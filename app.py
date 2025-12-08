@@ -5,51 +5,42 @@ from docx import Document
 import PyPDF2
 
 # ==========================================
-# 1. 페이지 및 초기 설정 (여기가 수정되었습니다!)
+# 1. 페이지 설정
 # ==========================================
 st.set_page_config(
-    page_title="AUDIT AI agent",  # 인터넷 탭 이름 & 스마트폰 홈 아이콘 이름
-    page_icon="🛡️",               # 아이콘 모양 (방패)
-    layout="centered"             # 모바일에서 보기 좋게 중앙 정렬
+    page_title="AUDIT AI agent",
+    page_icon="🛡️",
+    layout="centered"
 )
 
 # ==========================================
-# 2. 사이드바 (API 키 및 설정)
+# 2. 사이드바 (API 키 설정)
 # ==========================================
 with st.sidebar:
-    st.header("🔐 로그인 설정")
-    st.info("⚠️ 원활한 업무 처리를 위해\n반드시 '본인 계정의 API Key'를\n입력해야 합니다.")
-    
-    # API 키 입력받기 (비밀번호처럼 가려서 보임)
-    # [Tip] 한 번 입력하고 브라우저의 '비밀번호 저장'을 누르면 다음부턴 자동완성됩니다.
+    st.header("🔐 로그인")
     api_key_input = st.text_input("Google API Key 입력", type="password")
     
-    # 키가 입력되면 설정 적용
     if api_key_input:
         try:
             genai.configure(api_key=api_key_input)
-            st.success("인증 성공! ✅")
+            st.success("인증 완료 ✅")
         except:
             st.error("잘못된 키입니다.")
     else:
-        st.warning("키가 입력되지 않았습니다.")
+        st.warning("API 키를 입력해주세요.")
 
     st.markdown("---")
-    st.markdown("**[사용 가이드]**")
-    st.markdown("1. 본인 API 키 입력 (최초 1회 저장 권장)")
-    st.markdown("2. 작업 모드 선택")
-    st.markdown("3. 파일 업로드")
-    st.markdown("4. '검토 시작' 클릭")
+    st.markdown("**[모바일 사용 팁]**")
+    st.markdown("1. 메일/카톡에서 파일 다운로드")
+    st.markdown("2. 'Browse files' 버튼 터치")
+    st.markdown("3. [내 파일] 또는 [다운로드] 폴더 선택")
 
 # ==========================================
-# 3. 기능 함수들
+# 3. 기능 함수
 # ==========================================
-
-# 모델 설정
 def get_model():
     return genai.GenerativeModel('gemini-pro')
 
-# 파일 읽기 함수 (PDF, Word, Txt 지원)
 def read_file(uploaded_file):
     content = ""
     try:
@@ -68,15 +59,15 @@ def read_file(uploaded_file):
     return content
 
 # ==========================================
-# 4. 메인 화면 구성
+# 4. 메인 화면
 # ==========================================
 
 st.title("🛡️ AUDIT AI agent")
-st.markdown("### PC와 모바일 어디서든 쉽고 빠르게!")
+st.caption("언제 어디서나, 내 손안의 감사실")
 
 # 1. 작업 모드 선택
 option = st.selectbox(
-    "어떤 작업을 진행하시겠습니까?",
+    "작업을 선택하세요",
     (
         "1. ⚖️ 법률 리스크 정밀 검토",
         "2. 📝 감사 보고서 초안 작성", 
@@ -85,27 +76,35 @@ option = st.selectbox(
     )
 )
 
-# 2. 파일 업로드
-uploaded_file = st.file_uploader("검토할 파일을 올려주세요", type=['txt', 'pdf', 'docx'])
+st.divider()
+
+# 2. 파일 업로드 (문구 개선)
+st.markdown("##### 📂 검토할 파일 업로드")
+st.info("👇 아래 버튼을 누르면 핸드폰의 [다운로드/내 파일]함이 열립니다.")
+
+uploaded_file = st.file_uploader(
+    label="여기를 눌러 파일을 선택하세요", # 버튼 문구
+    type=['txt', 'pdf', 'docx'],
+    label_visibility="collapsed" # 라벨 숨김 (깔끔하게)
+)
 
 # 3. 추가 참고 자료
-reference_text = st.text_area("추가로 참고할 규정이나 지침이 있다면 여기에 적어주세요 (선택사항)", height=100)
+with st.expander("➕ 추가 규정이나 지침 직접 입력하기 (선택)"):
+    reference_text = st.text_area("내용을 붙여넣으세요", height=100)
 
 # 4. 실행 버튼
 if st.button("🚀 AI 검토 시작", use_container_width=True):
-    # 키가 없으면 실행 차단
     if not api_key_input:
-        st.error("⛔ [실행 불가] 왼쪽 사이드바에 본인의 API Key를 입력해주세요.")
+        st.error("⛔ 왼쪽 메뉴(>)를 열어 API 키를 먼저 입력해주세요.")
         st.stop()
     
     if not uploaded_file:
-        st.error("⚠️ 파일을 먼저 업로드해주세요!")
+        st.warning("⚠️ 파일을 먼저 업로드해주세요.")
     else:
-        with st.spinner('AI가 문서를 분석하고 보고서를 작성 중입니다...'):
+        with st.spinner('AI가 문서를 분석 중입니다... 잠시만 기다려주세요.'):
             content = read_file(uploaded_file)
             
             if content:
-                # 프롬프트 구성
                 prompt = f"""
                 당신은 감사실 수석 전문가입니다.
                 [작업 모드: {option}]
@@ -114,18 +113,16 @@ if st.button("🚀 AI 검토 시작", use_container_width=True):
                 {content}
                 
                 위 내용을 바탕으로 요청된 작업을 전문적으로 수행하고, 
-                가독성 좋은 보고서 형식으로 작성해줘.
+                모바일에서 읽기 편하도록 가독성 좋은 보고서 형식으로 작성해줘.
                 """
                 
                 try:
                     model = get_model()
                     response = model.generate_content(prompt)
                     
-                    # 결과 출력
-                    st.success("분석이 완료되었습니다!")
+                    st.success("분석 완료!")
                     st.divider()
                     st.markdown(response.text)
-                    st.balloons() # 축하 효과
                     
                 except Exception as e:
-                    st.error(f"오류 발생: {e}\n(API 키가 올바른지 확인해주세요)")
+                    st.error(f"오류 발생: {e}")
