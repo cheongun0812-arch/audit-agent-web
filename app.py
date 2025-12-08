@@ -4,14 +4,24 @@ import google.generativeai as genai
 from docx import Document
 import PyPDF2
 
-# --- 1. 설정 및 초기화 ---
-st.set_page_config(page_title="감사실 AI 에이전트", page_icon="🤖")
+# ==========================================
+# 1. 페이지 및 초기 설정 (여기가 수정되었습니다!)
+# ==========================================
+st.set_page_config(
+    page_title="AUDIT AI agent",  # 인터넷 탭 이름 & 스마트폰 홈 아이콘 이름
+    page_icon="🛡️",               # 아이콘 모양 (방패)
+    layout="centered"             # 모바일에서 보기 좋게 중앙 정렬
+)
 
+# ==========================================
+# 2. 사이드바 (API 키 및 설정)
+# ==========================================
 with st.sidebar:
     st.header("🔐 로그인 설정")
     st.info("⚠️ 원활한 업무 처리를 위해\n반드시 '본인 계정의 API Key'를\n입력해야 합니다.")
     
     # API 키 입력받기 (비밀번호처럼 가려서 보임)
+    # [Tip] 한 번 입력하고 브라우저의 '비밀번호 저장'을 누르면 다음부턴 자동완성됩니다.
     api_key_input = st.text_input("Google API Key 입력", type="password")
     
     # 키가 입력되면 설정 적용
@@ -26,16 +36,20 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown("**[사용 가이드]**")
-    st.markdown("1. 본인 API 키 입력 (필수)")
+    st.markdown("1. 본인 API 키 입력 (최초 1회 저장 권장)")
     st.markdown("2. 작업 모드 선택")
     st.markdown("3. 파일 업로드")
     st.markdown("4. '검토 시작' 클릭")
+
+# ==========================================
+# 3. 기능 함수들
+# ==========================================
 
 # 모델 설정
 def get_model():
     return genai.GenerativeModel('gemini-pro')
 
-# 파일 읽기 함수
+# 파일 읽기 함수 (PDF, Word, Txt 지원)
 def read_file(uploaded_file):
     content = ""
     try:
@@ -53,11 +67,14 @@ def read_file(uploaded_file):
         return None
     return content
 
-# --- 2. 메인 화면 ---
-st.title("🤖 감사실 AI 에이전트 Web")
+# ==========================================
+# 4. 메인 화면 구성
+# ==========================================
+
+st.title("🛡️ AUDIT AI agent")
 st.markdown("### PC와 모바일 어디서든 쉽고 빠르게!")
 
-# 작업 모드 선택
+# 1. 작업 모드 선택
 option = st.selectbox(
     "어떤 작업을 진행하시겠습니까?",
     (
@@ -68,18 +85,18 @@ option = st.selectbox(
     )
 )
 
-# 파일 업로드
+# 2. 파일 업로드
 uploaded_file = st.file_uploader("검토할 파일을 올려주세요", type=['txt', 'pdf', 'docx'])
 
-# 추가 참고 자료
+# 3. 추가 참고 자료
 reference_text = st.text_area("추가로 참고할 규정이나 지침이 있다면 여기에 적어주세요 (선택사항)", height=100)
 
-# 실행 버튼
+# 4. 실행 버튼
 if st.button("🚀 AI 검토 시작", use_container_width=True):
-    # [수정됨] 키가 없으면 절대 실행 안 함
+    # 키가 없으면 실행 차단
     if not api_key_input:
         st.error("⛔ [실행 불가] 왼쪽 사이드바에 본인의 API Key를 입력해주세요.")
-        st.stop() # 프로그램 강제 중단
+        st.stop()
     
     if not uploaded_file:
         st.error("⚠️ 파일을 먼저 업로드해주세요!")
@@ -88,6 +105,7 @@ if st.button("🚀 AI 검토 시작", use_container_width=True):
             content = read_file(uploaded_file)
             
             if content:
+                # 프롬프트 구성
                 prompt = f"""
                 당신은 감사실 수석 전문가입니다.
                 [작업 모드: {option}]
@@ -103,10 +121,11 @@ if st.button("🚀 AI 검토 시작", use_container_width=True):
                     model = get_model()
                     response = model.generate_content(prompt)
                     
+                    # 결과 출력
                     st.success("분석이 완료되었습니다!")
                     st.divider()
                     st.markdown(response.text)
-                    st.balloons()
+                    st.balloons() # 축하 효과
                     
                 except Exception as e:
                     st.error(f"오류 발생: {e}\n(API 키가 올바른지 확인해주세요)")
