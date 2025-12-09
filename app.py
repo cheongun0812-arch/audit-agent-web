@@ -15,47 +15,43 @@ st.set_page_config(
 )
 
 # ==========================================
-# 2. 사이드바 (설정 및 참고자료)
+# 2. 사이드바 (로그인 폼 적용 - 핵심 수정!)
 # ==========================================
 with st.sidebar:
-    st.header("⚙️ 설정 및 자료")
+    st.header("🔐 로그인")
     
-    # 1. API 키
-    with st.expander("🔐 API 키 설정", expanded=True):
-        api_key_input = st.text_input("Google API Key", type="password", help="본인의 키를 입력하세요.")
+    # [수정됨] 폼(Form)으로 감싸서 브라우저가 '로그인'으로 인식하게 유도
+    with st.form(key='login_form'):
+        st.info("⚠️ 본인의 API Key를 입력하세요.\n(최초 1회 입력 후 '저장' 권장)")
+        
+        # 비밀번호 입력창
+        api_key_input = st.text_input("Google API Key", type="password")
+        
+        # 로그인 버튼 (이걸 눌러야 전송됨)
+        submit_button = st.form_submit_button(label="인증하기 ✅")
+    
+    # 폼 제출 후 처리 로직
+    if submit_button:
         if api_key_input:
             try:
                 genai.configure(api_key=api_key_input)
-                st.success("인증 완료 ✅")
+                st.session_state['api_key'] = api_key_input # 세션에 저장
+                st.success("인증 되었습니다!")
             except:
                 st.error("잘못된 키입니다.")
         else:
-            st.warning("키 입력 필요")
+            st.warning("키를 입력해주세요.")
+            
+    # 세션 유지용 (새로고침 전까지 유지)
+    elif 'api_key' in st.session_state:
+        genai.configure(api_key=st.session_state['api_key'])
+        st.success("인증 상태 유지 중 ✅")
 
     st.markdown("---")
-    
-    # 2. [핵심 업그레이드] 참고 자료 업로드 기능
-    st.header("📚 참고 자료(Reference)")
-    st.info("검토 기준이 될 규정/지침 파일을 여기에 올려주세요.")
-    uploaded_refs = st.file_uploader(
-        "규정/매뉴얼 업로드 (여러 개 가능)", 
-        type=['txt', 'pdf', 'docx'], 
-        accept_multiple_files=True
-    )
-    
-    # 참고 자료 텍스트 변환
-    ref_content = ""
-    if uploaded_refs:
-        for ref_file in uploaded_refs:
-            if ref_file.name.endswith('.txt'):
-                ref_content += ref_file.getvalue().decode("utf-8") + "\n"
-            elif ref_file.name.endswith('.pdf'):
-                pdf_reader = PyPDF2.PdfReader(ref_file)
-                for page in pdf_reader.pages: ref_content += page.extract_text() + "\n"
-            elif ref_file.name.endswith('.docx'):
-                doc = Document(ref_file)
-                ref_content += "\n".join([para.text for para in doc.paragraphs]) + "\n"
-        st.success(f"{len(uploaded_refs)}개의 참고 자료 로드 완료!")
+    st.markdown("**[모바일 사용 팁]**")
+    st.markdown("1. 키 입력 후 **[인증하기]** 클릭")
+    st.markdown("2. 팝업 뜨면 **[비밀번호 저장]** 누르기")
+    st.markdown("3. 다음부턴 **생체인증**으로 자동 입력!")
 
 # ==========================================
 # 3. 기능 함수
@@ -84,10 +80,10 @@ def read_file(uploaded_file):
 st.title("🛡️ AUDIT AI agent")
 st.markdown("### PC와 모바일 어디서든 쉽고 빠르게!")
 
-# 탭 메뉴로 기능 분리
+# 탭 메뉴
 tab1, tab2 = st.tabs(["📑 문서 검토/작성", "💬 AI 감사관과 대화"])
 
-# --- [Tab 1] 기존 문서 검토 기능 ---
+# --- [Tab 1] 문서 검토 ---
 with tab1:
     option = st.selectbox(
         "작업을 선택하세요",
@@ -95,30 +91,34 @@ with tab1:
     )
 
     st.markdown("##### 📂 검토 대상(Target) 파일 업로드")
-    uploaded_file = st.file_uploader("여기를 눌러 파일을 선택하세요", type=['txt', 'pdf', 'docx'], key="target")
+    uploaded_file = st.file_uploader("파일 선택 (폰 내장 파일/다운로드함)", type=['txt', 'pdf', 'docx'], key="target")
+
+    # 참고 자료 업로드 (Tab1용)
+    with st.expander("📚 참고 자료(Reference) 함께 올리기 (선택)"):
+        uploaded_refs = st.file_uploader("규정/지침 파일 업로드", type=['txt', 'pdf', 'docx'], accept_multiple_files=True)
+        ref_content = ""
+        if uploaded_refs:
+            for ref_file in uploaded_refs:
+                content = read_file(ref_file)
+                if content: ref_content += content + "\n"
 
     if st.button("🚀 AI 검토 시작", use_container_width=True):
-        if not api_key_input:
-            st.error("사이드바에 API 키를 입력해주세요.")
-            st.stop()
-        
-        if not uploaded_file:
-            st.warning("검토할 대상 파일을 업로드해주세요.")
+        if 'api_key' not in st.session_state:
+            st.error("⛔ 왼쪽 메뉴(>)에서 [인증하기]를 먼저 진행해주세요.")
+        elif not uploaded_file:
+            st.warning("검토할 파일을 업로드해주세요.")
         else:
             with st.spinner('분석 중입니다...'):
                 content = read_file(uploaded_file)
                 if content:
-                    # 참고자료가 없으면 일반 모드
                     final_ref = ref_content if ref_content else "일반적인 비즈니스/법률 표준 및 상식"
-                    
                     prompt = f"""
                     당신은 감사실 수석 전문가입니다.
                     [작업 모드: {option}]
-                    [참고 자료(기준): {final_ref}]
+                    [참고 자료: {final_ref}]
                     [대상 파일 내용]
                     {content}
-                    
-                    위 내용을 바탕으로 작업을 수행하고, 가독성 좋은 보고서로 작성해줘.
+                    위 내용을 바탕으로 작업을 수행하고, 보고서로 작성해줘.
                     """
                     try:
                         model = get_model()
@@ -128,38 +128,30 @@ with tab1:
                     except Exception as e:
                         st.error(f"오류: {e}")
 
-# --- [Tab 2] 챗봇 기능 (New!) ---
+# --- [Tab 2] 챗봇 기능 ---
 with tab2:
-    st.info("파일 내용에 대해 궁금한 점을 대화하듯 물어보세요.")
+    st.info("파일 내용에 대해 대화하듯 물어보세요.")
     
-    # 채팅 기록 초기화
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # 이전 대화 내용 표시
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    # 사용자 입력 처리
-    if prompt := st.chat_input("질문을 입력하세요 (예: 이 계약서의 독소조항이 뭐야?)"):
-        if not api_key_input:
-            st.error("API 키가 필요합니다.")
+    if prompt := st.chat_input("질문 입력..."):
+        if 'api_key' not in st.session_state:
+            st.error("API 키 인증이 필요합니다.")
         else:
-            # 사용자 메시지 표시
             st.session_state.messages.append({"role": "user", "content": prompt})
             with st.chat_message("user"):
                 st.markdown(prompt)
 
-            # AI 답변 생성
             with st.chat_message("assistant"):
                 message_placeholder = st.empty()
-                full_response = ""
                 
-                # 컨텍스트 구성 (참고자료 + 업로드된 파일이 있다면 포함)
                 context = ""
                 if ref_content: context += f"[참고자료]\n{ref_content}\n"
-                # Tab1에서 올린 파일이 있다면 챗봇도 그걸 알게 함
                 if uploaded_file: 
                     target_content = read_file(uploaded_file)
                     if target_content: context += f"[검토대상파일]\n{target_content}\n"
@@ -169,9 +161,7 @@ with tab2:
                 try:
                     model = get_model()
                     response = model.generate_content(final_prompt)
-                    full_response = response.text
-                    message_placeholder.markdown(full_response)
-                    
-                    st.session_state.messages.append({"role": "assistant", "content": full_response})
+                    message_placeholder.markdown(response.text)
+                    st.session_state.messages.append({"role": "assistant", "content": response.text})
                 except Exception as e:
                     st.error(f"오류: {e}")
