@@ -20,7 +20,7 @@ st.set_page_config(
 with st.sidebar:
     st.header("🔐 로그인")
     
-    # [수정됨] 폼(Form)으로 감싸서 브라우저가 '로그인'으로 인식하게 유도
+    # 폼(Form)으로 감싸서 브라우저가 '로그인'으로 인식하게 유도
     with st.form(key='login_form'):
         st.info("⚠️ 본인의 API Key를 입력하세요.\n(최초 1회 입력 후 '저장' 권장)")
         
@@ -151,6 +151,7 @@ with tab2:
                 message_placeholder = st.empty()
                 
                 context = ""
+                # Tab 1에서 올린 내용이 있다면 대화에 포함
                 if ref_content: context += f"[참고자료]\n{ref_content}\n"
                 if uploaded_file: 
                     target_content = read_file(uploaded_file)
