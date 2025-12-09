@@ -15,49 +15,63 @@ st.set_page_config(
 )
 
 # ==========================================
-# 2. 사이드바 (로그인 폼 적용 - 핵심 수정!)
+# 2. 사이드바 (로그인 폼)
 # ==========================================
 with st.sidebar:
     st.header("🔐 로그인")
     
-    # 폼(Form)으로 감싸서 브라우저가 '로그인'으로 인식하게 유도
     with st.form(key='login_form'):
         st.info("⚠️ 본인의 API Key를 입력하세요.\n(최초 1회 입력 후 '저장' 권장)")
-        
-        # 비밀번호 입력창
         api_key_input = st.text_input("Google API Key", type="password")
-        
-        # 로그인 버튼 (이걸 눌러야 전송됨)
         submit_button = st.form_submit_button(label="인증하기 ✅")
     
-    # 폼 제출 후 처리 로직
     if submit_button:
         if api_key_input:
             try:
                 genai.configure(api_key=api_key_input)
-                st.session_state['api_key'] = api_key_input # 세션에 저장
+                st.session_state['api_key'] = api_key_input
                 st.success("인증 되었습니다!")
             except:
                 st.error("잘못된 키입니다.")
         else:
             st.warning("키를 입력해주세요.")
             
-    # 세션 유지용 (새로고침 전까지 유지)
     elif 'api_key' in st.session_state:
         genai.configure(api_key=st.session_state['api_key'])
         st.success("인증 상태 유지 중 ✅")
 
     st.markdown("---")
     st.markdown("**[모바일 사용 팁]**")
-    st.markdown("1. 키 입력 후 **[인증하기]** 클릭")
-    st.markdown("2. 팝업 뜨면 **[비밀번호 저장]** 누르기")
-    st.markdown("3. 다음부턴 **생체인증**으로 자동 입력!")
+    st.markdown("1. 키 입력 후 **[인증하기]**")
+    st.markdown("2. 팝업 뜨면 **[비밀번호 저장]**")
+    st.markdown("3. 다음부턴 **자동 입력!**")
 
 # ==========================================
-# 3. 기능 함수
+# 3. 기능 함수 (핵심 업그레이드: 모델 자동 찾기)
 # ==========================================
+
 def get_model():
-    return genai.GenerativeModel('gemini-pro')
+    # 1순위부터 3순위까지 후보군 설정 (최신 -> 구형 순)
+    candidates = [
+        'gemini-1.5-flash',      # 속도 최강 (모바일 추천)
+        'gemini-1.5-pro',        # 성능 최강
+        'models/gemini-1.5-flash',
+        'models/gemini-pro'
+    ]
+    
+    # 1. 목록 조회가 가능하면 조회해서 매칭
+    try:
+        my_models = [m.name for m in genai.list_models()]
+        for candidate in candidates:
+            # candidate 이름이 my_models 안에 포함되어 있는지 확인
+            for m in my_models:
+                if candidate in m:
+                    return genai.GenerativeModel(m)
+    except:
+        pass
+
+    # 2. 조회 실패 시, 가장 확률 높은 최신 모델 강제 지정
+    return genai.GenerativeModel('gemini-1.5-flash')
 
 def read_file(uploaded_file):
     content = ""
@@ -80,7 +94,6 @@ def read_file(uploaded_file):
 st.title("🛡️ AUDIT AI agent")
 st.markdown("### PC와 모바일 어디서든 쉽고 빠르게!")
 
-# 탭 메뉴
 tab1, tab2 = st.tabs(["📑 문서 검토/작성", "💬 AI 감사관과 대화"])
 
 # --- [Tab 1] 문서 검토 ---
@@ -93,7 +106,6 @@ with tab1:
     st.markdown("##### 📂 검토 대상(Target) 파일 업로드")
     uploaded_file = st.file_uploader("파일 선택 (폰 내장 파일/다운로드함)", type=['txt', 'pdf', 'docx'], key="target")
 
-    # 참고 자료 업로드 (Tab1용)
     with st.expander("📚 참고 자료(Reference) 함께 올리기 (선택)"):
         uploaded_refs = st.file_uploader("규정/지침 파일 업로드", type=['txt', 'pdf', 'docx'], accept_multiple_files=True)
         ref_content = ""
@@ -151,7 +163,7 @@ with tab2:
                 message_placeholder = st.empty()
                 
                 context = ""
-                # Tab 1에서 올린 내용이 있다면 대화에 포함
+                # Tab1에서 올린 파일이 있으면 챗봇도 알게 함
                 if ref_content: context += f"[참고자료]\n{ref_content}\n"
                 if uploaded_file: 
                     target_content = read_file(uploaded_file)
@@ -160,9 +172,10 @@ with tab2:
                 final_prompt = f"{context}\n\n질문: {prompt}"
                 
                 try:
+                    # [중요] 여기서 업그레이드된 함수를 사용합니다
                     model = get_model()
                     response = model.generate_content(final_prompt)
                     message_placeholder.markdown(response.text)
                     st.session_state.messages.append({"role": "assistant", "content": response.text})
                 except Exception as e:
-                    st.error(f"오류: {e}")
+                    st.error(f"오류가 발생했습니다: {e}")
