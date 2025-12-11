@@ -3,7 +3,6 @@ import os
 import google.generativeai as genai
 from docx import Document
 import PyPDF2
-import time
 
 # ==========================================
 # 1. 페이지 설정
@@ -15,23 +14,22 @@ st.set_page_config(
 )
 
 # ==========================================
-# 2. 사이드바 (로그인 폼)
+# 2. 사이드바 (로그인)
 # ==========================================
 with st.sidebar:
     st.header("🔐 로그인")
-    
     with st.form(key='login_form'):
-        st.info("⚠️ 본인의 API Key를 입력하세요.\n(모바일 복사 시 공백 주의!)")
+        st.info("⚠️ API Key를 입력하세요.")
         api_key_input = st.text_input("Google API Key", type="password")
         submit_button = st.form_submit_button(label="인증하기 ✅")
     
     if submit_button:
         if api_key_input:
-            clean_key = api_key_input.strip() # 공백 제거 안전장치
+            clean_key = api_key_input.strip()
             try:
                 genai.configure(api_key=clean_key)
                 st.session_state['api_key'] = clean_key
-                st.success("인증 되었습니다!")
+                st.success("인증 완료!")
             except:
                 st.error("유효하지 않은 키입니다.")
         else:
@@ -39,22 +37,41 @@ with st.sidebar:
             
     elif 'api_key' in st.session_state:
         genai.configure(api_key=st.session_state['api_key'])
-        st.success("인증 상태 유지 중 ✅")
-
-    st.markdown("---")
-    st.markdown("**[모바일 사용 팁]**")
-    st.markdown("1. 키 입력 후 **[인증하기]**")
-    st.markdown("2. 팝업 뜨면 **[비밀번호 저장]**")
-    st.markdown("3. 다음부턴 **자동 입력!**")
+        st.success("인증 유지 중 ✅")
 
 # ==========================================
-# 3. 기능 함수 [🚨 핵심 수정: 모델 강제 고정]
+# 3. [🚨 핵심 수정] 모델 자동 사냥 함수
 # ==========================================
-
 def get_model():
-    # 복잡하게 찾지 말고, 무조건 '1.5 Flash'를 쓰도록 명령합니다.
-    # 이 모델은 무료 한도가 매우 넉넉해서 429 오류가 거의 안 뜹니다.
-    return genai.GenerativeModel('gemini-1.5-flash')
+    # 1. 인증 정보 확인
+    if 'api_key' in st.session_state:
+        genai.configure(api_key=st.session_state['api_key'])
+
+    try:
+        # 2. 구글 서버에 "내가 쓸 수 있는 모델 다 보여줘" 요청
+        available_models = []
+        for m in genai.list_models():
+            # '글쓰기(generateContent)'가 가능한 모델만 추림
+            if 'generateContent' in m.supported_generation_methods:
+                available_models.append(m.name)
+
+        # 3. 우선순위대로 찾아보고 있으면 낚아채기
+        # (Flash -> Pro -> 아무거나)
+        for m in available_models:
+            if 'flash' in m.lower(): return genai.GenerativeModel(m)
+        
+        for m in available_models:
+            if 'pro' in m.lower() and 'vision' not in m.lower(): return genai.GenerativeModel(m)
+            
+        # 4. 정 없으면 목록의 첫 번째 놈이라도 가져옴
+        if available_models:
+            return genai.GenerativeModel(available_models[0])
+            
+    except Exception as e:
+        # 5. 목록 조회조차 실패하면 최후의 수단 (가장 기본 모델)
+        return genai.GenerativeModel('gemini-pro')
+        
+    return genai.GenerativeModel('gemini-pro')
 
 def read_file(uploaded_file):
     content = ""
@@ -67,7 +84,7 @@ def read_file(uploaded_file):
         elif uploaded_file.name.endswith('.docx'):
             doc = Document(uploaded_file)
             content = "\n".join([para.text for para in doc.paragraphs])
-    except Exception as e: return None
+    except: return None
     return content
 
 # ==========================================
@@ -75,88 +92,75 @@ def read_file(uploaded_file):
 # ==========================================
 
 st.title("🛡️ AUDIT AI agent")
-st.markdown("### PC와 모바일 어디서든 쉽고 빠르게!")
 
-tab1, tab2 = st.tabs(["📑 문서 검토/작성", "💬 AI 감사관과 대화"])
+tab1, tab2 = st.tabs(["📑 문서 검토", "💬 AI 대화"])
 
-# --- [Tab 1] 문서 검토 ---
+# --- Tab 1 ---
 with tab1:
-    option = st.selectbox(
-        "작업을 선택하세요",
-        ("1. ⚖️ 법률 리스크 정밀 검토", "2. 📝 감사 보고서 초안 작성", "3. ✨ 오타 수정 및 문구 교정", "4. 📑 기안문/공문 초안 생성")
-    )
-
-    st.markdown("##### 📂 검토 대상 파일")
+    option = st.selectbox("작업 선택", 
+        ("1. 법률 리스크 검토", "2. 감사 보고서 작성", "3. 문구 교정", "4. 기안문 생성"))
     uploaded_file = st.file_uploader("파일 선택", type=['txt', 'pdf', 'docx'], key="target")
-
-    with st.expander("📚 참고 자료 (선택)"):
+    
+    with st.expander("참고 자료 (선택)"):
         uploaded_refs = st.file_uploader("규정 업로드", type=['txt', 'pdf', 'docx'], accept_multiple_files=True)
         ref_content = ""
         if uploaded_refs:
             for ref_file in uploaded_refs:
-                content = read_file(ref_file)
-                if content: ref_content += content + "\n"
+                c = read_file(ref_file)
+                if c: ref_content += c + "\n"
 
-    if st.button("🚀 AI 검토 시작", use_container_width=True):
+    if st.button("🚀 실행", use_container_width=True):
         if 'api_key' not in st.session_state:
-            st.error("⛔ [오류] 먼저 사이드바에서 인증을 완료해주세요.")
+            st.error("먼저 로그인해주세요.")
         elif not uploaded_file:
-            st.warning("파일을 업로드해주세요.")
+            st.warning("파일을 올려주세요.")
         else:
-            with st.spinner('분석 중... (Flash 모델 가동)'):
+            with st.spinner('AI가 분석 중입니다...'):
                 content = read_file(uploaded_file)
                 if content:
-                    final_ref = ref_content if ref_content else "일반 표준"
-                    prompt = f"당신은 감사 전문가입니다. 모드:{option}. 참고:{final_ref}. 내용:{content}. 보고서로 작성해."
+                    ref_final = ref_content if ref_content else "일반 표준"
+                    prompt = f"역할:감사전문가. 모드:{option}. 기준:{ref_final}. 내용:{content}. 보고서작성."
                     try:
-                        # 여기서 강제 고정된 Flash 모델을 불러옵니다.
-                        model = get_model()
+                        model = get_model() # 자동 사냥 모델 호출
                         response = model.generate_content(prompt)
                         st.success("완료!")
                         st.markdown(response.text)
                     except Exception as e:
                         st.error(f"오류: {e}")
 
-# --- [Tab 2] 챗봇 기능 ---
+# --- Tab 2 ---
 with tab2:
-    st.info("파일 내용에 대해 질문하세요.")
+    st.info("질문을 입력하세요.")
+    if "messages" not in st.session_state: st.session_state.messages = []
     
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]): st.markdown(msg["content"])
 
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-
-    if prompt := st.chat_input("질문 입력..."):
+    if prompt := st.chat_input("질문..."):
         if 'api_key' not in st.session_state:
-            st.error("⛔ API 키 인증이 풀렸습니다. 왼쪽 메뉴에서 다시 인증해주세요.")
+            st.error("로그인이 필요합니다.")
         else:
             st.session_state.messages.append({"role": "user", "content": prompt})
-            with st.chat_message("user"):
-                st.markdown(prompt)
+            with st.chat_message("user"): st.markdown(prompt)
 
             with st.chat_message("assistant"):
-                message_placeholder = st.empty()
-                
-                context = ""
-                if ref_content: context += f"[참고자료]\n{ref_content}\n"
-                if uploaded_file: 
-                    target_content = read_file(uploaded_file)
-                    if target_content: context += f"[검토대상파일]\n{target_content}\n"
-                
-                final_prompt = f"{context}\n\n질문: {prompt}"
-                
+                msg_placeholder = st.empty()
                 try:
-                    # 여기서도 강제 고정된 Flash 모델 사용
+                    # 안전장치: 키 재설정
                     genai.configure(api_key=st.session_state['api_key'])
-                    model = get_model()
                     
-                    response = model.generate_content(final_prompt)
-                    message_placeholder.markdown(response.text)
+                    context = ""
+                    if ref_content: context += f"[참고]\n{ref_content}\n"
+                    if uploaded_file: 
+                        c = read_file(uploaded_file)
+                        if c: context += f"[파일내용]\n{c}\n"
+                    
+                    full_prompt = f"{context}\n질문: {prompt}"
+                    
+                    model = get_model() # 자동 사냥 모델 호출
+                    response = model.generate_content(full_prompt)
+                    msg_placeholder.markdown(response.text)
                     st.session_state.messages.append({"role": "assistant", "content": response.text})
                 except Exception as e:
-                    if "400" in str(e) or "API_KEY_INVALID" in str(e):
-                        st.error("⛔ 키가 잘못되었습니다. 다시 입력해주세요.")
-                    else:
-                        st.error(f"오류 발생: {e}")
+                    if "400" in str(e): st.error("키 오류. 다시 입력하세요.")
+                    else: st.error(f"오류: {e}")
