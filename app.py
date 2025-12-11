@@ -14,48 +14,31 @@ st.set_page_config(
 )
 
 # ==========================================
-# 2. 🎨 [디자인] V27 절대 테마 (모바일 완벽 대응)
+# 2. 🎨 디자인 테마 (V27 절대 테마 유지)
 # ==========================================
 st.markdown("""
     <style>
-    /* 1. 배경 및 폰트 강제 설정 (다크모드 무시) */
+    /* 배경 및 기본 폰트 강제 설정 */
     .stApp { background-color: #F4F6F9 !important; }
     html, body, p, div, span, label, h1, h2, h3, h4, h5, h6, li {
         color: #333333 !important; font-family: 'Pretendard', sans-serif !important;
     }
 
-    /* 2. 사이드바 (Control Center) */
+    /* 사이드바 */
     [data-testid="stSidebar"] { background-color: #2C3E50 !important; }
-    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 { color: #FFFFFF !important; }
-    [data-testid="stSidebar"] p, [data-testid="stSidebar"] span, [data-testid="stSidebar"] label { color: #ECF0F1 !important; }
+    [data-testid="stSidebar"] * { color: #FFFFFF !important; }
 
-    /* 3. 입력창 디자인 */
+    /* 입력창 & 버튼 */
     .stTextInput input {
         background-color: #FFFFFF !important; color: #000000 !important;
         border: 1px solid #BDC3C7 !important; border-radius: 8px !important;
     }
-    .stTextInput input::placeholder { color: #95A5A6 !important; }
-    .stSelectbox div[data-baseweb="select"] > div {
-        background-color: #FFFFFF !important; color: #000000 !important; border-color: #BDC3C7 !important;
-    }
-    
-    /* 4. 탭(Tab) 메뉴 */
-    .stTabs [data-baseweb="tab-list"] { gap: 8px; background-color: transparent; }
-    .stTabs [data-baseweb="tab"] {
-        background-color: #FFFFFF !important; border-radius: 8px 8px 0 0; border: 1px solid #E0E0E0;
-        border-bottom: none; padding: 10px 20px; color: #7F8C8D !important;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #2980B9 !important; color: #FFFFFF !important; font-weight: bold;
-    }
-
-    /* 5. 버튼 스타일 */
     .stButton > button {
         background: linear-gradient(to right, #2980B9, #2C3E50) !important;
         color: #FFFFFF !important; border: none; border-radius: 8px; font-weight: bold;
     }
     
-    /* 6. 채팅 메시지 박스 */
+    /* 챗봇 메시지 */
     [data-testid="stChatMessage"] {
         background-color: #FFFFFF !important; border: 1px solid #E0E0E0;
         border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
@@ -72,7 +55,7 @@ with st.sidebar:
     st.markdown("---")
     with st.form(key='login_form'):
         st.markdown("**🔐 Access Key**")
-        api_key_input = st.text_input("키 입력", type="password", label_visibility="collapsed", placeholder="API 키를 여기에 붙여넣으세요")
+        api_key_input = st.text_input("키 입력", type="password", label_visibility="collapsed", placeholder="API 키를 붙여넣으세요")
         submit_button = st.form_submit_button(label="시스템 접속 (Log in)")
     
     if submit_button:
@@ -89,48 +72,38 @@ with st.sidebar:
             
     elif 'api_key' in st.session_state:
         genai.configure(api_key=st.session_state['api_key'])
-        st.success("🟢 정상 가동 중")
+        st.success("🟢 Pro Engine 가동 중")
         
     st.markdown("---")
-    st.markdown("<div style='text-align: center; font-size: 11px; opacity: 0.7;'>Audit AI Solution © 2025<br>Security Level: High</div>", unsafe_allow_html=True)
+    st.markdown("<div style='text-align: center; font-size: 11px; opacity: 0.7;'>Audit AI Solution © 2025<br>Engine: Gemini 1.5 Pro</div>", unsafe_allow_html=True)
 
 # ==========================================
-# 4. [🚨 핵심 수정] 모델 완전 자동 사냥 함수
+# 4. [🚨 핵심 수정] 고성능 모델 우선 선택
 # ==========================================
 def get_model():
     if 'api_key' in st.session_state:
         genai.configure(api_key=st.session_state['api_key'])
     
     try:
-        # 1. 구글 서버에 "내가 지금 쓸 수 있는 모델 명단 다 내놔" 요청
+        # 모델 명단 조회
         all_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         
-        # 2. 우선순위대로 낚아채기 (이름이 정확하지 않아도 포함되어 있으면 OK)
-        # 1순위: 1.5 Flash (가성비/속도)
+        # [변경점] 1순위를 'Pro' 모델(고성능)로 변경!
+        for m in all_models:
+            if '1.5-pro' in m: return genai.GenerativeModel(m) # 가장 똑똑한 놈
+            
+        # 2순위: Pro가 없으면 Flash (백업)
         for m in all_models:
             if '1.5-flash' in m: return genai.GenerativeModel(m)
             
-        # 2순위: Flash 계열 아무거나
-        for m in all_models:
-            if 'flash' in m.lower(): return genai.GenerativeModel(m)
-            
-        # 3순위: 1.5 Pro (성능)
-        for m in all_models:
-            if '1.5-pro' in m: return genai.GenerativeModel(m)
-            
-        # 4순위: Pro 계열 아무거나
-        for m in all_models:
-            if 'pro' in m.lower() and 'vision' not in m.lower(): return genai.GenerativeModel(m)
-
-        # 5순위: 정 없으면 목록의 첫 번째 놈이라도 가져옴 (404 방지)
-        if all_models:
-            return genai.GenerativeModel(all_models[0])
+        # 3순위: 아무거나 잡히는 대로
+        if all_models: return genai.GenerativeModel(all_models[0])
             
     except Exception as e:
         print(f"모델 조회 실패: {e}")
     
-    # 최후의 안전장치 (이것도 안 되면 API 키 문제일 가능성 높음)
-    return genai.GenerativeModel('gemini-1.5-flash-latest')
+    # 최후의 수단
+    return genai.GenerativeModel('gemini-1.5-pro-latest')
 
 def read_file(uploaded_file):
     content = ""
@@ -151,11 +124,11 @@ def read_file(uploaded_file):
 # ==========================================
 
 st.markdown("<h1 style='text-align: center; color: #2C3E50 !important;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
-st.markdown("<div style='text-align: center; color: #7F8C8D !important; margin-bottom: 25px;'>Professional Legal & Audit Assistant System</div>", unsafe_allow_html=True)
+st.markdown("<div style='text-align: center; color: #7F8C8D !important; margin-bottom: 25px;'>High-Performance Legal & Audit Assistant</div>", unsafe_allow_html=True)
 
 tab1, tab2 = st.tabs(["  📄 문서 정밀 검토  ", "  💬 AI 감사관 대화  "])
 
-# --- Tab 1 ---
+# --- Tab 1: 문서 검토 ---
 with tab1:
     st.markdown("<br>", unsafe_allow_html=True)
     with st.container():
@@ -184,21 +157,32 @@ with tab1:
             elif not uploaded_file:
                 st.warning("⚠️ 파일을 업로드해주세요.")
             else:
-                with st.spinner('🔍 AI가 정밀 분석 중입니다...'):
+                with st.spinner('🧠 AI(Pro)가 깊이 있게 분석 중입니다...'):
                     content = read_file(uploaded_file)
                     if content:
                         ref_final = ref_content if ref_content else "일반 표준"
-                        prompt = f"역할:수석감사관. 모드:{option}. 기준:{ref_final}. 내용:{content}. 전문적인 보고서 형식으로 작성."
+                        # [프롬프트 강화] 상세하게 작성하라고 지시
+                        prompt = f"""
+                        [역할] 당신은 20년 경력의 수석 감사관이자 법률 전문가입니다.
+                        [작업] {option}
+                        [기준] {ref_final}
+                        [내용] {content}
+                        
+                        [지침]
+                        1. 단순한 요약이 아니라, 전문가 수준의 통찰력을 담아 구체적이고 상세하게 작성하십시오.
+                        2. 법적/규정적 근거를 명확히 제시하십시오.
+                        3. 가독성을 위해 소제목, 불렛포인트를 적절히 활용하십시오.
+                        """
                         try:
                             model = get_model()
                             response = model.generate_content(prompt)
-                            st.success("✅ 분석 완료")
+                            st.success("✅ 고성능 분석 완료")
                             st.markdown("### 📊 분석 결과")
                             st.markdown(response.text)
                         except Exception as e:
                             st.error(f"오류: {e}")
 
-# --- Tab 2 ---
+# --- Tab 2: 채팅 (성의 있는 답변 유도) ---
 with tab2:
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("#### 🗣️ 실시간 질의응답")
@@ -221,7 +205,7 @@ with tab2:
         else:
             st.session_state.messages.append({"role": "user", "content": user_input})
             with loading_placeholder.container():
-                st.markdown("""<div style='text-align: center; margin: 20px 0;'><span style='font-size: 30px;'>🤖 🔍</span><br><span style='color: #2980B9; font-weight: bold;'>답변 생성 중...</span></div>""", unsafe_allow_html=True)
+                st.markdown("""<div style='text-align: center; margin: 20px 0;'><span style='font-size: 30px;'>🧠 🔍</span><br><span style='color: #2980B9; font-weight: bold;'>심층 분석 중입니다...</span></div>""", unsafe_allow_html=True)
 
             try:
                 genai.configure(api_key=st.session_state['api_key'])
@@ -231,12 +215,27 @@ with tab2:
                     c = read_file(uploaded_file)
                     if c: context += f"[검토대상파일]\n{c}\n"
                 
-                full_prompt = f"{context}\n질문: {user_input}"
-                model = get_model()
+                # [핵심 수정] 챗봇에게 '친절하고 상세하게' 답변하라고 시스템 명령 추가
+                full_prompt = f"""
+                당신은 친절하고 꼼꼼한 AI 감사 전문가입니다. 
+                사용자의 질문에 대해 단답형으로 대답하지 말고, 배경 지식과 근거를 포함하여 최대한 상세하고 논리적으로 설명해주세요.
+                
+                [컨텍스트]
+                {context}
+                
+                [사용자 질문]
+                {user_input}
+                """
+                
+                model = get_model() # 이제 1.5 Pro 모델을 우선적으로 가져옵니다.
                 response = model.generate_content(full_prompt)
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
             except Exception as e:
-                st.error(f"오류: {e}")
+                # 429 오류(용량 초과)가 뜰 경우에 대한 안내
+                if "429" in str(e):
+                    st.error("⛔ 잠시만요! 고성능 모델(Pro)은 생각할 시간이 더 필요합니다. 약 30초 뒤에 다시 시도해주세요.")
+                else:
+                    st.error(f"오류: {e}")
             loading_placeholder.empty()
 
     st.markdown("---")
