@@ -3,10 +3,9 @@ import os
 import google.generativeai as genai
 from docx import Document
 import PyPDF2
-import time
 
 # ==========================================
-# 1. 페이지 설정 & 디자인 테마 적용
+# 1. 페이지 설정 (디자인 기초)
 # ==========================================
 st.set_page_config(
     page_title="AUDIT AI Agent",
@@ -14,101 +13,94 @@ st.set_page_config(
     layout="centered"
 )
 
-# 🎨 [고급 인테리어] CSS 스타일 주입
+# ==========================================
+# 2. 🎨 [핵심] 모바일/PC 통합 디자인 (CSS)
+# ==========================================
 st.markdown("""
     <style>
-    /* 1. 전체 배경 및 폰트 설정 */
-    .stApp {
-        background-color: #F8F9FA; /* 아주 연한 회색 (눈이 편안함) */
+    /* 1. 강제 라이트 테마 적용 (다크모드 방지) */
+    [data-testid="stAppViewContainer"] {
+        background-color: #F5F7F9 !important; /* 아주 연한 블루그레이 (고급짐) */
+    }
+    [data-testid="stSidebar"] {
+        background-color: #1A2530 !important; /* 사이드바: 딥 네이비 */
+    }
+    [data-testid="stSidebar"] * {
+        color: #FFFFFF !important; /* 사이드바 글씨: 무조건 흰색 */
+    }
+    
+    /* 2. 메인 텍스트 가독성 확보 */
+    h1, h2, h3, p, div, span, label {
+        color: #333333 !important; /* 본문 글씨: 진한 회색 (가독성 최우선) */
         font-family: 'Pretendard', sans-serif;
     }
     
-    /* 2. 메인 타이틀 디자인 (그라데이션 텍스트) */
-    h1 {
-        background: linear-gradient(to right, #0F2027, #203A43, #2C5364);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        font-weight: 800 !important;
-        text-align: center;
-        padding-bottom: 20px;
+    /* 3. 입력창 디자인 (경계선 명확하게) */
+    .stTextInput input {
+        background-color: #FFFFFF !important;
+        color: #000000 !important;
+        border: 2px solid #E0E0E0 !important;
+        border-radius: 8px !important;
+    }
+    .stTextInput input:focus {
+        border-color: #2a5298 !important; /* 포커스 시 파란색 */
     }
 
-    /* 3. 버튼 디자인 (고급스러운 네이비 & 골드 호버) */
-    .stButton>button {
-        background: linear-gradient(90deg, #1e3c72 0%, #2a5298 100%);
-        color: white;
-        border: none;
-        border-radius: 12px;
-        font-weight: bold;
-        padding: 0.5rem 1rem;
-        transition: all 0.3s ease;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    /* 4. 버튼 디자인 (그라데이션 & 그림자) */
+    .stButton > button {
+        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%) !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 8px !important;
+        font-weight: 600 !important;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
     }
-    .stButton>button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 8px rgba(0,0,0,0.2);
-        background: linear-gradient(90deg, #D4AF37 0%, #C5A028 100%); /* 골드 효과 */
+    .stButton > button:active {
+        transform: scale(0.98);
     }
 
-    /* 4. 입력창 및 박스 스타일 */
-    .stTextInput>div>div>input {
-        border-radius: 10px;
-        border: 1px solid #E0E0E0;
-        padding: 10px;
+    /* 5. 챗봇 메시지 카드 디자인 */
+    [data-testid="stChatMessage"] {
+        background-color: #FFFFFF !important;
+        border-radius: 12px !important;
+        border: 1px solid #EAEAEA !important;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05) !important;
+        margin-bottom: 12px !important;
     }
-    
-    /* 5. 챗봇 메시지 스타일 강화 */
-    .stChatMessage {
-        background-color: white;
-        border-radius: 15px;
-        padding: 15px;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-        margin-bottom: 10px;
-        border: 1px solid #f0f0f0;
+    /* 사용자 메시지 배경 (연한 파랑) */
+    [data-testid="stChatMessage"][data-testid="user"] {
+        background-color: #F0F7FF !important;
     }
 
-    /* 6. 탭 메뉴 스타일 */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 10px;
+    /* 6. 탭 메뉴 디자인 */
+    .stTabs [data-baseweb="tab-list"] button {
+        background-color: #FFFFFF !important;
+        border-radius: 8px 8px 0 0 !important;
+        color: #666666 !important;
     }
-    .stTabs [data-baseweb="tab"] {
-        height: 50px;
-        white-space: pre-wrap;
-        background-color: #ffffff;
-        border-radius: 10px;
-        gap: 1px;
-        padding-top: 10px;
-        padding-bottom: 10px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] {
+        background-color: #1e3c72 !important; /* 선택된 탭: 네이비 */
+        color: #FFFFFF !important;
     }
-    .stTabs [aria-selected="true"] {
-        background-color: #E3F2FD;
-        color: #1565C0;
-        font-weight: bold;
-    }
-    
-    /* 7. 로더 애니메이션 스타일 */
-    .loader {
-        text-align: center;
-        font-size: 40px;
-        margin: 20px 0;
-        animation: bounce 0.8s infinite alternate;
-    }
-    @keyframes bounce {
-        from { transform: translateY(0); }
-        to { transform: translateY(-10px); }
+
+    /* 7. 모바일 폰트 크기 최적화 */
+    @media (max-width: 640px) {
+        h1 { font-size: 24px !important; }
+        p, div { font-size: 16px !important; }
     }
     </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. 사이드바 (로그인)
+# 3. 사이드바 (로그인)
 # ==========================================
 with st.sidebar:
-    st.markdown("### 🏛️ Control Center") # 제목 변경
+    st.markdown("### 🏛️ Control Center")
+    st.markdown("---")
+    
     with st.form(key='login_form'):
-        st.info("🔐 보안 접속을 위해 API Key가 필요합니다.")
-        api_key_input = st.text_input("Access Key", type="password", placeholder="여기에 키를 입력하세요")
+        st.markdown("🔑 **Access Key**") # info 대신 markdown 사용 (색상 강제)
+        api_key_input = st.text_input("키 입력", type="password", placeholder="여기에 붙여넣기", label_visibility="collapsed")
         submit_button = st.form_submit_button(label="시스템 접속 🚀")
     
     if submit_button:
@@ -117,34 +109,41 @@ with st.sidebar:
             try:
                 genai.configure(api_key=clean_key)
                 st.session_state['api_key'] = clean_key
-                st.success("접속 승인되었습니다.")
+                st.success("접속 승인 (Authorized)")
             except:
-                st.error("유효하지 않은 키입니다.")
+                st.error("유효하지 않은 키")
         else:
-            st.warning("키를 입력해주세요.")
+            st.warning("키를 입력하세요")
             
     elif 'api_key' in st.session_state:
         genai.configure(api_key=st.session_state['api_key'])
-        st.success("🟢 시스템 정상 가동 중")
+        st.success("🟢 시스템 가동 중")
         
-    st.markdown("---")
-    st.markdown("<div style='text-align: center; color: gray; font-size: 12px;'>Audit AI Solution © 2025</div>", unsafe_allow_html=True)
+    st.markdown("<br><br><br>", unsafe_allow_html=True)
+    st.markdown("<div style='text-align: center; color: #888; font-size: 11px;'>Audit AI Solution © 2025</div>", unsafe_allow_html=True)
 
 # ==========================================
-# 3. 모델 및 파일 함수 (V23 동일)
+# 4. 모델 자동 감지 (오류 해결 로직 포함)
 # ==========================================
 def get_model():
     if 'api_key' in st.session_state:
         genai.configure(api_key=st.session_state['api_key'])
     try:
+        # 사용 가능한 모델 조회
         my_models = [m.name for m in genai.list_models()]
+        
+        # 1순위: Flash (속도/가성비)
         for m in my_models:
             if 'flash' in m.lower(): return genai.GenerativeModel(m)
+        # 2순위: Pro (성능)
         for m in my_models:
             if 'pro' in m.lower() and 'vision' not in m.lower(): return genai.GenerativeModel(m)
+        # 3순위: 아무거나
         if my_models: return genai.GenerativeModel(my_models[0])
     except: pass
-    return genai.GenerativeModel('gemini-pro')
+    
+    # 조회 실패 시 기본값 (404 방지)
+    return genai.GenerativeModel('gemini-1.5-flash')
 
 def read_file(uploaded_file):
     content = ""
@@ -161,30 +160,32 @@ def read_file(uploaded_file):
     return content
 
 # ==========================================
-# 4. 메인 화면 구성
+# 5. 메인 화면 구성
 # ==========================================
 
-# 헤더 섹션 (고급스러운 배지 효과)
-st.markdown("<h1 style='text-align: center;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #666; margin-top: -15px;'>Professional Legal & Audit Assistant System</p>", unsafe_allow_html=True)
-st.divider()
+# 헤더
+st.markdown("<h1 style='text-align: center; padding-bottom: 10px;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
+st.markdown("<div style='text-align: center; color: #555; font-size: 14px; margin-bottom: 20px;'>Professional Legal & Audit Assistant System</div>", unsafe_allow_html=True)
 
-tab1, tab2 = st.tabs(["📄 문서 정밀 검토", "💬 AI 감사관 대화"])
+tab1, tab2 = st.tabs(["  📄 문서 정밀 검토  ", "  💬 AI 감사관 대화  "])
 
 # --- Tab 1: 문서 검토 ---
 with tab1:
-    st.markdown("#### 📋 작업 설정")
-    # 카드를 흉내낸 컨테이너
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # 카드형 UI
     with st.container():
-        option = st.selectbox("수행할 작업을 선택하세요", 
-            ("1. ⚖️ 법률 리스크 정밀 검토", "2. 📝 감사 보고서 초안 작성", "3. ✨ 오타 수정 및 문구 교정", "4. 📑 기안문/공문 초안 생성"))
+        st.markdown("#### 1️⃣ 작업 선택")
+        option = st.selectbox("작업 유형", 
+            ("법률 리스크 정밀 검토", "감사 보고서 초안 작성", "오타 수정 및 문구 교정", "기안문/공문 초안 생성"), label_visibility="collapsed")
         
+        st.markdown("#### 2️⃣ 파일 업로드")
         col1, col2 = st.columns(2)
         with col1:
-            st.info("👇 **검토 대상 파일**")
-            uploaded_file = st.file_uploader("파일 업로드", type=['txt', 'pdf', 'docx'], key="target", label_visibility="collapsed")
+            st.info("👇 **검토할 파일**")
+            uploaded_file = st.file_uploader("검토 파일", type=['txt', 'pdf', 'docx'], key="target", label_visibility="collapsed")
         with col2:
-            st.warning("📚 **참고 규정/지침** (선택)")
+            st.warning("📚 **참고 규정** (선택)")
             uploaded_refs = st.file_uploader("참고 파일", type=['txt', 'pdf', 'docx'], accept_multiple_files=True, label_visibility="collapsed")
 
         # 참고자료 처리
@@ -194,14 +195,15 @@ with tab1:
                 c = read_file(ref_file)
                 if c: ref_content += c + "\n"
 
-        st.markdown("<br>", unsafe_allow_html=True) # 여백
-        if st.button("🚀 분석 시작 (Start Analysis)", use_container_width=True):
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        if st.button("🚀 분석 리포트 생성 (Start)", use_container_width=True):
             if 'api_key' not in st.session_state:
-                st.error("🔒 로그인이 필요합니다.")
+                st.error("🔒 왼쪽 메뉴에서 로그인을 먼저 해주세요.")
             elif not uploaded_file:
-                st.warning("⚠️ 검토할 파일을 업로드해주세요.")
+                st.warning("⚠️ 파일을 업로드해주세요.")
             else:
-                with st.spinner('🔍 AI가 정밀 분석 중입니다...'):
+                with st.spinner('🔍 AI가 문서를 정밀 분석 중입니다...'):
                     content = read_file(uploaded_file)
                     if content:
                         ref_final = ref_content if ref_content else "일반적인 비즈니스 및 법률 표준"
@@ -210,26 +212,27 @@ with tab1:
                             model = get_model()
                             response = model.generate_content(prompt)
                             st.success("✅ 분석 완료")
-                            st.markdown("### 📊 분석 결과 리포트")
+                            st.markdown("### 📊 분석 결과")
                             st.markdown("---")
                             st.markdown(response.text)
                         except Exception as e:
-                            st.error(f"오류: {e}")
+                            st.error(f"시스템 오류: {e}")
 
-# --- Tab 2: 채팅 (피드형) ---
+# --- Tab 2: 채팅 (피드형 + 디자인 개선) ---
 with tab2:
-    st.markdown("#### 🗣️ 실시간 질의응답")
+    st.markdown("<br>", unsafe_allow_html=True)
     
-    # 입력창 디자인 (아이콘 + 입력 + 버튼)
+    # 채팅 입력창 UI
+    st.markdown("#### 🗣️ 실시간 질의응답")
     with st.container():
         with st.form(key='chat_form', clear_on_submit=True):
-            col_icon, col_input, col_btn = st.columns([0.5, 4, 1.2])
+            col_icon, col_input, col_btn = st.columns([0.15, 0.6, 0.25])
             with col_icon:
-                st.markdown("<div style='font-size: 28px; padding-top: 5px;'>🤖</div>", unsafe_allow_html=True)
+                st.markdown("<div style='font-size: 24px; padding-top: 5px; text-align: center;'>🤖</div>", unsafe_allow_html=True)
             with col_input:
-                user_input = st.text_input("질문", placeholder="예: 이 조항의 독소조항 여부를 판단해줘", label_visibility="collapsed")
+                user_input = st.text_input("질문", placeholder="내용을 입력하세요", label_visibility="collapsed")
             with col_btn:
-                submit_chat = st.form_submit_button("전송 📤", use_container_width=True)
+                submit_chat = st.form_submit_button("전송", use_container_width=True)
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
@@ -239,16 +242,16 @@ with tab2:
 
     if submit_chat and user_input:
         if 'api_key' not in st.session_state:
-            st.error("🔒 로그인 후 이용 가능합니다.")
+            st.error("🔒 로그인 필요")
         else:
             st.session_state.messages.append({"role": "user", "content": user_input})
             
-            # 고급스러운 로딩 애니메이션
+            # 애니메이션
             with loading_placeholder.container():
                 st.markdown("""
-                <div class="loader">
-                    🤖<br>
-                    <span style='font-size: 18px; color: #2C5364;'>Data Analyzing...</span>
+                <div style='text-align: center; margin: 20px 0;'>
+                    <span style='font-size: 30px;'>🤖 🔍</span><br>
+                    <span style='color: #2a5298; font-weight: bold;'>답변을 찾고 있습니다...</span>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -269,11 +272,11 @@ with tab2:
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
                 
             except Exception as e:
-                st.error(f"System Error: {e}")
+                st.error(f"오류: {e}")
             
             loading_placeholder.empty()
 
-    # 대화 목록 출력 (최신순 페어링)
+    # 대화 목록 출력 (최신순)
     st.markdown("---")
     msgs = st.session_state.messages
     
@@ -282,12 +285,12 @@ with tab2:
             asst_msg = msgs[i]
             user_msg = msgs[i-1]
             
-            # 질문 카드 (파란색 포인트)
+            # 질문 (파란색 아이콘)
             with st.chat_message("user", avatar="👤"):
-                st.markdown(f"**Question:**\n\n{user_msg['content']}")
+                st.markdown(f"**질문:** {user_msg['content']}")
                 
-            # 답변 카드 (회색 배경)
+            # 답변 (방패 아이콘)
             with st.chat_message("assistant", avatar="🛡️"):
-                st.markdown(f"**Answer:**\n\n{asst_msg['content']}")
+                st.markdown(asst_msg['content'])
             
-            st.markdown("<hr style='border-top: 1px dashed #bbb;'>", unsafe_allow_html=True)
+            st.markdown("<hr style='border: 0; height: 1px; background: #E0E0E0; margin: 10px 0;'>", unsafe_allow_html=True)
