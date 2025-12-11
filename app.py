@@ -3,6 +3,7 @@ import os
 import google.generativeai as genai
 from docx import Document
 import PyPDF2
+import time
 
 # ==========================================
 # 1. 페이지 설정
@@ -40,15 +41,13 @@ with st.sidebar:
         st.success("인증 유지 중 ✅")
 
 # ==========================================
-# 3. 모델 자동 사냥 함수 (오류 방지용)
+# 3. 모델 및 파일 함수
 # ==========================================
 def get_model():
     if 'api_key' in st.session_state:
         genai.configure(api_key=st.session_state['api_key'])
-
     try:
         my_models = [m.name for m in genai.list_models()]
-        # 우선순위: Flash -> Pro
         for m in my_models:
             if 'flash' in m.lower(): return genai.GenerativeModel(m)
         for m in my_models:
@@ -79,7 +78,7 @@ st.title("🛡️ AUDIT AI agent")
 
 tab1, tab2 = st.tabs(["📑 문서 검토", "💬 AI 대화 (피드형)"])
 
-# --- Tab 1 (기존과 동일) ---
+# --- Tab 1 (기존 유지) ---
 with tab1:
     option = st.selectbox("작업 선택", 
         ("1. 법률 리스크 검토", "2. 감사 보고서 작성", "3. 문구 교정", "4. 기안문 생성"))
@@ -112,31 +111,43 @@ with tab1:
                     except Exception as e:
                         st.error(f"오류: {e}")
 
-# --- Tab 2 (UI 전면 수정: 입력창 상단 + 최신순 정렬) ---
+# --- Tab 2 (순서 완벽 수정 버전) ---
 with tab2:
-    # 1. 입력창을 최상단에 배치 (Form 사용)
-    with st.container():
-        st.markdown("##### 🗣️ 무엇이든 물어보세요")
-        with st.form(key='chat_form', clear_on_submit=True):
-            # clear_on_submit=True 덕분에 전송 후 입력창이 자동으로 비워집니다.
-            user_input = st.text_input("질문 입력 (예: 하도급의 정의가 뭐야?)", key="input_text")
-            col1, col2 = st.columns([4, 1])
-            with col2:
-                submit_chat = st.form_submit_button("전송 📤", use_container_width=True)
+    # 1. 입력창 UI
+    st.markdown("##### 🤖 무엇이든 물어보세요")
+    with st.form(key='chat_form', clear_on_submit=True):
+        col_icon, col_input, col_btn = st.columns([0.5, 3.5, 1])
+        with col_icon:
+            st.markdown("## 🗣️")
+        with col_input:
+            user_input = st.text_input("질문 입력", placeholder="예: 하도급의 정의가 뭐야?", label_visibility="collapsed")
+        with col_btn:
+            submit_chat = st.form_submit_button("전송 📤", use_container_width=True)
 
-    # 대화 기록 초기화
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # 2. 질문 처리 로직
+    # 애니메이션 자리
+    loading_placeholder = st.empty()
+
+    # 2. 질문 처리
     if submit_chat and user_input:
         if 'api_key' not in st.session_state:
             st.error("🔐 로그인 후 이용해주세요.")
         else:
-            # (1) 사용자 질문 저장
+            # 질문 저장
             st.session_state.messages.append({"role": "user", "content": user_input})
             
-            # (2) AI 답변 생성
+            # 애니메이션
+            with loading_placeholder.container():
+                st.markdown("""
+                <div style='text-align: center; font-size: 40px; margin: 20px 0; animation: bounce 0.8s infinite alternate;'>
+                    🤖<br><span style='font-size: 20px;'>💖🔍 찾는 중...</span>
+                </div>
+                <style>@keyframes bounce { from { transform: translateY(0); } to { transform: translateY(-15px); } }</style>
+                """, unsafe_allow_html=True)
+
+            # 답변 생성
             try:
                 genai.configure(api_key=st.session_state['api_key'])
                 
@@ -148,18 +159,41 @@ with tab2:
                 
                 full_prompt = f"{context}\n질문: {user_input}"
                 
-                model = get_model() # 자동 사냥 모델
+                model = get_model()
                 response = model.generate_content(full_prompt)
                 
-                # (3) AI 답변 저장
+                # 답변 저장
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
                 
             except Exception as e:
                 st.error(f"오류: {e}")
+            
+            loading_placeholder.empty()
 
-    # 3. 대화 목록 출력 (🚨 핵심: 역순 정렬 reversed)
-    # 최신 대화가 입력창 바로 아래에 오도록 거꾸로 출력합니다.
+    # 3. 대화 목록 출력 (🚨 정렬 로직 수정)
     st.markdown("---")
-    for msg in reversed(st.session_state.messages):
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+    
+    # 메시지 리스트 전체를 가져옴
+    msgs = st.session_state.messages
+    
+    # 짝수(질문)와 홀수(답변)를 묶어서 처리
+    # 최신 대화가 맨 뒤에 쌓이므로, 뒤에서부터 2개씩 끊어서 읽어옵니다.
+    # range(시작, 끝, -2) : 리스트의 끝에서부터 2칸씩 앞으로 이동
+    
+    if len(msgs) >= 2:
+        for i in range(len(msgs) - 1, 0, -2):
+            # i는 답변(Assistant)의 인덱스
+            # i-1은 질문(User)의 인덱스
+            
+            asst_msg = msgs[i]
+            user_msg = msgs[i-1]
+            
+            # [1] 질문을 먼저 출력 (항상 위에!)
+            with st.chat_message("user"):
+                st.write(user_msg["content"])
+                
+            # [2] 답변을 그 다음에 출력 (항상 아래에!)
+            with st.chat_message("assistant"):
+                st.markdown(asst_msg["content"])
+                
+            st.divider() # 대화 세트 구분선
