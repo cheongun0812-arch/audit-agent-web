@@ -14,104 +14,53 @@ st.set_page_config(
 )
 
 # ==========================================
-# 2. 🎨 [디자인 교정] 모바일/PC 완벽 호환 CSS
+# 2. 🎨 [디자인] V27 절대 테마 (모바일 완벽 대응)
 # ==========================================
 st.markdown("""
     <style>
-    /* 1. 기본 배경 및 폰트 강제 설정 (다크모드 무시) */
-    .stApp {
-        background-color: #F4F6F9 !important; /* 아주 연한 회색 배경 */
-    }
+    /* 1. 배경 및 폰트 강제 설정 (다크모드 무시) */
+    .stApp { background-color: #F4F6F9 !important; }
     html, body, p, div, span, label, h1, h2, h3, h4, h5, h6, li {
-        color: #333333 !important; /* 글씨는 무조건 진한 회색 */
-        font-family: 'Pretendard', sans-serif !important;
+        color: #333333 !important; font-family: 'Pretendard', sans-serif !important;
     }
 
-    /* 2. 사이드바 (Control Center) 디자인 수정 */
-    [data-testid="stSidebar"] {
-        background-color: #2C3E50 !important; /* 고급스러운 미드나잇 블루 */
-    }
-    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
-        color: #FFFFFF !important; /* 사이드바 제목은 흰색 */
-    }
-    [data-testid="stSidebar"] p, [data-testid="stSidebar"] span, [data-testid="stSidebar"] label {
-        color: #ECF0F1 !important; /* 사이드바 본문은 밝은 회색 */
-    }
+    /* 2. 사이드바 (Control Center) */
+    [data-testid="stSidebar"] { background-color: #2C3E50 !important; }
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 { color: #FFFFFF !important; }
+    [data-testid="stSidebar"] p, [data-testid="stSidebar"] span, [data-testid="stSidebar"] label { color: #ECF0F1 !important; }
 
-    /* 3. 입력창 디자인 (흰 배경 + 검은 글씨 강제) */
+    /* 3. 입력창 디자인 */
     .stTextInput input {
-        background-color: #FFFFFF !important;
-        color: #000000 !important; /* 입력 글씨 검은색 강제 */
-        border: 1px solid #BDC3C7 !important;
-        border-radius: 8px !important;
+        background-color: #FFFFFF !important; color: #000000 !important;
+        border: 1px solid #BDC3C7 !important; border-radius: 8px !important;
     }
-    .stTextInput input::placeholder {
-        color: #95A5A6 !important; /* 플레이스홀더 잘 보이게 */
-    }
-    /* 셀렉트박스(메뉴) 디자인 */
+    .stTextInput input::placeholder { color: #95A5A6 !important; }
     .stSelectbox div[data-baseweb="select"] > div {
-        background-color: #FFFFFF !important;
-        color: #000000 !important;
-        border-color: #BDC3C7 !important;
+        background-color: #FFFFFF !important; color: #000000 !important; border-color: #BDC3C7 !important;
     }
     
-    /* 4. 파일 업로더 디자인 */
-    [data-testid="stFileUploader"] {
-        background-color: #FFFFFF !important;
-        border-radius: 10px;
-        padding: 15px;
-        border: 1px dashed #BDC3C7;
-    }
-    [data-testid="stFileUploader"] section {
-        background-color: #F8F9FA !important;
-    }
-    [data-testid="stFileUploader"] span {
-        color: #555555 !important;
-    }
-
-    /* 5. 탭(Tab) 메뉴 디자인 */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-        background-color: transparent;
-    }
+    /* 4. 탭(Tab) 메뉴 */
+    .stTabs [data-baseweb="tab-list"] { gap: 8px; background-color: transparent; }
     .stTabs [data-baseweb="tab"] {
-        background-color: #FFFFFF !important;
-        border-radius: 8px 8px 0 0;
-        border: 1px solid #E0E0E0;
-        border-bottom: none;
-        padding: 10px 20px;
-        color: #7F8C8D !important;
+        background-color: #FFFFFF !important; border-radius: 8px 8px 0 0; border: 1px solid #E0E0E0;
+        border-bottom: none; padding: 10px 20px; color: #7F8C8D !important;
     }
     .stTabs [aria-selected="true"] {
-        background-color: #2980B9 !important; /* 선택된 탭: 파란색 */
-        color: #FFFFFF !important; /* 선택된 글씨: 흰색 */
-        font-weight: bold;
+        background-color: #2980B9 !important; color: #FFFFFF !important; font-weight: bold;
     }
 
-    /* 6. 버튼 스타일 */
+    /* 5. 버튼 스타일 */
     .stButton > button {
         background: linear-gradient(to right, #2980B9, #2C3E50) !important;
-        color: #FFFFFF !important;
-        border: none;
-        border-radius: 8px;
-        font-weight: bold;
-        transition: all 0.3s;
-    }
-    .stButton > button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        color: #FFFFFF !important; border: none; border-radius: 8px; font-weight: bold;
     }
     
-    /* 7. 채팅 메시지 박스 */
+    /* 6. 채팅 메시지 박스 */
     [data-testid="stChatMessage"] {
-        background-color: #FFFFFF !important;
-        border: 1px solid #E0E0E0;
-        border-radius: 12px;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        background-color: #FFFFFF !important; border: 1px solid #E0E0E0;
+        border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
     }
-    [data-testid="stChatMessage"][data-testid="user"] {
-        background-color: #EBF5FB !important; /* 사용자 질문: 아주 연한 파랑 */
-    }
+    [data-testid="stChatMessage"][data-testid="user"] { background-color: #EBF5FB !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -123,7 +72,6 @@ with st.sidebar:
     st.markdown("---")
     with st.form(key='login_form'):
         st.markdown("**🔐 Access Key**")
-        # placeholder 색상 문제 해결을 위해 안내 문구 수정
         api_key_input = st.text_input("키 입력", type="password", label_visibility="collapsed", placeholder="API 키를 여기에 붙여넣으세요")
         submit_button = st.form_submit_button(label="시스템 접속 (Log in)")
     
@@ -147,24 +95,42 @@ with st.sidebar:
     st.markdown("<div style='text-align: center; font-size: 11px; opacity: 0.7;'>Audit AI Solution © 2025<br>Security Level: High</div>", unsafe_allow_html=True)
 
 # ==========================================
-# 4. 모델 함수 (Gemini Pro 제거, Flash 고정)
+# 4. [🚨 핵심 수정] 모델 완전 자동 사냥 함수
 # ==========================================
 def get_model():
     if 'api_key' in st.session_state:
         genai.configure(api_key=st.session_state['api_key'])
     
-    # 묻지도 따지지도 않고 Flash 모델 사용 (오류 원천 차단)
-    target_model = 'gemini-1.5-flash'
     try:
-        # 혹시 목록에 정확한 명칭이 있다면 그걸 씀
-        all_models = [m.name for m in genai.list_models()]
+        # 1. 구글 서버에 "내가 지금 쓸 수 있는 모델 명단 다 내놔" 요청
+        all_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        
+        # 2. 우선순위대로 낚아채기 (이름이 정확하지 않아도 포함되어 있으면 OK)
+        # 1순위: 1.5 Flash (가성비/속도)
         for m in all_models:
-            if '1.5-flash' in m:
-                target_model = m
-                break
-    except: pass
+            if '1.5-flash' in m: return genai.GenerativeModel(m)
+            
+        # 2순위: Flash 계열 아무거나
+        for m in all_models:
+            if 'flash' in m.lower(): return genai.GenerativeModel(m)
+            
+        # 3순위: 1.5 Pro (성능)
+        for m in all_models:
+            if '1.5-pro' in m: return genai.GenerativeModel(m)
+            
+        # 4순위: Pro 계열 아무거나
+        for m in all_models:
+            if 'pro' in m.lower() and 'vision' not in m.lower(): return genai.GenerativeModel(m)
+
+        # 5순위: 정 없으면 목록의 첫 번째 놈이라도 가져옴 (404 방지)
+        if all_models:
+            return genai.GenerativeModel(all_models[0])
+            
+    except Exception as e:
+        print(f"모델 조회 실패: {e}")
     
-    return genai.GenerativeModel(target_model)
+    # 최후의 안전장치 (이것도 안 되면 API 키 문제일 가능성 높음)
+    return genai.GenerativeModel('gemini-1.5-flash-latest')
 
 def read_file(uploaded_file):
     content = ""
@@ -181,10 +147,9 @@ def read_file(uploaded_file):
     return content
 
 # ==========================================
-# 5. 메인 화면
+# 5. 메인 화면 구성
 # ==========================================
 
-# 헤더 디자인
 st.markdown("<h1 style='text-align: center; color: #2C3E50 !important;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
 st.markdown("<div style='text-align: center; color: #7F8C8D !important; margin-bottom: 25px;'>Professional Legal & Audit Assistant System</div>", unsafe_allow_html=True)
 
@@ -200,10 +165,10 @@ with tab1:
         st.markdown("#### 2️⃣ 파일 업로드")
         col1, col2 = st.columns(2)
         with col1:
-            st.info("👇 **검토 파일**") # 파란색 박스
+            st.info("👇 **검토 파일**")
             uploaded_file = st.file_uploader("검토 파일", type=['txt', 'pdf', 'docx'], key="target", label_visibility="collapsed")
         with col2:
-            st.warning("📚 **참고 규정**") # 노란색 박스
+            st.warning("📚 **참고 규정**")
             uploaded_refs = st.file_uploader("참고 파일", type=['txt', 'pdf', 'docx'], accept_multiple_files=True, label_visibility="collapsed")
 
         ref_content = ""
