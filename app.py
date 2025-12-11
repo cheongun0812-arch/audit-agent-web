@@ -78,31 +78,22 @@ with st.sidebar:
     st.markdown("<div style='text-align: center; font-size: 11px; opacity: 0.7;'>Audit AI Solution © 2025<br>Engine: Gemini 1.5 Pro</div>", unsafe_allow_html=True)
 
 # ==========================================
-# 4. [🚨 핵심 수정] 고성능 모델 우선 선택
+# 4. 모델 설정 (Pro 우선)
 # ==========================================
 def get_model():
     if 'api_key' in st.session_state:
         genai.configure(api_key=st.session_state['api_key'])
     
     try:
-        # 모델 명단 조회
         all_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         
-        # [변경점] 1순위를 'Pro' 모델(고성능)로 변경!
         for m in all_models:
-            if '1.5-pro' in m: return genai.GenerativeModel(m) # 가장 똑똑한 놈
-            
-        # 2순위: Pro가 없으면 Flash (백업)
+            if '1.5-pro' in m: return genai.GenerativeModel(m)
         for m in all_models:
             if '1.5-flash' in m: return genai.GenerativeModel(m)
-            
-        # 3순위: 아무거나 잡히는 대로
         if all_models: return genai.GenerativeModel(all_models[0])
             
-    except Exception as e:
-        print(f"모델 조회 실패: {e}")
-    
-    # 최후의 수단
+    except: pass
     return genai.GenerativeModel('gemini-1.5-pro-latest')
 
 def read_file(uploaded_file):
@@ -161,17 +152,12 @@ with tab1:
                     content = read_file(uploaded_file)
                     if content:
                         ref_final = ref_content if ref_content else "일반 표준"
-                        # [프롬프트 강화] 상세하게 작성하라고 지시
                         prompt = f"""
-                        [역할] 당신은 20년 경력의 수석 감사관이자 법률 전문가입니다.
+                        [역할] 수석 감사관/법률 전문가
                         [작업] {option}
                         [기준] {ref_final}
                         [내용] {content}
-                        
-                        [지침]
-                        1. 단순한 요약이 아니라, 전문가 수준의 통찰력을 담아 구체적이고 상세하게 작성하십시오.
-                        2. 법적/규정적 근거를 명확히 제시하십시오.
-                        3. 가독성을 위해 소제목, 불렛포인트를 적절히 활용하십시오.
+                        [지침] 상세하고 논리적인 전문가 보고서 작성
                         """
                         try:
                             model = get_model()
@@ -182,7 +168,7 @@ with tab1:
                         except Exception as e:
                             st.error(f"오류: {e}")
 
-# --- Tab 2: 채팅 (성의 있는 답변 유도) ---
+# --- Tab 2: 채팅 (애니메이션 적용) ---
 with tab2:
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("#### 🗣️ 실시간 질의응답")
@@ -204,8 +190,25 @@ with tab2:
             st.error("🔒 로그인 필요")
         else:
             st.session_state.messages.append({"role": "user", "content": user_input})
+            
+            # 🎬 [애니메이션] 통통 튀는 로봇 효과
             with loading_placeholder.container():
-                st.markdown("""<div style='text-align: center; margin: 20px 0;'><span style='font-size: 30px;'>🧠 🔍</span><br><span style='color: #2980B9; font-weight: bold;'>심층 분석 중입니다...</span></div>""", unsafe_allow_html=True)
+                st.markdown("""
+                <div style="display: flex; justify-content: center; align-items: center; gap: 15px; margin: 30px 0;">
+                    <div style="font-size: 35px; animation: bounce 0.6s infinite alternate;">🤖</div>
+                    <div style="font-size: 35px; animation: bounce 0.6s infinite alternate; animation-delay: 0.2s;">🔍</div>
+                    <div style="font-size: 35px; animation: bounce 0.6s infinite alternate; animation-delay: 0.4s;">📄</div>
+                </div>
+                <div style="text-align: center; color: #2980B9; font-weight: bold; margin-bottom: 20px;">
+                    심층 분석 및 답변 생성 중...
+                </div>
+                <style>
+                @keyframes bounce {
+                    from { transform: translateY(0); }
+                    to { transform: translateY(-15px); }
+                }
+                </style>
+                """, unsafe_allow_html=True)
 
             try:
                 genai.configure(api_key=st.session_state['api_key'])
@@ -215,25 +218,19 @@ with tab2:
                     c = read_file(uploaded_file)
                     if c: context += f"[검토대상파일]\n{c}\n"
                 
-                # [핵심 수정] 챗봇에게 '친절하고 상세하게' 답변하라고 시스템 명령 추가
                 full_prompt = f"""
                 당신은 친절하고 꼼꼼한 AI 감사 전문가입니다. 
-                사용자의 질문에 대해 단답형으로 대답하지 말고, 배경 지식과 근거를 포함하여 최대한 상세하고 논리적으로 설명해주세요.
-                
-                [컨텍스트]
+                사용자의 질문에 대해 배경 지식과 근거를 포함하여 상세하게 설명해주세요.
                 {context}
-                
-                [사용자 질문]
-                {user_input}
+                질문: {user_input}
                 """
                 
-                model = get_model() # 이제 1.5 Pro 모델을 우선적으로 가져옵니다.
+                model = get_model()
                 response = model.generate_content(full_prompt)
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
             except Exception as e:
-                # 429 오류(용량 초과)가 뜰 경우에 대한 안내
                 if "429" in str(e):
-                    st.error("⛔ 잠시만요! 고성능 모델(Pro)은 생각할 시간이 더 필요합니다. 약 30초 뒤에 다시 시도해주세요.")
+                    st.error("⛔ 잠시만요! 고성능 모델이 생각할 시간이 필요합니다. (30초 후 재시도)")
                 else:
                     st.error(f"오류: {e}")
             loading_placeholder.empty()
