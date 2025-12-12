@@ -149,7 +149,7 @@ if 'logout_anim' in st.session_state and st.session_state['logout_anim']:
 </div>
 """, unsafe_allow_html=True)
     
-    time.sleep(100.0) # 감상 시간
+    time.sleep(5.0) # 감상 시간
     
     # 🚨 [수정 2] 로그아웃 시 세션 완전 초기화 (먹통 방지)
     st.session_state.clear() # 모든 세션 데이터 삭제 (API 키 포함)
@@ -412,4 +412,5 @@ with tab3:
                     st.markdown(response.text)
 
                 except Exception as e: st.error(f"오류: {e}")
+
 
