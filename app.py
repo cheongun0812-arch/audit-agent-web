@@ -10,7 +10,7 @@ import time
 import glob
 import tempfile
 
-# yt_dlp 라이브러리 체크
+# yt_dlp 라이브러리 체크 (서버 환경 대응)
 try:
     import yt_dlp
 except ImportError:
@@ -26,39 +26,42 @@ st.set_page_config(
 )
 
 # ==========================================
-# 2. 🎨 [디자인] V51: 안전한 CSS & 모바일 최적화
+# 2. 🎨 [디자인] V53: 최종 UI/UX 최적화 (모바일/PC 완벽 호환)
 # ==========================================
 st.markdown("""
     <style>
-    /* 1. 배경 및 폰트 */
+    /* 1. 배경 및 폰트 설정 */
     .stApp { background-color: #F4F6F9 !important; }
     * { font-family: 'Pretendard', sans-serif !important; }
 
-    /* 2. 사이드바 (다크 네이비) */
+    /* 2. 사이드바 디자인 (다크 네이비 테마) */
     [data-testid="stSidebar"] { background-color: #2C3E50 !important; }
-    /* 사이드바 내 텍스트는 흰색 */
-    [data-testid="stSidebar"] p, [data-testid="stSidebar"] span, [data-testid="stSidebar"] label, [data-testid="stSidebar"] div, [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
+    
+    /* 사이드바 내 모든 텍스트: 흰색 강제 */
+    [data-testid="stSidebar"] p, [data-testid="stSidebar"] span, 
+    [data-testid="stSidebar"] label, [data-testid="stSidebar"] div, 
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
         color: #FFFFFF !important;
     }
 
-    /* 3. [핵심] 입력창 글씨 색상 강제 (검은색) */
+    /* 3. 입력창 디자인 (가독성 최우선: 흰 배경 + 검은 글씨) */
     input.stTextInput, textarea.stTextArea {
         background-color: #FFFFFF !important;
         color: #000000 !important;
-        -webkit-text-fill-color: #000000 !important; 
+        -webkit-text-fill-color: #000000 !important; /* 모바일 강제 적용 */
         caret-color: #000000 !important;
         border: 2px solid #BDC3C7 !important;
         font-weight: 500 !important;
     }
     
-    /* 플레이스홀더(안내문구)는 회색 */
+    /* 플레이스홀더(안내문구) 색상 */
     ::placeholder {
         color: #666666 !important;
         -webkit-text-fill-color: #666666 !important;
         opacity: 1 !important;
     }
 
-    /* 4. 버튼 디자인 */
+    /* 4. 버튼 디자인 (파란색 그라데이션) */
     .stButton > button {
         background: linear-gradient(to right, #2980B9, #2C3E50) !important;
         color: #FFFFFF !important;
@@ -66,10 +69,12 @@ st.markdown("""
         border: none !important;
         font-weight: bold !important;
         height: 45px !important;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2) !important;
     }
 
-    /* 5. 상단 메뉴 버튼 (책갈피 스타일 - 글씨 숨김) */
+    /* 5. 상단 메뉴 버튼 (책갈피 스타일 - 텍스트 완벽 제거) */
     [data-testid="stSidebarCollapsedControl"] {
+        font-size: 0 !important; /* 텍스트 크기 0으로 증발 */
         color: transparent !important;
         background-color: #FFFFFF !important;
         border-radius: 0 10px 10px 0;
@@ -79,8 +84,16 @@ st.markdown("""
         align-items: center !important;
         justify-content: center !important;
         box-shadow: 2px 2px 5px rgba(0,0,0,0.1) !important;
+        z-index: 999999 !important;
     }
-    /* ☰ 아이콘 */
+    
+    /* 기존 SVG 아이콘 숨김 */
+    [data-testid="stSidebarCollapsedControl"] > svg, 
+    [data-testid="stSidebarCollapsedControl"] > img {
+        display: none !important;
+    }
+
+    /* ☰ 햄버거 아이콘 생성 */
     [data-testid="stSidebarCollapsedControl"]::after {
         content: "☰";
         color: #2C3E50 !important;
@@ -89,13 +102,17 @@ st.markdown("""
         position: absolute;
     }
 
-    /* 6. 크리스마스 애니메이션 스타일 */
+    /* 6. 크리스마스 애니메이션 컨테이너 */
     .snow-bg {
         position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
         background: rgba(0, 0, 0, 0.9); z-index: 999999;
         display: flex; flex-direction: column; justify-content: center; align-items: center;
         text-align: center; color: white !important;
     }
+    
+    /* 7. 채팅 메시지 박스 */
+    [data-testid="stChatMessage"] { background-color: #FFFFFF; border: 1px solid #eee; }
+    [data-testid="stChatMessage"][data-testid="user"] { background-color: #E3F2FD; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -106,10 +123,10 @@ with st.sidebar:
     st.markdown("### 🏛️ Control Center")
     st.markdown("---")
     
+    # 로그인 전
     if 'api_key' not in st.session_state:
         with st.form(key='login_form'):
             st.markdown("<h4 style='color:white; margin-bottom:5px;'>🔐 Access Key</h4>", unsafe_allow_html=True)
-            # 입력창을 확실하게 보이게 설정
             api_key_input = st.text_input("Key", type="password", placeholder="여기에 API 키 입력", label_visibility="collapsed")
             submit_button = st.form_submit_button(label="시스템 접속 (Login)")
         
@@ -120,12 +137,14 @@ with st.sidebar:
                     genai.configure(api_key=clean_key)
                     st.session_state['api_key'] = clean_key
                     st.success("✅ 접속 완료")
+                    time.sleep(0.5)
                     st.rerun()
                 except:
                     st.error("❌ 키 오류")
             else:
                 st.warning("⚠️ 키 입력 필요")
 
+    # 로그인 후
     else:
         st.success("🟢 정상 가동 중")
         st.markdown("<br>", unsafe_allow_html=True)
@@ -138,10 +157,10 @@ with st.sidebar:
     st.markdown("<div style='color:white; text-align:center; font-size:12px; opacity:0.8;'>Audit AI Solution © 2025<br>Engine: Gemini 1.5 Pro</div>", unsafe_allow_html=True)
 
 # ==========================================
-# 4. 🎅 크리스마스 작별 애니메이션 (코드 노출 해결)
+# 4. 🎅 크리스마스 작별 애니메이션
 # ==========================================
 if 'logout_anim' in st.session_state and st.session_state['logout_anim']:
-    # [수정] 들여쓰기(Indent)를 완전히 제거하여 코드로 인식되는 문제 해결
+    # HTML 들여쓰기 제거로 코드 노출 방지
     st.markdown("""
 <div class="snow-bg">
 <div style="font-size: 80px; margin-bottom: 20px;">🎅🎄</div>
@@ -151,20 +170,18 @@ if 'logout_anim' in st.session_state and st.session_state['logout_anim']:
 """, unsafe_allow_html=True)
     
     time.sleep(3.0)
-    
-    # 세션 초기화
     for key in list(st.session_state.keys()):
         del st.session_state[key]
-    
     st.rerun()
 
 # ==========================================
-# 5. 기능 함수 (검증된 로직)
+# 5. 핵심 기능 함수 (안정성 검증 완료)
 # ==========================================
 def get_model():
     if 'api_key' in st.session_state:
         genai.configure(api_key=st.session_state['api_key'])
     try:
+        # 모델 자동 사냥 (Flash/Pro)
         all_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         for m in all_models:
             if '1.5-pro' in m: return genai.GenerativeModel(m)
@@ -261,17 +278,19 @@ def process_media_file(uploaded_file):
 st.markdown("<h1 style='text-align: center; color: #2C3E50;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
 st.markdown("<div style='text-align: center; color: #555; margin-bottom: 20px;'>Professional Legal & Audit Assistant System</div>", unsafe_allow_html=True)
 
-tab1, tab2, tab3 = st.tabs(["📄 문서 정밀 검토", "💬 AI 파트너 대화", "📰 스마트 요약"])
+# [수정] 탭 이름 변경 및 아이콘 통일
+tab1, tab2, tab3 = st.tabs(["📄 문서 정밀 검토", "💬 Audit AI 에이전트 대화", "📰 스마트 요약"])
 
 # --- Tab 1: 문서 검토 ---
 with tab1:
-    st.markdown("### 1️⃣ 작업 및 파일 설정")
+    # [수정] 폴더 아이콘(📂)으로 변경하여 통일성 확보
+    st.markdown("### 📂 작업 및 파일 설정")
+    
     option = st.selectbox("작업 유형 선택", 
         ("법률 리스크 정밀 검토", "감사 보고서 초안 작성", "오타 수정 및 문구 교정", "기안문/공문 초안 생성"))
     
     st.markdown("---")
     
-    # 모바일 최적화 (일자형 배치)
     st.info("👇 **검토할 파일 (필수)**")
     uploaded_file = st.file_uploader("검토 파일 업로드", type=['txt', 'pdf', 'docx'], key="target", label_visibility="collapsed")
     
@@ -323,7 +342,6 @@ with tab2:
     st.markdown("### 🗣️ 실시간 질의응답")
     st.info("파일 내용이나 업무 관련 궁금한 점을 물어보세요.")
     
-    # 모바일 최적화 (단순 폼)
     with st.form(key='chat_form', clear_on_submit=True):
         user_input = st.text_input("질문 입력", placeholder="예: 하도급법 위반 사례를 알려줘")
         submit_chat = st.form_submit_button("전송 📤", use_container_width=True)
@@ -334,7 +352,7 @@ with tab2:
         if 'api_key' not in st.session_state: st.error("🔒 로그인 필요")
         else:
             st.session_state.messages.append({"role": "user", "content": user_input})
-            with st.spinner("AI 파트너가 답변을 생성 중입니다..."):
+            with st.spinner("Audit AI 에이전트가 답변을 생성 중입니다..."):
                 try:
                     genai.configure(api_key=st.session_state['api_key'])
                     context = ""
@@ -367,7 +385,6 @@ with tab2:
 with tab3:
     st.markdown("### 📰 스마트 요약 & 인사이트")
     
-    # 모바일 최적화 (단순 라디오 버튼)
     summary_type = st.radio("입력 방식 선택", ["🌐 URL 입력", "📁 미디어 파일 업로드", "✍️ 텍스트 입력"])
     
     final_input = None
