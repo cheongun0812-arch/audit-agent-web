@@ -26,83 +26,123 @@ st.set_page_config(
 )
 
 # ==========================================
-# 2. 🎨 [디자인] V40: 모바일 강제 렌더링 해결 CSS
+# 2. 🎨 [디자인] V41: CSS 핵(Hack) 적용
 # ==========================================
 st.markdown("""
     <style>
-    /* 1. 기본 배경 및 폰트 */
+    /* 1. 전체 배경 및 폰트 강제 */
     .stApp { background-color: #F4F6F9 !important; }
-    html, body, p, div, span, label, h1, h2, h3, h4, h5, h6, li {
-        color: #333333 !important; 
+    
+    html, body, p, div, span, label, h1, h2, h3, h4, h5, h6, li, button {
         font-family: 'Pretendard', sans-serif !important;
+    }
+    
+    /* 텍스트 가독성 확보 (검은색 강제) */
+    p, div, span, label, li {
+        color: #333333 !important;
     }
 
     /* 2. 사이드바 디자인 */
     [data-testid="stSidebar"] { background-color: #2C3E50 !important; }
-    [data-testid="stSidebar"] * { color: #FFFFFF !important; }
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
+        color: #FFFFFF !important;
+    }
+    /* 사이드바 안의 일반 텍스트는 흰색 */
+    [data-testid="stSidebar"] p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] span {
+        color: #ECF0F1 !important;
+    }
 
-    /* 3. [핵심] 'keyboard...' 글씨 제거 및 책갈피 아이콘화 🔖 */
+    /* 🚨 3. [최후의 수단] 상단 메뉴 버튼 'keyboard...' 글씨 날리기 🚨 */
     [data-testid="stSidebarCollapsedControl"] {
+        /* 글씨를 화면 왼쪽 끝으로 9999px 날려버림 (물리적으로 안보임) */
+        text-indent: -9999px !important;
+        white-space: nowrap !important;
+        
+        /* 책갈피 모양 만들기 */
         background-color: #FFFFFF !important;
         border-radius: 0 12px 12px 0 !important;
-        border: 1px solid #E0E0E0 !important;
+        border: 1px solid #BDC3C7 !important;
         border-left: none !important;
-        box-shadow: 3px 3px 10px rgba(0,0,0,0.15) !important;
+        box-shadow: 2px 2px 6px rgba(0,0,0,0.15) !important;
+        
+        /* 위치 및 크기 고정 */
+        position: fixed !important;
         top: 60px !important;
         left: 0 !important;
-        width: 40px !important;
-        height: 40px !important;
-        z-index: 999999 !important;
+        width: 45px !important;
+        height: 45px !important;
+        z-index: 9999999 !important;
         
-        /* 🚨 글씨 숨기기 필살기 */
-        color: transparent !important; 
-        font-size: 0 !important;
-        overflow: hidden !important;
+        /* 내용 정렬 */
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
     }
     
-    /* ☰ 햄버거 아이콘 심기 */
+    /* 기존 SVG 아이콘 삭제 */
+    [data-testid="stSidebarCollapsedControl"] > svg, 
+    [data-testid="stSidebarCollapsedControl"] > img {
+        display: none !important;
+    }
+    
+    /* ☰ 햄버거 아이콘 새로 그리기 (가상 요소 사용) */
     [data-testid="stSidebarCollapsedControl"]::after {
         content: "☰";
-        font-size: 24px !important;
-        color: #2C3E50 !important; /* 아이콘 색상은 진한 네이비 */
+        text-indent: 0 !important; /* 날아간 글씨 원상복구 */
+        font-size: 26px !important;
+        color: #2C3E50 !important; /* 진한 네이비 */
         font-weight: 900 !important;
-        display: block !important;
         position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -55%);
+        display: block !important;
+        visibility: visible !important;
     }
 
-    /* 4. [핵심] 입력창 & 버튼 색상 강제 (모바일 다크모드 무시) */
-    
-    /* 입력창: 무조건 라이트 모드 렌더링 강제 (눈 아이콘 복구) */
-    input {
-        color-scheme: light !important; 
+    /* 🚨 4. [입력창] 흰 화면에서 글씨 안 보이는 문제 해결 🚨 */
+    /* 모든 텍스트 입력창 강제 스타일링 */
+    input[type="text"], input[type="password"] {
         background-color: #FFFFFF !important;
-        color: #000000 !important;
-        -webkit-text-fill-color: #000000 !important;
-        border: 1px solid #BDC3C7 !important;
+        border: 2px solid #D5DBDB !important;
         border-radius: 8px !important;
+        padding: 10px !important;
+        
+        /* 글씨 색상: 무조건 검은색 */
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important; /* 모바일 크롬/사파리 강제 */
+        caret-color: #000000 !important; /* 커서 색상 */
+        opacity: 1 !important;
     }
     
-    /* 버튼: 그라데이션 배경 + 흰색 글씨 강제 */
+    /* placeholder(안내문구) 색상 강제 */
+    ::placeholder {
+        color: #7F8C8D !important;
+        -webkit-text-fill-color: #7F8C8D !important;
+        opacity: 1 !important; /* 투명도 제거 */
+    }
+    
+    /* 비밀번호 눈 아이콘 강제 색상 변경 (필터 사용) */
+    button[aria-label="Show password"] {
+        filter: invert(1) !important; /* 색상 반전시켜서 검게 보이게 함 */
+    }
+
+    /* 5. 버튼 디자인 */
     .stButton > button {
         background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%) !important;
         color: #FFFFFF !important;
-        -webkit-text-fill-color: #FFFFFF !important; /* 모바일 강제 */
+        -webkit-text-fill-color: #FFFFFF !important;
         border: none !important;
         border-radius: 8px !important;
         font-weight: 700 !important;
-        padding: 0.5rem 1rem !important;
         box-shadow: 0 4px 6px rgba(0,0,0,0.2) !important;
     }
     
-    /* 5. 채팅 메시지 박스 */
+    /* 6. 채팅 메시지 박스 */
     [data-testid="stChatMessage"] {
         background-color: #FFFFFF !important; 
         border: 1px solid #E0E0E0;
         border-radius: 12px;
-        color: #333333 !important;
     }
     [data-testid="stChatMessage"][data-testid="user"] { 
         background-color: #EBF5FB !important; 
@@ -118,9 +158,8 @@ with st.sidebar:
     st.markdown("---")
     with st.form(key='login_form'):
         st.markdown("**🔐 Access Key**")
-        # [수정] 입력창 placeholder와 라벨 명확화
-        api_key_input = st.text_input("API 키 입력", type="password", label_visibility="collapsed", placeholder="API 키를 입력하세요")
-        # [수정] 버튼 텍스트 명확화
+        # 라벨을 'visible'로 바꿔서 모바일 접근성 향상
+        api_key_input = st.text_input("API Key", type="password", placeholder="API 키를 입력하세요", label_visibility="visible")
         submit_button = st.form_submit_button(label="시스템 접속 (Login)")
     
     if submit_button:
