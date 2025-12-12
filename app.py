@@ -104,14 +104,19 @@ def read_file(uploaded_file):
     except: return None
     return content
 
+# [핵심 수정] 403 오류 우회 시도 및 실패 시 안내
 def download_and_upload_youtube_audio(url):
     try:
+        # 우회 설정 추가 (Android 클라이언트로 위장)
         ydl_opts = {
-            'format': 'bestaudio[ext=m4a]/bestaudio/best',
+            'format': 'bestaudio/best',
             'outtmpl': 'temp_audio.%(ext)s',
             'quiet': True,
-            'overwrites': True
+            'overwrites': True,
+            'extractor_args': {'youtube': {'player_client': ['android', 'web']}}, # [중요] 우회 시도
+            'http_headers': {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
         }
+        
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
             
@@ -126,8 +131,17 @@ def download_and_upload_youtube_audio(url):
             
         os.remove(audio_path)
         return myfile
+        
     except Exception as e:
-        st.error(f"오디오 처리 중 오류: {e}")
+        # 403 Forbidden 오류가 발생하면 사용자에게 솔직하게 안내
+        if "403" in str(e) or "Forbidden" in str(e):
+            st.error("🔒 [유튜브 보안 차단] 클라우드 서버에서의 다운로드가 막혔습니다.")
+            st.info("💡 **해결 방법:**")
+            st.markdown("1. [SaveFrom.net](https://ko.savefrom.net/) 등에서 해당 영상을 **MP3**로 다운받으세요.")
+            st.markdown("2. 위 탭에서 **'📁 미디어 파일 업로드'**를 선택하고 파일을 올려주세요.")
+            st.markdown("3. 그러면 AI가 똑같이 분석해 드립니다!")
+        else:
+            st.error(f"오디오 처리 중 오류: {e}")
         return None
 
 def get_youtube_transcript(url):
@@ -257,18 +271,18 @@ with tab2:
             with st.chat_message("assistant", avatar="🛡️"): st.markdown(asst_msg['content'])
             st.markdown("<hr style='border: 0; height: 1px; background: #BDC3C7; margin: 10px 0;'>", unsafe_allow_html=True)
 
-# --- Tab 3: 스마트 요약 (수정됨) ---
+# --- Tab 3: 스마트 요약 ---
 with tab3:
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("#### 📰 스마트 요약 & 인사이트")
     st.info("유튜브/뉴스 URL 또는 파일을 업로드하세요.")
     
-    summary_type = st.radio("입력 방식", ("🌐 URL 입력 (유튜브/뉴스)", "📁 미디어 파일 업로드 (MP3/MP4)", "✍️ 텍스트 입력"), horizontal=True)
+    summary_type = st.radio("입력 방식", ("🌐 URL 입력", "📁 미디어 파일 업로드", "✍️ 텍스트 입력"), horizontal=True)
     
     final_input = None
-    is_multimodal = False # [수정] 변수명 통일 (오디오/영상/파일 모두 이걸로 처리)
+    is_multimodal = False
 
-    if summary_type == "🌐 URL 입력 (유튜브/뉴스)":
+    if summary_type == "🌐 URL 입력":
         target_url = st.text_input("🔗 URL 붙여넣기")
         
         if target_url:
@@ -284,16 +298,16 @@ with tab3:
                             audio_file = download_and_upload_youtube_audio(target_url)
                             if audio_file:
                                 final_input = audio_file
-                                is_multimodal = True # [설정] 멀티모달 모드 켜기
+                                is_multimodal = True
             else:
                 with st.spinner("웹사이트 분석 중..."):
                     final_input = get_web_content(target_url)
 
-    elif summary_type == "📁 미디어 파일 업로드 (MP3/MP4)":
+    elif summary_type == "📁 미디어 파일 업로드":
         media_file = st.file_uploader("영상/음성 파일 (MP3/MP4)", type=['mp3', 'mp4', 'm4a', 'wav'])
         if media_file:
             final_input = process_media_file(media_file)
-            is_multimodal = True # [설정] 멀티모달 모드 켜기
+            is_multimodal = True
 
     else:
         final_input = st.text_area("내용 붙여넣기", height=200)
@@ -313,12 +327,9 @@ with tab3:
                     """
                     model = get_model()
                     
-                    # [수정] 통합된 변수(is_multimodal)로 체크
                     if is_multimodal:
-                        # 오디오/영상 파일과 함께 프롬프트 전송
                         response = model.generate_content([prompt, final_input])
                     else:
-                        # 텍스트만 전송
                         response = model.generate_content(f"{prompt}\n\n{final_input[:30000]}")
                     
                     st.success("분석 완료")
