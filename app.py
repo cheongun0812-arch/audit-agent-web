@@ -125,7 +125,7 @@ with st.sidebar:
     st.caption("Audit AI Solution © 2025\nEngine: Gemini 1.5 Pro")
 
 # ==========================================
-# 4. 🎅 크리스마스 작별 애니메이션 로직
+# 4. 🎅 크리스마스 작별 애니메이션 로직 (수정됨)
 # ==========================================
 if 'logout_anim' in st.session_state and st.session_state['logout_anim']:
     # 전체 화면을 덮는 눈 내리는 효과 HTML/CSS
@@ -135,7 +135,7 @@ if 'logout_anim' in st.session_state and st.session_state['logout_anim']:
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
             background: rgba(0, 0, 0, 0.85); z-index: 999999;
             display: flex; flex-direction: column; justify-content: center; align-items: center;
-            color: white; text-align: center;
+            color: white; text-align: center; font-family: 'Pretendard', sans-serif;
         }
         .snowflake {
             color: #fff; font-size: 1.5em; font-family: Arial, sans-serif; text-shadow: 0 0 5px #000;
@@ -161,9 +161,9 @@ if 'logout_anim' in st.session_state and st.session_state['logout_anim']:
         </style>
         
         <div class="snow-container">
-            <div style="font-size: 80px;">🎅🎄</div>
-            <h1 style="color:white !important; margin-top: 20px;">Merry Christmas!</h1>
-            <h3 style="color:#eee !important;">오늘도 수고 많으셨습니다.<br>따뜻한 연말 보내세요! ❤️</h3>
+            <div style="font-size: 80px; margin-bottom: 20px;">🎅🎄</div>
+            <div style="font-size: 40px; font-weight: bold; color:white !important; margin-bottom: 20px;">Merry Christmas!</div>
+            <div style="font-size: 24px; color:#eee !important; line-height: 1.5;">오늘도 수고 많으셨습니다.<br>따뜻한 연말 보내세요! ❤️</div>
             
             <div class="snowflake">❅</div><div class="snowflake">❆</div><div class="snowflake">❅</div>
             <div class="snowflake">❆</div><div class="snowflake">❅</div><div class="snowflake">❆</div>
@@ -172,7 +172,7 @@ if 'logout_anim' in st.session_state and st.session_state['logout_anim']:
         </div>
     """, unsafe_allow_html=True)
     
-    # 3초 동안 애니메이션 보여주기
+    # 3.5초 동안 애니메이션 보여주기
     time.sleep(3.5)
     
     # 로그아웃 처리 (세션 삭제)
