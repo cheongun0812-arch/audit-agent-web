@@ -2,3 +2,6 @@ streamlit
 google-generativeai
 python-docx
 PyPDF2
+youtube-transcript-api
+beautifulsoup4
+requests
