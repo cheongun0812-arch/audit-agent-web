@@ -87,68 +87,60 @@ st.markdown("""
 # 3. 사이드바 (로그인 & 로그아웃)
 # ==========================================
 with st.sidebar:
-    st.title("🏛️ Control Center")
+    st.markdown("### 🏛️ Control Center")
     st.markdown("---")
     
-    # 🚨 [수정 2] 입력창 터치 시 흰색 박스(글씨 안보임) 해결을 위한 강제 CSS 주입
-    st.markdown("""
-        <style>
-        /* 입력창 글씨를 무조건 검은색으로 강제 고정 */
-        input[type="password"] {
-            background-color: #FFFFFF !important;
-            color: #000000 !important;
-            -webkit-text-fill-color: #000000 !important;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-
-    # 세션에 키가 없으면 -> 로그인 폼 표시
+    # 로그인 상태가 아니면 -> 로그인 화면
     if 'api_key' not in st.session_state:
         with st.form(key='login_form'):
-            st.markdown("🔑 **Access Key**")
-            api_key_input = st.text_input("키 입력", type="password", placeholder="API 키를 입력하세요", label_visibility="collapsed")
+            st.markdown("<h4 style='color:white; margin-bottom:5px;'>🔐 Access Key</h4>", unsafe_allow_html=True)
+            # label_visibility="collapsed" 이지만 위의 markdown으로 라벨 대체 효과
+            api_key_input = st.text_input("Key", type="password", placeholder="API 키를 입력하세요", label_visibility="collapsed")
             submit_button = st.form_submit_button(label="시스템 접속 (Login)")
         
-        # 🚨 [수정 1] 접속 오류 해결 (두 번 클릭해야 하는 문제 수정)
+        # 🚨 [수정 1] 로그인 로직 개선 (한 번 클릭으로 해결)
         if submit_button:
             if api_key_input:
                 clean_key = api_key_input.strip()
+                
+                # 1. 일단 세션에 저장 (화면 리로드 시 유지되도록)
+                st.session_state['api_key'] = clean_key
+                
                 try:
-                    # 1. 설정
+                    # 2. 설정 및 테스트
                     genai.configure(api_key=clean_key)
+                    list(genai.list_models()) # 유효성 검사
                     
-                    # 2. 유효성 검사 (실제 호출을 한번 해봐야 확실함)
-                    list(genai.list_models()) 
-                    
-                    # 3. 성공 시 세션 저장 -> 성공 메시지 -> 새로고침(Rerun)
-                    st.session_state['api_key'] = clean_key
+                    # 3. 성공 시 메시지 후 리로드
                     st.success("✅ 접속 완료")
-                    time.sleep(0.5) # 메시지를 볼 찰나의 시간 확보
-                    st.rerun()      # 즉시 새로고침하여 로그인 상태로 전환
+                    time.sleep(0.5)
+                    st.rerun() # 즉시 새로고침
+                    
                 except Exception as e:
-                    st.error("❌ 유효하지 않은 키입니다.")
+                    # 4. 실패 시 저장했던 키 삭제 및 에러 표시
+                    if 'api_key' in st.session_state:
+                        del st.session_state['api_key']
+                    st.error("❌ 유효하지 않은 키입니다. 다시 확인해주세요.")
             else:
-                st.warning("⚠️ 키 입력 필요")
+                st.warning("⚠️ 키를 입력해주세요.")
 
-    # 세션에 키가 있으면 -> 로그아웃 버튼 표시
+    # 로그인 상태면 -> 로그아웃 화면
     else:
-        st.success("🟢 시스템 정상 가동")
+        st.success("🟢 정상 가동 중")
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # 🎄 따뜻한 작별 버튼
         if st.button("🎄 고마워! 또 봐! (Logout)", type="primary", use_container_width=True):
-            # 1. 애니메이션 트리거 설정
+            # 애니메이션 플래그 켜기
             st.session_state['logout_anim'] = True
             st.rerun()
 
     st.markdown("---")
-    st.caption("ktMOS북부 Audit AI Solution © 2025\nEngine: Gemini 1.5 Pro")
+    st.markdown("<div style='color:white; text-align:center; font-size:12px; opacity:0.8;'>Audit AI Solution © 2025<br>Engine: Gemini 1.5 Pro</div>", unsafe_allow_html=True)
 
 # ==========================================
-# 4. 🎅 크리스마스 작별 애니메이션 (코드 노출 방지)
+# 4. 🎅 크리스마스 작별 애니메이션
 # ==========================================
 if 'logout_anim' in st.session_state and st.session_state['logout_anim']:
-    # HTML 들여쓰기를 제거하여 코드로 인식되는 문제 해결
     st.markdown("""
 <div class="snow-bg">
 <div style="font-size: 80px; margin-bottom: 20px;">🎅🎄</div>
@@ -157,13 +149,15 @@ if 'logout_anim' in st.session_state and st.session_state['logout_anim']:
 </div>
 """, unsafe_allow_html=True)
     
-    time.sleep(3.0)
-    for key in list(st.session_state.keys()):
-        del st.session_state[key]
-    st.rerun()
+    time.sleep(3.5) # 감상 시간
+    
+    # 🚨 [수정 2] 로그아웃 시 세션 완전 초기화 (먹통 방지)
+    st.session_state.clear() # 모든 세션 데이터 삭제 (API 키 포함)
+    
+    st.rerun() # 초기 화면으로 복귀
 
 # ==========================================
-# 5. 핵심 기능 함수
+# 5. 핵심 기능 함수 (기존 유지)
 # ==========================================
 def get_model():
     if 'api_key' in st.session_state:
@@ -261,24 +255,22 @@ def process_media_file(uploaded_file):
 # ==========================================
 # 6. 메인 화면 구성
 # ==========================================
+
 st.markdown("<h1 style='text-align: center; color: #2C3E50;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
 st.markdown("<div style='text-align: center; color: #555; margin-bottom: 20px;'>Professional Legal & Audit Assistant System</div>", unsafe_allow_html=True)
 
-# [수정] 탭 명칭 및 아이콘 최종 확인
+# 탭 구성
 tab1, tab2, tab3 = st.tabs(["📄 문서 정밀 검토", "💬 Audit AI 에이전트 대화", "📰 스마트 요약"])
 
 # --- Tab 1: 문서 검토 ---
 with tab1:
-    # [수정] 📂 폴더 아이콘 적용
     st.markdown("### 📂 작업 및 파일 설정")
     option = st.selectbox("작업 유형 선택", 
         ("법률 리스크 정밀 검토", "감사 보고서 초안 작성", "오타 수정 및 문구 교정", "기안문/공문 초안 생성"))
     st.markdown("---")
     
-    # [수정] 모바일 깨짐 방지: 1단 배치 (st.columns 제거)
     st.info("👇 **검토할 파일 (필수)**")
     uploaded_file = st.file_uploader("검토 파일 업로드", type=['txt', 'pdf', 'docx'], key="target", label_visibility="collapsed")
-    
     st.warning("📚 **참고 규정/지침 (선택)**")
     uploaded_refs = st.file_uploader("참고 파일 업로드", type=['txt', 'pdf', 'docx'], accept_multiple_files=True, label_visibility="collapsed")
 
@@ -327,7 +319,6 @@ with tab2:
     st.markdown("### 🗣️ 실시간 질의응답")
     st.info("파일 내용이나 업무 관련 궁금한 점을 물어보세요.")
     
-    # [수정] 모바일 깨짐 방지: 1단 배치
     with st.form(key='chat_form', clear_on_submit=True):
         user_input = st.text_input("질문 입력", placeholder="예: 하도급법 위반 사례를 알려줘")
         submit_chat = st.form_submit_button("전송 📤", use_container_width=True)
@@ -371,7 +362,6 @@ with tab2:
 with tab3:
     st.markdown("### 📰 스마트 요약 & 인사이트")
     
-    # [수정] 라디오 버튼 단순화
     summary_type = st.radio("입력 방식 선택", ["🌐 URL 입력", "📁 미디어 파일 업로드", "✍️ 텍스트 입력"])
     
     final_input = None
