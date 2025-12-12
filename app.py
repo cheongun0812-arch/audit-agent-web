@@ -26,42 +26,37 @@ st.set_page_config(
 )
 
 # ==========================================
-# 2. 🎨 [디자인] V55: 가시성(Visibility) 제어 기술 적용
+# 2. 🎨 [디자인] V56: CSS 절대 강제 (오류 원천 봉쇄)
 # ==========================================
 st.markdown("""
     <style>
-    /* 1. 기본 배경 및 폰트 */
+    /* 1. 기본 설정 */
     .stApp { background-color: #F4F6F9 !important; }
     * { font-family: 'Pretendard', sans-serif !important; }
 
-    /* 2. 사이드바 (다크 네이비) */
+    /* 2. 사이드바 (Control Center) */
     [data-testid="stSidebar"] { background-color: #2C3E50 !important; }
-    /* 사이드바 내 모든 텍스트: 흰색 강제 */
-    [data-testid="stSidebar"] p, [data-testid="stSidebar"] span, 
-    [data-testid="stSidebar"] label, [data-testid="stSidebar"] div, 
-    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
-        color: #FFFFFF !important;
-    }
+    [data-testid="stSidebar"] * { color: #FFFFFF !important; }
 
-    /* 3. [핵심 해결] 입력창 글씨 색상 (Gray Color Text) */
-    /* 모바일에서 흰색으로 날아가는 것을 방지하기 위해 진한 회색(#333333)으로 고정 */
-    input.stTextInput, textarea.stTextArea {
+    /* 🚨 3. [최종 해결] 입력창 텍스트 실종 방지 (color-scheme 강제) 🚨 */
+    /* 브라우저에게 '여기는 라이트모드다'라고 인식시켜 색상 반전을 막음 */
+    [data-testid="stSidebar"] input {
+        color-scheme: light !important; 
         background-color: #FFFFFF !important;
-        color: #333333 !important; /* Gray Text Color */
-        -webkit-text-fill-color: #333333 !important;
-        caret-color: #333333 !important;
-        border: 2px solid #BDC3C7 !important;
-        font-weight: 600 !important; /* 글씨 두께 강화 */
+        color: #000000 !important; /* 검은색 강제 */
+        -webkit-text-fill-color: #000000 !important;
+        caret-color: #000000 !important;
+        border: 1px solid #BDC3C7 !important;
     }
     
-    /* 플레이스홀더(안내문구) 색상 */
+    /* 플레이스홀더(안내문구)도 강제 색상 지정 */
     ::placeholder {
-        color: #888888 !important;
-        -webkit-text-fill-color: #888888 !important;
+        color: #555555 !important;
+        -webkit-text-fill-color: #555555 !important;
         opacity: 1 !important;
     }
 
-    /* 4. 버튼 디자인 (White Text Color) */
+    /* 4. 버튼 디자인 */
     .stButton > button {
         background: linear-gradient(to right, #2980B9, #2C3E50) !important;
         color: #FFFFFF !important;
@@ -71,29 +66,35 @@ st.markdown("""
         height: 45px !important;
     }
 
-    /* 5. [핵심 해결] 상단 'keyboard...' 텍스트 박멸 (Visibility 기법) */
-    /* 부모 요소를 숨겨서 텍스트 자체를 안 보이게 만듦 */
+    /* 🚨 5. [최종 해결] 상단 메뉴 'keyboard...' 텍스트 박멸 🚨 */
+    /* 버튼 자체의 스타일 */
     [data-testid="stSidebarCollapsedControl"] {
-        visibility: hidden !important; 
         background-color: #FFFFFF !important;
         border-radius: 0 10px 10px 0;
-        width: 45px !important;
-        height: 45px !important;
-        box-shadow: 2px 2px 5px rgba(0,0,0,0.1) !important;
+        width: 42px !important;
+        height: 42px !important;
+        box-shadow: 2px 2px 5px rgba(0,0,0,0.15) !important;
         z-index: 999999 !important;
+        
+        /* 텍스트와 아이콘을 정렬하기 위한 설정 */
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
     }
-    
-    /* ☰ 아이콘만 '다시 보이게(visible)' 설정 */
+
+    /* 🔥 버튼 안의 모든 자식 요소(SVG, 텍스트 노드 등)를 아예 없애버림 */
+    [data-testid="stSidebarCollapsedControl"] > * {
+        display: none !important;
+    }
+
+    /* 🔥 그리고 가상 요소로 햄버거 아이콘(☰)만 새로 그림 */
     [data-testid="stSidebarCollapsedControl"]::after {
         content: "☰";
-        visibility: visible !important;
         color: #2C3E50 !important;
         font-size: 26px !important;
         font-weight: 900 !important;
-        position: absolute;
-        top: 5px; 
-        left: 10px;
         display: block !important;
+        margin-top: -3px; /* 수직 중앙 보정 */
     }
 
     /* 6. 크리스마스 애니메이션 스타일 */
@@ -103,10 +104,6 @@ st.markdown("""
         display: flex; flex-direction: column; justify-content: center; align-items: center;
         text-align: center; color: white !important;
     }
-    
-    /* 7. 채팅 메시지 박스 */
-    [data-testid="stChatMessage"] { background-color: #FFFFFF; border: 1px solid #eee; }
-    [data-testid="stChatMessage"][data-testid="user"] { background-color: #E3F2FD; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -117,11 +114,11 @@ with st.sidebar:
     st.markdown("### 🏛️ Control Center")
     st.markdown("---")
     
-    # 로그인 전
     if 'api_key' not in st.session_state:
         with st.form(key='login_form'):
+            # 라벨을 확실하게 보여줌
             st.markdown("<h4 style='color:white; margin-bottom:5px;'>🔐 Access Key</h4>", unsafe_allow_html=True)
-            # [수정] 플레이스홀더를 더 명확하게
+            # 입력창
             api_key_input = st.text_input("Key", type="password", placeholder="API 키 입력", label_visibility="collapsed")
             submit_button = st.form_submit_button(label="시스템 접속 (Login)")
         
@@ -139,7 +136,6 @@ with st.sidebar:
             else:
                 st.warning("⚠️ 키 입력 필요")
 
-    # 로그인 후
     else:
         st.success("🟢 정상 가동 중")
         st.markdown("<br>", unsafe_allow_html=True)
@@ -271,17 +267,13 @@ def process_media_file(uploaded_file):
 st.markdown("<h1 style='text-align: center; color: #2C3E50;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
 st.markdown("<div style='text-align: center; color: #555; margin-bottom: 20px;'>Professional Legal & Audit Assistant System</div>", unsafe_allow_html=True)
 
-# [수정] 탭 이름 최종 적용 (Audit AI 에이전트 대화)
 tab1, tab2, tab3 = st.tabs(["📄 문서 정밀 검토", "💬 Audit AI 에이전트 대화", "📰 스마트 요약"])
 
 # --- Tab 1: 문서 검토 ---
 with tab1:
-    # [수정] 폴더 아이콘 적용
     st.markdown("### 📂 작업 및 파일 설정")
-    
     option = st.selectbox("작업 유형 선택", 
         ("법률 리스크 정밀 검토", "감사 보고서 초안 작성", "오타 수정 및 문구 교정", "기안문/공문 초안 생성"))
-    
     st.markdown("---")
     
     st.info("👇 **검토할 파일 (필수)**")
