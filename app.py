@@ -41,9 +41,12 @@ st.markdown("""
     [data-testid="stSidebar"] * { color: #FFFFFF !important; }
 
     /* 3. [핵심] 상단 못생긴 버튼 -> '책갈피' 스타일로 성형수술 🔖 */
+    
+    /* (1) 버튼 껍데기 디자인 (책갈피 모양) */
     [data-testid="stSidebarCollapsedControl"] {
         background-color: #FFFFFF !important;
-        border-radius: 0 12px 12px 0 !important; /* 오른쪽만 둥글게 (책갈피 모양) */
+        color: transparent !important; /* 기존 글씨(keyboard...)를 투명하게 만듦 */
+        border-radius: 0 12px 12px 0 !important; /* 오른쪽만 둥글게 */
         border: 1px solid #E0E0E0 !important;
         border-left: none !important;
         box-shadow: 2px 2px 8px rgba(0,0,0,0.1) !important;
@@ -52,30 +55,31 @@ st.markdown("""
         width: 40px !important;
         height: 40px !important;
         z-index: 99999 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
     }
     
-    /* 기존의 못생긴 아이콘/글씨 숨기기 */
-    [data-testid="stSidebarCollapsedControl"] svg, 
-    [data-testid="stSidebarCollapsedControl"] img {
+    /* (2) 기존 아이콘(SVG) 강제로 숨김 */
+    [data-testid="stSidebarCollapsedControl"] > svg, 
+    [data-testid="stSidebarCollapsedControl"] > img {
         display: none !important;
     }
     
-    /* 깔끔한 햄버거 메뉴(☰) 아이콘 심기 */
+    /* (3) 새로운 햄버거 아이콘(☰) 심기 */
     [data-testid="stSidebarCollapsedControl"]::after {
         content: "☰"; 
-        font-size: 22px;
-        color: #2C3E50;
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -55%);
+        font-size: 24px;
+        color: #2C3E50 !important; /* 아이콘 색상 (네이비) */
         font-weight: bold;
+        position: absolute;
+        margin-top: -2px;
     }
     
-    /* 호버 효과 */
+    /* (4) 마우스 올렸을 때 효과 */
     [data-testid="stSidebarCollapsedControl"]:hover {
         background-color: #F8F9FA !important;
-        width: 45px !important; /* 마우스 올리면 쑥 나옴 */
+        width: 45px !important; /* 살짝 튀어나옴 */
         transition: width 0.2s ease;
     }
 
@@ -322,12 +326,12 @@ with tab3:
     st.markdown("#### 📰 스마트 요약 & 인사이트")
     st.info("유튜브/뉴스 URL 또는 파일을 업로드하세요.")
     
-    summary_type = st.radio("입력 방식", ("🌐 URL 입력", "📁 미디어 파일 업로드", "✍️ 텍스트 입력"), horizontal=True)
+    summary_type = st.radio("입력 방식", ("🌐 URL 입력 (유튜브/뉴스)", "📁 미디어 파일 업로드 (MP3/MP4)", "✍️ 텍스트 입력"), horizontal=True)
     
     final_input = None
-    is_multimodal = False # [중요] 변수명 통일
+    is_multimodal = False
 
-    if summary_type == "🌐 URL 입력":
+    if summary_type == "🌐 URL 입력 (유튜브/뉴스)":
         target_url = st.text_input("🔗 URL 붙여넣기")
         if target_url:
             if "youtu" in target_url:
@@ -342,16 +346,16 @@ with tab3:
                             audio_file = download_and_upload_youtube_audio(target_url)
                             if audio_file:
                                 final_input = audio_file
-                                is_multimodal = True # 멀티모달 모드 활성화
+                                is_multimodal = True
             else:
                 with st.spinner("웹사이트 분석 중..."):
                     final_input = get_web_content(target_url)
 
-    elif summary_type == "📁 미디어 파일 업로드":
+    elif summary_type == "📁 미디어 파일 업로드 (MP3/MP4)":
         media_file = st.file_uploader("영상/음성 파일 (MP3/MP4)", type=['mp3', 'mp4', 'm4a', 'wav'])
         if media_file:
             final_input = process_media_file(media_file)
-            is_multimodal = True # 멀티모달 모드 활성화 (여기가 수정됨!)
+            is_multimodal = True
 
     else:
         final_input = st.text_area("내용 붙여넣기", height=200)
@@ -371,7 +375,6 @@ with tab3:
                     """
                     model = get_model()
                     
-                    # 통합된 변수로 분기 처리
                     if is_multimodal:
                         response = model.generate_content([prompt, final_input])
                     else:
