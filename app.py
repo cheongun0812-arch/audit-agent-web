@@ -26,60 +26,80 @@ st.set_page_config(
 )
 
 # ==========================================
-# 2. 🎨 디자인 테마 (V47 안전성 유지 + 크리스마스 효과)
+# 2. 🎨 디자인 테마 (기존 성공 코드 유지 + 버튼 수정)
 # ==========================================
 st.markdown("""
     <style>
-    .stApp { background-color: #F4F6F9; }
-    [data-testid="stSidebar"] { background-color: #2C3E50; }
+    /* 1. 배경 및 폰트 */
+    .stApp { background-color: #F4F6F9 !important; }
+    * { font-family: 'Pretendard', sans-serif !important; }
+
+    /* 2. 사이드바 */
+    [data-testid="stSidebar"] { background-color: #2C3E50 !important; }
     [data-testid="stSidebar"] * { color: #FFFFFF !important; }
-    
-    .stTextInput input, .stTextArea textarea {
+
+    /* 3. 입력창 디자인 (검은 글씨 유지) */
+    input.stTextInput, textarea.stTextArea {
         background-color: #FFFFFF !important;
         color: #000000 !important;
         -webkit-text-fill-color: #000000 !important;
+        caret-color: #000000 !important;
         border: 1px solid #BDC3C7 !important;
     }
-    
-    .stButton > button {
-        background: linear-gradient(to right, #2980B9, #2C3E50) !important;
-        color: #FFFFFF !important;
-        border: none !important;
-        font-weight: bold !important;
+    ::placeholder {
+        color: #666666 !important;
+        -webkit-text-fill-color: #666666 !important;
+        opacity: 1 !important;
     }
 
-    /* 상단 메뉴 버튼 (책갈피) */
+    /* 4. [수정] 버튼 디자인: 터치 시 흰색으로 변하는 문제 해결 */
+    .stButton > button, 
+    .stButton > button:focus, 
+    .stButton > button:active, 
+    .stButton > button:hover {
+        background: linear-gradient(to right, #2980B9, #2C3E50) !important;
+        color: #FFFFFF !important;
+        -webkit-text-fill-color: #FFFFFF !important; /* 모바일 강제 적용 */
+        border: none !important;
+        font-weight: bold !important;
+        height: 45px !important;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2) !important;
+        outline: none !important; /* 포커스 테두리 제거 */
+    }
+
+    /* 5. 상단 메뉴 버튼 (기존 성공 코드 유지) */
     [data-testid="stSidebarCollapsedControl"] {
         color: transparent !important;
         background-color: #FFFFFF !important;
         border-radius: 0 10px 10px 0;
         border: 1px solid #ddd;
-        width: 40px; height: 40px;
+        width: 40px !important;
+        height: 40px !important;
         z-index: 99999;
-    }
-    [data-testid="stSidebarCollapsedControl"]::after {
-        content: "☰";
-        color: #333;
-        font-size: 24px;
-        font-weight: bold;
-        position: absolute;
-        top: 5px; left: 10px;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
     }
     
+    [data-testid="stSidebarCollapsedControl"]::after {
+        content: "☰";
+        color: #2C3E50 !important;
+        font-size: 24px !important;
+        font-weight: bold !important;
+        position: absolute;
+    }
+
+    /* 6. 크리스마스 애니메이션 스타일 */
+    .snow-bg {
+        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+        background: rgba(0, 0, 0, 0.9); z-index: 999999;
+        display: flex; flex-direction: column; justify-content: center; align-items: center;
+        text-align: center; color: white !important;
+    }
+    
+    /* 7. 채팅 메시지 박스 */
     [data-testid="stChatMessage"] { background-color: #FFFFFF; border: 1px solid #eee; }
     [data-testid="stChatMessage"][data-testid="user"] { background-color: #E3F2FD; }
-
-    /* 🎄 크리스마스 로그아웃 버튼 스타일 */
-    .logout-btn {
-        border: 2px solid #FF5252 !important;
-        background: transparent !important;
-        color: #FF5252 !important;
-        border-radius: 20px !important;
-    }
-    .logout-btn:hover {
-        background-color: #FF5252 !important;
-        color: white !important;
-    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -87,48 +107,50 @@ st.markdown("""
 # 3. 사이드바 (로그인 & 로그아웃)
 # ==========================================
 with st.sidebar:
-    st.title("🏛️ Control Center")
+    st.markdown("### 🏛️ Control Center")
     st.markdown("---")
     
-    # 세션에 키가 없으면 -> 로그인 폼 표시
     if 'api_key' not in st.session_state:
         with st.form(key='login_form'):
-            st.markdown("🔑 **Access Key**")
-            api_key_input = st.text_input("키 입력", type="password", placeholder="API 키를 입력하세요", label_visibility="collapsed")
+            st.markdown("<h4 style='color:white; margin-bottom:5px;'>🔐 Access Key</h4>", unsafe_allow_html=True)
+            api_key_input = st.text_input("Key", type="password", placeholder="여기에 API 키 입력", label_visibility="collapsed")
             submit_button = st.form_submit_button(label="시스템 접속 (Login)")
         
+        # [수정] 로그인 로직: 버튼 한 번 클릭으로 즉시 접속되도록 st.rerun() 위치 조정
         if submit_button:
             if api_key_input:
                 clean_key = api_key_input.strip()
                 try:
+                    # 키 유효성 테스트 (모델 목록 조회 시도)
                     genai.configure(api_key=clean_key)
+                    list(genai.list_models()) # 테스트 호출
+                    
+                    # 성공 시 세션 저장 및 즉시 리로드
                     st.session_state['api_key'] = clean_key
                     st.success("✅ 접속 완료")
-                    st.rerun() # 새로고침
+                    time.sleep(0.5) # 메시지 보여줄 시간 확보
+                    st.rerun() # [중요] 여기서 즉시 새로고침하여 상태 반영
                 except:
-                    st.error("❌ 키 오류")
+                    st.error("❌ 유효하지 않은 키입니다.")
             else:
-                st.warning("⚠️ 키 입력 필요")
+                st.warning("⚠️ 키를 입력해주세요.")
 
-    # 세션에 키가 있으면 -> 로그아웃 버튼 표시
     else:
-        st.success("🟢 시스템 정상 가동")
+        st.success("🟢 정상 가동 중")
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # 🎄 따뜻한 작별 버튼
         if st.button("🎄 고마워! 또 봐! (Logout)", type="primary", use_container_width=True):
-            # 1. 애니메이션 트리거 설정
             st.session_state['logout_anim'] = True
             st.rerun()
 
     st.markdown("---")
-    st.caption("Audit AI Solution © 2025\nEngine: Gemini 1.5 Pro")
+    st.markdown("<div style='color:white; text-align:center; font-size:12px; opacity:0.8;'>Audit AI Solution © 2025<br>Engine: Gemini 1.5 Pro</div>", unsafe_allow_html=True)
 
 # ==========================================
-# 4. 🎅 크리스마스 작별 애니메이션 (코드 노출 방지)
+# 4. 🎅 크리스마스 작별 애니메이션
 # ==========================================
 if 'logout_anim' in st.session_state and st.session_state['logout_anim']:
-    # HTML 들여쓰기를 제거하여 코드로 인식되는 문제 해결
+    # HTML 들여쓰기 제거 (코드 노출 방지)
     st.markdown("""
 <div class="snow-bg">
 <div style="font-size: 80px; margin-bottom: 20px;">🎅🎄</div>
@@ -143,7 +165,7 @@ if 'logout_anim' in st.session_state and st.session_state['logout_anim']:
     st.rerun()
 
 # ==========================================
-# 5. 핵심 기능 함수
+# 5. 핵심 기능 함수 (기존 유지)
 # ==========================================
 def get_model():
     if 'api_key' in st.session_state:
@@ -245,21 +267,18 @@ def process_media_file(uploaded_file):
 st.markdown("<h1 style='text-align: center; color: #2C3E50;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
 st.markdown("<div style='text-align: center; color: #555; margin-bottom: 20px;'>Professional Legal & Audit Assistant System</div>", unsafe_allow_html=True)
 
-# [수정] 탭 명칭 및 아이콘 최종 확인
+# 탭 구성
 tab1, tab2, tab3 = st.tabs(["📄 문서 정밀 검토", "💬 Audit AI 에이전트 대화", "📰 스마트 요약"])
 
 # --- Tab 1: 문서 검토 ---
 with tab1:
-    # [수정] 📂 폴더 아이콘 적용
     st.markdown("### 📂 작업 및 파일 설정")
     option = st.selectbox("작업 유형 선택", 
         ("법률 리스크 정밀 검토", "감사 보고서 초안 작성", "오타 수정 및 문구 교정", "기안문/공문 초안 생성"))
     st.markdown("---")
     
-    # [수정] 모바일 깨짐 방지: 1단 배치 (st.columns 제거)
     st.info("👇 **검토할 파일 (필수)**")
     uploaded_file = st.file_uploader("검토 파일 업로드", type=['txt', 'pdf', 'docx'], key="target", label_visibility="collapsed")
-    
     st.warning("📚 **참고 규정/지침 (선택)**")
     uploaded_refs = st.file_uploader("참고 파일 업로드", type=['txt', 'pdf', 'docx'], accept_multiple_files=True, label_visibility="collapsed")
 
@@ -308,7 +327,6 @@ with tab2:
     st.markdown("### 🗣️ 실시간 질의응답")
     st.info("파일 내용이나 업무 관련 궁금한 점을 물어보세요.")
     
-    # [수정] 모바일 깨짐 방지: 1단 배치
     with st.form(key='chat_form', clear_on_submit=True):
         user_input = st.text_input("질문 입력", placeholder="예: 하도급법 위반 사례를 알려줘")
         submit_chat = st.form_submit_button("전송 📤", use_container_width=True)
@@ -352,7 +370,6 @@ with tab2:
 with tab3:
     st.markdown("### 📰 스마트 요약 & 인사이트")
     
-    # [수정] 라디오 버튼 단순화
     summary_type = st.radio("입력 방식 선택", ["🌐 URL 입력", "📁 미디어 파일 업로드", "✍️ 텍스트 입력"])
     
     final_input = None
