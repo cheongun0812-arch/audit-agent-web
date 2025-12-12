@@ -6,12 +6,12 @@ import PyPDF2
 from youtube_transcript_api import YouTubeTranscriptApi
 import requests
 from bs4 import BeautifulSoup
-from urllib.parse import urlparse, parse_qs
+import yt_dlp # 유튜브 다운로드 도구
 import time
-import tempfile # 임시 파일 처리를 위해 추가
+import glob
 
 # ==========================================
-# 1. 페이지 설정
+# 1. 페이지 설정 & 디자인 (V27 절대 테마)
 # ==========================================
 st.set_page_config(
     page_title="AUDIT AI Agent",
@@ -19,9 +19,6 @@ st.set_page_config(
     layout="centered"
 )
 
-# ==========================================
-# 2. 🎨 디자인 테마 (V27 절대 테마)
-# ==========================================
 st.markdown("""
     <style>
     .stApp { background-color: #F4F6F9 !important; }
@@ -47,7 +44,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 3. 사이드바 (로그인)
+# 2. 사이드바 (로그인)
 # ==========================================
 with st.sidebar:
     st.markdown("### 🏛️ Control Center")
@@ -77,7 +74,7 @@ with st.sidebar:
     st.markdown("<div style='text-align: center; font-size: 11px; opacity: 0.7;'>Audit AI Solution © 2025<br>Engine: Gemini 1.5 Pro</div>", unsafe_allow_html=True)
 
 # ==========================================
-# 4. 기능 함수들
+# 3. 기능 함수 (모델, 파일, 유튜브 오디오 처리)
 # ==========================================
 def get_model():
     if 'api_key' in st.session_state:
@@ -106,18 +103,53 @@ def read_file(uploaded_file):
     except: return None
     return content
 
-# 유튜브 자막 (텍스트 방식)
+# [핵심] 유튜브 오디오 다운로드 및 업로드 함수
+def download_and_upload_youtube_audio(url):
+    try:
+        # 1. yt-dlp 설정 (오디오만 다운로드, m4a 포맷)
+        ydl_opts = {
+            'format': 'bestaudio[ext=m4a]/bestaudio/best',
+            'outtmpl': 'temp_audio.%(ext)s',
+            'quiet': True,
+            'overwrites': True
+        }
+        
+        # 2. 다운로드 실행
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
+            
+        # 3. 다운로드된 파일 찾기 (확장자가 다를 수 있으므로)
+        audio_files = glob.glob("temp_audio.*")
+        if not audio_files: return None
+        audio_path = audio_files[0]
+        
+        # 4. Gemini에 업로드
+        myfile = genai.upload_file(audio_path)
+        
+        # 5. 처리 대기
+        while myfile.state.name == "PROCESSING":
+            time.sleep(2)
+            myfile = genai.get_file(myfile.name)
+            
+        # 6. 임시 파일 삭제
+        os.remove(audio_path)
+        
+        return myfile # 업로드된 파일 객체 반환
+        
+    except Exception as e:
+        st.error(f"오디오 처리 중 오류: {e}")
+        return None
+
+# 자막 추출 함수
 def get_youtube_transcript(url):
     try:
         if "youtu.be" in url: video_id = url.split("/")[-1]
-        else:
-            query = urlparse(url).query
-            params = parse_qs(query)
-            video_id = params["v"][0]
+        else: video_id = url.split("v=")[-1].split("&")[0]
+        
         transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['ko', 'en'])
         text = " ".join([t['text'] for t in transcript])
         return text
-    except Exception as e:
+    except:
         return None # 자막 없음
 
 # 웹 크롤링
@@ -128,36 +160,10 @@ def get_web_content(url):
         soup = BeautifulSoup(response.text, 'html.parser')
         for script in soup(["script", "style"]): script.decompose()
         return soup.get_text()[:10000]
-    except Exception as e:
-        return f"[오류] {e}"
-
-# [New] 미디어 파일 업로드 및 처리 함수
-def process_media_file(uploaded_file):
-    try:
-        # 1. 임시 파일로 저장
-        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp_file:
-            tmp_file.write(uploaded_file.getvalue())
-            tmp_path = tmp_file.name
-
-        # 2. Gemini 서버에 파일 업로드
-        myfile = genai.upload_file(tmp_path)
-        
-        # 3. 처리 대기 (Active 상태가 될 때까지)
-        with st.spinner('🎧 AI가 파일을 듣고 분석 중입니다... (잠시만 기다려주세요)'):
-            while myfile.state.name == "PROCESSING":
-                time.sleep(2)
-                myfile = genai.get_file(myfile.name)
-        
-        # 4. 임시 파일 삭제 (청소)
-        os.remove(tmp_path)
-        
-        return myfile
-    except Exception as e:
-        st.error(f"파일 처리 중 오류 발생: {e}")
-        return None
+    except Exception as e: return f"[오류] {e}"
 
 # ==========================================
-# 5. 메인 화면
+# 4. 메인 화면
 # ==========================================
 
 st.markdown("<h1 style='text-align: center; color: #2C3E50 !important;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
@@ -248,37 +254,41 @@ with tab2:
             with st.chat_message("assistant", avatar="🛡️"): st.markdown(asst_msg['content'])
             st.markdown("<hr style='border: 0; height: 1px; background: #BDC3C7; margin: 10px 0;'>", unsafe_allow_html=True)
 
-# --- Tab 3: 스마트 요약 (멀티모달 업그레이드) ---
+# --- Tab 3: 스마트 요약 (자막 없으면 듣기 모드) ---
 with tab3:
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("#### 📰 스마트 요약 & 인사이트")
-    st.info("유튜브 자막이 없어도 OK! 영상/음성 파일을 직접 올리면 AI가 듣고 요약합니다.")
+    st.info("유튜브 링크를 입력하면 자막을 먼저 찾고, 없으면 AI가 직접 영상을 듣고 요약합니다.")
     
-    summary_type = st.radio("입력 방식", ("🌐 URL 입력 (유튜브/뉴스)", "📁 미디어 파일 업로드 (MP3/MP4)", "✍️ 텍스트 입력"), horizontal=True)
+    summary_type = st.radio("입력 방식", ("🌐 URL 입력 (유튜브/뉴스)", "✍️ 텍스트 직접 입력"), horizontal=True)
     
-    final_input = None # AI에게 던질 최종 데이터
-    is_media_file = False # 파일 여부 확인
+    final_input = None
+    is_audio_mode = False
 
     if summary_type == "🌐 URL 입력 (유튜브/뉴스)":
         target_url = st.text_input("🔗 URL 붙여넣기")
+        
+        # URL 처리 로직
         if target_url:
             if "youtu" in target_url:
-                with st.spinner("자막 확인 중..."):
+                with st.spinner("1단계: 자막 확인 중..."):
+                    # 1. 자막 시도
                     text_data = get_youtube_transcript(target_url)
+                    
                     if text_data:
+                        st.success("✅ 자막을 찾았습니다!")
                         final_input = text_data
                     else:
-                        st.error("⛔ 이 영상에는 자막이 없습니다! '미디어 파일 업로드' 방식을 이용해주세요.")
+                        st.warning("⚠️ 자막이 없습니다. AI가 오디오를 직접 청취합니다. (시간이 조금 더 걸립니다)")
+                        with st.spinner("2단계: 오디오 추출 및 듣기 모드 전환..."):
+                            # 2. 자막 없으면 오디오 다운로드 -> Gemini 업로드
+                            audio_file = download_and_upload_youtube_audio(target_url)
+                            if audio_file:
+                                final_input = audio_file
+                                is_audio_mode = True
             else:
                 with st.spinner("웹사이트 분석 중..."):
                     final_input = get_web_content(target_url)
-
-    elif summary_type == "📁 미디어 파일 업로드 (MP3/MP4)":
-        media_file = st.file_uploader("영상/음성 파일 업로드 (200MB 이하)", type=['mp3', 'mp4', 'm4a', 'wav'])
-        if media_file:
-            # 파일을 Gemini에 업로드 처리
-            final_input = process_media_file(media_file)
-            is_media_file = True
 
     else:
         final_input = st.text_area("내용 붙여넣기", height=200)
@@ -287,25 +297,26 @@ with tab3:
         if 'api_key' not in st.session_state:
             st.error("🔒 로그인 필요")
         elif not final_input:
-            st.warning("요약할 대상을 입력하거나 업로드해주세요.")
+            st.warning("요약할 대상을 입력해주세요.")
         else:
-            with st.spinner('🧠 AI가 내용을 심층 분석 중입니다...'):
+            with st.spinner('🧠 AI가 심층 분석 중입니다...'):
                 try:
-                    # 프롬프트 설정
-                    prompt_text = """
-                    당신은 감사실 수석 전문가입니다. 제공된 내용을 분석하여 다음 보고서를 작성하세요.
+                    prompt = """
+                    당신은 감사실 수석 전문가입니다. 제공된 내용을 분석하여 보고서를 작성하세요.
                     1. **핵심 요약 (Executive Summary)**: 전체 내용 3줄 요약
-                    2. **상세 내용 (Details)**: 시간 순서 또는 주제별 주요 내용 정리
-                    3. **감사/리스크 인사이트 (Insights)**: 업무상 유의해야 할 점, 리스크, 시사점 도출
+                    2. **상세 내용 (Details)**: 주요 이슈 및 내용을 논리적으로 정리
+                    3. **감사/리스크 인사이트 (Insights)**: 업무상 유의점, 리스크, 기회요인 도출
                     """
                     
                     model = get_model()
                     
-                    # 입력 데이터가 '파일(미디어)'인지 '텍스트'인지에 따라 다르게 호출
-                    if is_media_file:
-                        response = model.generate_content([prompt_text, final_input])
+                    # 텍스트 vs 오디오(파일) 분기 처리
+                    if is_audio_mode:
+                        # 오디오 파일과 프롬프트를 같이 보냄
+                        response = model.generate_content([prompt, final_input])
                     else:
-                        response = model.generate_content(f"{prompt_text}\n\n[내용]\n{final_input[:30000]}")
+                        # 텍스트만 보냄
+                        response = model.generate_content(f"{prompt}\n\n[내용]\n{final_input[:30000]}")
                     
                     st.success("분석 완료!")
                     st.markdown("### 📑 AI 요약 보고서")
