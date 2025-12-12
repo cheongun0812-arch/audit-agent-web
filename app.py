@@ -17,7 +17,7 @@ except ImportError:
     yt_dlp = None
 
 # ==========================================
-# 1. 페이지 설정
+# 1. 페이지 설정 (기본값 준수)
 # ==========================================
 st.set_page_config(
     page_title="AUDIT AI Agent",
@@ -26,82 +26,62 @@ st.set_page_config(
 )
 
 # ==========================================
-# 2. 🎨 [디자인] V41 CSS 유지
+# 2. 🎨 [디자인] 안전한 CSS (화면 깨짐 방지)
 # ==========================================
 st.markdown("""
     <style>
-    .stApp { background-color: #F4F6F9 !important; }
-    html, body, p, div, span, label, h1, h2, h3, h4, h5, h6, li, button {
-        font-family: 'Pretendard', sans-serif !important;
-    }
-    p, div, span, label, li { color: #333333 !important; }
+    /* 1. 배경색 (안전한 회색) */
+    .stApp { background-color: #F4F6F9; }
     
-    [data-testid="stSidebar"] { background-color: #2C3E50 !important; }
-    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 { color: #FFFFFF !important; }
-    [data-testid="stSidebar"] p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] span { color: #ECF0F1 !important; }
-
-    [data-testid="stSidebarCollapsedControl"] {
-        text-indent: -9999px !important;
-        white-space: nowrap !important;
-        background-color: #FFFFFF !important;
-        border-radius: 0 12px 12px 0 !important;
-        border: 1px solid #BDC3C7 !important;
-        border-left: none !important;
-        box-shadow: 2px 2px 6px rgba(0,0,0,0.15) !important;
-        position: fixed !important;
-        top: 60px !important;
-        left: 0 !important;
-        width: 45px !important;
-        height: 45px !important;
-        z-index: 9999999 !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-    }
-    [data-testid="stSidebarCollapsedControl"] > svg, 
-    [data-testid="stSidebarCollapsedControl"] > img { display: none !important; }
-    
-    [data-testid="stSidebarCollapsedControl"]::after {
-        content: "☰";
-        text-indent: 0 !important;
-        font-size: 26px !important;
-        color: #2C3E50 !important;
-        font-weight: 900 !important;
-        position: absolute;
-        top: 50%; left: 50%;
-        transform: translate(-50%, -55%);
-        display: block !important;
-        visibility: visible !important;
+    /* 2. 사이드바 (네이비) */
+    [data-testid="stSidebar"] { background-color: #2C3E50; }
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, [data-testid="stSidebar"] p, [data-testid="stSidebar"] span, [data-testid="stSidebar"] label, [data-testid="stSidebar"] div {
+        color: #FFFFFF !important;
     }
 
-    input[type="text"], input[type="password"] {
+    /* 3. 입력창 (흰 배경, 검은 글씨 강제) */
+    .stTextInput input, .stTextArea textarea {
         background-color: #FFFFFF !important;
-        border: 2px solid #D5DBDB !important;
-        border-radius: 8px !important;
-        padding: 10px !important;
         color: #000000 !important;
         -webkit-text-fill-color: #000000 !important;
-        caret-color: #000000 !important;
-        opacity: 1 !important;
+        border: 1px solid #BDC3C7 !important;
     }
-    ::placeholder {
-        color: #7F8C8D !important;
-        -webkit-text-fill-color: #7F8C8D !important;
-        opacity: 1 !important;
-    }
-    button[aria-label="Show password"] { filter: invert(1) !important; }
-
+    
+    /* 4. 버튼 (파란색 그라데이션) */
     .stButton > button {
-        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%) !important;
+        background: linear-gradient(to right, #2980B9, #2C3E50) !important;
         color: #FFFFFF !important;
-        -webkit-text-fill-color: #FFFFFF !important;
         border: none !important;
-        border-radius: 8px !important;
-        font-weight: 700 !important;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.2) !important;
+        font-weight: bold !important;
     }
-    [data-testid="stChatMessage"] { background-color: #FFFFFF !important; border: 1px solid #E0E0E0; border-radius: 12px; }
-    [data-testid="stChatMessage"][data-testid="user"] { background-color: #EBF5FB !important; }
+
+    /* 5. 탭 메뉴 (잘 보이게 설정) */
+    .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {
+        font-size: 16px;
+        font-weight: bold;
+    }
+
+    /* 6. (중요) 상단 못생긴 글씨 숨기기 + 햄버거 아이콘 */
+    [data-testid="stSidebarCollapsedControl"] {
+        color: transparent !important;
+        background-color: #FFFFFF !important;
+        border-radius: 0 10px 10px 0;
+        border: 1px solid #ddd;
+        width: 40px; height: 40px;
+        z-index: 99999;
+    }
+    [data-testid="stSidebarCollapsedControl"]::after {
+        content: "☰";
+        color: #333;
+        font-size: 24px;
+        font-weight: bold;
+        position: absolute;
+        top: 5px; left: 10px;
+    }
+    
+    /* 7. 채팅 메시지 박스 가독성 확보 */
+    [data-testid="stChatMessage"] { background-color: #FFFFFF; border: 1px solid #eee; }
+    [data-testid="stChatMessage"][data-testid="user"] { background-color: #E3F2FD; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -109,11 +89,11 @@ st.markdown("""
 # 3. 사이드바 (로그인)
 # ==========================================
 with st.sidebar:
-    st.markdown("### 🏛️ Control Center")
+    st.title("🏛️ Control Center")
     st.markdown("---")
     with st.form(key='login_form'):
-        st.markdown("**🔐 Access Key**")
-        api_key_input = st.text_input("Key", type="password", label_visibility="collapsed", placeholder="API 키를 입력하세요")
+        st.markdown("🔑 **Access Key**")
+        api_key_input = st.text_input("키 입력", type="password", placeholder="API 키를 입력하세요", label_visibility="collapsed")
         submit_button = st.form_submit_button(label="시스템 접속 (Login)")
     
     if submit_button:
@@ -130,23 +110,19 @@ with st.sidebar:
             
     elif 'api_key' in st.session_state:
         genai.configure(api_key=st.session_state['api_key'])
-        st.success("🟢 가동 중")
+        st.success("🟢 시스템 정상 가동")
         
     st.markdown("---")
-    st.markdown("""
-        <div class="sidebar-footer">
-            Audit AI Solution © 2025<br>
-            Engine: Gemini 1.5 Pro
-        </div>
-    """, unsafe_allow_html=True)
+    st.caption("Audit AI Solution © 2025\nEngine: Gemini 1.5 Pro")
 
 # ==========================================
-# 4. 기능 함수
+# 4. 기능 함수 (검증된 로직 유지)
 # ==========================================
 def get_model():
     if 'api_key' in st.session_state:
         genai.configure(api_key=st.session_state['api_key'])
     try:
+        # 모델 자동 사냥
         all_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         for m in all_models:
             if '1.5-pro' in m: return genai.GenerativeModel(m)
@@ -195,11 +171,7 @@ def download_and_upload_youtube_audio(url):
         os.remove(audio_path)
         return myfile
     except Exception as e:
-        if "403" in str(e) or "Forbidden" in str(e):
-            st.error("🔒 [보안 차단] 유튜브 보안으로 인해 자동 다운로드가 막혔습니다.")
-            st.info("💡 '미디어 파일 업로드' 탭을 이용해 다운받은 파일을 직접 올려주세요.")
-        else:
-            st.error(f"오디오 처리 중 오류: {e}")
+        st.error(f"오디오 다운로드 실패 (보안 차단): {e}")
         return None
 
 def get_youtube_transcript(url):
@@ -237,23 +209,186 @@ def process_media_file(uploaded_file):
         return None
 
 # ==========================================
-# 5. 메인 화면
+# 5. 메인 화면 구성
 # ==========================================
 
-st.markdown("<h1 style='text-align: center; color: #2C3E50 !important;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
-st.markdown("<div style='text-align: center; color: #7F8C8D !important; margin-bottom: 25px;'>Professional Legal & Audit Assistant System</div>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center; color: #2C3E50;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
+st.markdown("<div style='text-align: center; color: #555; margin-bottom: 20px;'>Professional Legal & Audit Assistant System</div>", unsafe_allow_html=True)
 
-tab1, tab2, tab3 = st.tabs(["  📄 문서 정밀 검토  ", "  💬 AI 파트너 대화  ", "  📰 스마트 요약  "])
+# 탭 구성 (이모지 포함하여 명확하게)
+tab1, tab2, tab3 = st.tabs(["📄 문서 정밀 검토", "💬 AI 파트너 대화", "📰 스마트 요약"])
 
 # --- Tab 1: 문서 검토 ---
 with tab1:
+    st.markdown("### 1️⃣ 작업 및 파일 설정")
+    
+    # 작업 선택
+    option = st.selectbox("작업 유형을 선택하세요", 
+        ("법률 리스크 정밀 검토", "감사 보고서 초안 작성", "오타 수정 및 문구 교정", "기안문/공문 초안 생성"))
+    
+    st.markdown("---")
+    
+    # [수정] 컬럼 대신 일반 배치로 변경 (모바일에서 숨겨지는 현상 방지)
+    st.info("👇 **검토할 파일 (필수)**")
+    uploaded_file = st.file_uploader("검토 파일 업로드", type=['txt', 'pdf', 'docx'], key="target", label_visibility="collapsed")
+    
+    st.warning("📚 **참고 규정/지침 (선택)**")
+    uploaded_refs = st.file_uploader("참고 파일 업로드", type=['txt', 'pdf', 'docx'], accept_multiple_files=True, label_visibility="collapsed")
+
+    # 파일 읽기 로직
+    ref_content = ""
+    if uploaded_refs:
+        for ref_file in uploaded_refs:
+            c = read_file(ref_file)
+            if c: ref_content += c + "\n"
+
     st.markdown("<br>", unsafe_allow_html=True)
-    with st.container():
-        st.markdown("#### 1️⃣ 작업 선택")
-        option = st.selectbox("작업 유형", ("법률 리스크 정밀 검토", "감사 보고서 초안 작성", "오타 수정 및 문구 교정", "기안문/공문 초안 생성"), label_visibility="collapsed")
-        
-        st.markdown("#### 2️⃣ 파일 업로드")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.info("👇 **검토 파일**")
-            uploaded_file = st.file_uploader("검토 파일", type=['txt', 'pdf', 'docx'], key="target", label_visibility="collapsed")
+    if st.button("🚀 분석 리포트 생성 (Start)", use_container_width=True):
+        if 'api_key' not in st.session_state: st.error("🔒 왼쪽 메뉴에서 로그인이 필요합니다.")
+        elif not uploaded_file: st.warning("⚠️ 검토할 파일을 업로드해주세요.")
+        else:
+            # 페르소나 설정
+            persona_name = "AI 감사 전문가"
+            greeting = "안녕하세요. 업무를 도와드릴 AI 감사 전문가입니다."
+            if "법률" in option: 
+                persona_name = "법률 전문가 AI 에이전트"
+                greeting = "안녕하세요. '법률 전문가 AI 에이전트'입니다."
+            elif "오타" in option:
+                persona_name = "AI 에디터"
+                greeting = "안녕하세요. 'AI 에디터'입니다."
+            elif "기안" in option:
+                persona_name = "AI 도큐멘트 페이퍼"
+                greeting = "안녕하세요. 'AI 도큐멘트 페이퍼'입니다."
+
+            with st.spinner(f'🧠 {persona_name}가 문서를 분석 중입니다...'):
+                content = read_file(uploaded_file)
+                if content:
+                    ref_final = ref_content if ref_content else "일반적인 비즈니스 및 법률 표준"
+                    prompt = f"""[역할] {persona_name}
+[지시] 반드시 다음 인사말로 시작하세요: "{greeting}"
+
+[작업] {option}
+[기준] {ref_final}
+[내용] {content}
+
+[작성 지침] 전문가로서 구체적이고 명확한 보고서를 작성하십시오."""
+                    try:
+                        model = get_model()
+                        response = model.generate_content(prompt)
+                        st.success(f"✅ {persona_name} 분석 완료")
+                        st.markdown(response.text)
+                    except Exception as e: st.error(f"시스템 오류: {e}")
+
+# --- Tab 2: 챗봇 ---
+with tab2:
+    st.markdown("### 🗣️ 실시간 질의응답")
+    st.info("파일 내용이나 업무 관련 궁금한 점을 물어보세요.")
+
+    # [수정] 복잡한 컬럼 제거하고 표준 입력창 사용 (가시성 확보)
+    with st.form(key='chat_form', clear_on_submit=True):
+        user_input = st.text_input("질문 입력", placeholder="예: 하도급법 위반 사례를 알려줘")
+        submit_chat = st.form_submit_button("전송 📤", use_container_width=True)
+
+    if "messages" not in st.session_state: st.session_state.messages = []
+
+    if submit_chat and user_input:
+        if 'api_key' not in st.session_state: st.error("🔒 로그인 필요")
+        else:
+            st.session_state.messages.append({"role": "user", "content": user_input})
+            
+            with st.spinner("AI 파트너가 답변을 생성 중입니다..."):
+                try:
+                    genai.configure(api_key=st.session_state['api_key'])
+                    context = ""
+                    if ref_content: context += f"[참고자료]\n{ref_content}\n"
+                    if uploaded_file: 
+                        c = read_file(uploaded_file)
+                        if c: context += f"[검토대상파일]\n{c}\n"
+                    
+                    full_prompt = f"""당신은 'AI 파인더'입니다. 친절하고 명확하게 답변하세요.
+                    인사말: "안녕하세요. 여러분의 궁금증을 해소해 드릴 'AI 파인더'입니다." (필요시 사용)
+                    
+                    [컨텍스트]
+                    {context}
+                    
+                    [질문]
+                    {user_input}"""
+                    
+                    model = get_model()
+                    response = model.generate_content(full_prompt)
+                    st.session_state.messages.append({"role": "assistant", "content": response.text})
+                except Exception as e: st.error(f"오류: {e}")
+
+    # 대화 기록 출력
+    st.markdown("---")
+    msgs = st.session_state.messages
+    # 최신순 정렬 (질문-답변 쌍)
+    if len(msgs) >= 2:
+        for i in range(len(msgs) - 1, 0, -2):
+            asst_msg = msgs[i]
+            user_msg = msgs[i-1]
+            with st.chat_message("user", avatar="👤"):
+                st.write(user_msg['content'])
+            with st.chat_message("assistant", avatar="🛡️"):
+                st.markdown(asst_msg['content'])
+            st.divider()
+
+# --- Tab 3: 스마트 요약 ---
+with tab3:
+    st.markdown("### 📰 스마트 요약 & 인사이트")
+    
+    # [수정] 라디오 버튼 스타일 문제 해결을 위해 단순화
+    summary_type = st.radio("입력 방식 선택", ["🌐 URL 입력 (유튜브/뉴스)", "📁 미디어 파일 업로드", "✍️ 텍스트 입력"])
+    
+    final_input = None
+    is_multimodal = False
+
+    if "URL" in summary_type:
+        target_url = st.text_input("🔗 URL을 붙여넣으세요")
+        if target_url:
+            if "youtu" in target_url:
+                with st.spinner("유튜브 분석 중... (자막 확인)"):
+                    text_data = get_youtube_transcript(target_url)
+                    if text_data:
+                        st.success("✅ 자막 확보 완료")
+                        final_input = text_data
+                    else:
+                        st.warning("⚠️ 자막 없음 -> 오디오 다운로드 시도 (시간이 소요됩니다)")
+                        audio_file = download_and_upload_youtube_audio(target_url)
+                        if audio_file:
+                            final_input = audio_file
+                            is_multimodal = True
+            else:
+                with st.spinner("웹사이트 분석 중..."):
+                    final_input = get_web_content(target_url)
+
+    elif "미디어" in summary_type:
+        media_file = st.file_uploader("영상/음성 파일 (MP3, MP4)", type=['mp3', 'mp4', 'm4a', 'wav'])
+        if media_file:
+            final_input = process_media_file(media_file)
+            is_multimodal = True
+
+    else:
+        final_input = st.text_area("내용을 직접 입력하세요", height=200)
+
+    if st.button("✨ 요약 시작", use_container_width=True):
+        if 'api_key' not in st.session_state: st.error("🔒 로그인 필요")
+        elif not final_input: st.warning("분석할 대상을 입력하세요.")
+        else:
+            with st.spinner('🧠 AI가 핵심 내용을 요약 중입니다...'):
+                try:
+                    prompt = """[역할] 스마트 정보 분석가
+[작업] 다음 내용을 분석하여 보고서 작성
+1. 핵심 요약 (Executive Summary)
+2. 상세 내용 (Key Details)
+3. 감사/리스크 인사이트 (Insights)"""
+                    
+                    model = get_model()
+                    if is_multimodal:
+                        response = model.generate_content([prompt, final_input])
+                    else:
+                        response = model.generate_content(f"{prompt}\n\n{final_input[:30000]}")
+                    
+                    st.success("분석 완료")
+                    st.markdown(response.text)
+                except Exception as e: st.error(f"오류: {e}")
