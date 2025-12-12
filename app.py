@@ -26,79 +26,105 @@ st.set_page_config(
 )
 
 # ==========================================
-# 2. 🎨 [디자인] 책갈피 UI & V27 테마 적용
+# 2. 🎨 [디자인] V39: 모바일 강제 렌더링 해결 CSS
 # ==========================================
 st.markdown("""
     <style>
-    /* 1. 기본 배경 및 폰트 */
+    /* 1. 기본 배경 (전체) */
     .stApp { background-color: #F4F6F9 !important; }
+    
+    /* 2. 폰트 및 기본 텍스트 (모바일 강제 적용) */
     html, body, p, div, span, label, h1, h2, h3, h4, h5, h6, li {
-        color: #333333 !important; font-family: 'Pretendard', sans-serif !important;
+        color: #333333 !important; 
+        font-family: 'Pretendard', sans-serif !important;
     }
 
-    /* 2. 사이드바 디자인 */
-    [data-testid="stSidebar"] { background-color: #2C3E50 !important; }
-    [data-testid="stSidebar"] * { color: #FFFFFF !important; }
+    /* 3. 사이드바 (Control Center) 배경 */
+    [data-testid="stSidebar"] { 
+        background-color: #2C3E50 !important; 
+    }
+    /* 사이드바 내의 모든 텍스트는 일단 흰색으로 시작 */
+    [data-testid="stSidebar"] * { 
+        color: #FFFFFF !important; 
+    }
 
-    /* 3. [핵심] 상단 못생긴 버튼 -> '책갈피' 스타일로 성형수술 🔖 */
-    
-    /* (1) 버튼 껍데기 디자인 (책갈피 모양) */
+    /* 4. [핵심] 상단 메뉴 버튼 (keyboard... 글씨 제거 수술) */
     [data-testid="stSidebarCollapsedControl"] {
         background-color: #FFFFFF !important;
-        color: transparent !important; /* 기존 글씨(keyboard...)를 투명하게 만듦 */
-        border-radius: 0 12px 12px 0 !important; /* 오른쪽만 둥글게 */
+        border-radius: 0 12px 12px 0 !important;
         border: 1px solid #E0E0E0 !important;
         border-left: none !important;
-        box-shadow: 2px 2px 8px rgba(0,0,0,0.1) !important;
-        top: 60px !important; /* 위치를 살짝 아래로 */
+        box-shadow: 2px 2px 5px rgba(0,0,0,0.1) !important;
+        top: 60px !important;
         left: 0 !important;
         width: 40px !important;
         height: 40px !important;
         z-index: 99999 !important;
+        
+        /* 🚨 글씨를 없애는 마법의 코드 🚨 */
+        font-size: 0 !important; /* 글씨 크기를 0으로 만들어 증발시킴 */
+        color: transparent !important;
+        overflow: hidden !important;
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
     }
     
-    /* (2) 기존 아이콘(SVG) 강제로 숨김 */
-    [data-testid="stSidebarCollapsedControl"] > svg, 
-    [data-testid="stSidebarCollapsedControl"] > img {
-        display: none !important;
-    }
-    
-    /* (3) 새로운 햄버거 아이콘(☰) 심기 */
+    /* 햄버거 아이콘(☰) 심기 */
     [data-testid="stSidebarCollapsedControl"]::after {
         content: "☰"; 
-        font-size: 24px;
-        color: #2C3E50 !important; /* 아이콘 색상 (네이비) */
+        font-size: 22px !important; /* 아이콘 크기는 다시 키움 */
+        color: #2C3E50 !important;
         font-weight: bold;
-        position: absolute;
-        margin-top: -2px;
+        display: block !important;
     }
     
-    /* (4) 마우스 올렸을 때 효과 */
-    [data-testid="stSidebarCollapsedControl"]:hover {
-        background-color: #F8F9FA !important;
-        width: 45px !important; /* 살짝 튀어나옴 */
-        transition: width 0.2s ease;
+    /* 기존 SVG 아이콘 숨기기 */
+    [data-testid="stSidebarCollapsedControl"] svg {
+        display: none !important;
     }
 
-    /* 4. 입력창 & 버튼 */
-    .stTextInput input {
-        background-color: #FFFFFF !important; color: #000000 !important;
-        border: 1px solid #BDC3C7 !important; border-radius: 8px !important;
-    }
-    .stButton > button {
-        background: linear-gradient(to right, #2980B9, #2C3E50) !important;
-        color: #FFFFFF !important; border: none; border-radius: 8px; font-weight: bold;
+    /* 5. [핵심] 입력창 글씨 색상 강제 (모바일 다크모드 무시) */
+    input[type="password"], input[type="text"] {
+        background-color: #FFFFFF !important; 
+        color: #000000 !important; /* 글씨 검은색 */
+        -webkit-text-fill-color: #000000 !important; /* 모바일 브라우저 강제 적용 */
+        caret-color: #000000 !important; /* 커서 깜빡임 색상 */
+        border: 1px solid #BDC3C7 !important; 
+        border-radius: 8px !important;
     }
     
-    /* 5. 채팅 메시지 박스 */
-    [data-testid="stChatMessage"] {
-        background-color: #FFFFFF !important; border: 1px solid #E0E0E0;
-        border-radius: 12px;
+    /* 플레이스홀더(안내문구) 색상 */
+    ::placeholder {
+        color: #95A5A6 !important;
+        -webkit-text-fill-color: #95A5A6 !important;
+        opacity: 1 !important;
     }
-    [data-testid="stChatMessage"][data-testid="user"] { background-color: #EBF5FB !important; }
+
+    /* 6. 버튼 스타일 (글씨 잘 보이게) */
+    .stButton > button {
+        background: linear-gradient(to right, #2980B9, #2C3E50) !important;
+        color: #FFFFFF !important; 
+        -webkit-text-fill-color: #FFFFFF !important; /* 모바일 강제 적용 */
+        border: none; 
+        border-radius: 8px; 
+        font-weight: bold;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+    
+    /* 7. 채팅 메시지 박스 */
+    [data-testid="stChatMessage"] {
+        background-color: #FFFFFF !important; 
+        border: 1px solid #E0E0E0;
+        border-radius: 12px;
+        color: #333333 !important;
+    }
+    [data-testid="stChatMessage"] p {
+        color: #333333 !important; /* 채팅 글씨 진회색 */
+    }
+    [data-testid="stChatMessage"][data-testid="user"] { 
+        background-color: #EBF5FB !important; 
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -110,7 +136,8 @@ with st.sidebar:
     st.markdown("---")
     with st.form(key='login_form'):
         st.markdown("**🔐 Access Key**")
-        api_key_input = st.text_input("키 입력", type="password", label_visibility="collapsed", placeholder="API 키를 붙여넣으세요")
+        # placeholder를 한글로 명확하게 변경
+        api_key_input = st.text_input("키 입력", type="password", label_visibility="collapsed", placeholder="API 키 입력")
         submit_button = st.form_submit_button(label="시스템 접속 (Log in)")
     
     if submit_button:
@@ -133,7 +160,7 @@ with st.sidebar:
     st.markdown("<div style='text-align: center; font-size: 11px; opacity: 0.7;'>Audit AI Solution © 2025<br>Engine: Gemini 1.5 Pro</div>", unsafe_allow_html=True)
 
 # ==========================================
-# 4. 기능 함수
+# 4. 기능 함수 (로직 유지)
 # ==========================================
 def get_model():
     if 'api_key' in st.session_state:
@@ -320,18 +347,18 @@ with tab2:
             with st.chat_message("assistant", avatar="🛡️"): st.markdown(asst_msg['content'])
             st.markdown("<hr style='border: 0; height: 1px; background: #BDC3C7; margin: 10px 0;'>", unsafe_allow_html=True)
 
-# --- Tab 3: 스마트 요약 (변수명 버그 수정 완료) ---
+# --- Tab 3: 스마트 요약 ---
 with tab3:
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("#### 📰 스마트 요약 & 인사이트")
     st.info("유튜브/뉴스 URL 또는 파일을 업로드하세요.")
     
-    summary_type = st.radio("입력 방식", ("🌐 URL 입력 (유튜브/뉴스)", "📁 미디어 파일 업로드 (MP3/MP4)", "✍️ 텍스트 입력"), horizontal=True)
+    summary_type = st.radio("입력 방식", ("🌐 URL 입력", "📁 미디어 파일 업로드", "✍️ 텍스트 입력"), horizontal=True)
     
     final_input = None
     is_multimodal = False
 
-    if summary_type == "🌐 URL 입력 (유튜브/뉴스)":
+    if summary_type == "🌐 URL 입력":
         target_url = st.text_input("🔗 URL 붙여넣기")
         if target_url:
             if "youtu" in target_url:
@@ -351,7 +378,7 @@ with tab3:
                 with st.spinner("웹사이트 분석 중..."):
                     final_input = get_web_content(target_url)
 
-    elif summary_type == "📁 미디어 파일 업로드 (MP3/MP4)":
+    elif summary_type == "📁 미디어 파일 업로드":
         media_file = st.file_uploader("영상/음성 파일 (MP3/MP4)", type=['mp3', 'mp4', 'm4a', 'wav'])
         if media_file:
             final_input = process_media_file(media_file)
