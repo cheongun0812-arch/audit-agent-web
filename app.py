@@ -90,6 +90,18 @@ with st.sidebar:
     st.title("🏛️ Control Center")
     st.markdown("---")
     
+    # 🚨 [수정 2] 입력창 터치 시 흰색 박스(글씨 안보임) 해결을 위한 강제 CSS 주입
+    st.markdown("""
+        <style>
+        /* 입력창 글씨를 무조건 검은색으로 강제 고정 */
+        input[type="password"] {
+            background-color: #FFFFFF !important;
+            color: #000000 !important;
+            -webkit-text-fill-color: #000000 !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
     # 세션에 키가 없으면 -> 로그인 폼 표시
     if 'api_key' not in st.session_state:
         with st.form(key='login_form'):
@@ -97,16 +109,24 @@ with st.sidebar:
             api_key_input = st.text_input("키 입력", type="password", placeholder="API 키를 입력하세요", label_visibility="collapsed")
             submit_button = st.form_submit_button(label="시스템 접속 (Login)")
         
+        # 🚨 [수정 1] 접속 오류 해결 (두 번 클릭해야 하는 문제 수정)
         if submit_button:
             if api_key_input:
                 clean_key = api_key_input.strip()
                 try:
+                    # 1. 설정
                     genai.configure(api_key=clean_key)
+                    
+                    # 2. 유효성 검사 (실제 호출을 한번 해봐야 확실함)
+                    list(genai.list_models()) 
+                    
+                    # 3. 성공 시 세션 저장 -> 성공 메시지 -> 새로고침(Rerun)
                     st.session_state['api_key'] = clean_key
                     st.success("✅ 접속 완료")
-                    st.rerun() # 새로고침
-                except:
-                    st.error("❌ 키 오류")
+                    time.sleep(0.5) # 메시지를 볼 찰나의 시간 확보
+                    st.rerun()      # 즉시 새로고침하여 로그인 상태로 전환
+                except Exception as e:
+                    st.error("❌ 유효하지 않은 키입니다.")
             else:
                 st.warning("⚠️ 키 입력 필요")
 
@@ -122,7 +142,7 @@ with st.sidebar:
             st.rerun()
 
     st.markdown("---")
-    st.caption("Audit AI Solution © 2025\nEngine: Gemini 1.5 Pro")
+    st.caption("ktMOS북부 Audit AI Solution © 2025\nEngine: Gemini 1.5 Pro")
 
 # ==========================================
 # 4. 🎅 크리스마스 작별 애니메이션 (코드 노출 방지)
@@ -241,7 +261,6 @@ def process_media_file(uploaded_file):
 # ==========================================
 # 6. 메인 화면 구성
 # ==========================================
-
 st.markdown("<h1 style='text-align: center; color: #2C3E50;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
 st.markdown("<div style='text-align: center; color: #555; margin-bottom: 20px;'>Professional Legal & Audit Assistant System</div>", unsafe_allow_html=True)
 
