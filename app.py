@@ -436,3 +436,16 @@ with tab3:
         if 'api_key' not in st.session_state: st.error("🔒 로그인 필요")
         elif not final_input: st.warning("분석할 대상을 입력하세요.")
         else:
+            with st.spinner('🧠 AI가 핵심 내용을 요약 중입니다...'):
+                try:
+                    prompt = """[역할] 스마트 정보 분석가
+[작업] 다음 내용을 분석하여 보고서 작성
+1. 핵심 요약 (Executive Summary)
+2. 상세 내용 (Key Details)
+3. 감사/리스크 인사이트 (Insights)"""
+                    model = get_model()
+                    if is_multimodal: response = model.generate_content([prompt, final_input])
+                    else: response = model.generate_content(f"{prompt}\n\n{final_input[:30000]}")
+                    st.success("분석 완료")
+                    st.markdown(response.text)
+                except Exception as e: st.error(f"오류: {e}")
