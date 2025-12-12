@@ -130,124 +130,123 @@ with st.sidebar:
     st.caption("Audit AI Solution © 2025\nEngine: Gemini 1.5 Pro")
 
 # ==========================================
-# 4. 🎅 크리스마스 작별 애니메이션 (코드 노출 방지)
+# 4. 🎅 크리스마스 작별 애니메이션 (수정됨)
 # ==========================================
 if 'logout_anim' in st.session_state and st.session_state['logout_anim']:
     
-    # 1. 빈 공간(Placeholder)을 먼저 확보하여 렌더링 우선순위를 높임
-    anim_placeholder = st.empty()
+    # [수정 포인트] 들여쓰기를 없애고 변수에 담아서 실행 (가장 안전한 방법)
+    closing_html = """
+    <style>
+        /* 1. 배경 설정 (밤하늘 그라데이션) */
+        .logout-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: linear-gradient(to bottom, #020024 0%, #090979 35%, #00d4ff 100%);
+            background: radial-gradient(ellipse at bottom, #1b2735 0%, #090a0f 100%);
+            z-index: 9999999; /* 최상위 노출 */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            overflow: hidden;
+        }
+
+        /* 2. 🛷 산타와 루돌프 비행 애니메이션 */
+        @keyframes flySanta {
+            0% { left: -20%; top: 20%; transform: rotate(5deg); }
+            25% { top: 15%; transform: rotate(-5deg); }
+            50% { top: 20%; transform: rotate(5deg); }
+            75% { top: 10%; transform: rotate(-5deg); }
+            100% { left: 120%; top: 15%; transform: rotate(0deg); }
+        }
+        
+        .santa-sleigh {
+            position: fixed;
+            font-size: 5rem;
+            animation: flySanta 4s linear forwards;
+            z-index: 1000000;
+            text-shadow: 0 0 20px rgba(255, 215, 0, 0.8);
+        }
+
+        /* 3. 🎄 크리스마스 트리 전구 반짝임 효과 */
+        @keyframes blinkLights {
+            0% { text-shadow: 0 0 10px #ff0000, 0 0 20px #ff0000; transform: scale(1); }
+            50% { text-shadow: 0 0 30px #00ff00, 0 0 40px #00ff00; transform: scale(1.1); }
+            100% { text-shadow: 0 0 10px #0000ff, 0 0 20px #0000ff; transform: scale(1); }
+        }
+
+        .center-icon {
+            font-size: 100px; 
+            margin-bottom: 20px;
+            animation: blinkLights 1.5s infinite alternate;
+        }
+
+        /* 4. 텍스트 스타일 */
+        .msg-title {
+            color: white !important;
+            font-size: 3rem !important;
+            font-family: 'Arial', sans-serif !important;
+            font-weight: bold !important;
+            text-shadow: 0 0 10px #fff, 0 0 20px #ff00de;
+            margin: 0 !important;
+        }
+        .msg-sub {
+            color: #e0e0e0 !important;
+            font-size: 1.2rem !important;
+            margin-top: 15px !important;
+            font-weight: 300 !important;
+        }
+        
+        /* 5. ❄️ 눈 내리는 효과 */
+        .snowflake {
+            position: fixed;
+            top: -10px;
+            z-index: 999999;
+            color: #fff;
+            font-size: 1.5em;
+            user-select: none;
+            animation-name: fall;
+            animation-timing-function: linear;
+            animation-iteration-count: infinite;
+        }
+        
+        @keyframes fall {
+            to { transform: translateY(105vh); }
+        }
+        
+        /* 눈송이 랜덤 배치 */
+        .snowflake:nth-of-type(1) { left: 10%; animation-duration: 5s; animation-delay: 0s; }
+        .snowflake:nth-of-type(2) { left: 30%; animation-duration: 7s; animation-delay: 1s; opacity: 0.8;}
+        .snowflake:nth-of-type(3) { left: 50%; animation-duration: 4s; animation-delay: 2s; opacity: 0.6;}
+        .snowflake:nth-of-type(4) { left: 70%; animation-duration: 6s; animation-delay: 0.5s; }
+        .snowflake:nth-of-type(5) { left: 90%; animation-duration: 8s; animation-delay: 3s; opacity: 0.9;}
+        .snowflake:nth-of-type(6) { left: 20%; animation-duration: 5.5s; animation-delay: 4s; font-size: 1em;}
+        
+    </style>
+
+    <div class="logout-overlay">
+        <div class="snowflake">❅</div><div class="snowflake">❄️</div><div class="snowflake">❆</div>
+        <div class="snowflake">❅</div><div class="snowflake">❄️</div><div class="snowflake">❆</div>
+        
+        <div class="santa-sleigh">🎅🦌🦌🛷💨</div>
+        
+        <div class="center-icon">🎄✨</div>
+        <h1 class="msg-title">Merry Christmas!</h1>
+        <h3 class="msg-sub">오늘도 수고 많으셨습니다.<br>따뜻하고 행복한 연말 보내세요! ❤️</h3>
+    </div>
+    """
     
-    with anim_placeholder.container():
-        st.markdown("""
-        <style>
-            /* 1. 배경 설정 (밤하늘 그라데이션) */
-            .logout-overlay {
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100vw;
-                height: 100vh;
-                background: linear-gradient(to bottom, #020024 0%, #090979 35%, #00d4ff 100%);
-                background: radial-gradient(ellipse at bottom, #1b2735 0%, #090a0f 100%);
-                z-index: 999999; /* 다른 요소보다 무조건 위에 오도록 매우 높게 설정 */
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
-                align-items: center;
-                text-align: center;
-                overflow: hidden;
-            }
+    # 화면에 그리기
+    st.markdown(closing_html, unsafe_allow_html=True)
 
-            /* 2. 🛷 산타와 루돌프 비행 애니메이션 (파도치며 날아가기) */
-            @keyframes flySanta {
-                0% { left: -20%; top: 20%; transform: rotate(5deg); }
-                25% { top: 15%; transform: rotate(-5deg); }
-                50% { top: 20%; transform: rotate(5deg); }
-                75% { top: 10%; transform: rotate(-5deg); }
-                100% { left: 120%; top: 15%; transform: rotate(0deg); }
-            }
-            
-            .santa-sleigh {
-                position: fixed;
-                font-size: 5rem;
-                animation: flySanta 4s linear forwards;
-                z-index: 1000000;
-                text-shadow: 0 0 20px rgba(255, 215, 0, 0.8); /* 금빛 후광 */
-            }
-
-            /* 3. 🎄 크리스마스 트리 전구 반짝임 효과 */
-            @keyframes blinkLights {
-                0% { text-shadow: 0 0 10px #ff0000, 0 0 20px #ff0000; filter: hue-rotate(0deg); transform: scale(1); }
-                50% { text-shadow: 0 0 30px #00ff00, 0 0 40px #00ff00; filter: hue-rotate(180deg); transform: scale(1.1); }
-                100% { text-shadow: 0 0 10px #0000ff, 0 0 20px #0000ff; filter: hue-rotate(360deg); transform: scale(1); }
-            }
-
-            .center-icon {
-                font-size: 100px; 
-                margin-bottom: 20px;
-                animation: blinkLights 1.5s infinite alternate; /* 계속 깜빡임 */
-            }
-
-            /* 4. 텍스트 스타일 */
-            .msg-title {
-                color: white !important;
-                font-size: 3rem !important;
-                font-family: 'Arial', sans-serif;
-                font-weight: bold;
-                text-shadow: 0 0 10px #fff, 0 0 20px #ff00de;
-                margin: 0;
-            }
-            .msg-sub {
-                color: #e0e0e0 !important;
-                font-size: 1.2rem !important;
-                margin-top: 15px;
-                font-weight: 300;
-            }
-            
-            /* 5. ❄️ 눈 내리는 효과 */
-            .snowflake {
-                position: fixed;
-                top: -10px;
-                z-index: 999999;
-                color: #fff;
-                font-size: 1.5em;
-                user-select: none;
-                animation-name: fall;
-                animation-timing-function: linear;
-                animation-iteration-count: infinite;
-            }
-            
-            @keyframes fall {
-                to { transform: translateY(105vh); }
-            }
-            
-            /* 눈송이 랜덤 배치 */
-            .snowflake:nth-of-type(1) { left: 10%; animation-duration: 5s; animation-delay: 0s; }
-            .snowflake:nth-of-type(2) { left: 30%; animation-duration: 7s; animation-delay: 1s; opacity: 0.8;}
-            .snowflake:nth-of-type(3) { left: 50%; animation-duration: 4s; animation-delay: 2s; opacity: 0.6;}
-            .snowflake:nth-of-type(4) { left: 70%; animation-duration: 6s; animation-delay: 0.5s; }
-            .snowflake:nth-of-type(5) { left: 90%; animation-duration: 8s; animation-delay: 3s; opacity: 0.9;}
-            .snowflake:nth-of-type(6) { left: 20%; animation-duration: 5.5s; animation-delay: 4s; font-size: 1em;}
-            
-        </style>
-
-        <div class="logout-overlay">
-            <div class="snowflake">❅</div><div class="snowflake">❄️</div><div class="snowflake">❆</div>
-            <div class="snowflake">❅</div><div class="snowflake">❄️</div><div class="snowflake">❆</div>
-            
-            <div class="santa-sleigh">🎅🦌🦌🛷💨</div>
-            
-            <div class="center-icon">🎄✨</div>
-            <h1 class="msg-title">Merry Christmas!</h1>
-            <h3 class="msg-sub">오늘도 수고 많으셨습니다.<br>따뜻하고 행복한 연말 보내세요! ❤️</h3>
-        </div>
-        """, unsafe_allow_html=True)
-
-    # 렌더링이 될 시간을 줌 (산타가 지나갈 시간)
+    # 4.5초 대기 (애니메이션 감상 시간)
     time.sleep(4.5)
     
-    # 애니메이션 후 데이터 정리
-    anim_placeholder.empty() # 화면 비우기
+    # 로그아웃 처리 (세션 삭제)
     for key in list(st.session_state.keys()):
         del st.session_state[key]
         
