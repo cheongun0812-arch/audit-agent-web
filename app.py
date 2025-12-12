@@ -26,79 +26,81 @@ st.set_page_config(
 )
 
 # ==========================================
-# 2. 🎨 [디자인] V40~42 디자인 유지
+# 2. 🎨 [디자인] V41 CSS 유지
 # ==========================================
 st.markdown("""
     <style>
-    /* 1. 기본 배경 */
     .stApp { background-color: #F4F6F9 !important; }
-    
-    /* 2. 폰트 강제 적용 */
     html, body, p, div, span, label, h1, h2, h3, h4, h5, h6, li, button {
         font-family: 'Pretendard', sans-serif !important;
     }
-
-    /* 3. 사이드바 배경 */
-    [data-testid="stSidebar"] { background-color: #2C3E50 !important; }
-
-    /* 입력창 글씨 색상: 진한 회색 */
-    input.stTextInput {
-        background-color: #FFFFFF !important;
-        color: #333333 !important;
-        -webkit-text-fill-color: #333333 !important;
-        caret-color: #333333 !important;
-    }
-    ::placeholder {
-        color: #888888 !important;
-        -webkit-text-fill-color: #888888 !important;
-        opacity: 1 !important;
-    }
-
-    /* 버튼 글씨: 흰색 */
-    .stButton > button {
-        background: linear-gradient(to right, #2980B9, #2C3E50) !important;
-        color: #FFFFFF !important;
-        -webkit-text-fill-color: #FFFFFF !important;
-        border: none !important;
-        font-weight: bold !important;
-    }
-
-    /* 사이드바 하단 정보: 흰색 */
-    .sidebar-footer {
-        color: #FFFFFF !important;
-        text-align: center;
-        font-size: 12px;
-        opacity: 0.9;
-        margin-top: 50px;
-    }
+    p, div, span, label, li { color: #333333 !important; }
     
-    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, 
-    [data-testid="stSidebar"] label, [data-testid="stSidebar"] p {
-        color: #FFFFFF !important;
-    }
+    [data-testid="stSidebar"] { background-color: #2C3E50 !important; }
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 { color: #FFFFFF !important; }
+    [data-testid="stSidebar"] p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] span { color: #ECF0F1 !important; }
 
-    /* 상단 메뉴 버튼: 글씨 숨기고 아이콘만 */
     [data-testid="stSidebarCollapsedControl"] {
-        color: transparent !important;
+        text-indent: -9999px !important;
+        white-space: nowrap !important;
         background-color: #FFFFFF !important;
         border-radius: 0 12px 12px 0 !important;
-        width: 40px !important;
-        height: 40px !important;
+        border: 1px solid #BDC3C7 !important;
+        border-left: none !important;
+        box-shadow: 2px 2px 6px rgba(0,0,0,0.15) !important;
+        position: fixed !important;
+        top: 60px !important;
+        left: 0 !important;
+        width: 45px !important;
+        height: 45px !important;
+        z-index: 9999999 !important;
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
     }
+    [data-testid="stSidebarCollapsedControl"] > svg, 
+    [data-testid="stSidebarCollapsedControl"] > img { display: none !important; }
+    
     [data-testid="stSidebarCollapsedControl"]::after {
         content: "☰";
+        text-indent: 0 !important;
+        font-size: 26px !important;
         color: #2C3E50 !important;
-        font-size: 24px !important;
-        font-weight: bold !important;
+        font-weight: 900 !important;
         position: absolute;
+        top: 50%; left: 50%;
+        transform: translate(-50%, -55%);
+        display: block !important;
+        visibility: visible !important;
     }
-    
-    /* 채팅 메시지 박스 */
-    [data-testid="stChatMessage"] { background-color: #FFFFFF !important; border-radius: 12px; }
-    [data-testid="stChatMessage"] p { color: #333333 !important; }
+
+    input[type="text"], input[type="password"] {
+        background-color: #FFFFFF !important;
+        border: 2px solid #D5DBDB !important;
+        border-radius: 8px !important;
+        padding: 10px !important;
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+        caret-color: #000000 !important;
+        opacity: 1 !important;
+    }
+    ::placeholder {
+        color: #7F8C8D !important;
+        -webkit-text-fill-color: #7F8C8D !important;
+        opacity: 1 !important;
+    }
+    button[aria-label="Show password"] { filter: invert(1) !important; }
+
+    .stButton > button {
+        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%) !important;
+        color: #FFFFFF !important;
+        -webkit-text-fill-color: #FFFFFF !important;
+        border: none !important;
+        border-radius: 8px !important;
+        font-weight: 700 !important;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.2) !important;
+    }
+    [data-testid="stChatMessage"] { background-color: #FFFFFF !important; border: 1px solid #E0E0E0; border-radius: 12px; }
     [data-testid="stChatMessage"][data-testid="user"] { background-color: #EBF5FB !important; }
     </style>
 """, unsafe_allow_html=True)
@@ -173,3 +175,85 @@ def download_and_upload_youtube_audio(url):
         st.error("서버에 yt-dlp가 설치되지 않았습니다.")
         return None
     try:
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'outtmpl': 'temp_audio.%(ext)s',
+            'quiet': True,
+            'overwrites': True,
+            'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
+            'http_headers': {'User-Agent': 'Mozilla/5.0'}
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
+        audio_files = glob.glob("temp_audio.*")
+        if not audio_files: return None
+        audio_path = audio_files[0]
+        myfile = genai.upload_file(audio_path)
+        while myfile.state.name == "PROCESSING":
+            time.sleep(2)
+            myfile = genai.get_file(myfile.name)
+        os.remove(audio_path)
+        return myfile
+    except Exception as e:
+        if "403" in str(e) or "Forbidden" in str(e):
+            st.error("🔒 [보안 차단] 유튜브 보안으로 인해 자동 다운로드가 막혔습니다.")
+            st.info("💡 '미디어 파일 업로드' 탭을 이용해 다운받은 파일을 직접 올려주세요.")
+        else:
+            st.error(f"오디오 처리 중 오류: {e}")
+        return None
+
+def get_youtube_transcript(url):
+    try:
+        if "youtu.be" in url: video_id = url.split("/")[-1]
+        else: video_id = url.split("v=")[-1].split("&")[0]
+        transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['ko', 'en'])
+        text = " ".join([t['text'] for t in transcript])
+        return text
+    except: return None
+
+def get_web_content(url):
+    try:
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        response = requests.get(url, headers=headers)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        for script in soup(["script", "style"]): script.decompose()
+        return soup.get_text()[:10000]
+    except Exception as e: return f"[오류] {e}"
+
+def process_media_file(uploaded_file):
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp_file:
+            tmp_file.write(uploaded_file.getvalue())
+            tmp_path = tmp_file.name
+        myfile = genai.upload_file(tmp_path)
+        with st.spinner('🎧 파일 분석 준비 중...'):
+            while myfile.state.name == "PROCESSING":
+                time.sleep(2)
+                myfile = genai.get_file(myfile.name)
+        os.remove(tmp_path)
+        return myfile
+    except Exception as e:
+        st.error(f"파일 오류: {e}")
+        return None
+
+# ==========================================
+# 5. 메인 화면
+# ==========================================
+
+st.markdown("<h1 style='text-align: center; color: #2C3E50 !important;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
+st.markdown("<div style='text-align: center; color: #7F8C8D !important; margin-bottom: 25px;'>Professional Legal & Audit Assistant System</div>", unsafe_allow_html=True)
+
+tab1, tab2, tab3 = st.tabs(["  📄 문서 정밀 검토  ", "  💬 AI 파트너 대화  ", "  📰 스마트 요약  "])
+
+# --- Tab 1: 문서 검토 ---
+with tab1:
+    st.markdown("<br>", unsafe_allow_html=True)
+    with st.container():
+        st.markdown("#### 1️⃣ 작업 선택")
+        option = st.selectbox("작업 유형", ("법률 리스크 정밀 검토", "감사 보고서 초안 작성", "오타 수정 및 문구 교정", "기안문/공문 초안 생성"), label_visibility="collapsed")
+        
+        st.markdown("#### 2️⃣ 파일 업로드")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.info("👇 **검토 파일**")
+            uploaded_file = st.file_uploader("검토 파일", type=['txt', 'pdf', 'docx'], key="target", label_visibility="collapsed")
