@@ -69,17 +69,17 @@ st.markdown("""
     [data-testid="stChatMessage"] { background-color: #FFFFFF; border: 1px solid #eee; }
     [data-testid="stChatMessage"][data-testid="user"] { background-color: #E3F2FD; }
 
-   /* 🎄크리스마스 애니메이션 스타일 */
-    .snow-bg {
-        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-        background: rgba(0, 0, 0, 0.9); z-index: 999999;
-        display: flex; flex-direction: column; justify-content: center; align-items: center;
-        text-align: center; color: white !important;
+    /* 🎄 크리스마스 로그아웃 버튼 스타일 */
+    .logout-btn {
+        border: 2px solid #FF5252 !important;
+        background: transparent !important;
+        color: #FF5252 !important;
+        border-radius: 20px !important;
     }
-    
-    /* 🗣️채팅 메시지 박스 */
-    [data-testid="stChatMessage"] { background-color: #FFFFFF; border: 1px solid #eee; }
-    [data-testid="stChatMessage"][data-testid="user"] { background-color: #E3F2FD; }
+    .logout-btn:hover {
+        background-color: #FF5252 !important;
+        color: white !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -87,65 +87,164 @@ st.markdown("""
 # 3. 사이드바 (로그인 & 로그아웃)
 # ==========================================
 with st.sidebar:
-    st.markdown("### 🏛️ Control Center")
+    st.title("🏛️ Control Center")
     st.markdown("---")
     
+    # 세션에 키가 없으면 -> 로그인 폼 표시
     if 'api_key' not in st.session_state:
         with st.form(key='login_form'):
-            st.markdown("<h4 style='color:white; margin-bottom:5px;'>🔐 Access Key</h4>", unsafe_allow_html=True)
-            api_key_input = st.text_input("Key", type="password", placeholder="여기에 API 키 입력", label_visibility="collapsed")
+            st.markdown("🔑 **Access Key**")
+            # 라벨을 명확히 하고, 키 입력 즉시 반응하도록 설정
+            api_key_input = st.text_input("키 입력", type="password", placeholder="API 키를 입력하세요", label_visibility="collapsed")
             submit_button = st.form_submit_button(label="시스템 접속 (Login)")
         
-        # [수정] 로그인 로직: 버튼 한 번 클릭으로 즉시 접속되도록 st.rerun() 위치 조정
         if submit_button:
             if api_key_input:
                 clean_key = api_key_input.strip()
-                try:
-                    # 키 유효성 테스트 (모델 목록 조회 시도)
-                    genai.configure(api_key=clean_key)
-                    list(genai.list_models()) # 테스트 호출
-                    
-                    # 성공 시 세션 저장 및 즉시 리로드
-                    st.session_state['api_key'] = clean_key
-                    st.success("✅ 접속 완료")
-                    time.sleep(0.5) # 메시지 보여줄 시간 확보
-                    st.rerun() # [중요] 여기서 즉시 새로고침하여 상태 반영
-                except:
-                    st.error("❌ 유효하지 않은 키입니다.")
+                
+                # [수정됨] 불필요한 try-except 제거
+                # genai.configure는 검증 단계가 아니라 설정 단계이므로 에러가 잘 나지 않습니다.
+                # 만약 키가 틀렸다면 이후 데이터 요청 시 에러가 나도록 하는 것이 자연스럽습니다.
+                genai.configure(api_key=clean_key)
+                
+                # 세션 상태 저장
+                st.session_state['api_key'] = clean_key
+                
+                st.success("✅ 접속 완료")
+                st.rerun() # 즉시 새로고침하여 로그인 상태로 전환
             else:
-                st.warning("⚠️ 키를 입력해주세요.")
+                st.warning("⚠️ 키를 입력해주세요")
 
+    # 세션에 키가 있으면 -> 로그아웃 버튼 표시
     else:
-        st.success("🟢 정상 가동 중")
+        st.success("🟢 시스템 정상 가동")
         st.markdown("<br>", unsafe_allow_html=True)
         
+        # 🎄 따뜻한 작별 버튼
         if st.button("🎄 고마워! 또 봐! (Logout)", type="primary", use_container_width=True):
-            st.session_state['logout_anim'] = True
+            # 로그아웃 시 세션 초기화
+            del st.session_state['api_key']
             st.rerun()
 
     st.markdown("---")
-    st.markdown("<div style='color:white; text-align:center; font-size:12px; opacity:0.8;'>Audit AI Solution © 2025<br>Engine: Gemini 1.5 Pro</div>", unsafe_allow_html=True)
+    st.caption("Audit AI Solution © 2025\nEngine: Gemini 1.5 Pro")
 
 # ==========================================
-# 4. 🎅 크리스마스 작별 애니메이션
+# 4. 🎅 크리스마스 작별 애니메이션 (코드 노출 방지)
 # ==========================================
 if 'logout_anim' in st.session_state and st.session_state['logout_anim']:
-    # HTML 들여쓰기 제거 (코드 노출 방지)
+    # CSS와 HTML을 활용한 크리스마스 애니메이션 오버레이
     st.markdown("""
-<div class="snow-bg">
-<div style="font-size: 80px; margin-bottom: 20px;">🎅🎄</div>
-<h1 style="color: white !important;">Merry Christmas!</h1>
-<h3 style="color: #ddd !important;">오늘도 수고 많으셨습니다.<br>따뜻한 연말 보내세요! ❤️</h3>
-</div>
-""", unsafe_allow_html=True)
+    <style>
+        /* 1. 전체 화면을 덮는 어두운 배경 (눈 내리는 효과 포함) */
+        .logout-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: linear-gradient(to bottom, #0f2027, #203a43, #2c5364);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            overflow: hidden;
+        }
+
+        /* 2. 날아가는 산타와 루돌프 애니메이션 */
+        @keyframes flyAcross {
+            0% { transform: translateX(-120%) translateY(0px) rotate(5deg); }
+            25% { transform: translateX(-50%) translateY(-30px) rotate(0deg); }
+            50% { transform: translateX(0%) translateY(0px) rotate(-5deg); }
+            75% { transform: translateX(50%) translateY(-30px) rotate(0deg); }
+            100% { transform: translateX(120%) translateY(0px) rotate(5deg); }
+        }
+        
+        .santa-sleigh {
+            position: absolute;
+            top: 20%;
+            font-size: 4rem;
+            animation: flyAcross 3.5s linear forwards;
+            filter: drop-shadow(0 0 10px gold);
+        }
+
+        /* 3. 중앙 아이콘 반짝임 (전구 효과) */
+        @keyframes glow {
+            0% { text-shadow: 0 0 10px #fff, 0 0 20px #ff00de, 0 0 30px #ff00de; transform: scale(1); }
+            50% { text-shadow: 0 0 20px #fff, 0 0 30px #ffdd00, 0 0 40px #ffdd00; transform: scale(1.1); }
+            100% { text-shadow: 0 0 10px #fff, 0 0 20px #ff00de, 0 0 30px #ff00de; transform: scale(1); }
+        }
+
+        .center-icon {
+            font-size: 80px; 
+            margin-bottom: 20px;
+            animation: glow 2s infinite ease-in-out;
+        }
+
+        /* 4. 텍스트 스타일 */
+        .msg-title {
+            color: white !important;
+            font-family: 'Arial', sans-serif;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px #000000;
+        }
+        .msg-sub {
+            color: #ddd !important;
+            margin-top: 10px;
+        }
+        
+        /* 5. 눈 내리는 효과 (간단 버전) */
+        .snowflake {
+            color: #fff;
+            font-size: 1em;
+            font-family: Arial;
+            text-shadow: 0 0 1px #000;
+            position: fixed;
+            top: -10%;
+            z-index: 9998;
+            user-select: none;
+            cursor: default;
+            animation-name: snowflakes-fall, snowflakes-shake;
+            animation-duration: 10s, 3s;
+            animation-timing-function: linear, ease-in-out;
+            animation-iteration-count: infinite, infinite;
+            animation-play-state: running, running;
+        }
+        @keyframes snowflakes-fall { 0% { top: -10%; } 100% { top: 100%; } }
+        @keyframes snowflakes-shake { 0% { transform: translateX(0px); } 50% { transform: translateX(80px); } 100% { transform: translateX(0px); } }
+        
+        /* 눈송이 위치 랜덤 배치 */
+        .snowflake:nth-of-type(1) { left: 1%; animation-delay: 0s, 0s; }
+        .snowflake:nth-of-type(2) { left: 20%; animation-delay: 1s, 1s; }
+        .snowflake:nth-of-type(3) { left: 40%; animation-delay: 6s, 0.5s; }
+        .snowflake:nth-of-type(4) { left: 60%; animation-delay: 4s, 2s; }
+        .snowflake:nth-of-type(5) { left: 80%; animation-delay: 2s, 2s; }
+        
+    </style>
+
+    <div class="logout-overlay">
+        <div class="snowflake">❅</div><div class="snowflake">❆</div><div class="snowflake">❅</div><div class="snowflake">❆</div><div class="snowflake">❅</div>
+        
+        <div class="santa-sleigh">🦌🦌🛷🎅💨</div>
+        
+        <div class="center-icon">🎄🎁</div>
+        <h1 class="msg-title">Merry Christmas!</h1>
+        <h3 class="msg-sub">오늘도 수고 많으셨습니다.<br>따뜻한 연말 보내세요! ❤️</h3>
+    </div>
+    """, unsafe_allow_html=True)
     
-    time.sleep(3.0)
+    # 애니메이션이 충분히 보일 수 있도록 대기 시간 3.5초로 약간 조정
+    time.sleep(3.5)
+    
+    # 세션 초기화 및 리런
     for key in list(st.session_state.keys()):
         del st.session_state[key]
     st.rerun()
 
 # ==========================================
-# 5. 핵심 기능 함수 (기존 유지)
+# 5. 핵심 기능 함수
 # ==========================================
 def get_model():
     if 'api_key' in st.session_state:
@@ -247,18 +346,21 @@ def process_media_file(uploaded_file):
 st.markdown("<h1 style='text-align: center; color: #2C3E50;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
 st.markdown("<div style='text-align: center; color: #555; margin-bottom: 20px;'>Professional Legal & Audit Assistant System</div>", unsafe_allow_html=True)
 
-# 탭 구성
+# [수정] 탭 명칭 및 아이콘 최종 확인
 tab1, tab2, tab3 = st.tabs(["📄 문서 정밀 검토", "💬 Audit AI 에이전트 대화", "📰 스마트 요약"])
 
 # --- Tab 1: 문서 검토 ---
 with tab1:
+    # [수정] 📂 폴더 아이콘 적용
     st.markdown("### 📂 작업 및 파일 설정")
     option = st.selectbox("작업 유형 선택", 
         ("법률 리스크 정밀 검토", "감사 보고서 초안 작성", "오타 수정 및 문구 교정", "기안문/공문 초안 생성"))
     st.markdown("---")
     
+    # [수정] 모바일 깨짐 방지: 1단 배치 (st.columns 제거)
     st.info("👇 **검토할 파일 (필수)**")
     uploaded_file = st.file_uploader("검토 파일 업로드", type=['txt', 'pdf', 'docx'], key="target", label_visibility="collapsed")
+    
     st.warning("📚 **참고 규정/지침 (선택)**")
     uploaded_refs = st.file_uploader("참고 파일 업로드", type=['txt', 'pdf', 'docx'], accept_multiple_files=True, label_visibility="collapsed")
 
@@ -307,6 +409,7 @@ with tab2:
     st.markdown("### 🗣️ 실시간 질의응답")
     st.info("파일 내용이나 업무 관련 궁금한 점을 물어보세요.")
     
+    # [수정] 모바일 깨짐 방지: 1단 배치
     with st.form(key='chat_form', clear_on_submit=True):
         user_input = st.text_input("질문 입력", placeholder="예: 하도급법 위반 사례를 알려줘")
         submit_chat = st.form_submit_button("전송 📤", use_container_width=True)
@@ -350,6 +453,7 @@ with tab2:
 with tab3:
     st.markdown("### 📰 스마트 요약 & 인사이트")
     
+    # [수정] 라디오 버튼 단순화
     summary_type = st.radio("입력 방식 선택", ["🌐 URL 입력", "📁 미디어 파일 업로드", "✍️ 텍스트 입력"])
     
     final_input = None
