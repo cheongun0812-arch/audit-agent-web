@@ -26,11 +26,11 @@ st.set_page_config(
 )
 
 # ==========================================
-# 2. 🎨 [디자인] V60: 요소 파괴 및 강제 적용 (The Nuclear Option)
+# 2. 🎨 [디자인] V48 성공 로직 복원 + 필수 수정 사항 통합
 # ==========================================
 st.markdown("""
     <style>
-    /* 1. 배경 및 폰트 */
+    /* 1. 기본 배경 */
     .stApp { background-color: #F4F6F9 !important; }
     * { font-family: 'Pretendard', sans-serif !important; }
 
@@ -38,50 +38,38 @@ st.markdown("""
     [data-testid="stSidebar"] { background-color: #2C3E50 !important; }
     [data-testid="stSidebar"] * { color: #FFFFFF !important; }
 
-    /* 🚨 3. [최종 해결] 상단 메뉴 'keyboard...' 텍스트 완전 박멸 🚨 */
-    /* (1) 버튼 껍데기만 남기고 내부 텍스트 크기를 0으로 만듦 */
+    /* 🚨 3. [V48 방식 복원] 상단 메뉴 버튼: 글씨 투명화 기법 (성공했던 방식) 🚨 */
     [data-testid="stSidebarCollapsedControl"] {
-        font-size: 0 !important;
-        
+        color: transparent !important; /* 글씨를 투명하게 만듦 */
         background-color: #FFFFFF !important;
         border-radius: 0 10px 10px 0;
-        width: 42px !important;
-        height: 42px !important;
-        box-shadow: 2px 2px 5px rgba(0,0,0,0.15);
-        z-index: 999999;
-        
-        /* 중앙 정렬 강제 */
+        border: 1px solid #ddd;
+        width: 40px !important;
+        height: 40px !important;
+        z-index: 99999;
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
     }
-
-    /* (2) 버튼 내부의 모든 자식 요소(SVG, 텍스트, span 등)를 화면에서 제거 */
-    [data-testid="stSidebarCollapsedControl"] > * {
-        display: none !important;
-    }
-
-    /* (3) 햄버거 아이콘(☰)을 가상 요소로 새로 그림 */
+    
+    /* ☰ 햄버거 아이콘 덮어쓰기 */
     [data-testid="stSidebarCollapsedControl"]::after {
-        content: "☰" !important;
-        font-size: 26px !important; /* 폰트 사이즈 복구 */
-        color: #2C3E50 !important;
-        font-weight: 900 !important;
-        display: block !important;
-        margin-top: -4px !important; /* 위치 미세 조정 */
+        content: "☰";
+        color: #2C3E50 !important; /* 아이콘 색상 */
+        font-size: 24px !important;
+        font-weight: bold !important;
+        position: absolute;
     }
 
-    /* 🚨 4. [최종 해결] 입력창 글씨 색상 (검은색 강제) 🚨 */
+    /* 4. 입력창 디자인 (모바일 텍스트 실종 방지) */
     input.stTextInput, textarea.stTextArea {
         background-color: #FFFFFF !important;
-        color: #000000 !important; /* 무조건 검은색 */
+        color: #000000 !important;
         -webkit-text-fill-color: #000000 !important; /* 모바일 크롬 강제 */
         caret-color: #000000 !important;
-        border: 2px solid #BDC3C7 !important;
-        font-weight: 600 !important;
+        border: 1px solid #BDC3C7 !important;
+        font-weight: 500 !important;
     }
-    
-    /* 플레이스홀더 색상 */
     ::placeholder {
         color: #666666 !important;
         -webkit-text-fill-color: #666666 !important;
@@ -95,6 +83,7 @@ st.markdown("""
         -webkit-text-fill-color: #FFFFFF !important;
         border: none !important;
         font-weight: bold !important;
+        height: 45px !important;
     }
 
     /* 6. 크리스마스 애니메이션 스타일 */
@@ -118,11 +107,10 @@ with st.sidebar:
     st.markdown("### 🏛️ Control Center")
     st.markdown("---")
     
+    # 로그인 전
     if 'api_key' not in st.session_state:
         with st.form(key='login_form'):
-            # 라벨을 확실하게 보여줌
             st.markdown("<h4 style='color:white; margin-bottom:5px;'>🔐 Access Key</h4>", unsafe_allow_html=True)
-            # 입력창
             api_key_input = st.text_input("Key", type="password", placeholder="API 키 입력", label_visibility="collapsed")
             submit_button = st.form_submit_button(label="시스템 접속 (Login)")
         
@@ -140,6 +128,7 @@ with st.sidebar:
             else:
                 st.warning("⚠️ 키 입력 필요")
 
+    # 로그인 후
     else:
         st.success("🟢 정상 가동 중")
         st.markdown("<br>", unsafe_allow_html=True)
@@ -152,10 +141,10 @@ with st.sidebar:
     st.markdown("<div style='color:white; text-align:center; font-size:12px; opacity:0.8;'>Audit AI Solution © 2025<br>Engine: Gemini 1.5 Pro</div>", unsafe_allow_html=True)
 
 # ==========================================
-# 4. 🎅 크리스마스 작별 애니메이션
+# 4. 🎅 크리스마스 작별 애니메이션 (코드 노출 방지)
 # ==========================================
 if 'logout_anim' in st.session_state and st.session_state['logout_anim']:
-    # HTML 들여쓰기 제거 -> 코드 노출 방지
+    # HTML 들여쓰기를 제거하여 코드로 인식되는 문제 해결
     st.markdown("""
 <div class="snow-bg">
 <div style="font-size: 80px; margin-bottom: 20px;">🎅🎄</div>
@@ -170,7 +159,7 @@ if 'logout_anim' in st.session_state and st.session_state['logout_anim']:
     st.rerun()
 
 # ==========================================
-# 5. 핵심 기능 함수 (안정성 검증 완료)
+# 5. 핵심 기능 함수
 # ==========================================
 def get_model():
     if 'api_key' in st.session_state:
@@ -272,18 +261,21 @@ def process_media_file(uploaded_file):
 st.markdown("<h1 style='text-align: center; color: #2C3E50;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
 st.markdown("<div style='text-align: center; color: #555; margin-bottom: 20px;'>Professional Legal & Audit Assistant System</div>", unsafe_allow_html=True)
 
-# 탭 구성 (요청사항 반영)
+# [수정] 탭 명칭 및 아이콘 최종 확인
 tab1, tab2, tab3 = st.tabs(["📄 문서 정밀 검토", "💬 Audit AI 에이전트 대화", "📰 스마트 요약"])
 
 # --- Tab 1: 문서 검토 ---
 with tab1:
+    # [수정] 📂 폴더 아이콘 적용
     st.markdown("### 📂 작업 및 파일 설정")
     option = st.selectbox("작업 유형 선택", 
         ("법률 리스크 정밀 검토", "감사 보고서 초안 작성", "오타 수정 및 문구 교정", "기안문/공문 초안 생성"))
     st.markdown("---")
     
+    # [수정] 모바일 깨짐 방지: 1단 배치 (st.columns 제거)
     st.info("👇 **검토할 파일 (필수)**")
     uploaded_file = st.file_uploader("검토 파일 업로드", type=['txt', 'pdf', 'docx'], key="target", label_visibility="collapsed")
+    
     st.warning("📚 **참고 규정/지침 (선택)**")
     uploaded_refs = st.file_uploader("참고 파일 업로드", type=['txt', 'pdf', 'docx'], accept_multiple_files=True, label_visibility="collapsed")
 
@@ -298,7 +290,6 @@ with tab1:
         if 'api_key' not in st.session_state: st.error("🔒 로그인 필요")
         elif not uploaded_file: st.warning("⚠️ 검토할 파일을 업로드해주세요.")
         else:
-            # 페르소나 설정
             persona_name = "AI 감사 전문가"
             greeting = "안녕하세요. 업무를 도와드릴 AI 감사 전문가입니다."
             if "법률" in option: 
@@ -333,6 +324,7 @@ with tab2:
     st.markdown("### 🗣️ 실시간 질의응답")
     st.info("파일 내용이나 업무 관련 궁금한 점을 물어보세요.")
     
+    # [수정] 모바일 깨짐 방지: 1단 배치
     with st.form(key='chat_form', clear_on_submit=True):
         user_input = st.text_input("질문 입력", placeholder="예: 하도급법 위반 사례를 알려줘")
         submit_chat = st.form_submit_button("전송 📤", use_container_width=True)
@@ -376,6 +368,7 @@ with tab2:
 with tab3:
     st.markdown("### 📰 스마트 요약 & 인사이트")
     
+    # [수정] 라디오 버튼 단순화
     summary_type = st.radio("입력 방식 선택", ["🌐 URL 입력", "📁 미디어 파일 업로드", "✍️ 텍스트 입력"])
     
     final_input = None
