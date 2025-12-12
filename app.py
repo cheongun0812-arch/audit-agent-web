@@ -17,7 +17,7 @@ except ImportError:
     yt_dlp = None
 
 # ==========================================
-# 1. 페이지 설정 (기본값 준수)
+# 1. 페이지 설정
 # ==========================================
 st.set_page_config(
     page_title="AUDIT AI Agent",
@@ -26,20 +26,14 @@ st.set_page_config(
 )
 
 # ==========================================
-# 2. 🎨 [디자인] 안전한 CSS (화면 깨짐 방지)
+# 2. 🎨 디자인 테마 (V47 안전성 유지 + 크리스마스 효과)
 # ==========================================
 st.markdown("""
     <style>
-    /* 1. 배경색 (안전한 회색) */
     .stApp { background-color: #F4F6F9; }
-    
-    /* 2. 사이드바 (네이비) */
     [data-testid="stSidebar"] { background-color: #2C3E50; }
-    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, [data-testid="stSidebar"] p, [data-testid="stSidebar"] span, [data-testid="stSidebar"] label, [data-testid="stSidebar"] div {
-        color: #FFFFFF !important;
-    }
-
-    /* 3. 입력창 (흰 배경, 검은 글씨 강제) */
+    [data-testid="stSidebar"] * { color: #FFFFFF !important; }
+    
     .stTextInput input, .stTextArea textarea {
         background-color: #FFFFFF !important;
         color: #000000 !important;
@@ -47,7 +41,6 @@ st.markdown("""
         border: 1px solid #BDC3C7 !important;
     }
     
-    /* 4. 버튼 (파란색 그라데이션) */
     .stButton > button {
         background: linear-gradient(to right, #2980B9, #2C3E50) !important;
         color: #FFFFFF !important;
@@ -55,13 +48,7 @@ st.markdown("""
         font-weight: bold !important;
     }
 
-    /* 5. 탭 메뉴 (잘 보이게 설정) */
-    .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {
-        font-size: 16px;
-        font-weight: bold;
-    }
-
-    /* 6. (중요) 상단 못생긴 글씨 숨기기 + 햄버거 아이콘 */
+    /* 상단 메뉴 버튼 (책갈피) */
     [data-testid="stSidebarCollapsedControl"] {
         color: transparent !important;
         background-color: #FFFFFF !important;
@@ -79,50 +66,128 @@ st.markdown("""
         top: 5px; left: 10px;
     }
     
-    /* 7. 채팅 메시지 박스 가독성 확보 */
     [data-testid="stChatMessage"] { background-color: #FFFFFF; border: 1px solid #eee; }
     [data-testid="stChatMessage"][data-testid="user"] { background-color: #E3F2FD; }
+
+    /* 🎄 크리스마스 로그아웃 버튼 스타일 */
+    .logout-btn {
+        border: 2px solid #FF5252 !important;
+        background: transparent !important;
+        color: #FF5252 !important;
+        border-radius: 20px !important;
+    }
+    .logout-btn:hover {
+        background-color: #FF5252 !important;
+        color: white !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 3. 사이드바 (로그인)
+# 3. 사이드바 (로그인 & 로그아웃)
 # ==========================================
 with st.sidebar:
     st.title("🏛️ Control Center")
     st.markdown("---")
-    with st.form(key='login_form'):
-        st.markdown("🔑 **Access Key**")
-        api_key_input = st.text_input("키 입력", type="password", placeholder="API 키를 입력하세요", label_visibility="collapsed")
-        submit_button = st.form_submit_button(label="시스템 접속 (Login)")
     
-    if submit_button:
-        if api_key_input:
-            clean_key = api_key_input.strip()
-            try:
-                genai.configure(api_key=clean_key)
-                st.session_state['api_key'] = clean_key
-                st.success("✅ 접속 완료")
-            except:
-                st.error("❌ 키 오류")
-        else:
-            st.warning("⚠️ 키 입력 필요")
-            
-    elif 'api_key' in st.session_state:
-        genai.configure(api_key=st.session_state['api_key'])
-        st.success("🟢 시스템 정상 가동")
+    # 세션에 키가 없으면 -> 로그인 폼 표시
+    if 'api_key' not in st.session_state:
+        with st.form(key='login_form'):
+            st.markdown("🔑 **Access Key**")
+            api_key_input = st.text_input("키 입력", type="password", placeholder="API 키를 입력하세요", label_visibility="collapsed")
+            submit_button = st.form_submit_button(label="시스템 접속 (Login)")
         
+        if submit_button:
+            if api_key_input:
+                clean_key = api_key_input.strip()
+                try:
+                    genai.configure(api_key=clean_key)
+                    st.session_state['api_key'] = clean_key
+                    st.success("✅ 접속 완료")
+                    st.rerun() # 새로고침
+                except:
+                    st.error("❌ 키 오류")
+            else:
+                st.warning("⚠️ 키 입력 필요")
+
+    # 세션에 키가 있으면 -> 로그아웃 버튼 표시
+    else:
+        st.success("🟢 시스템 정상 가동")
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # 🎄 따뜻한 작별 버튼
+        if st.button("🎄 고마워! 또 봐! (Logout)", type="primary", use_container_width=True):
+            # 1. 애니메이션 트리거 설정
+            st.session_state['logout_anim'] = True
+            st.rerun()
+
     st.markdown("---")
     st.caption("Audit AI Solution © 2025\nEngine: Gemini 1.5 Pro")
 
 # ==========================================
-# 4. 기능 함수 (검증된 로직 유지)
+# 4. 🎅 크리스마스 작별 애니메이션 로직
+# ==========================================
+if 'logout_anim' in st.session_state and st.session_state['logout_anim']:
+    # 전체 화면을 덮는 눈 내리는 효과 HTML/CSS
+    st.markdown("""
+        <style>
+        .snow-container {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0, 0, 0, 0.85); z-index: 999999;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            color: white; text-align: center;
+        }
+        .snowflake {
+            color: #fff; font-size: 1.5em; font-family: Arial, sans-serif; text-shadow: 0 0 5px #000;
+            position: fixed; top: -10%; z-index: 9999; user-select: none; cursor: default;
+            animation-name: snowflakes-fall, snowflakes-shake;
+            animation-duration: 10s, 3s;
+            animation-timing-function: linear, ease-in-out;
+            animation-iteration-count: infinite, infinite;
+            animation-play-state: running, running;
+        }
+        @keyframes snowflakes-fall { 0% { top: -10%; } 100% { top: 100%; } }
+        @keyframes snowflakes-shake { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(80px); } }
+        .snowflake:nth-of-type(0) { left: 1%; animation-delay: 0s, 0s; }
+        .snowflake:nth-of-type(1) { left: 10%; animation-delay: 1s, 1s; }
+        .snowflake:nth-of-type(2) { left: 20%; animation-delay: 6s, 0.5s; }
+        .snowflake:nth-of-type(3) { left: 30%; animation-delay: 4s, 2s; }
+        .snowflake:nth-of-type(4) { left: 40%; animation-delay: 2s, 2s; }
+        .snowflake:nth-of-type(5) { left: 50%; animation-delay: 8s, 3s; }
+        .snowflake:nth-of-type(6) { left: 60%; animation-delay: 6s, 2s; }
+        .snowflake:nth-of-type(7) { left: 70%; animation-delay: 2.5s, 1s; }
+        .snowflake:nth-of-type(8) { left: 80%; animation-delay: 1s, 0s; }
+        .snowflake:nth-of-type(9) { left: 90%; animation-delay: 3s, 1.5s; }
+        </style>
+        
+        <div class="snow-container">
+            <div style="font-size: 80px;">🎅🎄</div>
+            <h1 style="color:white !important; margin-top: 20px;">Merry Christmas!</h1>
+            <h3 style="color:#eee !important;">오늘도 수고 많으셨습니다.<br>따뜻한 연말 보내세요! ❤️</h3>
+            
+            <div class="snowflake">❅</div><div class="snowflake">❆</div><div class="snowflake">❅</div>
+            <div class="snowflake">❆</div><div class="snowflake">❅</div><div class="snowflake">❆</div>
+            <div class="snowflake">❅</div><div class="snowflake">❆</div><div class="snowflake">❅</div>
+            <div class="snowflake">❆</div>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    # 3초 동안 애니메이션 보여주기
+    time.sleep(3.5)
+    
+    # 로그아웃 처리 (세션 삭제)
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
+    
+    st.rerun() # 초기 화면으로 복귀
+
+# ==========================================
+# 5. 기능 함수 (기존 유지)
 # ==========================================
 def get_model():
     if 'api_key' in st.session_state:
         genai.configure(api_key=st.session_state['api_key'])
     try:
-        # 모델 자동 사냥
         all_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         for m in all_models:
             if '1.5-pro' in m: return genai.GenerativeModel(m)
@@ -171,7 +236,7 @@ def download_and_upload_youtube_audio(url):
         os.remove(audio_path)
         return myfile
     except Exception as e:
-        st.error(f"오디오 다운로드 실패 (보안 차단): {e}")
+        st.error(f"오디오 처리 중 오류: {e}")
         return None
 
 def get_youtube_transcript(url):
@@ -209,33 +274,25 @@ def process_media_file(uploaded_file):
         return None
 
 # ==========================================
-# 5. 메인 화면 구성
+# 6. 메인 화면 구성
 # ==========================================
 
 st.markdown("<h1 style='text-align: center; color: #2C3E50;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
 st.markdown("<div style='text-align: center; color: #555; margin-bottom: 20px;'>Professional Legal & Audit Assistant System</div>", unsafe_allow_html=True)
 
-# 탭 구성 (이모지 포함하여 명확하게)
 tab1, tab2, tab3 = st.tabs(["📄 문서 정밀 검토", "💬 AI 파트너 대화", "📰 스마트 요약"])
 
 # --- Tab 1: 문서 검토 ---
 with tab1:
     st.markdown("### 1️⃣ 작업 및 파일 설정")
-    
-    # 작업 선택
     option = st.selectbox("작업 유형을 선택하세요", 
         ("법률 리스크 정밀 검토", "감사 보고서 초안 작성", "오타 수정 및 문구 교정", "기안문/공문 초안 생성"))
-    
     st.markdown("---")
-    
-    # [수정] 컬럼 대신 일반 배치로 변경 (모바일에서 숨겨지는 현상 방지)
     st.info("👇 **검토할 파일 (필수)**")
     uploaded_file = st.file_uploader("검토 파일 업로드", type=['txt', 'pdf', 'docx'], key="target", label_visibility="collapsed")
-    
     st.warning("📚 **참고 규정/지침 (선택)**")
     uploaded_refs = st.file_uploader("참고 파일 업로드", type=['txt', 'pdf', 'docx'], accept_multiple_files=True, label_visibility="collapsed")
 
-    # 파일 읽기 로직
     ref_content = ""
     if uploaded_refs:
         for ref_file in uploaded_refs:
@@ -247,7 +304,6 @@ with tab1:
         if 'api_key' not in st.session_state: st.error("🔒 왼쪽 메뉴에서 로그인이 필요합니다.")
         elif not uploaded_file: st.warning("⚠️ 검토할 파일을 업로드해주세요.")
         else:
-            # 페르소나 설정
             persona_name = "AI 감사 전문가"
             greeting = "안녕하세요. 업무를 도와드릴 AI 감사 전문가입니다."
             if "법률" in option: 
@@ -283,8 +339,6 @@ with tab1:
 with tab2:
     st.markdown("### 🗣️ 실시간 질의응답")
     st.info("파일 내용이나 업무 관련 궁금한 점을 물어보세요.")
-
-    # [수정] 복잡한 컬럼 제거하고 표준 입력창 사용 (가시성 확보)
     with st.form(key='chat_form', clear_on_submit=True):
         user_input = st.text_input("질문 입력", placeholder="예: 하도급법 위반 사례를 알려줘")
         submit_chat = st.form_submit_button("전송 📤", use_container_width=True)
@@ -295,7 +349,6 @@ with tab2:
         if 'api_key' not in st.session_state: st.error("🔒 로그인 필요")
         else:
             st.session_state.messages.append({"role": "user", "content": user_input})
-            
             with st.spinner("AI 파트너가 답변을 생성 중입니다..."):
                 try:
                     genai.configure(api_key=st.session_state['api_key'])
@@ -319,25 +372,19 @@ with tab2:
                     st.session_state.messages.append({"role": "assistant", "content": response.text})
                 except Exception as e: st.error(f"오류: {e}")
 
-    # 대화 기록 출력
     st.markdown("---")
     msgs = st.session_state.messages
-    # 최신순 정렬 (질문-답변 쌍)
     if len(msgs) >= 2:
         for i in range(len(msgs) - 1, 0, -2):
             asst_msg = msgs[i]
             user_msg = msgs[i-1]
-            with st.chat_message("user", avatar="👤"):
-                st.write(user_msg['content'])
-            with st.chat_message("assistant", avatar="🛡️"):
-                st.markdown(asst_msg['content'])
+            with st.chat_message("user", avatar="👤"): st.write(user_msg['content'])
+            with st.chat_message("assistant", avatar="🛡️"): st.markdown(asst_msg['content'])
             st.divider()
 
 # --- Tab 3: 스마트 요약 ---
 with tab3:
     st.markdown("### 📰 스마트 요약 & 인사이트")
-    
-    # [수정] 라디오 버튼 스타일 문제 해결을 위해 단순화
     summary_type = st.radio("입력 방식 선택", ["🌐 URL 입력 (유튜브/뉴스)", "📁 미디어 파일 업로드", "✍️ 텍스트 입력"])
     
     final_input = None
@@ -382,13 +429,9 @@ with tab3:
 1. 핵심 요약 (Executive Summary)
 2. 상세 내용 (Key Details)
 3. 감사/리스크 인사이트 (Insights)"""
-                    
                     model = get_model()
-                    if is_multimodal:
-                        response = model.generate_content([prompt, final_input])
-                    else:
-                        response = model.generate_content(f"{prompt}\n\n{final_input[:30000]}")
-                    
+                    if is_multimodal: response = model.generate_content([prompt, final_input])
+                    else: response = model.generate_content(f"{prompt}\n\n{final_input[:30000]}")
                     st.success("분석 완료")
                     st.markdown(response.text)
                 except Exception as e: st.error(f"오류: {e}")
