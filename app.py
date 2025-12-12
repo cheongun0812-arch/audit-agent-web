@@ -6,13 +6,18 @@ import PyPDF2
 from youtube_transcript_api import YouTubeTranscriptApi
 import requests
 from bs4 import BeautifulSoup
-import yt_dlp # 유튜브 다운로드 도구
 import time
 import glob
 import tempfile
 
+# yt_dlp 라이브러리 체크
+try:
+    import yt_dlp
+except ImportError:
+    yt_dlp = None
+
 # ==========================================
-# 1. 페이지 설정 & 디자인 (V27 절대 테마)
+# 1. 페이지 설정
 # ==========================================
 st.set_page_config(
     page_title="AUDIT AI Agent",
@@ -20,14 +25,61 @@ st.set_page_config(
     layout="centered"
 )
 
+# ==========================================
+# 2. 🎨 [디자인] 책갈피 UI & V27 테마 적용
+# ==========================================
 st.markdown("""
     <style>
+    /* 1. 기본 배경 및 폰트 */
     .stApp { background-color: #F4F6F9 !important; }
     html, body, p, div, span, label, h1, h2, h3, h4, h5, h6, li {
         color: #333333 !important; font-family: 'Pretendard', sans-serif !important;
     }
+
+    /* 2. 사이드바 디자인 */
     [data-testid="stSidebar"] { background-color: #2C3E50 !important; }
     [data-testid="stSidebar"] * { color: #FFFFFF !important; }
+
+    /* 3. [핵심] 상단 못생긴 버튼 -> '책갈피' 스타일로 성형수술 🔖 */
+    [data-testid="stSidebarCollapsedControl"] {
+        background-color: #FFFFFF !important;
+        border-radius: 0 12px 12px 0 !important; /* 오른쪽만 둥글게 (책갈피 모양) */
+        border: 1px solid #E0E0E0 !important;
+        border-left: none !important;
+        box-shadow: 2px 2px 8px rgba(0,0,0,0.1) !important;
+        top: 60px !important; /* 위치를 살짝 아래로 */
+        left: 0 !important;
+        width: 40px !important;
+        height: 40px !important;
+        z-index: 99999 !important;
+    }
+    
+    /* 기존의 못생긴 아이콘/글씨 숨기기 */
+    [data-testid="stSidebarCollapsedControl"] svg, 
+    [data-testid="stSidebarCollapsedControl"] img {
+        display: none !important;
+    }
+    
+    /* 깔끔한 햄버거 메뉴(☰) 아이콘 심기 */
+    [data-testid="stSidebarCollapsedControl"]::after {
+        content: "☰"; 
+        font-size: 22px;
+        color: #2C3E50;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -55%);
+        font-weight: bold;
+    }
+    
+    /* 호버 효과 */
+    [data-testid="stSidebarCollapsedControl"]:hover {
+        background-color: #F8F9FA !important;
+        width: 45px !important; /* 마우스 올리면 쑥 나옴 */
+        transition: width 0.2s ease;
+    }
+
+    /* 4. 입력창 & 버튼 */
     .stTextInput input {
         background-color: #FFFFFF !important; color: #000000 !important;
         border: 1px solid #BDC3C7 !important; border-radius: 8px !important;
@@ -36,6 +88,8 @@ st.markdown("""
         background: linear-gradient(to right, #2980B9, #2C3E50) !important;
         color: #FFFFFF !important; border: none; border-radius: 8px; font-weight: bold;
     }
+    
+    /* 5. 채팅 메시지 박스 */
     [data-testid="stChatMessage"] {
         background-color: #FFFFFF !important; border: 1px solid #E0E0E0;
         border-radius: 12px;
@@ -45,7 +99,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. 사이드바 (로그인)
+# 3. 사이드바 (로그인)
 # ==========================================
 with st.sidebar:
     st.markdown("### 🏛️ Control Center")
@@ -75,7 +129,7 @@ with st.sidebar:
     st.markdown("<div style='text-align: center; font-size: 11px; opacity: 0.7;'>Audit AI Solution © 2025<br>Engine: Gemini 1.5 Pro</div>", unsafe_allow_html=True)
 
 # ==========================================
-# 3. 기능 함수
+# 4. 기능 함수
 # ==========================================
 def get_model():
     if 'api_key' in st.session_state:
@@ -104,42 +158,34 @@ def read_file(uploaded_file):
     except: return None
     return content
 
-# [핵심 수정] 403 오류 우회 시도 및 실패 시 안내
 def download_and_upload_youtube_audio(url):
+    if yt_dlp is None:
+        st.error("서버에 yt-dlp가 설치되지 않았습니다.")
+        return None
     try:
-        # 우회 설정 추가 (Android 클라이언트로 위장)
         ydl_opts = {
             'format': 'bestaudio/best',
             'outtmpl': 'temp_audio.%(ext)s',
             'quiet': True,
             'overwrites': True,
-            'extractor_args': {'youtube': {'player_client': ['android', 'web']}}, # [중요] 우회 시도
-            'http_headers': {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+            'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
+            'http_headers': {'User-Agent': 'Mozilla/5.0'}
         }
-        
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
-            
         audio_files = glob.glob("temp_audio.*")
         if not audio_files: return None
         audio_path = audio_files[0]
-        
         myfile = genai.upload_file(audio_path)
         while myfile.state.name == "PROCESSING":
             time.sleep(2)
             myfile = genai.get_file(myfile.name)
-            
         os.remove(audio_path)
         return myfile
-        
     except Exception as e:
-        # 403 Forbidden 오류가 발생하면 사용자에게 솔직하게 안내
         if "403" in str(e) or "Forbidden" in str(e):
-            st.error("🔒 [유튜브 보안 차단] 클라우드 서버에서의 다운로드가 막혔습니다.")
-            st.info("💡 **해결 방법:**")
-            st.markdown("1. [SaveFrom.net](https://ko.savefrom.net/) 등에서 해당 영상을 **MP3**로 다운받으세요.")
-            st.markdown("2. 위 탭에서 **'📁 미디어 파일 업로드'**를 선택하고 파일을 올려주세요.")
-            st.markdown("3. 그러면 AI가 똑같이 분석해 드립니다!")
+            st.error("🔒 [보안 차단] 유튜브 보안으로 인해 자동 다운로드가 막혔습니다.")
+            st.info("💡 '미디어 파일 업로드' 탭을 이용해 다운받은 파일을 직접 올려주세요.")
         else:
             st.error(f"오디오 처리 중 오류: {e}")
         return None
@@ -167,7 +213,6 @@ def process_media_file(uploaded_file):
         with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp_file:
             tmp_file.write(uploaded_file.getvalue())
             tmp_path = tmp_file.name
-        
         myfile = genai.upload_file(tmp_path)
         with st.spinner('🎧 파일 분석 준비 중...'):
             while myfile.state.name == "PROCESSING":
@@ -180,7 +225,7 @@ def process_media_file(uploaded_file):
         return None
 
 # ==========================================
-# 4. 메인 화면
+# 5. 메인 화면
 # ==========================================
 
 st.markdown("<h1 style='text-align: center; color: #2C3E50 !important;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
@@ -271,7 +316,7 @@ with tab2:
             with st.chat_message("assistant", avatar="🛡️"): st.markdown(asst_msg['content'])
             st.markdown("<hr style='border: 0; height: 1px; background: #BDC3C7; margin: 10px 0;'>", unsafe_allow_html=True)
 
-# --- Tab 3: 스마트 요약 ---
+# --- Tab 3: 스마트 요약 (변수명 버그 수정 완료) ---
 with tab3:
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("#### 📰 스마트 요약 & 인사이트")
@@ -280,11 +325,10 @@ with tab3:
     summary_type = st.radio("입력 방식", ("🌐 URL 입력", "📁 미디어 파일 업로드", "✍️ 텍스트 입력"), horizontal=True)
     
     final_input = None
-    is_multimodal = False
+    is_multimodal = False # [중요] 변수명 통일
 
     if summary_type == "🌐 URL 입력":
         target_url = st.text_input("🔗 URL 붙여넣기")
-        
         if target_url:
             if "youtu" in target_url:
                 with st.spinner("1단계: 자막 확인 중..."):
@@ -298,7 +342,7 @@ with tab3:
                             audio_file = download_and_upload_youtube_audio(target_url)
                             if audio_file:
                                 final_input = audio_file
-                                is_multimodal = True
+                                is_multimodal = True # 멀티모달 모드 활성화
             else:
                 with st.spinner("웹사이트 분석 중..."):
                     final_input = get_web_content(target_url)
@@ -307,7 +351,7 @@ with tab3:
         media_file = st.file_uploader("영상/음성 파일 (MP3/MP4)", type=['mp3', 'mp4', 'm4a', 'wav'])
         if media_file:
             final_input = process_media_file(media_file)
-            is_multimodal = True
+            is_multimodal = True # 멀티모달 모드 활성화 (여기가 수정됨!)
 
     else:
         final_input = st.text_area("내용 붙여넣기", height=200)
@@ -327,6 +371,7 @@ with tab3:
                     """
                     model = get_model()
                     
+                    # 통합된 변수로 분기 처리
                     if is_multimodal:
                         response = model.generate_content([prompt, final_input])
                     else:
