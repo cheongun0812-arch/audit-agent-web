@@ -149,7 +149,7 @@ if 'logout_anim' in st.session_state and st.session_state['logout_anim']:
 </div>
 """, unsafe_allow_html=True)
     
-    time.sleep(3.5) # 감상 시간
+    time.sleep(30.0) # 감상 시간
     
     # 🚨 [수정 2] 로그아웃 시 세션 완전 초기화 (먹통 방지)
     st.session_state.clear() # 모든 세션 데이터 삭제 (API 키 포함)
@@ -255,7 +255,6 @@ def process_media_file(uploaded_file):
 # ==========================================
 # 6. 메인 화면 구성
 # ==========================================
-
 st.markdown("<h1 style='text-align: center; color: #2C3E50;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
 st.markdown("<div style='text-align: center; color: #555; margin-bottom: 20px;'>Professional Legal & Audit Assistant System</div>", unsafe_allow_html=True)
 
@@ -411,4 +410,5 @@ with tab3:
                     else: response = model.generate_content(f"{prompt}\n\n{final_input[:30000]}")
                     st.success("분석 완료")
                     st.markdown(response.text)
+
                 except Exception as e: st.error(f"오류: {e}")
