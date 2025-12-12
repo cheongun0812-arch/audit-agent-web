@@ -26,7 +26,7 @@ st.set_page_config(
 )
 
 # ==========================================
-# 2. 🎨 [디자인] V50: 안전 제일 CSS (오류 원천 차단)
+# 2. 🎨 [디자인] V51: 안전한 CSS & 모바일 최적화
 # ==========================================
 st.markdown("""
     <style>
@@ -37,12 +37,11 @@ st.markdown("""
     /* 2. 사이드바 (다크 네이비) */
     [data-testid="stSidebar"] { background-color: #2C3E50 !important; }
     /* 사이드바 내 텍스트는 흰색 */
-    [data-testid="stSidebar"] p, [data-testid="stSidebar"] span, [data-testid="stSidebar"] label, [data-testid="stSidebar"] div {
+    [data-testid="stSidebar"] p, [data-testid="stSidebar"] span, [data-testid="stSidebar"] label, [data-testid="stSidebar"] div, [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
         color: #FFFFFF !important;
     }
 
     /* 3. [핵심] 입력창 글씨 색상 강제 (검은색) */
-    /* 모바일 다크모드가 멋대로 글씨를 하얗게 바꾸지 못하게 막음 */
     input.stTextInput, textarea.stTextArea {
         background-color: #FFFFFF !important;
         color: #000000 !important;
@@ -79,6 +78,7 @@ st.markdown("""
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
+        box-shadow: 2px 2px 5px rgba(0,0,0,0.1) !important;
     }
     /* ☰ 아이콘 */
     [data-testid="stSidebarCollapsedControl"]::after {
@@ -89,7 +89,7 @@ st.markdown("""
         position: absolute;
     }
 
-    /* 6. 크리스마스 애니메이션 컨테이너 */
+    /* 6. 크리스마스 애니메이션 스타일 */
     .snow-bg {
         position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
         background: rgba(0, 0, 0, 0.9); z-index: 999999;
@@ -138,17 +138,17 @@ with st.sidebar:
     st.markdown("<div style='color:white; text-align:center; font-size:12px; opacity:0.8;'>Audit AI Solution © 2025<br>Engine: Gemini 1.5 Pro</div>", unsafe_allow_html=True)
 
 # ==========================================
-# 4. 🎅 크리스마스 작별 애니메이션 (단순화)
+# 4. 🎅 크리스마스 작별 애니메이션 (코드 노출 해결)
 # ==========================================
 if 'logout_anim' in st.session_state and st.session_state['logout_anim']:
-    # 복잡한 HTML 제거하고, 아주 심플하고 확실한 구조로 변경
+    # [수정] 들여쓰기(Indent)를 완전히 제거하여 코드로 인식되는 문제 해결
     st.markdown("""
-        <div class="snow-bg">
-            <div style="font-size: 80px; margin-bottom: 20px;">🎅🎄</div>
-            <h1 style="color: white !important;">Merry Christmas!</h1>
-            <h3 style="color: #ddd !important;">오늘도 수고 많으셨습니다.<br>따뜻한 연말 보내세요! ❤️</h3>
-        </div>
-    """, unsafe_allow_html=True)
+<div class="snow-bg">
+<div style="font-size: 80px; margin-bottom: 20px;">🎅🎄</div>
+<h1 style="color: white !important;">Merry Christmas!</h1>
+<h3 style="color: #ddd !important;">오늘도 수고 많으셨습니다.<br>따뜻한 연말 보내세요! ❤️</h3>
+</div>
+""", unsafe_allow_html=True)
     
     time.sleep(3.0)
     
@@ -271,7 +271,7 @@ with tab1:
     
     st.markdown("---")
     
-    # [수정] 복잡한 컬럼(Columns) 제거 -> 일자형 배치 (모바일 짤림 방지)
+    # 모바일 최적화 (일자형 배치)
     st.info("👇 **검토할 파일 (필수)**")
     uploaded_file = st.file_uploader("검토 파일 업로드", type=['txt', 'pdf', 'docx'], key="target", label_visibility="collapsed")
     
@@ -286,4 +286,135 @@ with tab1:
 
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("🚀 분석 리포트 생성 (Start)", use_container_width=True):
-        if 'api_key' not in st.
+        if 'api_key' not in st.session_state: st.error("🔒 로그인 필요")
+        elif not uploaded_file: st.warning("⚠️ 검토할 파일을 업로드해주세요.")
+        else:
+            persona_name = "AI 감사 전문가"
+            greeting = "안녕하세요. 업무를 도와드릴 AI 감사 전문가입니다."
+            if "법률" in option: 
+                persona_name = "법률 전문가 AI 에이전트"
+                greeting = "안녕하세요. '법률 전문가 AI 에이전트'입니다."
+            elif "오타" in option:
+                persona_name = "AI 에디터"
+                greeting = "안녕하세요. 'AI 에디터'입니다."
+            elif "기안" in option:
+                persona_name = "AI 도큐멘트 페이퍼"
+                greeting = "안녕하세요. 'AI 도큐멘트 페이퍼'입니다."
+
+            with st.spinner(f'🧠 {persona_name}가 문서를 분석 중입니다...'):
+                content = read_file(uploaded_file)
+                if content:
+                    ref_final = ref_content if ref_content else "일반적인 비즈니스 및 법률 표준"
+                    prompt = f"""[역할] {persona_name}
+[지시] 반드시 다음 인사말로 시작: "{greeting}"
+[작업] {option}
+[기준] {ref_final}
+[내용] {content}
+[지침] 전문가로서 명확한 보고서 작성"""
+                    try:
+                        model = get_model()
+                        response = model.generate_content(prompt)
+                        st.success(f"✅ {persona_name} 분석 완료")
+                        st.markdown(response.text)
+                    except Exception as e: st.error(f"시스템 오류: {e}")
+
+# --- Tab 2: 챗봇 ---
+with tab2:
+    st.markdown("### 🗣️ 실시간 질의응답")
+    st.info("파일 내용이나 업무 관련 궁금한 점을 물어보세요.")
+    
+    # 모바일 최적화 (단순 폼)
+    with st.form(key='chat_form', clear_on_submit=True):
+        user_input = st.text_input("질문 입력", placeholder="예: 하도급법 위반 사례를 알려줘")
+        submit_chat = st.form_submit_button("전송 📤", use_container_width=True)
+
+    if "messages" not in st.session_state: st.session_state.messages = []
+
+    if submit_chat and user_input:
+        if 'api_key' not in st.session_state: st.error("🔒 로그인 필요")
+        else:
+            st.session_state.messages.append({"role": "user", "content": user_input})
+            with st.spinner("AI 파트너가 답변을 생성 중입니다..."):
+                try:
+                    genai.configure(api_key=st.session_state['api_key'])
+                    context = ""
+                    if ref_content: context += f"[참고자료]\n{ref_content}\n"
+                    if uploaded_file: 
+                        c = read_file(uploaded_file)
+                        if c: context += f"[검토대상파일]\n{c}\n"
+                    
+                    full_prompt = f"""당신은 'AI 파인더'입니다. 친절하고 명확하게 답변하세요.
+                    인사말: "안녕하세요. 여러분의 궁금증을 해소해 드릴 'AI 파인더'입니다." (필요시 사용)
+                    [컨텍스트] {context}
+                    [질문] {user_input}"""
+                    
+                    model = get_model()
+                    response = model.generate_content(full_prompt)
+                    st.session_state.messages.append({"role": "assistant", "content": response.text})
+                except Exception as e: st.error(f"오류: {e}")
+
+    st.markdown("---")
+    msgs = st.session_state.messages
+    if len(msgs) >= 2:
+        for i in range(len(msgs) - 1, 0, -2):
+            asst_msg = msgs[i]
+            user_msg = msgs[i-1]
+            with st.chat_message("user", avatar="👤"): st.write(user_msg['content'])
+            with st.chat_message("assistant", avatar="🛡️"): st.markdown(asst_msg['content'])
+            st.divider()
+
+# --- Tab 3: 스마트 요약 ---
+with tab3:
+    st.markdown("### 📰 스마트 요약 & 인사이트")
+    
+    # 모바일 최적화 (단순 라디오 버튼)
+    summary_type = st.radio("입력 방식 선택", ["🌐 URL 입력", "📁 미디어 파일 업로드", "✍️ 텍스트 입력"])
+    
+    final_input = None
+    is_multimodal = False
+
+    if "URL" in summary_type:
+        target_url = st.text_input("🔗 URL을 붙여넣으세요")
+        if target_url:
+            if "youtu" in target_url:
+                with st.spinner("자막 확인 중..."):
+                    text_data = get_youtube_transcript(target_url)
+                    if text_data:
+                        st.success("✅ 자막 확보 완료")
+                        final_input = text_data
+                    else:
+                        st.warning("⚠️ 자막 없음 -> 오디오 다운로드 시도")
+                        audio_file = download_and_upload_youtube_audio(target_url)
+                        if audio_file:
+                            final_input = audio_file
+                            is_multimodal = True
+            else:
+                with st.spinner("웹사이트 분석 중..."):
+                    final_input = get_web_content(target_url)
+
+    elif "미디어" in summary_type:
+        media_file = st.file_uploader("영상/음성 파일 (MP3, MP4)", type=['mp3', 'mp4', 'm4a', 'wav'])
+        if media_file:
+            final_input = process_media_file(media_file)
+            is_multimodal = True
+
+    else:
+        final_input = st.text_area("내용을 직접 입력하세요", height=200)
+
+    if st.button("✨ 요약 시작", use_container_width=True):
+        if 'api_key' not in st.session_state: st.error("🔒 로그인 필요")
+        elif not final_input: st.warning("분석할 대상을 입력하세요.")
+        else:
+            with st.spinner('🧠 AI가 핵심 내용을 요약 중입니다...'):
+                try:
+                    prompt = """[역할] 스마트 정보 분석가
+[작업] 다음 내용을 분석하여 보고서 작성
+1. 핵심 요약 (Executive Summary)
+2. 상세 내용 (Key Details)
+3. 감사/리스크 인사이트 (Insights)"""
+                    model = get_model()
+                    if is_multimodal: response = model.generate_content([prompt, final_input])
+                    else: response = model.generate_content(f"{prompt}\n\n{final_input[:30000]}")
+                    st.success("분석 완료")
+                    st.markdown(response.text)
+                except Exception as e: st.error(f"오류: {e}")
