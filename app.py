@@ -125,64 +125,25 @@ with st.sidebar:
     st.caption("Audit AI Solution © 2025\nEngine: Gemini 1.5 Pro")
 
 # ==========================================
-# 4. 🎅 크리스마스 작별 애니메이션 로직
+# 4. 🎅 크리스마스 작별 애니메이션 (코드 노출 방지)
 # ==========================================
 if 'logout_anim' in st.session_state and st.session_state['logout_anim']:
-    # 전체 화면을 덮는 눈 내리는 효과 HTML/CSS
+    # HTML 들여쓰기를 제거하여 코드로 인식되는 문제 해결
     st.markdown("""
-        <style>
-        .snow-container {
-            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            background: rgba(0, 0, 0, 0.85); z-index: 999999;
-            display: flex; flex-direction: column; justify-content: center; align-items: center;
-            color: white; text-align: center;
-        }
-        .snowflake {
-            color: #fff; font-size: 1.5em; font-family: Arial, sans-serif; text-shadow: 0 0 5px #000;
-            position: fixed; top: -10%; z-index: 9999; user-select: none; cursor: default;
-            animation-name: snowflakes-fall, snowflakes-shake;
-            animation-duration: 10s, 3s;
-            animation-timing-function: linear, ease-in-out;
-            animation-iteration-count: infinite, infinite;
-            animation-play-state: running, running;
-        }
-        @keyframes snowflakes-fall { 0% { top: -10%; } 100% { top: 100%; } }
-        @keyframes snowflakes-shake { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(80px); } }
-        .snowflake:nth-of-type(0) { left: 1%; animation-delay: 0s, 0s; }
-        .snowflake:nth-of-type(1) { left: 10%; animation-delay: 1s, 1s; }
-        .snowflake:nth-of-type(2) { left: 20%; animation-delay: 6s, 0.5s; }
-        .snowflake:nth-of-type(3) { left: 30%; animation-delay: 4s, 2s; }
-        .snowflake:nth-of-type(4) { left: 40%; animation-delay: 2s, 2s; }
-        .snowflake:nth-of-type(5) { left: 50%; animation-delay: 8s, 3s; }
-        .snowflake:nth-of-type(6) { left: 60%; animation-delay: 6s, 2s; }
-        .snowflake:nth-of-type(7) { left: 70%; animation-delay: 2.5s, 1s; }
-        .snowflake:nth-of-type(8) { left: 80%; animation-delay: 1s, 0s; }
-        .snowflake:nth-of-type(9) { left: 90%; animation-delay: 3s, 1.5s; }
-        </style>
-        
-        <div class="snow-container">
-            <div style="font-size: 80px;">🎅🎄</div>
-            <h1 style="color:white !important; margin-top: 20px;">Merry Christmas!</h1>
-            <h3 style="color:#eee !important;">오늘도 수고 많으셨습니다.<br>따뜻한 연말 보내세요! ❤️</h3>
-            
-            <div class="snowflake">❅</div><div class="snowflake">❆</div><div class="snowflake">❅</div>
-            <div class="snowflake">❆</div><div class="snowflake">❅</div><div class="snowflake">❆</div>
-            <div class="snowflake">❅</div><div class="snowflake">❆</div><div class="snowflake">❅</div>
-            <div class="snowflake">❆</div>
-        </div>
-    """, unsafe_allow_html=True)
+<div class="snow-bg">
+<div style="font-size: 80px; margin-bottom: 20px;">🎅🎄</div>
+<h1 style="color: white !important;">Merry Christmas!</h1>
+<h3 style="color: #ddd !important;">오늘도 수고 많으셨습니다.<br>따뜻한 연말 보내세요! ❤️</h3>
+</div>
+""", unsafe_allow_html=True)
     
-    # 3초 동안 애니메이션 보여주기
-    time.sleep(3.5)
-    
-    # 로그아웃 처리 (세션 삭제)
+    time.sleep(3.0)
     for key in list(st.session_state.keys()):
         del st.session_state[key]
-    
-    st.rerun() # 초기 화면으로 복귀
+    st.rerun()
 
 # ==========================================
-# 5. 기능 함수 (기존 유지)
+# 5. 핵심 기능 함수
 # ==========================================
 def get_model():
     if 'api_key' in st.session_state:
@@ -236,7 +197,11 @@ def download_and_upload_youtube_audio(url):
         os.remove(audio_path)
         return myfile
     except Exception as e:
-        st.error(f"오디오 처리 중 오류: {e}")
+        if "403" in str(e) or "Forbidden" in str(e):
+            st.error("🔒 [보안 차단] 유튜브 정책상 자동 다운로드가 제한됩니다.")
+            st.info("💡 해당 영상을 파일로 다운받아 '미디어 파일 업로드' 기능을 이용해주세요.")
+        else:
+            st.error(f"오디오 오류: {e}")
         return None
 
 def get_youtube_transcript(url):
@@ -280,16 +245,21 @@ def process_media_file(uploaded_file):
 st.markdown("<h1 style='text-align: center; color: #2C3E50;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
 st.markdown("<div style='text-align: center; color: #555; margin-bottom: 20px;'>Professional Legal & Audit Assistant System</div>", unsafe_allow_html=True)
 
-tab1, tab2, tab3 = st.tabs(["📄 문서 정밀 검토", "💬 AI 파트너 대화", "📰 스마트 요약"])
+# [수정] 탭 명칭 및 아이콘 최종 확인
+tab1, tab2, tab3 = st.tabs(["📄 문서 정밀 검토", "💬 Audit AI 에이전트 대화", "📰 스마트 요약"])
 
 # --- Tab 1: 문서 검토 ---
 with tab1:
-    st.markdown("### 1️⃣ 작업 및 파일 설정")
-    option = st.selectbox("작업 유형을 선택하세요", 
+    # [수정] 📂 폴더 아이콘 적용
+    st.markdown("### 📂 작업 및 파일 설정")
+    option = st.selectbox("작업 유형 선택", 
         ("법률 리스크 정밀 검토", "감사 보고서 초안 작성", "오타 수정 및 문구 교정", "기안문/공문 초안 생성"))
     st.markdown("---")
+    
+    # [수정] 모바일 깨짐 방지: 1단 배치 (st.columns 제거)
     st.info("👇 **검토할 파일 (필수)**")
     uploaded_file = st.file_uploader("검토 파일 업로드", type=['txt', 'pdf', 'docx'], key="target", label_visibility="collapsed")
+    
     st.warning("📚 **참고 규정/지침 (선택)**")
     uploaded_refs = st.file_uploader("참고 파일 업로드", type=['txt', 'pdf', 'docx'], accept_multiple_files=True, label_visibility="collapsed")
 
@@ -301,7 +271,7 @@ with tab1:
 
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("🚀 분석 리포트 생성 (Start)", use_container_width=True):
-        if 'api_key' not in st.session_state: st.error("🔒 왼쪽 메뉴에서 로그인이 필요합니다.")
+        if 'api_key' not in st.session_state: st.error("🔒 로그인 필요")
         elif not uploaded_file: st.warning("⚠️ 검토할 파일을 업로드해주세요.")
         else:
             persona_name = "AI 감사 전문가"
@@ -321,13 +291,11 @@ with tab1:
                 if content:
                     ref_final = ref_content if ref_content else "일반적인 비즈니스 및 법률 표준"
                     prompt = f"""[역할] {persona_name}
-[지시] 반드시 다음 인사말로 시작하세요: "{greeting}"
-
+[지시] 반드시 다음 인사말로 시작: "{greeting}"
 [작업] {option}
 [기준] {ref_final}
 [내용] {content}
-
-[작성 지침] 전문가로서 구체적이고 명확한 보고서를 작성하십시오."""
+[지침] 전문가로서 명확한 보고서 작성"""
                     try:
                         model = get_model()
                         response = model.generate_content(prompt)
@@ -339,6 +307,8 @@ with tab1:
 with tab2:
     st.markdown("### 🗣️ 실시간 질의응답")
     st.info("파일 내용이나 업무 관련 궁금한 점을 물어보세요.")
+    
+    # [수정] 모바일 깨짐 방지: 1단 배치
     with st.form(key='chat_form', clear_on_submit=True):
         user_input = st.text_input("질문 입력", placeholder="예: 하도급법 위반 사례를 알려줘")
         submit_chat = st.form_submit_button("전송 📤", use_container_width=True)
@@ -349,7 +319,7 @@ with tab2:
         if 'api_key' not in st.session_state: st.error("🔒 로그인 필요")
         else:
             st.session_state.messages.append({"role": "user", "content": user_input})
-            with st.spinner("AI 파트너가 답변을 생성 중입니다..."):
+            with st.spinner("Audit AI 에이전트가 답변을 생성 중입니다..."):
                 try:
                     genai.configure(api_key=st.session_state['api_key'])
                     context = ""
@@ -360,12 +330,8 @@ with tab2:
                     
                     full_prompt = f"""당신은 'AI 파인더'입니다. 친절하고 명확하게 답변하세요.
                     인사말: "안녕하세요. 여러분의 궁금증을 해소해 드릴 'AI 파인더'입니다." (필요시 사용)
-                    
-                    [컨텍스트]
-                    {context}
-                    
-                    [질문]
-                    {user_input}"""
+                    [컨텍스트] {context}
+                    [질문] {user_input}"""
                     
                     model = get_model()
                     response = model.generate_content(full_prompt)
@@ -385,7 +351,9 @@ with tab2:
 # --- Tab 3: 스마트 요약 ---
 with tab3:
     st.markdown("### 📰 스마트 요약 & 인사이트")
-    summary_type = st.radio("입력 방식 선택", ["🌐 URL 입력 (유튜브/뉴스)", "📁 미디어 파일 업로드", "✍️ 텍스트 입력"])
+    
+    # [수정] 라디오 버튼 단순화
+    summary_type = st.radio("입력 방식 선택", ["🌐 URL 입력", "📁 미디어 파일 업로드", "✍️ 텍스트 입력"])
     
     final_input = None
     is_multimodal = False
@@ -394,13 +362,13 @@ with tab3:
         target_url = st.text_input("🔗 URL을 붙여넣으세요")
         if target_url:
             if "youtu" in target_url:
-                with st.spinner("유튜브 분석 중... (자막 확인)"):
+                with st.spinner("자막 확인 중..."):
                     text_data = get_youtube_transcript(target_url)
                     if text_data:
                         st.success("✅ 자막 확보 완료")
                         final_input = text_data
                     else:
-                        st.warning("⚠️ 자막 없음 -> 오디오 다운로드 시도 (시간이 소요됩니다)")
+                        st.warning("⚠️ 자막 없음 -> 오디오 다운로드 시도")
                         audio_file = download_and_upload_youtube_audio(target_url)
                         if audio_file:
                             final_input = audio_file
