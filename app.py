@@ -26,46 +26,42 @@ st.set_page_config(
 )
 
 # ==========================================
-# 2. 🎨 [디자인] V54: 강력한 CSS (텍스트 박멸 & 레이아웃 고정)
+# 2. 🎨 [디자인] V55: 가시성(Visibility) 제어 기술 적용
 # ==========================================
 st.markdown("""
     <style>
-    /* 1. 배경 및 폰트 */
+    /* 1. 기본 배경 및 폰트 */
     .stApp { background-color: #F4F6F9 !important; }
     * { font-family: 'Pretendard', sans-serif !important; }
 
-    /* 2. 사이드바 (다크 네이비) & 레이아웃 고정 */
-    [data-testid="stSidebar"] { 
-        background-color: #2C3E50 !important;
-        min-width: 250px !important; /* 최소 너비 확보 */
-    }
-    /* 사이드바 내부 컨텐츠 흔들림 방지 */
-    [data-testid="stSidebarUserContent"] {
-        padding: 20px !important;
-        width: 100% !important;
-    }
-    /* 사이드바 텍스트 색상 */
-    [data-testid="stSidebar"] p, [data-testid="stSidebar"] span, [data-testid="stSidebar"] label, 
-    [data-testid="stSidebar"] div, [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
+    /* 2. 사이드바 (다크 네이비) */
+    [data-testid="stSidebar"] { background-color: #2C3E50 !important; }
+    /* 사이드바 내 모든 텍스트: 흰색 강제 */
+    [data-testid="stSidebar"] p, [data-testid="stSidebar"] span, 
+    [data-testid="stSidebar"] label, [data-testid="stSidebar"] div, 
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
         color: #FFFFFF !important;
     }
 
-    /* 3. 입력창 디자인 */
+    /* 3. [핵심 해결] 입력창 글씨 색상 (Gray Color Text) */
+    /* 모바일에서 흰색으로 날아가는 것을 방지하기 위해 진한 회색(#333333)으로 고정 */
     input.stTextInput, textarea.stTextArea {
         background-color: #FFFFFF !important;
-        color: #000000 !important;
-        -webkit-text-fill-color: #000000 !important; 
-        caret-color: #000000 !important;
+        color: #333333 !important; /* Gray Text Color */
+        -webkit-text-fill-color: #333333 !important;
+        caret-color: #333333 !important;
         border: 2px solid #BDC3C7 !important;
-        font-weight: 500 !important;
+        font-weight: 600 !important; /* 글씨 두께 강화 */
     }
+    
+    /* 플레이스홀더(안내문구) 색상 */
     ::placeholder {
-        color: #666666 !important;
-        -webkit-text-fill-color: #666666 !important;
+        color: #888888 !important;
+        -webkit-text-fill-color: #888888 !important;
         opacity: 1 !important;
     }
 
-    /* 4. 버튼 디자인 */
+    /* 4. 버튼 디자인 (White Text Color) */
     .stButton > button {
         background: linear-gradient(to right, #2980B9, #2C3E50) !important;
         color: #FFFFFF !important;
@@ -73,51 +69,31 @@ st.markdown("""
         border: none !important;
         font-weight: bold !important;
         height: 45px !important;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.2) !important;
     }
 
-    /* 🚨 5. [최종 해결] 상단 메뉴 버튼: 'keyboard...' 글씨 화면 밖으로 날리기 */
+    /* 5. [핵심 해결] 상단 'keyboard...' 텍스트 박멸 (Visibility 기법) */
+    /* 부모 요소를 숨겨서 텍스트 자체를 안 보이게 만듦 */
     [data-testid="stSidebarCollapsedControl"] {
-        /* (1) 글씨를 투명하게 하고 화면 왼쪽 끝으로 날려버림 */
-        color: transparent !important;
-        text-indent: -9999px !important;
-        white-space: nowrap !important;
-        overflow: hidden !important;
-        
-        /* (2) 버튼 모양 잡기 */
+        visibility: hidden !important; 
         background-color: #FFFFFF !important;
-        border-radius: 0 10px 10px 0 !important;
+        border-radius: 0 10px 10px 0;
         width: 45px !important;
         height: 45px !important;
-        box-shadow: 2px 2px 5px rgba(0,0,0,0.15) !important;
-        border: 1px solid #E0E0E0 !important;
-        
-        /* (3) 위치 및 정렬 */
+        box-shadow: 2px 2px 5px rgba(0,0,0,0.1) !important;
         z-index: 999999 !important;
-        display: block !important; /* flex 대신 block을 써서 text-indent 먹히게 함 */
     }
     
-    /* (4) 기존의 모든 자식 요소(SVG 아이콘, 텍스트 노드 등) 숨기기 */
-    [data-testid="stSidebarCollapsedControl"] > * {
-        display: none !important;
-    }
-
-    /* (5) ☰ 아이콘을 가상 요소로 새로 그림 */
+    /* ☰ 아이콘만 '다시 보이게(visible)' 설정 */
     [data-testid="stSidebarCollapsedControl"]::after {
         content: "☰";
-        text-indent: 0 !important; /* 날아간 들여쓰기 원상복구 */
+        visibility: visible !important;
         color: #2C3E50 !important;
         font-size: 26px !important;
         font-weight: 900 !important;
-        
-        /* 중앙 정렬 */
         position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -55%);
-        
+        top: 5px; 
+        left: 10px;
         display: block !important;
-        visibility: visible !important;
     }
 
     /* 6. 크리스마스 애니메이션 스타일 */
@@ -127,6 +103,10 @@ st.markdown("""
         display: flex; flex-direction: column; justify-content: center; align-items: center;
         text-align: center; color: white !important;
     }
+    
+    /* 7. 채팅 메시지 박스 */
+    [data-testid="stChatMessage"] { background-color: #FFFFFF; border: 1px solid #eee; }
+    [data-testid="stChatMessage"][data-testid="user"] { background-color: #E3F2FD; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -141,7 +121,8 @@ with st.sidebar:
     if 'api_key' not in st.session_state:
         with st.form(key='login_form'):
             st.markdown("<h4 style='color:white; margin-bottom:5px;'>🔐 Access Key</h4>", unsafe_allow_html=True)
-            api_key_input = st.text_input("Key", type="password", placeholder="여기에 API 키 입력", label_visibility="collapsed")
+            # [수정] 플레이스홀더를 더 명확하게
+            api_key_input = st.text_input("Key", type="password", placeholder="API 키 입력", label_visibility="collapsed")
             submit_button = st.form_submit_button(label="시스템 접속 (Login)")
         
         if submit_button:
@@ -174,7 +155,6 @@ with st.sidebar:
 # 4. 🎅 크리스마스 작별 애니메이션
 # ==========================================
 if 'logout_anim' in st.session_state and st.session_state['logout_anim']:
-    # HTML 들여쓰기 제거로 코드 노출 방지
     st.markdown("""
 <div class="snow-bg">
 <div style="font-size: 80px; margin-bottom: 20px;">🎅🎄</div>
@@ -195,7 +175,6 @@ def get_model():
     if 'api_key' in st.session_state:
         genai.configure(api_key=st.session_state['api_key'])
     try:
-        # 모델 자동 사냥 (Flash/Pro)
         all_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         for m in all_models:
             if '1.5-pro' in m: return genai.GenerativeModel(m)
@@ -292,12 +271,12 @@ def process_media_file(uploaded_file):
 st.markdown("<h1 style='text-align: center; color: #2C3E50;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
 st.markdown("<div style='text-align: center; color: #555; margin-bottom: 20px;'>Professional Legal & Audit Assistant System</div>", unsafe_allow_html=True)
 
-# [수정] 탭 이름 및 아이콘 최종 확인
+# [수정] 탭 이름 최종 적용 (Audit AI 에이전트 대화)
 tab1, tab2, tab3 = st.tabs(["📄 문서 정밀 검토", "💬 Audit AI 에이전트 대화", "📰 스마트 요약"])
 
 # --- Tab 1: 문서 검토 ---
 with tab1:
-    # [수정] 폴더 아이콘(📂) 적용
+    # [수정] 폴더 아이콘 적용
     st.markdown("### 📂 작업 및 파일 설정")
     
     option = st.selectbox("작업 유형 선택", 
