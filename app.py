@@ -9,6 +9,7 @@ from bs4 import BeautifulSoup
 import yt_dlp # 유튜브 다운로드 도구
 import time
 import glob
+import tempfile
 
 # ==========================================
 # 1. 페이지 설정 & 디자인 (V27 절대 테마)
@@ -74,7 +75,7 @@ with st.sidebar:
     st.markdown("<div style='text-align: center; font-size: 11px; opacity: 0.7;'>Audit AI Solution © 2025<br>Engine: Gemini 1.5 Pro</div>", unsafe_allow_html=True)
 
 # ==========================================
-# 3. 기능 함수 (모델, 파일, 유튜브 오디오 처리)
+# 3. 기능 함수
 # ==========================================
 def get_model():
     if 'api_key' in st.session_state:
@@ -103,56 +104,41 @@ def read_file(uploaded_file):
     except: return None
     return content
 
-# [핵심] 유튜브 오디오 다운로드 및 업로드 함수
 def download_and_upload_youtube_audio(url):
     try:
-        # 1. yt-dlp 설정 (오디오만 다운로드, m4a 포맷)
         ydl_opts = {
             'format': 'bestaudio[ext=m4a]/bestaudio/best',
             'outtmpl': 'temp_audio.%(ext)s',
             'quiet': True,
             'overwrites': True
         }
-        
-        # 2. 다운로드 실행
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
             
-        # 3. 다운로드된 파일 찾기 (확장자가 다를 수 있으므로)
         audio_files = glob.glob("temp_audio.*")
         if not audio_files: return None
         audio_path = audio_files[0]
         
-        # 4. Gemini에 업로드
         myfile = genai.upload_file(audio_path)
-        
-        # 5. 처리 대기
         while myfile.state.name == "PROCESSING":
             time.sleep(2)
             myfile = genai.get_file(myfile.name)
             
-        # 6. 임시 파일 삭제
         os.remove(audio_path)
-        
-        return myfile # 업로드된 파일 객체 반환
-        
+        return myfile
     except Exception as e:
         st.error(f"오디오 처리 중 오류: {e}")
         return None
 
-# 자막 추출 함수
 def get_youtube_transcript(url):
     try:
         if "youtu.be" in url: video_id = url.split("/")[-1]
         else: video_id = url.split("v=")[-1].split("&")[0]
-        
         transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['ko', 'en'])
         text = " ".join([t['text'] for t in transcript])
         return text
-    except:
-        return None # 자막 없음
+    except: return None
 
-# 웹 크롤링
 def get_web_content(url):
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
@@ -161,6 +147,23 @@ def get_web_content(url):
         for script in soup(["script", "style"]): script.decompose()
         return soup.get_text()[:10000]
     except Exception as e: return f"[오류] {e}"
+
+def process_media_file(uploaded_file):
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp_file:
+            tmp_file.write(uploaded_file.getvalue())
+            tmp_path = tmp_file.name
+        
+        myfile = genai.upload_file(tmp_path)
+        with st.spinner('🎧 파일 분석 준비 중...'):
+            while myfile.state.name == "PROCESSING":
+                time.sleep(2)
+                myfile = genai.get_file(myfile.name)
+        os.remove(tmp_path)
+        return myfile
+    except Exception as e:
+        st.error(f"파일 오류: {e}")
+        return None
 
 # ==========================================
 # 4. 메인 화면
@@ -254,73 +257,71 @@ with tab2:
             with st.chat_message("assistant", avatar="🛡️"): st.markdown(asst_msg['content'])
             st.markdown("<hr style='border: 0; height: 1px; background: #BDC3C7; margin: 10px 0;'>", unsafe_allow_html=True)
 
-# --- Tab 3: 스마트 요약 (자막 없으면 듣기 모드) ---
+# --- Tab 3: 스마트 요약 (수정됨) ---
 with tab3:
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("#### 📰 스마트 요약 & 인사이트")
-    st.info("유튜브 링크를 입력하면 자막을 먼저 찾고, 없으면 AI가 직접 영상을 듣고 요약합니다.")
+    st.info("유튜브/뉴스 URL 또는 파일을 업로드하세요.")
     
-    summary_type = st.radio("입력 방식", ("🌐 URL 입력 (유튜브/뉴스)", "✍️ 텍스트 직접 입력"), horizontal=True)
+    summary_type = st.radio("입력 방식", ("🌐 URL 입력 (유튜브/뉴스)", "📁 미디어 파일 업로드 (MP3/MP4)", "✍️ 텍스트 입력"), horizontal=True)
     
     final_input = None
-    is_audio_mode = False
+    is_multimodal = False # [수정] 변수명 통일 (오디오/영상/파일 모두 이걸로 처리)
 
     if summary_type == "🌐 URL 입력 (유튜브/뉴스)":
         target_url = st.text_input("🔗 URL 붙여넣기")
         
-        # URL 처리 로직
         if target_url:
             if "youtu" in target_url:
                 with st.spinner("1단계: 자막 확인 중..."):
-                    # 1. 자막 시도
                     text_data = get_youtube_transcript(target_url)
-                    
                     if text_data:
-                        st.success("✅ 자막을 찾았습니다!")
+                        st.success("✅ 자막 확보 완료")
                         final_input = text_data
                     else:
-                        st.warning("⚠️ 자막이 없습니다. AI가 오디오를 직접 청취합니다. (시간이 조금 더 걸립니다)")
-                        with st.spinner("2단계: 오디오 추출 및 듣기 모드 전환..."):
-                            # 2. 자막 없으면 오디오 다운로드 -> Gemini 업로드
+                        st.warning("⚠️ 자막이 없습니다. 오디오 듣기 모드로 전환합니다.")
+                        with st.spinner("2단계: 오디오 다운로드 중..."):
                             audio_file = download_and_upload_youtube_audio(target_url)
                             if audio_file:
                                 final_input = audio_file
-                                is_audio_mode = True
+                                is_multimodal = True # [설정] 멀티모달 모드 켜기
             else:
                 with st.spinner("웹사이트 분석 중..."):
                     final_input = get_web_content(target_url)
 
+    elif summary_type == "📁 미디어 파일 업로드 (MP3/MP4)":
+        media_file = st.file_uploader("영상/음성 파일 (MP3/MP4)", type=['mp3', 'mp4', 'm4a', 'wav'])
+        if media_file:
+            final_input = process_media_file(media_file)
+            is_multimodal = True # [설정] 멀티모달 모드 켜기
+
     else:
         final_input = st.text_area("내용 붙여넣기", height=200)
 
-    if st.button("✨ 핵심 요약 및 인사이트 도출", use_container_width=True):
-        if 'api_key' not in st.session_state:
-            st.error("🔒 로그인 필요")
-        elif not final_input:
-            st.warning("요약할 대상을 입력해주세요.")
+    if st.button("✨ 요약 시작", use_container_width=True):
+        if 'api_key' not in st.session_state: st.error("🔒 로그인 필요")
+        elif not final_input: st.warning("대상 입력 필요")
         else:
-            with st.spinner('🧠 AI가 심층 분석 중입니다...'):
+            with st.spinner('🧠 AI 심층 분석 중...'):
                 try:
                     prompt = """
-                    당신은 감사실 수석 전문가입니다. 제공된 내용을 분석하여 보고서를 작성하세요.
-                    1. **핵심 요약 (Executive Summary)**: 전체 내용 3줄 요약
-                    2. **상세 내용 (Details)**: 주요 이슈 및 내용을 논리적으로 정리
-                    3. **감사/리스크 인사이트 (Insights)**: 업무상 유의점, 리스크, 기회요인 도출
+                    [역할] 감사실 수석 전문가
+                    [작업] 제공된 내용을 바탕으로 다음 보고서 작성
+                    1. 핵심 요약 (3줄)
+                    2. 상세 내용 (논리적 정리)
+                    3. 감사/리스크 인사이트 (시사점)
                     """
-                    
                     model = get_model()
                     
-                    # 텍스트 vs 오디오(파일) 분기 처리
-                    if is_audio_mode:
-                        # 오디오 파일과 프롬프트를 같이 보냄
+                    # [수정] 통합된 변수(is_multimodal)로 체크
+                    if is_multimodal:
+                        # 오디오/영상 파일과 함께 프롬프트 전송
                         response = model.generate_content([prompt, final_input])
                     else:
-                        # 텍스트만 보냄
-                        response = model.generate_content(f"{prompt}\n\n[내용]\n{final_input[:30000]}")
+                        # 텍스트만 전송
+                        response = model.generate_content(f"{prompt}\n\n{final_input[:30000]}")
                     
-                    st.success("분석 완료!")
-                    st.markdown("### 📑 AI 요약 보고서")
+                    st.success("분석 완료")
+                    st.markdown("### 📑 요약 보고서")
                     st.markdown(response.text)
-                    
-                except Exception as e:
-                    st.error(f"오류: {e}")
+                except Exception as e: st.error(f"오류: {e}")
