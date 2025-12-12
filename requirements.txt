@@ -5,4 +5,5 @@ PyPDF2
 youtube-transcript-api
 beautifulsoup4
 requests
-yt-dlp  <-- (이거 꼭 추가해주세요!)
+yt-dlp
+
