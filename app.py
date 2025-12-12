@@ -26,7 +26,7 @@ st.set_page_config(
 )
 
 # ==========================================
-# 2. 🎨 [디자인] V48(아이콘 해결) + V57(입력창 해결) 통합
+# 2. 🎨 [디자인] V59: Visibility 기법 (고스트 박멸)
 # ==========================================
 st.markdown("""
     <style>
@@ -39,33 +39,51 @@ st.markdown("""
     /* 사이드바 텍스트 화이트 강제 */
     [data-testid="stSidebar"] * { color: #FFFFFF !important; }
 
-    /* 3. [핵심 복원] V48 방식의 상단 메뉴 버튼 (이게 정답이었습니다!) */
+    /* 🚨 3. [최종 해결] 상단 메뉴 버튼: Visibility 차단 전술 🚨 */
+    /* (1) 버튼 영역 전체를 '보이지 않게(hidden)' 설정 -> 텍스트가 있어도 안 보임 */
     [data-testid="stSidebarCollapsedControl"] {
-        color: transparent !important; /* 글씨 투명화 */
+        visibility: hidden !important; 
+        
+        /* 버튼 껍데기 디자인 */
         background-color: #FFFFFF !important;
         border-radius: 0 10px 10px 0;
         border: 1px solid #ddd;
-        width: 40px; height: 40px;
-        z-index: 99999;
+        width: 40px !important;
+        height: 40px !important;
+        box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+        z-index: 999999;
+        
+        /* 위치 잡기 */
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
     }
     
-    /* ☰ 아이콘 덮어쓰기 */
+    /* (2) 오직 가상요소(::after)로 만든 아이콘만 '보이게(visible)' 설정 */
     [data-testid="stSidebarCollapsedControl"]::after {
-        content: "☰";
-        color: #2C3E50; /* 진한 네이비 */
-        font-size: 24px;
-        font-weight: bold;
-        position: absolute;
-        top: 5px; left: 10px;
+        content: "☰" !important;
+        visibility: visible !important; /* 얘만 유일하게 보임 */
+        
+        color: #2C3E50 !important; /* 진한 네이비 */
+        font-size: 26px !important;
+        font-weight: 900 !important;
+        
+        /* 위치 강제 고정 */
+        position: absolute !important;
+        top: 50% !important;
+        left: 50% !important;
+        transform: translate(-50%, -55%) !important;
+        display: block !important;
     }
 
-    /* 4. 입력창 디자인 (글씨 안보임 해결 - V57 유지) */
+    /* 4. 입력창 디자인 (글씨 안보임 해결 유지) */
     input.stTextInput, textarea.stTextArea {
         background-color: #FFFFFF !important;
         color: #000000 !important;
         -webkit-text-fill-color: #000000 !important; /* 모바일 강제 적용 */
         caret-color: #000000 !important;
         border: 1px solid #BDC3C7 !important;
+        font-weight: 600 !important;
     }
     ::placeholder {
         color: #666666 !important;
@@ -149,7 +167,7 @@ if 'logout_anim' in st.session_state and st.session_state['logout_anim']:
     st.rerun()
 
 # ==========================================
-# 5. 핵심 기능 함수 (안정성 검증 완료)
+# 5. 핵심 기능 함수 (검증된 로직)
 # ==========================================
 def get_model():
     if 'api_key' in st.session_state:
@@ -251,22 +269,17 @@ def process_media_file(uploaded_file):
 st.markdown("<h1 style='text-align: center; color: #2C3E50;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
 st.markdown("<div style='text-align: center; color: #555; margin-bottom: 20px;'>Professional Legal & Audit Assistant System</div>", unsafe_allow_html=True)
 
-# [수정] 요청하신 탭 명칭 변경 적용
+# 탭 구성
 tab1, tab2, tab3 = st.tabs(["📄 문서 정밀 검토", "💬 Audit AI 에이전트 대화", "📰 스마트 요약"])
 
 # --- Tab 1: 문서 검토 ---
 with tab1:
-    # [수정] 폴더 아이콘 적용
     st.markdown("### 📂 작업 및 파일 설정")
-    
     option = st.selectbox("작업 유형 선택", 
         ("법률 리스크 정밀 검토", "감사 보고서 초안 작성", "오타 수정 및 문구 교정", "기안문/공문 초안 생성"))
-    
     st.markdown("---")
-    
     st.info("👇 **검토할 파일 (필수)**")
     uploaded_file = st.file_uploader("검토 파일 업로드", type=['txt', 'pdf', 'docx'], key="target", label_visibility="collapsed")
-    
     st.warning("📚 **참고 규정/지침 (선택)**")
     uploaded_refs = st.file_uploader("참고 파일 업로드", type=['txt', 'pdf', 'docx'], accept_multiple_files=True, label_visibility="collapsed")
 
@@ -281,7 +294,6 @@ with tab1:
         if 'api_key' not in st.session_state: st.error("🔒 로그인 필요")
         elif not uploaded_file: st.warning("⚠️ 검토할 파일을 업로드해주세요.")
         else:
-            # 페르소나 적용
             persona_name = "AI 감사 전문가"
             greeting = "안녕하세요. 업무를 도와드릴 AI 감사 전문가입니다."
             if "법률" in option: 
