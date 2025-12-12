@@ -110,7 +110,7 @@ with st.sidebar:
     # 로그인 전
     if 'api_key' not in st.session_state:
         with st.form(key='login_form'):
-            st.markdown("<h4 style='color:white; margin-bottom:5px;'>🔐 Access Key</h4>", unsafe_allow_html=True)
+            st.markdown("<h4 style='color:gray; margin-bottom:5px;'>🔐 Access Key</h4>", unsafe_allow_html=True)
             api_key_input = st.text_input("Key", type="password", placeholder="API 키 입력", label_visibility="collapsed")
             submit_button = st.form_submit_button(label="시스템 접속 (Login)")
         
@@ -418,4 +418,5 @@ with tab3:
                     else: response = model.generate_content(f"{prompt}\n\n{final_input[:30000]}")
                     st.success("분석 완료")
                     st.markdown(response.text)
+
                 except Exception as e: st.error(f"오류: {e}")
