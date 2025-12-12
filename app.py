@@ -10,7 +10,7 @@ import time
 import glob
 import tempfile
 
-# yt_dlp 라이브러리 체크 (서버 환경 대응)
+# yt_dlp 라이브러리 체크
 try:
     import yt_dlp
 except ImportError:
@@ -26,42 +26,46 @@ st.set_page_config(
 )
 
 # ==========================================
-# 2. 🎨 [디자인] V53: 최종 UI/UX 최적화 (모바일/PC 완벽 호환)
+# 2. 🎨 [디자인] V54: 강력한 CSS (텍스트 박멸 & 레이아웃 고정)
 # ==========================================
 st.markdown("""
     <style>
-    /* 1. 배경 및 폰트 설정 */
+    /* 1. 배경 및 폰트 */
     .stApp { background-color: #F4F6F9 !important; }
     * { font-family: 'Pretendard', sans-serif !important; }
 
-    /* 2. 사이드바 디자인 (다크 네이비 테마) */
-    [data-testid="stSidebar"] { background-color: #2C3E50 !important; }
-    
-    /* 사이드바 내 모든 텍스트: 흰색 강제 */
-    [data-testid="stSidebar"] p, [data-testid="stSidebar"] span, 
-    [data-testid="stSidebar"] label, [data-testid="stSidebar"] div, 
-    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
+    /* 2. 사이드바 (다크 네이비) & 레이아웃 고정 */
+    [data-testid="stSidebar"] { 
+        background-color: #2C3E50 !important;
+        min-width: 250px !important; /* 최소 너비 확보 */
+    }
+    /* 사이드바 내부 컨텐츠 흔들림 방지 */
+    [data-testid="stSidebarUserContent"] {
+        padding: 20px !important;
+        width: 100% !important;
+    }
+    /* 사이드바 텍스트 색상 */
+    [data-testid="stSidebar"] p, [data-testid="stSidebar"] span, [data-testid="stSidebar"] label, 
+    [data-testid="stSidebar"] div, [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
         color: #FFFFFF !important;
     }
 
-    /* 3. 입력창 디자인 (가독성 최우선: 흰 배경 + 검은 글씨) */
+    /* 3. 입력창 디자인 */
     input.stTextInput, textarea.stTextArea {
         background-color: #FFFFFF !important;
         color: #000000 !important;
-        -webkit-text-fill-color: #000000 !important; /* 모바일 강제 적용 */
+        -webkit-text-fill-color: #000000 !important; 
         caret-color: #000000 !important;
         border: 2px solid #BDC3C7 !important;
         font-weight: 500 !important;
     }
-    
-    /* 플레이스홀더(안내문구) 색상 */
     ::placeholder {
         color: #666666 !important;
         -webkit-text-fill-color: #666666 !important;
         opacity: 1 !important;
     }
 
-    /* 4. 버튼 디자인 (파란색 그라데이션) */
+    /* 4. 버튼 디자인 */
     .stButton > button {
         background: linear-gradient(to right, #2980B9, #2C3E50) !important;
         color: #FFFFFF !important;
@@ -72,47 +76,57 @@ st.markdown("""
         box-shadow: 0 2px 5px rgba(0,0,0,0.2) !important;
     }
 
-    /* 5. 상단 메뉴 버튼 (책갈피 스타일 - 텍스트 완벽 제거) */
+    /* 🚨 5. [최종 해결] 상단 메뉴 버튼: 'keyboard...' 글씨 화면 밖으로 날리기 */
     [data-testid="stSidebarCollapsedControl"] {
-        font-size: 0 !important; /* 텍스트 크기 0으로 증발 */
+        /* (1) 글씨를 투명하게 하고 화면 왼쪽 끝으로 날려버림 */
         color: transparent !important;
+        text-indent: -9999px !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        
+        /* (2) 버튼 모양 잡기 */
         background-color: #FFFFFF !important;
-        border-radius: 0 10px 10px 0;
-        width: 40px !important;
-        height: 40px !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        box-shadow: 2px 2px 5px rgba(0,0,0,0.1) !important;
+        border-radius: 0 10px 10px 0 !important;
+        width: 45px !important;
+        height: 45px !important;
+        box-shadow: 2px 2px 5px rgba(0,0,0,0.15) !important;
+        border: 1px solid #E0E0E0 !important;
+        
+        /* (3) 위치 및 정렬 */
         z-index: 999999 !important;
+        display: block !important; /* flex 대신 block을 써서 text-indent 먹히게 함 */
     }
     
-    /* 기존 SVG 아이콘 숨김 */
-    [data-testid="stSidebarCollapsedControl"] > svg, 
-    [data-testid="stSidebarCollapsedControl"] > img {
+    /* (4) 기존의 모든 자식 요소(SVG 아이콘, 텍스트 노드 등) 숨기기 */
+    [data-testid="stSidebarCollapsedControl"] > * {
         display: none !important;
     }
 
-    /* ☰ 햄버거 아이콘 생성 */
+    /* (5) ☰ 아이콘을 가상 요소로 새로 그림 */
     [data-testid="stSidebarCollapsedControl"]::after {
         content: "☰";
+        text-indent: 0 !important; /* 날아간 들여쓰기 원상복구 */
         color: #2C3E50 !important;
-        font-size: 24px !important;
-        font-weight: bold !important;
+        font-size: 26px !important;
+        font-weight: 900 !important;
+        
+        /* 중앙 정렬 */
         position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -55%);
+        
+        display: block !important;
+        visibility: visible !important;
     }
 
-    /* 6. 크리스마스 애니메이션 컨테이너 */
+    /* 6. 크리스마스 애니메이션 스타일 */
     .snow-bg {
         position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
         background: rgba(0, 0, 0, 0.9); z-index: 999999;
         display: flex; flex-direction: column; justify-content: center; align-items: center;
         text-align: center; color: white !important;
     }
-    
-    /* 7. 채팅 메시지 박스 */
-    [data-testid="stChatMessage"] { background-color: #FFFFFF; border: 1px solid #eee; }
-    [data-testid="stChatMessage"][data-testid="user"] { background-color: #E3F2FD; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -278,12 +292,12 @@ def process_media_file(uploaded_file):
 st.markdown("<h1 style='text-align: center; color: #2C3E50;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
 st.markdown("<div style='text-align: center; color: #555; margin-bottom: 20px;'>Professional Legal & Audit Assistant System</div>", unsafe_allow_html=True)
 
-# [수정] 탭 이름 변경 및 아이콘 통일
+# [수정] 탭 이름 및 아이콘 최종 확인
 tab1, tab2, tab3 = st.tabs(["📄 문서 정밀 검토", "💬 Audit AI 에이전트 대화", "📰 스마트 요약"])
 
 # --- Tab 1: 문서 검토 ---
 with tab1:
-    # [수정] 폴더 아이콘(📂)으로 변경하여 통일성 확보
+    # [수정] 폴더 아이콘(📂) 적용
     st.markdown("### 📂 작업 및 파일 설정")
     
     option = st.selectbox("작업 유형 선택", 
@@ -422,16 +436,3 @@ with tab3:
         if 'api_key' not in st.session_state: st.error("🔒 로그인 필요")
         elif not final_input: st.warning("분석할 대상을 입력하세요.")
         else:
-            with st.spinner('🧠 AI가 핵심 내용을 요약 중입니다...'):
-                try:
-                    prompt = """[역할] 스마트 정보 분석가
-[작업] 다음 내용을 분석하여 보고서 작성
-1. 핵심 요약 (Executive Summary)
-2. 상세 내용 (Key Details)
-3. 감사/리스크 인사이트 (Insights)"""
-                    model = get_model()
-                    if is_multimodal: response = model.generate_content([prompt, final_input])
-                    else: response = model.generate_content(f"{prompt}\n\n{final_input[:30000]}")
-                    st.success("분석 완료")
-                    st.markdown(response.text)
-                except Exception as e: st.error(f"오류: {e}")
