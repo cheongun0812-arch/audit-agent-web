@@ -26,101 +26,83 @@ st.set_page_config(
 )
 
 # ==========================================
-# 2. 🎨 [디자인] V39: 모바일 강제 렌더링 해결 CSS
+# 2. 🎨 [디자인] V40: 모바일 강제 렌더링 해결 CSS
 # ==========================================
 st.markdown("""
     <style>
-    /* 1. 기본 배경 (전체) */
+    /* 1. 기본 배경 및 폰트 */
     .stApp { background-color: #F4F6F9 !important; }
-    
-    /* 2. 폰트 및 기본 텍스트 (모바일 강제 적용) */
     html, body, p, div, span, label, h1, h2, h3, h4, h5, h6, li {
         color: #333333 !important; 
         font-family: 'Pretendard', sans-serif !important;
     }
 
-    /* 3. 사이드바 (Control Center) 배경 */
-    [data-testid="stSidebar"] { 
-        background-color: #2C3E50 !important; 
-    }
-    /* 사이드바 내의 모든 텍스트는 일단 흰색으로 시작 */
-    [data-testid="stSidebar"] * { 
-        color: #FFFFFF !important; 
-    }
+    /* 2. 사이드바 디자인 */
+    [data-testid="stSidebar"] { background-color: #2C3E50 !important; }
+    [data-testid="stSidebar"] * { color: #FFFFFF !important; }
 
-    /* 4. [핵심] 상단 메뉴 버튼 (keyboard... 글씨 제거 수술) */
+    /* 3. [핵심] 'keyboard...' 글씨 제거 및 책갈피 아이콘화 🔖 */
     [data-testid="stSidebarCollapsedControl"] {
         background-color: #FFFFFF !important;
         border-radius: 0 12px 12px 0 !important;
         border: 1px solid #E0E0E0 !important;
         border-left: none !important;
-        box-shadow: 2px 2px 5px rgba(0,0,0,0.1) !important;
+        box-shadow: 3px 3px 10px rgba(0,0,0,0.15) !important;
         top: 60px !important;
         left: 0 !important;
         width: 40px !important;
         height: 40px !important;
-        z-index: 99999 !important;
+        z-index: 999999 !important;
         
-        /* 🚨 글씨를 없애는 마법의 코드 🚨 */
-        font-size: 0 !important; /* 글씨 크기를 0으로 만들어 증발시킴 */
-        color: transparent !important;
+        /* 🚨 글씨 숨기기 필살기 */
+        color: transparent !important; 
+        font-size: 0 !important;
         overflow: hidden !important;
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
     }
     
-    /* 햄버거 아이콘(☰) 심기 */
+    /* ☰ 햄버거 아이콘 심기 */
     [data-testid="stSidebarCollapsedControl"]::after {
-        content: "☰"; 
-        font-size: 22px !important; /* 아이콘 크기는 다시 키움 */
-        color: #2C3E50 !important;
-        font-weight: bold;
+        content: "☰";
+        font-size: 24px !important;
+        color: #2C3E50 !important; /* 아이콘 색상은 진한 네이비 */
+        font-weight: 900 !important;
         display: block !important;
-    }
-    
-    /* 기존 SVG 아이콘 숨기기 */
-    [data-testid="stSidebarCollapsedControl"] svg {
-        display: none !important;
+        position: absolute;
     }
 
-    /* 5. [핵심] 입력창 글씨 색상 강제 (모바일 다크모드 무시) */
-    input[type="password"], input[type="text"] {
-        background-color: #FFFFFF !important; 
-        color: #000000 !important; /* 글씨 검은색 */
-        -webkit-text-fill-color: #000000 !important; /* 모바일 브라우저 강제 적용 */
-        caret-color: #000000 !important; /* 커서 깜빡임 색상 */
-        border: 1px solid #BDC3C7 !important; 
+    /* 4. [핵심] 입력창 & 버튼 색상 강제 (모바일 다크모드 무시) */
+    
+    /* 입력창: 무조건 라이트 모드 렌더링 강제 (눈 아이콘 복구) */
+    input {
+        color-scheme: light !important; 
+        background-color: #FFFFFF !important;
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+        border: 1px solid #BDC3C7 !important;
         border-radius: 8px !important;
     }
     
-    /* 플레이스홀더(안내문구) 색상 */
-    ::placeholder {
-        color: #95A5A6 !important;
-        -webkit-text-fill-color: #95A5A6 !important;
-        opacity: 1 !important;
-    }
-
-    /* 6. 버튼 스타일 (글씨 잘 보이게) */
+    /* 버튼: 그라데이션 배경 + 흰색 글씨 강제 */
     .stButton > button {
-        background: linear-gradient(to right, #2980B9, #2C3E50) !important;
-        color: #FFFFFF !important; 
-        -webkit-text-fill-color: #FFFFFF !important; /* 모바일 강제 적용 */
-        border: none; 
-        border-radius: 8px; 
-        font-weight: bold;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%) !important;
+        color: #FFFFFF !important;
+        -webkit-text-fill-color: #FFFFFF !important; /* 모바일 강제 */
+        border: none !important;
+        border-radius: 8px !important;
+        font-weight: 700 !important;
+        padding: 0.5rem 1rem !important;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.2) !important;
     }
     
-    /* 7. 채팅 메시지 박스 */
+    /* 5. 채팅 메시지 박스 */
     [data-testid="stChatMessage"] {
         background-color: #FFFFFF !important; 
         border: 1px solid #E0E0E0;
         border-radius: 12px;
         color: #333333 !important;
-    }
-    [data-testid="stChatMessage"] p {
-        color: #333333 !important; /* 채팅 글씨 진회색 */
     }
     [data-testid="stChatMessage"][data-testid="user"] { 
         background-color: #EBF5FB !important; 
@@ -136,9 +118,10 @@ with st.sidebar:
     st.markdown("---")
     with st.form(key='login_form'):
         st.markdown("**🔐 Access Key**")
-        # placeholder를 한글로 명확하게 변경
-        api_key_input = st.text_input("키 입력", type="password", label_visibility="collapsed", placeholder="API 키 입력")
-        submit_button = st.form_submit_button(label="시스템 접속 (Log in)")
+        # [수정] 입력창 placeholder와 라벨 명확화
+        api_key_input = st.text_input("API 키 입력", type="password", label_visibility="collapsed", placeholder="API 키를 입력하세요")
+        # [수정] 버튼 텍스트 명확화
+        submit_button = st.form_submit_button(label="시스템 접속 (Login)")
     
     if submit_button:
         if api_key_input:
@@ -154,13 +137,13 @@ with st.sidebar:
             
     elif 'api_key' in st.session_state:
         genai.configure(api_key=st.session_state['api_key'])
-        st.success("🟢 Pro Engine 가동 중")
+        st.success("🟢 정상 가동 중")
         
     st.markdown("---")
     st.markdown("<div style='text-align: center; font-size: 11px; opacity: 0.7;'>Audit AI Solution © 2025<br>Engine: Gemini 1.5 Pro</div>", unsafe_allow_html=True)
 
 # ==========================================
-# 4. 기능 함수 (로직 유지)
+# 4. 기능 함수
 # ==========================================
 def get_model():
     if 'api_key' in st.session_state:
