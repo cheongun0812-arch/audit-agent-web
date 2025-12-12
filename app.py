@@ -7,6 +7,8 @@ from youtube_transcript_api import YouTubeTranscriptApi
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse, parse_qs
+import time
+import tempfile # 임시 파일 처리를 위해 추가
 
 # ==========================================
 # 1. 페이지 설정
@@ -18,7 +20,7 @@ st.set_page_config(
 )
 
 # ==========================================
-# 2. 디자인 테마 (V27 절대 테마 유지)
+# 2. 🎨 디자인 테마 (V27 절대 테마)
 # ==========================================
 st.markdown("""
     <style>
@@ -75,7 +77,7 @@ with st.sidebar:
     st.markdown("<div style='text-align: center; font-size: 11px; opacity: 0.7;'>Audit AI Solution © 2025<br>Engine: Gemini 1.5 Pro</div>", unsafe_allow_html=True)
 
 # ==========================================
-# 4. 기능 함수들 (모델, 파일읽기, 유튜브/웹 크롤링)
+# 4. 기능 함수들
 # ==========================================
 def get_model():
     if 'api_key' in st.session_state:
@@ -104,36 +106,55 @@ def read_file(uploaded_file):
     except: return None
     return content
 
-# [New] 유튜브 자막 추출 함수
+# 유튜브 자막 (텍스트 방식)
 def get_youtube_transcript(url):
     try:
-        if "youtu.be" in url:
-            video_id = url.split("/")[-1]
+        if "youtu.be" in url: video_id = url.split("/")[-1]
         else:
             query = urlparse(url).query
             params = parse_qs(query)
             video_id = params["v"][0]
-        
         transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['ko', 'en'])
         text = " ".join([t['text'] for t in transcript])
         return text
     except Exception as e:
-        return f"[오류] 자막을 가져올 수 없습니다. (원인: {e})"
+        return None # 자막 없음
 
-# [New] 웹사이트 본문 추출 함수
+# 웹 크롤링
 def get_web_content(url):
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(url, headers=headers)
         soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # 스크립트/스타일 제거
-        for script in soup(["script", "style"]):
-            script.decompose()
-            
-        return soup.get_text()[:10000] # 너무 길면 자름
+        for script in soup(["script", "style"]): script.decompose()
+        return soup.get_text()[:10000]
     except Exception as e:
-        return f"[오류] 웹사이트를 읽을 수 없습니다. (원인: {e})"
+        return f"[오류] {e}"
+
+# [New] 미디어 파일 업로드 및 처리 함수
+def process_media_file(uploaded_file):
+    try:
+        # 1. 임시 파일로 저장
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp_file:
+            tmp_file.write(uploaded_file.getvalue())
+            tmp_path = tmp_file.name
+
+        # 2. Gemini 서버에 파일 업로드
+        myfile = genai.upload_file(tmp_path)
+        
+        # 3. 처리 대기 (Active 상태가 될 때까지)
+        with st.spinner('🎧 AI가 파일을 듣고 분석 중입니다... (잠시만 기다려주세요)'):
+            while myfile.state.name == "PROCESSING":
+                time.sleep(2)
+                myfile = genai.get_file(myfile.name)
+        
+        # 4. 임시 파일 삭제 (청소)
+        os.remove(tmp_path)
+        
+        return myfile
+    except Exception as e:
+        st.error(f"파일 처리 중 오류 발생: {e}")
+        return None
 
 # ==========================================
 # 5. 메인 화면
@@ -142,10 +163,9 @@ def get_web_content(url):
 st.markdown("<h1 style='text-align: center; color: #2C3E50 !important;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
 st.markdown("<div style='text-align: center; color: #7F8C8D !important; margin-bottom: 25px;'>Professional Legal & Audit Assistant System</div>", unsafe_allow_html=True)
 
-# 탭 메뉴가 3개로 늘어났습니다!
 tab1, tab2, tab3 = st.tabs(["  📄 문서 정밀 검토  ", "  💬 AI 감사관 대화  ", "  📰 스마트 요약  "])
 
-# --- Tab 1: 문서 검토 (기존 유지) ---
+# --- Tab 1 ---
 with tab1:
     st.markdown("<br>", unsafe_allow_html=True)
     with st.container():
@@ -169,12 +189,10 @@ with tab1:
 
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("🚀 분석 리포트 생성 (Start Analysis)", use_container_width=True):
-            if 'api_key' not in st.session_state:
-                st.error("🔒 로그인 필요")
-            elif not uploaded_file:
-                st.warning("⚠️ 파일 필요")
+            if 'api_key' not in st.session_state: st.error("🔒 로그인 필요")
+            elif not uploaded_file: st.warning("⚠️ 파일 필요")
             else:
-                with st.spinner('🧠 AI(Pro)가 분석 중입니다...'):
+                with st.spinner('🧠 AI(Pro)가 분석 중...'):
                     content = read_file(uploaded_file)
                     if content:
                         ref_final = ref_content if ref_content else "일반 표준"
@@ -184,10 +202,9 @@ with tab1:
                             response = model.generate_content(prompt)
                             st.success("✅ 완료")
                             st.markdown(response.text)
-                        except Exception as e:
-                            st.error(f"오류: {e}")
+                        except Exception as e: st.error(f"오류: {e}")
 
-# --- Tab 2: 채팅 (기존 유지) ---
+# --- Tab 2 ---
 with tab2:
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("#### 🗣️ 실시간 질의응답")
@@ -202,8 +219,7 @@ with tab2:
     loading_placeholder = st.empty()
 
     if submit_chat and user_input:
-        if 'api_key' not in st.session_state:
-            st.error("🔒 로그인 필요")
+        if 'api_key' not in st.session_state: st.error("🔒 로그인 필요")
         else:
             st.session_state.messages.append({"role": "user", "content": user_input})
             with loading_placeholder.container():
@@ -219,8 +235,7 @@ with tab2:
                 model = get_model()
                 response = model.generate_content(full_prompt)
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
-            except Exception as e:
-                st.error(f"오류: {e}")
+            except Exception as e: st.error(f"오류: {e}")
             loading_placeholder.empty()
 
     st.markdown("---")
@@ -233,58 +248,64 @@ with tab2:
             with st.chat_message("assistant", avatar="🛡️"): st.markdown(asst_msg['content'])
             st.markdown("<hr style='border: 0; height: 1px; background: #BDC3C7; margin: 10px 0;'>", unsafe_allow_html=True)
 
-# --- Tab 3: [New!] 스마트 요약 (유튜브/뉴스) ---
+# --- Tab 3: 스마트 요약 (멀티모달 업그레이드) ---
 with tab3:
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("#### 📰 스마트 요약 & 인사이트")
-    st.info("유튜브 영상 링크나 뉴스 기사 URL, 또는 텍스트를 직접 입력하면 핵심만 요약해 드립니다.")
+    st.info("유튜브 자막이 없어도 OK! 영상/음성 파일을 직접 올리면 AI가 듣고 요약합니다.")
     
-    summary_type = st.radio("입력 방식 선택", ("🌐 URL 입력 (유튜브/뉴스)", "✍️ 텍스트 직접 입력"), horizontal=True)
+    summary_type = st.radio("입력 방식", ("🌐 URL 입력 (유튜브/뉴스)", "📁 미디어 파일 업로드 (MP3/MP4)", "✍️ 텍스트 입력"), horizontal=True)
     
-    input_content = ""
-    
+    final_input = None # AI에게 던질 최종 데이터
+    is_media_file = False # 파일 여부 확인
+
     if summary_type == "🌐 URL 입력 (유튜브/뉴스)":
-        target_url = st.text_input("🔗 URL을 여기에 붙여넣으세요 (유튜브, 신문기사 등)")
+        target_url = st.text_input("🔗 URL 붙여넣기")
         if target_url:
-            if "youtube.com" in target_url or "youtu.be" in target_url:
-                st.caption("📺 유튜브 링크가 감지되었습니다. 자막을 추출합니다...")
-                with st.spinner("자막 다운로드 중..."):
-                    input_content = get_youtube_transcript(target_url)
+            if "youtu" in target_url:
+                with st.spinner("자막 확인 중..."):
+                    text_data = get_youtube_transcript(target_url)
+                    if text_data:
+                        final_input = text_data
+                    else:
+                        st.error("⛔ 이 영상에는 자막이 없습니다! '미디어 파일 업로드' 방식을 이용해주세요.")
             else:
-                st.caption("🌐 웹사이트 링크가 감지되었습니다. 본문을 추출합니다...")
-                with st.spinner("웹사이트 읽는 중..."):
-                    input_content = get_web_content(target_url)
-                    
-            if "[오류]" in input_content:
-                st.error(input_content)
-                input_content = "" # 오류 시 초기화
-                
+                with st.spinner("웹사이트 분석 중..."):
+                    final_input = get_web_content(target_url)
+
+    elif summary_type == "📁 미디어 파일 업로드 (MP3/MP4)":
+        media_file = st.file_uploader("영상/음성 파일 업로드 (200MB 이하)", type=['mp3', 'mp4', 'm4a', 'wav'])
+        if media_file:
+            # 파일을 Gemini에 업로드 처리
+            final_input = process_media_file(media_file)
+            is_media_file = True
+
     else:
-        input_content = st.text_area("📝 요약할 내용을 여기에 붙여넣으세요", height=200)
+        final_input = st.text_area("내용 붙여넣기", height=200)
 
     if st.button("✨ 핵심 요약 및 인사이트 도출", use_container_width=True):
         if 'api_key' not in st.session_state:
             st.error("🔒 로그인 필요")
-        elif not input_content:
-            st.warning("요약할 내용이나 URL을 입력해주세요.")
+        elif not final_input:
+            st.warning("요약할 대상을 입력하거나 업로드해주세요.")
         else:
-            with st.spinner('🧠 AI가 내용을 분석하고 요약 중입니다...'):
+            with st.spinner('🧠 AI가 내용을 심층 분석 중입니다...'):
                 try:
-                    prompt = f"""
-                    당신은 감사실 수석 전문가입니다. 
-                    아래 제공된 내용(기사, 영상 자막 등)을 읽고 다음 형식으로 보고서를 작성해 주세요.
-                    
-                    1. **핵심 요약 (Executive Summary)**: 전체 내용을 3~5줄로 요약
-                    2. **주요 포인트 (Key Takeaways)**: 중요한 사실이나 주장 5가지 (불렛포인트)
-                    3. **감사/리스크 관점의 시사점 (Insights)**: 우리 회사나 업무에 미칠 수 있는 영향, 리스크, 기회요인 등 전문가적 견해 추가
-                    
-                    [대상 텍스트]
-                    {input_content[:20000]} 
-                    (내용이 너무 길면 앞부분 20000자만 처리)
+                    # 프롬프트 설정
+                    prompt_text = """
+                    당신은 감사실 수석 전문가입니다. 제공된 내용을 분석하여 다음 보고서를 작성하세요.
+                    1. **핵심 요약 (Executive Summary)**: 전체 내용 3줄 요약
+                    2. **상세 내용 (Details)**: 시간 순서 또는 주제별 주요 내용 정리
+                    3. **감사/리스크 인사이트 (Insights)**: 업무상 유의해야 할 점, 리스크, 시사점 도출
                     """
                     
                     model = get_model()
-                    response = model.generate_content(prompt)
+                    
+                    # 입력 데이터가 '파일(미디어)'인지 '텍스트'인지에 따라 다르게 호출
+                    if is_media_file:
+                        response = model.generate_content([prompt_text, final_input])
+                    else:
+                        response = model.generate_content(f"{prompt_text}\n\n[내용]\n{final_input[:30000]}")
                     
                     st.success("분석 완료!")
                     st.markdown("### 📑 AI 요약 보고서")
