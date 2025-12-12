@@ -26,140 +26,83 @@ st.set_page_config(
 )
 
 # ==========================================
-# 2. 🎨 [디자인] V41: CSS 핵(Hack) 적용
+# 2. 🎨 [디자인] 텍스트 색상 강제 교정 CSS
 # ==========================================
 st.markdown("""
     <style>
-    /* 1. 전체 배경 및 폰트 강제 */
+    /* 1. 기본 배경 */
     .stApp { background-color: #F4F6F9 !important; }
     
-    html, body, p, div, span, label, h1, h2, h3, h4, h5, h6, li, button {
-        font-family: 'Pretendard', sans-serif !important;
-    }
-    
-    /* 텍스트 가독성 확보 (검은색 강제) */
-    p, div, span, label, li {
-        color: #333333 !important;
+    /* 2. 폰트 강제 적용 */
+    * { font-family: 'Pretendard', sans-serif !important; }
+
+    /* 3. 사이드바 배경 (다크 네이비) */
+    [data-testid="stSidebar"] { 
+        background-color: #2C3E50 !important; 
     }
 
-    /* 2. 사이드바 디자인 */
-    [data-testid="stSidebar"] { background-color: #2C3E50 !important; }
-    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
-        color: #FFFFFF !important;
-    }
-    /* 사이드바 안의 일반 텍스트는 흰색 */
-    [data-testid="stSidebar"] p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] span {
-        color: #ECF0F1 !important;
-    }
-
-    /* 🚨 3. [최후의 수단] 상단 메뉴 버튼 'keyboard...' 글씨 날리기 🚨 */
-    [data-testid="stSidebarCollapsedControl"] {
-        /* 글씨를 화면 왼쪽 끝으로 9999px 날려버림 (물리적으로 안보임) */
-        text-indent: -9999px !important;
-        white-space: nowrap !important;
-        
-        /* 책갈피 모양 만들기 */
+    /* 🚨 [핵심 1] 입력창 글씨 색상: 진한 회색 (Dark Gray) 강제 🚨 */
+    /* 모바일 다크모드에서도 흰 배경에 검은/회색 글씨가 나오도록 강제함 */
+    input.stTextInput {
         background-color: #FFFFFF !important;
-        border-radius: 0 12px 12px 0 !important;
-        border: 1px solid #BDC3C7 !important;
-        border-left: none !important;
-        box-shadow: 2px 2px 6px rgba(0,0,0,0.15) !important;
-        
-        /* 위치 및 크기 고정 */
-        position: fixed !important;
-        top: 60px !important;
-        left: 0 !important;
-        width: 45px !important;
-        height: 45px !important;
-        z-index: 9999999 !important;
-        
-        /* 내용 정렬 */
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
+        color: #333333 !important; /* 요청하신 GRAY TEXT COLOR */
+        -webkit-text-fill-color: #333333 !important; /* 모바일 크롬 강제 적용 */
+        caret-color: #333333 !important; /* 커서 색상 */
     }
     
-    /* 기존 SVG 아이콘 삭제 */
-    [data-testid="stSidebarCollapsedControl"] > svg, 
-    [data-testid="stSidebarCollapsedControl"] > img {
-        display: none !important;
-    }
-    
-    /* ☰ 햄버거 아이콘 새로 그리기 (가상 요소 사용) */
-    [data-testid="stSidebarCollapsedControl"]::after {
-        content: "☰";
-        text-indent: 0 !important; /* 날아간 글씨 원상복구 */
-        font-size: 26px !important;
-        color: #2C3E50 !important; /* 진한 네이비 */
-        font-weight: 900 !important;
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -55%);
-        display: block !important;
-        visibility: visible !important;
-    }
-
-    /* 🚨 4. [입력창] 흰 화면에서 글씨 안 보이는 문제 해결 🚨 */
-    /* 모든 텍스트 입력창 강제 스타일링 */
-    input[type="text"], input[type="password"] {
-        background-color: #FFFFFF !important;
-        border: 2px solid #D5DBDB !important;
-        border-radius: 8px !important;
-        padding: 10px !important;
-        
-        /* 글씨 색상: 무조건 검은색 */
-        color: #000000 !important;
-        -webkit-text-fill-color: #000000 !important; /* 모바일 크롬/사파리 강제 */
-        caret-color: #000000 !important; /* 커서 색상 */
+    /* 입력창 플레이스홀더(안내문구) 색상 */
+    ::placeholder {
+        color: #888888 !important;
+        -webkit-text-fill-color: #888888 !important;
         opacity: 1 !important;
     }
-    
-    /* placeholder(안내문구) 색상 강제 */
-    ::placeholder {
-        color: #7F8C8D !important;
-        -webkit-text-fill-color: #7F8C8D !important;
-        opacity: 1 !important; /* 투명도 제거 */
-    }
-    
-    /* 비밀번호 눈 아이콘 강제 색상 변경 (필터 사용) */
-    button[aria-label="Show password"] {
-        filter: invert(1) !important; /* 색상 반전시켜서 검게 보이게 함 */
-    }
 
-    /* 5. 버튼 디자인 */
+    /* 🚨 [핵심 2] 로그인 버튼 글씨: 흰색 (White) 강제 🚨 */
     .stButton > button {
-        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%) !important;
+        background: linear-gradient(to right, #2980B9, #2C3E50) !important;
         color: #FFFFFF !important;
         -webkit-text-fill-color: #FFFFFF !important;
         border: none !important;
-        border-radius: 8px !important;
-        font-weight: 700 !important;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.2) !important;
+        font-weight: bold !important;
+    }
+
+    /* 🚨 [핵심 3] 사이드바 하단 정보: 흰색 (White) 강제 🚨 */
+    .sidebar-footer {
+        color: #FFFFFF !important; /* 요청하신 WHITE TEXT COLOR */
+        text-align: center;
+        font-size: 12px;
+        opacity: 0.9;
+        margin-top: 50px;
     }
     
-    /* 6. 채팅 메시지 박스 */
-    [data-testid="stChatMessage"] {
-        background-color: #FFFFFF !important; 
-        border: 1px solid #E0E0E0;
-        border-radius: 12px;
+    /* 사이드바 제목 및 라벨 색상 보정 */
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, 
+    [data-testid="stSidebar"] label, [data-testid="stSidebar"] p {
+        color: #FFFFFF !important;
     }
-    [data-testid="stChatMessage"][data-testid="user"] { 
-        background-color: #EBF5FB !important; 
+
+    /* (미해결로 두자고 하셨지만, 눈에 거슬리지 않게 최소한의 투명화만 적용) */
+    [data-testid="stSidebarCollapsedControl"] {
+        color: transparent !important;
+    }
+    
+    /* 메인 화면 텍스트 색상 (검은색) */
+    .main-text, p, li, h1, h2, h3 {
+        color: #333333 !important;
     }
     </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 3. 사이드바 (로그인)
+# 3. 사이드바 (로그인) - 색상 클래스 적용
 # ==========================================
 with st.sidebar:
     st.markdown("### 🏛️ Control Center")
     st.markdown("---")
     with st.form(key='login_form'):
         st.markdown("**🔐 Access Key**")
-        # 라벨을 'visible'로 바꿔서 모바일 접근성 향상
-        api_key_input = st.text_input("API Key", type="password", placeholder="API 키를 입력하세요", label_visibility="visible")
+        # 라벨을 collapsed로 해서 깔끔하게
+        api_key_input = st.text_input("Key", type="password", label_visibility="collapsed", placeholder="API 키를 입력하세요")
         submit_button = st.form_submit_button(label="시스템 접속 (Login)")
     
     if submit_button:
@@ -168,21 +111,27 @@ with st.sidebar:
             try:
                 genai.configure(api_key=clean_key)
                 st.session_state['api_key'] = clean_key
-                st.success("✅ 접속 승인됨")
+                st.success("✅ 접속 완료")
             except:
-                st.error("❌ 유효하지 않은 키")
+                st.error("❌ 키 오류")
         else:
-            st.warning("⚠️ 키를 입력하세요")
+            st.warning("⚠️ 키 입력 필요")
             
     elif 'api_key' in st.session_state:
         genai.configure(api_key=st.session_state['api_key'])
-        st.success("🟢 정상 가동 중")
+        st.success("🟢 가동 중")
         
     st.markdown("---")
-    st.markdown("<div style='text-align: center; font-size: 11px; opacity: 0.7;'>Audit AI Solution © 2025<br>Engine: Gemini 1.5 Pro</div>", unsafe_allow_html=True)
+    # [수정] 하단 텍스트에 CSS 클래스(.sidebar-footer) 적용하여 흰색 강제
+    st.markdown("""
+        <div class="sidebar-footer">
+            Audit AI Solution © 2025<br>
+            Engine: Gemini 1.5 Pro
+        </div>
+    """, unsafe_allow_html=True)
 
 # ==========================================
-# 4. 기능 함수
+# 4. 기능 함수 (기존 유지)
 # ==========================================
 def get_model():
     if 'api_key' in st.session_state:
