@@ -26,97 +26,60 @@ st.set_page_config(
 )
 
 # ==========================================
-# 2. 🎨 [디자인] V50: CSS 분리 및 절대 색상 적용
+# 2. 🎨 디자인 테마 (V47 안전성 유지 + 크리스마스 효과)
 # ==========================================
 st.markdown("""
     <style>
-    /* 1. 전체 폰트 및 배경 */
-    .stApp { background-color: #F4F6F9 !important; }
-    * { font-family: 'Pretendard', sans-serif !important; }
-
-    /* 2. 사이드바 (다크 네이비) */
-    [data-testid="stSidebar"] { background-color: #2C3E50 !important; }
+    .stApp { background-color: #F4F6F9; }
+    [data-testid="stSidebar"] { background-color: #2C3E50; }
+    [data-testid="stSidebar"] * { color: #FFFFFF !important; }
     
-    /* 사이드바 내 모든 텍스트 강제 화이트 */
-    [data-testid="stSidebar"] p, [data-testid="stSidebar"] span, [data-testid="stSidebar"] div, [data-testid="stSidebar"] label {
-        color: #FFFFFF !important;
-    }
-
-    /* 3. 입력창 디자인 (무조건 흰 배경에 검은 글씨) */
-    input.stTextInput {
+    .stTextInput input, .stTextArea textarea {
         background-color: #FFFFFF !important;
         color: #000000 !important;
-        -webkit-text-fill-color: #000000 !important; /* 모바일 크롬 강제 */
-        caret-color: #000000 !important;
-        border: 2px solid #BDC3C7 !important;
+        -webkit-text-fill-color: #000000 !important;
+        border: 1px solid #BDC3C7 !important;
     }
     
-    /* 입력창 안내문구 (플레이스홀더) 색상 */
-    ::placeholder {
-        color: #666666 !important;
-        -webkit-text-fill-color: #666666 !important;
-        opacity: 1 !important;
-    }
-
-    /* 4. 버튼 디자인 */
     .stButton > button {
         background: linear-gradient(to right, #2980B9, #2C3E50) !important;
         color: #FFFFFF !important;
-        -webkit-text-fill-color: #FFFFFF !important;
         border: none !important;
         font-weight: bold !important;
     }
 
-    /* 5. 상단 메뉴 버튼 (책갈피 스타일) */
+    /* 상단 메뉴 버튼 (책갈피) */
     [data-testid="stSidebarCollapsedControl"] {
         color: transparent !important;
         background-color: #FFFFFF !important;
         border-radius: 0 10px 10px 0;
-        width: 40px !important;
-        height: 40px !important;
-        box-shadow: 2px 2px 5px rgba(0,0,0,0.2) !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
+        border: 1px solid #ddd;
+        width: 40px; height: 40px;
+        z-index: 99999;
     }
-    /* 햄버거 아이콘 */
     [data-testid="stSidebarCollapsedControl"]::after {
         content: "☰";
-        color: #2C3E50 !important;
-        font-size: 24px !important;
-        font-weight: bold !important;
+        color: #333;
+        font-size: 24px;
+        font-weight: bold;
         position: absolute;
+        top: 5px; left: 10px;
     }
+    
+    [data-testid="stChatMessage"] { background-color: #FFFFFF; border: 1px solid #eee; }
+    [data-testid="stChatMessage"][data-testid="user"] { background-color: #E3F2FD; }
 
-    /* 6. 🎄 크리스마스 애니메이션 스타일 (여기서 정의) */
-    .snow-container {
-        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-        background: rgba(0, 0, 0, 0.9); z-index: 999999;
-        display: flex; flex-direction: column; justify-content: center; align-items: center;
-        text-align: center;
+    /* 🎄 크리스마스 로그아웃 버튼 스타일 */
+    .logout-btn {
+        border: 2px solid #FF5252 !important;
+        background: transparent !important;
+        color: #FF5252 !important;
+        border-radius: 20px !important;
     }
-    .snow-text-main {
-        font-size: 40px; font-weight: bold; color: #FFFFFF !important; margin: 20px 0;
+    .logout-btn:hover {
+        background-color: #FF5252 !important;
+        color: white !important;
     }
-    .snow-text-sub {
-        font-size: 20px; color: #DDDDDD !important; line-height: 1.5;
-    }
-    .snowflake {
-        color: #fff; font-size: 1.5em; position: fixed; top: -10%; z-index: 9999;
-        animation-name: snowflakes-fall, snowflakes-shake;
-        animation-duration: 10s, 3s;
-        animation-timing-function: linear, ease-in-out;
-        animation-iteration-count: infinite, infinite;
-        animation-play-state: running, running;
-    }
-    @keyframes snowflakes-fall { 0% { top: -10%; } 100% { top: 100%; } }
-    @keyframes snowflakes-shake { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(80px); } }
-    .snowflake:nth-of-type(0) { left: 1%; animation-delay: 0s, 0s; }
-    .snowflake:nth-of-type(1) { left: 10%; animation-delay: 1s, 1s; }
-    .snowflake:nth-of-type(2) { left: 20%; animation-delay: 6s, 0.5s; }
-    .snowflake:nth-of-type(3) { left: 30%; animation-delay: 4s, 2s; }
-    .snowflake:nth-of-type(4) { left: 40%; animation-delay: 2s, 2s; }
-    .snowflake:nth-of-type(5) { left: 50%; animation-delay: 8s, 3s; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -124,14 +87,14 @@ st.markdown("""
 # 3. 사이드바 (로그인 & 로그아웃)
 # ==========================================
 with st.sidebar:
-    st.markdown("### 🏛️ Control Center")
+    st.title("🏛️ Control Center")
     st.markdown("---")
     
+    # 세션에 키가 없으면 -> 로그인 폼 표시
     if 'api_key' not in st.session_state:
         with st.form(key='login_form'):
-            # [수정] 라벨을 별도 Markdown으로 강제 표시 (시인성 100%)
-            st.markdown("<h4 style='color:white; margin-bottom:5px;'>🔐 Access Key</h4>", unsafe_allow_html=True)
-            api_key_input = st.text_input("Key", type="password", placeholder="API 키를 입력하세요", label_visibility="collapsed")
+            st.markdown("🔑 **Access Key**")
+            api_key_input = st.text_input("키 입력", type="password", placeholder="API 키를 입력하세요", label_visibility="collapsed")
             submit_button = st.form_submit_button(label="시스템 접속 (Login)")
         
         if submit_button:
@@ -141,45 +104,82 @@ with st.sidebar:
                     genai.configure(api_key=clean_key)
                     st.session_state['api_key'] = clean_key
                     st.success("✅ 접속 완료")
-                    st.rerun()
+                    st.rerun() # 새로고침
                 except:
                     st.error("❌ 키 오류")
             else:
                 st.warning("⚠️ 키 입력 필요")
 
+    # 세션에 키가 있으면 -> 로그아웃 버튼 표시
     else:
-        st.success("🟢 정상 가동 중")
+        st.success("🟢 시스템 정상 가동")
         st.markdown("<br>", unsafe_allow_html=True)
         
+        # 🎄 따뜻한 작별 버튼
         if st.button("🎄 고마워! 또 봐! (Logout)", type="primary", use_container_width=True):
+            # 1. 애니메이션 트리거 설정
             st.session_state['logout_anim'] = True
             st.rerun()
 
     st.markdown("---")
-    st.markdown("<div style='color:white; text-align:center; font-size:12px; opacity:0.8;'>Audit AI Solution © 2025<br>Engine: Gemini 1.5 Pro</div>", unsafe_allow_html=True)
+    st.caption("Audit AI Solution © 2025\nEngine: Gemini 1.5 Pro")
 
 # ==========================================
-# 4. 🎅 크리스마스 작별 애니메이션 (HTML 간소화)
+# 4. 🎅 크리스마스 작별 애니메이션 로직
 # ==========================================
 if 'logout_anim' in st.session_state and st.session_state['logout_anim']:
-    # 복잡한 스타일은 위쪽 CSS로 빼고, 여기선 구조만 남김 -> 텍스트 노출 오류 해결
+    # 전체 화면을 덮는 눈 내리는 효과 HTML/CSS
     st.markdown("""
+        <style>
+        .snow-container {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0, 0, 0, 0.85); z-index: 999999;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            color: white; text-align: center;
+        }
+        .snowflake {
+            color: #fff; font-size: 1.5em; font-family: Arial, sans-serif; text-shadow: 0 0 5px #000;
+            position: fixed; top: -10%; z-index: 9999; user-select: none; cursor: default;
+            animation-name: snowflakes-fall, snowflakes-shake;
+            animation-duration: 10s, 3s;
+            animation-timing-function: linear, ease-in-out;
+            animation-iteration-count: infinite, infinite;
+            animation-play-state: running, running;
+        }
+        @keyframes snowflakes-fall { 0% { top: -10%; } 100% { top: 100%; } }
+        @keyframes snowflakes-shake { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(80px); } }
+        .snowflake:nth-of-type(0) { left: 1%; animation-delay: 0s, 0s; }
+        .snowflake:nth-of-type(1) { left: 10%; animation-delay: 1s, 1s; }
+        .snowflake:nth-of-type(2) { left: 20%; animation-delay: 6s, 0.5s; }
+        .snowflake:nth-of-type(3) { left: 30%; animation-delay: 4s, 2s; }
+        .snowflake:nth-of-type(4) { left: 40%; animation-delay: 2s, 2s; }
+        .snowflake:nth-of-type(5) { left: 50%; animation-delay: 8s, 3s; }
+        .snowflake:nth-of-type(6) { left: 60%; animation-delay: 6s, 2s; }
+        .snowflake:nth-of-type(7) { left: 70%; animation-delay: 2.5s, 1s; }
+        .snowflake:nth-of-type(8) { left: 80%; animation-delay: 1s, 0s; }
+        .snowflake:nth-of-type(9) { left: 90%; animation-delay: 3s, 1.5s; }
+        </style>
+        
         <div class="snow-container">
-            <div style="font-size: 80px; margin-bottom: 20px;">🎅🎄</div>
-            <div class="snow-text-main">Merry Christmas!</div>
-            <div class="snow-text-sub">오늘도 수고 많으셨습니다.<br>따뜻한 연말 보내세요! ❤️</div>
+            <div style="font-size: 80px;">🎅🎄</div>
+            <h1 style="color:white !important; margin-top: 20px;">Merry Christmas!</h1>
+            <h3 style="color:#eee !important;">오늘도 수고 많으셨습니다.<br>따뜻한 연말 보내세요! ❤️</h3>
             
             <div class="snowflake">❅</div><div class="snowflake">❆</div><div class="snowflake">❅</div>
             <div class="snowflake">❆</div><div class="snowflake">❅</div><div class="snowflake">❆</div>
+            <div class="snowflake">❅</div><div class="snowflake">❆</div><div class="snowflake">❅</div>
+            <div class="snowflake">❆</div>
         </div>
     """, unsafe_allow_html=True)
     
+    # 3초 동안 애니메이션 보여주기
     time.sleep(3.5)
     
+    # 로그아웃 처리 (세션 삭제)
     for key in list(st.session_state.keys()):
         del st.session_state[key]
     
-    st.rerun()
+    st.rerun() # 초기 화면으로 복귀
 
 # ==========================================
 # 5. 기능 함수 (기존 유지)
@@ -236,11 +236,7 @@ def download_and_upload_youtube_audio(url):
         os.remove(audio_path)
         return myfile
     except Exception as e:
-        if "403" in str(e) or "Forbidden" in str(e):
-            st.error("🔒 [보안 차단] 유튜브 보안으로 인해 자동 다운로드가 막혔습니다.")
-            st.info("💡 '미디어 파일 업로드' 탭을 이용해 다운받은 파일을 직접 올려주세요.")
-        else:
-            st.error(f"오디오 처리 중 오류: {e}")
+        st.error(f"오디오 처리 중 오류: {e}")
         return None
 
 def get_youtube_transcript(url):
@@ -286,7 +282,7 @@ st.markdown("<div style='text-align: center; color: #555; margin-bottom: 20px;'>
 
 tab1, tab2, tab3 = st.tabs(["📄 문서 정밀 검토", "💬 AI 파트너 대화", "📰 스마트 요약"])
 
-# --- Tab 1 ---
+# --- Tab 1: 문서 검토 ---
 with tab1:
     st.markdown("### 1️⃣ 작업 및 파일 설정")
     option = st.selectbox("작업 유형을 선택하세요", 
@@ -339,7 +335,7 @@ with tab1:
                         st.markdown(response.text)
                     except Exception as e: st.error(f"시스템 오류: {e}")
 
-# --- Tab 2 ---
+# --- Tab 2: 챗봇 ---
 with tab2:
     st.markdown("### 🗣️ 실시간 질의응답")
     st.info("파일 내용이나 업무 관련 궁금한 점을 물어보세요.")
@@ -386,7 +382,7 @@ with tab2:
             with st.chat_message("assistant", avatar="🛡️"): st.markdown(asst_msg['content'])
             st.divider()
 
-# --- Tab 3 ---
+# --- Tab 3: 스마트 요약 ---
 with tab3:
     st.markdown("### 📰 스마트 요약 & 인사이트")
     summary_type = st.radio("입력 방식 선택", ["🌐 URL 입력 (유튜브/뉴스)", "📁 미디어 파일 업로드", "✍️ 텍스트 입력"])
