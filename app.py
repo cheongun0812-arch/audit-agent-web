@@ -94,26 +94,21 @@ with st.sidebar:
     if 'api_key' not in st.session_state:
         with st.form(key='login_form'):
             st.markdown("🔑 **Access Key**")
-            # 라벨을 명확히 하고, 키 입력 즉시 반응하도록 설정
             api_key_input = st.text_input("키 입력", type="password", placeholder="API 키를 입력하세요", label_visibility="collapsed")
             submit_button = st.form_submit_button(label="시스템 접속 (Login)")
         
         if submit_button:
             if api_key_input:
                 clean_key = api_key_input.strip()
-                
-                # [수정됨] 불필요한 try-except 제거
-                # genai.configure는 검증 단계가 아니라 설정 단계이므로 에러가 잘 나지 않습니다.
-                # 만약 키가 틀렸다면 이후 데이터 요청 시 에러가 나도록 하는 것이 자연스럽습니다.
-                genai.configure(api_key=clean_key)
-                
-                # 세션 상태 저장
-                st.session_state['api_key'] = clean_key
-                
-                st.success("✅ 접속 완료")
-                st.rerun() # 즉시 새로고침하여 로그인 상태로 전환
+                try:
+                    genai.configure(api_key=clean_key)
+                    st.session_state['api_key'] = clean_key
+                    st.success("✅ 접속 완료")
+                    st.rerun() # 새로고침
+                except:
+                    st.error("❌ 키 오류")
             else:
-                st.warning("⚠️ 키를 입력해주세요")
+                st.warning("⚠️ 키 입력 필요")
 
     # 세션에 키가 있으면 -> 로그아웃 버튼 표시
     else:
@@ -122,8 +117,8 @@ with st.sidebar:
         
         # 🎄 따뜻한 작별 버튼
         if st.button("🎄 고마워! 또 봐! (Logout)", type="primary", use_container_width=True):
-            # 로그아웃 시 세션 초기화
-            del st.session_state['api_key']
+            # 1. 애니메이션 트리거 설정
+            st.session_state['logout_anim'] = True
             st.rerun()
 
     st.markdown("---")
@@ -133,112 +128,16 @@ with st.sidebar:
 # 4. 🎅 크리스마스 작별 애니메이션 (코드 노출 방지)
 # ==========================================
 if 'logout_anim' in st.session_state and st.session_state['logout_anim']:
-    # CSS와 HTML을 활용한 크리스마스 애니메이션 오버레이
+    # HTML 들여쓰기를 제거하여 코드로 인식되는 문제 해결
     st.markdown("""
-    <style>
-        /* 1. 전체 화면을 덮는 어두운 배경 (눈 내리는 효과 포함) */
-        .logout-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background: linear-gradient(to bottom, #0f2027, #203a43, #2c5364);
-            z-index: 9999;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            text-align: center;
-            overflow: hidden;
-        }
-
-        /* 2. 날아가는 산타와 루돌프 애니메이션 */
-        @keyframes flyAcross {
-            0% { transform: translateX(-120%) translateY(0px) rotate(5deg); }
-            25% { transform: translateX(-50%) translateY(-30px) rotate(0deg); }
-            50% { transform: translateX(0%) translateY(0px) rotate(-5deg); }
-            75% { transform: translateX(50%) translateY(-30px) rotate(0deg); }
-            100% { transform: translateX(120%) translateY(0px) rotate(5deg); }
-        }
-        
-        .santa-sleigh {
-            position: absolute;
-            top: 20%;
-            font-size: 4rem;
-            animation: flyAcross 3.5s linear forwards;
-            filter: drop-shadow(0 0 10px gold);
-        }
-
-        /* 3. 중앙 아이콘 반짝임 (전구 효과) */
-        @keyframes glow {
-            0% { text-shadow: 0 0 10px #fff, 0 0 20px #ff00de, 0 0 30px #ff00de; transform: scale(1); }
-            50% { text-shadow: 0 0 20px #fff, 0 0 30px #ffdd00, 0 0 40px #ffdd00; transform: scale(1.1); }
-            100% { text-shadow: 0 0 10px #fff, 0 0 20px #ff00de, 0 0 30px #ff00de; transform: scale(1); }
-        }
-
-        .center-icon {
-            font-size: 80px; 
-            margin-bottom: 20px;
-            animation: glow 2s infinite ease-in-out;
-        }
-
-        /* 4. 텍스트 스타일 */
-        .msg-title {
-            color: white !important;
-            font-family: 'Arial', sans-serif;
-            font-weight: bold;
-            text-shadow: 2px 2px 4px #000000;
-        }
-        .msg-sub {
-            color: #ddd !important;
-            margin-top: 10px;
-        }
-        
-        /* 5. 눈 내리는 효과 (간단 버전) */
-        .snowflake {
-            color: #fff;
-            font-size: 1em;
-            font-family: Arial;
-            text-shadow: 0 0 1px #000;
-            position: fixed;
-            top: -10%;
-            z-index: 9998;
-            user-select: none;
-            cursor: default;
-            animation-name: snowflakes-fall, snowflakes-shake;
-            animation-duration: 10s, 3s;
-            animation-timing-function: linear, ease-in-out;
-            animation-iteration-count: infinite, infinite;
-            animation-play-state: running, running;
-        }
-        @keyframes snowflakes-fall { 0% { top: -10%; } 100% { top: 100%; } }
-        @keyframes snowflakes-shake { 0% { transform: translateX(0px); } 50% { transform: translateX(80px); } 100% { transform: translateX(0px); } }
-        
-        /* 눈송이 위치 랜덤 배치 */
-        .snowflake:nth-of-type(1) { left: 1%; animation-delay: 0s, 0s; }
-        .snowflake:nth-of-type(2) { left: 20%; animation-delay: 1s, 1s; }
-        .snowflake:nth-of-type(3) { left: 40%; animation-delay: 6s, 0.5s; }
-        .snowflake:nth-of-type(4) { left: 60%; animation-delay: 4s, 2s; }
-        .snowflake:nth-of-type(5) { left: 80%; animation-delay: 2s, 2s; }
-        
-    </style>
-
-    <div class="logout-overlay">
-        <div class="snowflake">❅</div><div class="snowflake">❆</div><div class="snowflake">❅</div><div class="snowflake">❆</div><div class="snowflake">❅</div>
-        
-        <div class="santa-sleigh">🦌🦌🛷🎅💨</div>
-        
-        <div class="center-icon">🎄🎁</div>
-        <h1 class="msg-title">Merry Christmas!</h1>
-        <h3 class="msg-sub">오늘도 수고 많으셨습니다.<br>따뜻한 연말 보내세요! ❤️</h3>
-    </div>
-    """, unsafe_allow_html=True)
+<div class="snow-bg">
+<div style="font-size: 80px; margin-bottom: 20px;">🎅🎄</div>
+<h1 style="color: white !important;">Merry Christmas!</h1>
+<h3 style="color: #ddd !important;">오늘도 수고 많으셨습니다.<br>따뜻한 연말 보내세요! ❤️</h3>
+</div>
+""", unsafe_allow_html=True)
     
-    # 애니메이션이 충분히 보일 수 있도록 대기 시간 3.5초로 약간 조정
-    time.sleep(3.5)
-    
-    # 세션 초기화 및 리런
+    time.sleep(3.0)
     for key in list(st.session_state.keys()):
         del st.session_state[key]
     st.rerun()
