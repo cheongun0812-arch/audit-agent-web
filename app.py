@@ -10,6 +10,7 @@ import time
 import glob
 import tempfile
 import hashlib
+import base64
 
 # yt_dlp 라이브러리 체크
 try:
@@ -27,49 +28,10 @@ st.set_page_config(
 )
 
 # ==========================================
-# 2. 🎨 디자인 테마 (V47 안전성 유지 + 크리스마스 효과)
+# 2. 🎨 디자인 테마 (검증된 V71 코드 100% 유지)
 # ==========================================
 st.markdown("""
     <style>
-    .stApp { background-color: #F4F6F9; }
-    [data-testid="stSidebar"] { background-color: #2C3E50; }
-    [data-testid="stSidebar"] * { color: #FFFFFF !important; }
-    
-    .stTextInput input, .stTextArea textarea {
-        background-color: #FFFFFF !important;
-        color: #000000 !important;
-        -webkit-text-fill-color: #000000 !important;
-        border: 1px solid #BDC3C7 !important;
-    }
-    
-    .stButton > button {
-        background: linear-gradient(to right, #2980B9, #2C3E50) !important;
-        color: #FFFFFF !important;
-        border: none !important;
-        font-weight: bold !important;
-    }
-
-    /* 상단 메뉴 버튼 (책갈피) */
-    [data-testid="stSidebarCollapsedControl"] {
-        color: transparent !important;
-        background-color: #FFFFFF !important;
-        border-radius: 0 10px 10px 0;
-        border: 1px solid #ddd;
-        width: 40px; height: 40px;
-        z-index: 99999;
-    }
-    [data-testid="stSidebarCollapsedControl"]::after {
-        content: "☰";
-        color: #333;
-        font-size: 24px;
-        font-weight: bold;
-        position: absolute;
-        top: 5px; left: 10px;
-    }
-    
-    [data-testid="stChatMessage"] { background-color: #FFFFFF; border: 1px solid #eee; }
-    [data-testid="stChatMessage"][data-testid="user"] { background-color: #E3F2FD; }
-
     /* 1. 기본 배경 및 폰트 */
     .stApp { background-color: #F4F6F9 !important; }
     * { font-family: 'Pretendard', sans-serif !important; }
@@ -141,13 +103,49 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 3. 사이드바 (로그인 & 로그아웃 & 자동복구)
+# 3. 로그인 처리 로직 (콜백 함수) - [V72 핵심]
+# ==========================================
+def try_login():
+    """버튼 클릭 시 즉시 실행되는 로그인 검증 함수"""
+    # 세션에 저장된 input 값을 가져옴
+    if 'login_input_key' in st.session_state:
+        raw_key = st.session_state['login_input_key']
+        # 공백 제거 세탁
+        clean_key = "".join(raw_key.split())
+        
+        if not clean_key:
+            st.session_state['login_error'] = "⚠️ 키를 입력해주세요."
+            return
+
+        try:
+            # 1. 키 설정
+            genai.configure(api_key=clean_key)
+            # 2. 유효성 검사 (실제 통신)
+            list(genai.list_models())
+            
+            # 3. 성공 시: 메인 세션에 키 저장
+            st.session_state['api_key'] = clean_key
+            st.session_state['login_error'] = None # 에러 초기화
+            
+            # 4. 자동 로그인용 URL 저장
+            encoded_key = base64.b64encode(clean_key.encode()).decode()
+            try:
+                st.query_params['k'] = encoded_key
+            except:
+                st.experimental_set_query_params(k=encoded_key)
+                
+        except Exception as e:
+            # 실패 시 에러 메시지 저장
+            st.session_state['login_error'] = f"❌ 인증 실패: {e}"
+
+# ==========================================
+# 4. 사이드바 구성
 # ==========================================
 with st.sidebar:
     st.markdown("### 🏛️ Control Center")
     st.markdown("---")
     
-    # [자동 로그인] URL 파라미터 체크
+    # [자동 로그인] URL 파라미터 복구 로직
     if 'api_key' not in st.session_state:
         try:
             qp = st.query_params
@@ -157,7 +155,6 @@ with st.sidebar:
         if 'k' in qp:
             try:
                 k_val = qp['k'][0] if isinstance(qp['k'], list) else qp['k']
-                # 여기서 base64가 사용됩니다. (이제 에러 안 남)
                 restored_key = base64.b64decode(k_val).decode('utf-8')
                 
                 genai.configure(api_key=restored_key)
@@ -173,42 +170,26 @@ with st.sidebar:
                 except:
                     st.experimental_set_query_params()
 
-    # 로그인 화면
+    # ------------------------------------------------------------------
+    # [상태 A] 로그인이 안 된 경우 -> 로그인 폼 표시
+    # ------------------------------------------------------------------
     if 'api_key' not in st.session_state:
         with st.form(key='login_form'):
             st.markdown("<h4 style='color:white; margin-bottom:5px;'>🔐 Access Key</h4>", unsafe_allow_html=True)
-            api_key_input = st.text_input("Key", type="password", placeholder="API 키를 입력하세요", label_visibility="collapsed")
-            submit_button = st.form_submit_button(label="시스템 접속 (Login)")
+            
+            # [중요] key를 지정하여 콜백 함수에서 값을 읽을 수 있게 함
+            st.text_input("Key", type="password", placeholder="API 키를 입력하세요", label_visibility="collapsed", key="login_input_key")
+            
+            # [V72 핵심] on_click=try_login 추가 (클릭 즉시 실행)
+            submit_button = st.form_submit_button(label="시스템 접속 (Login)", on_click=try_login)
         
-        if submit_button:
-            if api_key_input:
-                # [키 세탁] 공백 제거
-                clean_key = "".join(api_key_input.split())
-                
-                st.session_state['api_key'] = clean_key 
-                try:
-                    genai.configure(api_key=clean_key)
-                    list(genai.list_models()) 
-                    
-                    # [키 저장] 여기서 base64 사용
-                    encoded_key = base64.b64encode(clean_key.encode()).decode()
-                    try:
-                        st.query_params['k'] = encoded_key
-                    except:
-                        st.experimental_set_query_params(k=encoded_key)
-                        
-                    st.success("✅ 접속 완료")
-                    time.sleep(0.5)
-                    st.rerun()
-                except Exception as e:
-                    if 'api_key' in st.session_state:
-                        del st.session_state['api_key']
-                    st.error(f"❌ 인증 실패: {e}")
-                    st.info("💡 공백이 제거된 키로 시도했습니다. 키 값을 다시 확인해주세요.")
-            else:
-                st.warning("⚠️ 키를 입력해주세요.")
+        # 콜백에서 발생한 에러가 있다면 표시
+        if 'login_error' in st.session_state and st.session_state['login_error']:
+            st.error(st.session_state['login_error'])
 
-    # 로그아웃 화면
+    # ------------------------------------------------------------------
+    # [상태 B] 로그인이 된 경우 -> 로그아웃 버튼 표시
+    # ------------------------------------------------------------------
     else:
         st.success("🟢 정상 가동 중")
         st.markdown("<br>", unsafe_allow_html=True)
@@ -221,7 +202,7 @@ with st.sidebar:
     st.markdown("<div style='color:white; text-align:center; font-size:12px; opacity:0.8;'>Audit AI Solution © 2025<br>Engine: Gemini 1.5 Pro</div>", unsafe_allow_html=True)
 
 # ==========================================
-# 4. 🎅 크리스마스 작별 애니메이션
+# 5. 🎅 크리스마스 작별 애니메이션
 # ==========================================
 if 'logout_anim' in st.session_state and st.session_state['logout_anim']:
     st.markdown("""
@@ -234,7 +215,7 @@ if 'logout_anim' in st.session_state and st.session_state['logout_anim']:
     
     time.sleep(3.5)
     
-    # URL 파라미터 삭제
+    # 로그아웃 시 URL 정보 삭제
     try:
         st.query_params.clear()
     except:
@@ -244,7 +225,7 @@ if 'logout_anim' in st.session_state and st.session_state['logout_anim']:
     st.rerun()
 
 # ==========================================
-# 5. 핵심 기능 함수 (안정성 강화)
+# 6. 핵심 기능 함수 (안정성 강화)
 # ==========================================
 def get_model():
     if 'api_key' in st.session_state:
@@ -322,7 +303,7 @@ def download_and_upload_youtube_audio(url):
         if not audio_files: return None
         audio_path = audio_files[0]
         
-        st.toast("AI에게 데이터를 전달합니다...", icon="🤖")
+        st.toast("🤖 AI에게 데이터를 전달합니다...", icon="📂")
         myfile = genai.upload_file(audio_path)
         
         with st.spinner('🎧 유튜브 콘텐츠를 심층 분석 중입니다...'):
@@ -358,7 +339,7 @@ def get_web_content(url):
     except Exception as e: return f"[오류] {e}"
 
 # ==========================================
-# 6. 메인 화면 구성
+# 7. 메인 화면 구성
 # ==========================================
 
 st.markdown("<h1 style='text-align: center; color: #2C3E50;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
@@ -387,7 +368,7 @@ with tab1:
                 check_btn = st.form_submit_button("인증 확인")
                 
                 if check_btn:
-                    # 'ktmos0402!'의 해시값
+                    # 'ktmos0402!' 해시 분할 검증
                     k1 = "kt"
                     k2 = "mos"
                     k3 = "0402"
