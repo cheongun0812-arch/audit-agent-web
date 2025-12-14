@@ -85,19 +85,54 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 3. 사이드바 (로그인 & 로그아웃)
+# 3. 사이드바 (로그인 & 로그아웃 & 자동복구)
 # ==========================================
 with st.sidebar:
     st.markdown("### 🏛️ Control Center")
     st.markdown("---")
     
+    # [기능 추가] 새로고침 시 URL에서 키 복구 시도
+    if 'api_key' not in st.session_state:
+        # URL 쿼리 파라미터 확인 (st.query_params 사용 - Streamlit 최신 버전)
+        # 구버전 호환성을 위해 try-except 처리
+        try:
+            qp = st.query_params
+        except:
+            qp = st.experimental_get_query_params()
+
+        # URL에 저장된 키('k')가 있다면 복구 시도
+        if 'k' in qp:
+            try:
+                # 저장된 키가 리스트인 경우와 문자열인 경우 모두 처리
+                k_val = qp['k'][0] if isinstance(qp['k'], list) else qp['k']
+                
+                # Base64 디코딩
+                restored_key = base64.b64decode(k_val).decode('utf-8')
+                
+                # 유효성 검사
+                genai.configure(api_key=restored_key)
+                list(genai.list_models())
+                
+                # 세션 복구
+                st.session_state['api_key'] = restored_key
+                st.toast("🔄 이전 접속 상태를 복구했습니다.", icon="✨")
+                time.sleep(0.1)
+                st.rerun()
+            except:
+                # 복구 실패 시 URL 청소
+                try:
+                    st.query_params.clear()
+                except:
+                    st.experimental_set_query_params()
+
+    # ---------------------------------------------------------
+
     if 'api_key' not in st.session_state:
         with st.form(key='login_form'):
             st.markdown("<h4 style='color:white; margin-bottom:5px;'>🔐 Access Key</h4>", unsafe_allow_html=True)
             api_key_input = st.text_input("Key", type="password", placeholder="API 키를 입력하세요", label_visibility="collapsed")
             submit_button = st.form_submit_button(label="시스템 접속 (Login)")
         
-        # 로그인 로직 (한 번 클릭으로 접속)
         if submit_button:
             if api_key_input:
                 clean_key = api_key_input.strip()
@@ -105,6 +140,14 @@ with st.sidebar:
                 try:
                     genai.configure(api_key=clean_key)
                     list(genai.list_models()) 
+                    
+                    # [기능 추가] 로그인 성공 시 URL에 키 암호화 저장
+                    encoded_key = base64.b64encode(clean_key.encode()).decode()
+                    try:
+                        st.query_params['k'] = encoded_key
+                    except:
+                        st.experimental_set_query_params(k=encoded_key)
+                        
                     st.success("✅ 접속 완료")
                     time.sleep(0.5)
                     st.rerun()
@@ -139,6 +182,13 @@ if 'logout_anim' in st.session_state and st.session_state['logout_anim']:
 """, unsafe_allow_html=True)
     
     time.sleep(3.5)
+    
+    # [수정] 로그아웃 시 URL 파라미터도 함께 삭제
+    try:
+        st.query_params.clear()
+    except:
+        st.experimental_set_query_params()
+        
     st.session_state.clear()
     st.rerun()
 
@@ -172,27 +222,20 @@ def read_file(uploaded_file):
     except: return None
     return content
 
-# [UX 수정] 파일 업로드 안정성 강화 (대기 로직 포함)
 def process_media_file(uploaded_file):
     try:
-        # 1. 임시 파일 저장 (확장자 유지)
         with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp_file:
             tmp_file.write(uploaded_file.getvalue())
             tmp_path = tmp_file.name
         
-        # 2. 안심 멘트
         st.toast("🤖 AI에게 분석 자료를 전달하고 있습니다...", icon="📂")
-        
-        # 3. 업로드
         myfile = genai.upload_file(tmp_path)
         
-        # 4. 대기 멘트 (Processing -> Active)
         with st.spinner('🎧 AI가 오디오/비디오 데이터를 분석하고 있습니다... (잠시만 기다려주세요)'):
             while myfile.state.name == "PROCESSING":
                 time.sleep(2)
                 myfile = genai.get_file(myfile.name)
         
-        # 임시 파일 삭제
         os.remove(tmp_path)
         
         if myfile.state.name == "FAILED":
@@ -280,7 +323,7 @@ with tab1:
     option = st.selectbox("작업 유형 선택", 
         ("법률 리스크 정밀 검토", "감사 보고서 검증", "오타 수정 및 문구 교정", "기안문/공문 초안 생성"))
     
-    # 🔒 [수정] 감사실 보안 로직 (해시 오류 수정)
+    # 🔒 감사실 보안 로직
     is_authenticated = True 
     
     if option == "감사 보고서 검증":
@@ -293,14 +336,13 @@ with tab1:
                 check_btn = st.form_submit_button("인증 확인")
                 
                 if check_btn:
-                    # [핵심] 암호를 분할하여 코드 난독화 (ktmos0402!)
+                    # 'ktmos0402!'의 해시값 (안전 분할)
                     k1 = "kt"
                     k2 = "mos"
                     k3 = "0402"
                     k4 = "!"
                     real_key = k1 + k2 + k3 + k4
                     
-                    # 입력값과 조합된 키를 해시값으로 비교 (안전)
                     if hashlib.sha256(pass_input.encode()).hexdigest() == hashlib.sha256(real_key.encode()).hexdigest():
                         st.session_state['audit_verified'] = True
                         st.success("🔓 인증되었습니다.")
