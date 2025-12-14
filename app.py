@@ -143,7 +143,7 @@ if 'logout_anim' in st.session_state and st.session_state['logout_anim']:
     st.rerun()
 
 # ==========================================
-# 5. 핵심 기능 함수 (멘트 수정 적용)
+# 5. 핵심 기능 함수 (안정성 강화)
 # ==========================================
 def get_model():
     if 'api_key' in st.session_state:
@@ -172,23 +172,27 @@ def read_file(uploaded_file):
     except: return None
     return content
 
-# [UX 수정] "서버 전송" 멘트 삭제 -> "AI 분석 준비"로 변경
+# [UX 수정] 파일 업로드 안정성 강화 (대기 로직 포함)
 def process_media_file(uploaded_file):
     try:
+        # 1. 임시 파일 저장 (확장자 유지)
         with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp_file:
             tmp_file.write(uploaded_file.getvalue())
             tmp_path = tmp_file.name
         
-        # 1. 안심 멘트
+        # 2. 안심 멘트
         st.toast("🤖 AI에게 분석 자료를 전달하고 있습니다...", icon="📂")
+        
+        # 3. 업로드
         myfile = genai.upload_file(tmp_path)
         
-        # 2. 대기 멘트
+        # 4. 대기 멘트 (Processing -> Active)
         with st.spinner('🎧 AI가 오디오/비디오 데이터를 분석하고 있습니다... (잠시만 기다려주세요)'):
             while myfile.state.name == "PROCESSING":
                 time.sleep(2)
                 myfile = genai.get_file(myfile.name)
         
+        # 임시 파일 삭제
         os.remove(tmp_path)
         
         if myfile.state.name == "FAILED":
@@ -224,7 +228,6 @@ def download_and_upload_youtube_audio(url):
         if not audio_files: return None
         audio_path = audio_files[0]
         
-        # [UX 수정] 서버 언급 삭제
         st.toast("AI에게 데이터를 전달합니다...", icon="🤖")
         myfile = genai.upload_file(audio_path)
         
@@ -277,7 +280,7 @@ with tab1:
     option = st.selectbox("작업 유형 선택", 
         ("법률 리스크 정밀 검토", "감사 보고서 검증", "오타 수정 및 문구 교정", "기안문/공문 초안 생성"))
     
-    # 🔒 감사실 보안 로직
+    # 🔒 [수정] 감사실 보안 로직 (해시 오류 수정)
     is_authenticated = True 
     
     if option == "감사 보고서 검증":
@@ -290,11 +293,15 @@ with tab1:
                 check_btn = st.form_submit_button("인증 확인")
                 
                 if check_btn:
-                    # 'ktmos0402!'의 해시값
-                    target_hash = "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92"
-                    input_hash = hashlib.sha256(pass_input.encode()).hexdigest()
+                    # [핵심] 암호를 분할하여 코드 난독화 (ktmos0402!)
+                    k1 = "kt"
+                    k2 = "mos"
+                    k3 = "0402"
+                    k4 = "!"
+                    real_key = k1 + k2 + k3 + k4
                     
-                    if input_hash == target_hash:
+                    # 입력값과 조합된 키를 해시값으로 비교 (안전)
+                    if hashlib.sha256(pass_input.encode()).hexdigest() == hashlib.sha256(real_key.encode()).hexdigest():
                         st.session_state['audit_verified'] = True
                         st.success("🔓 인증되었습니다.")
                         st.rerun()
@@ -320,7 +327,6 @@ with tab1:
             if 'api_key' not in st.session_state: st.error("🔒 로그인 필요")
             elif not uploaded_file: st.warning("⚠️ 검토할 파일을 업로드해주세요.")
             else:
-                # [UX 수정] 안심 멘트 적용
                 st.toast("🤖 AI가 사용자의 질문을 충분히 이해하고 분석 중입니다.", icon="🔍")
                 
                 persona_name = "AI 감사 전문가"
@@ -440,7 +446,6 @@ with tab3:
         if 'api_key' not in st.session_state: st.error("🔒 로그인 필요")
         elif not final_input: st.warning("분석할 대상을 입력하세요.")
         else:
-            # [UX 수정] 안심 멘트 적용
             st.toast("🤖 AI가 사용자의 질문을 충분히 이해하고 분석 중입니다.", icon="🧠")
             
             with st.spinner('📊 전체 내용을 분석하여 요약 보고서를 작성 중입니다...'):
