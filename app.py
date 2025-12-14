@@ -32,73 +32,56 @@ st.set_page_config(
 # ==========================================
 st.markdown("""
     <style>
-    /* 1. 기본 배경 및 폰트 */
-    .stApp { background-color: #F4F6F9 !important; }
-    * { font-family: 'Pretendard', sans-serif !important; }
-
-    /* 2. 사이드바 */
-    [data-testid="stSidebar"] { background-color: #2C3E50 !important; }
+    .stApp { background-color: #F4F6F9; }
+    [data-testid="stSidebar"] { background-color: #2C3E50; }
     [data-testid="stSidebar"] * { color: #FFFFFF !important; }
-
-    /* 3. 입력창 디자인 (터치 시 흰색 박스/글씨 안보임 해결) */
-    input.stTextInput, textarea.stTextArea {
-        background-color: #FFFFFF !important;
-        color: #000000 !important; 
-        -webkit-text-fill-color: #000000 !important;
-        caret-color: #000000 !important;
-        border: 1px solid #BDC3C7 !important;
-    }
-    input.stTextInput:focus, textarea.stTextArea:focus {
+    
+    .stTextInput input, .stTextArea textarea {
         background-color: #FFFFFF !important;
         color: #000000 !important;
         -webkit-text-fill-color: #000000 !important;
-        border-color: #2980B9 !important;
+        border: 1px solid #BDC3C7 !important;
     }
-    ::placeholder {
-        color: #666666 !important;
-        -webkit-text-fill-color: #666666 !important;
-        opacity: 1 !important;
-    }
-
-    /* 4. 버튼 디자인 */
+    
     .stButton > button {
         background: linear-gradient(to right, #2980B9, #2C3E50) !important;
         color: #FFFFFF !important;
-        -webkit-text-fill-color: #FFFFFF !important;
         border: none !important;
         font-weight: bold !important;
     }
 
-    /* 5. 상단 메뉴 버튼 (글씨 투명화 성공 코드) */
+    /* 상단 메뉴 버튼 (책갈피) */
     [data-testid="stSidebarCollapsedControl"] {
         color: transparent !important;
         background-color: #FFFFFF !important;
         border-radius: 0 10px 10px 0;
         border: 1px solid #ddd;
-        width: 40px !important;
-        height: 40px !important;
+        width: 40px; height: 40px;
         z-index: 99999;
     }
     [data-testid="stSidebarCollapsedControl"]::after {
         content: "☰";
-        color: #2C3E50 !important;
+        color: #333;
         font-size: 24px;
         font-weight: bold;
         position: absolute;
+        top: 5px; left: 10px;
     }
     
-    /* 6. 크리스마스 애니메이션 스타일 */
-    .snow-bg {
-        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-        background: rgba(0, 0, 0, 0.9); z-index: 999999;
-        display: flex; flex-direction: column; justify-content: center; align-items: center;
-        text-align: center; color: white !important;
-        pointer-events: none;
-    }
-    
-    /* 7. 채팅 메시지 박스 */
     [data-testid="stChatMessage"] { background-color: #FFFFFF; border: 1px solid #eee; }
     [data-testid="stChatMessage"][data-testid="user"] { background-color: #E3F2FD; }
+
+    /* 🎄 크리스마스 로그아웃 버튼 스타일 */
+    .logout-btn {
+        border: 2px solid #FF5252 !important;
+        background: transparent !important;
+        color: #FF5252 !important;
+        border-radius: 20px !important;
+    }
+    .logout-btn:hover {
+        background-color: #FF5252 !important;
+        color: white !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
