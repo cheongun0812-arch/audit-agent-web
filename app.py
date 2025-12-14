@@ -70,17 +70,73 @@ st.markdown("""
     [data-testid="stChatMessage"] { background-color: #FFFFFF; border: 1px solid #eee; }
     [data-testid="stChatMessage"][data-testid="user"] { background-color: #E3F2FD; }
 
-    /* 🎄 크리스마스 로그아웃 버튼 스타일 */
-    .logout-btn {
-        border: 2px solid #FF5252 !important;
-        background: transparent !important;
-        color: #FF5252 !important;
-        border-radius: 20px !important;
+    /* 1. 기본 배경 및 폰트 */
+    .stApp { background-color: #F4F6F9 !important; }
+    * { font-family: 'Pretendard', sans-serif !important; }
+
+    /* 2. 사이드바 */
+    [data-testid="stSidebar"] { background-color: #2C3E50 !important; }
+    [data-testid="stSidebar"] * { color: #FFFFFF !important; }
+
+    /* 3. 입력창 디자인 (터치 시 흰색 박스/글씨 안보임 해결) */
+    input.stTextInput, textarea.stTextArea {
+        background-color: #FFFFFF !important;
+        color: #000000 !important; 
+        -webkit-text-fill-color: #000000 !important;
+        caret-color: #000000 !important;
+        border: 1px solid #BDC3C7 !important;
     }
-    .logout-btn:hover {
-        background-color: #FF5252 !important;
-        color: white !important;
+    input.stTextInput:focus, textarea.stTextArea:focus {
+        background-color: #FFFFFF !important;
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+        border-color: #2980B9 !important;
     }
+    ::placeholder {
+        color: #666666 !important;
+        -webkit-text-fill-color: #666666 !important;
+        opacity: 1 !important;
+    }
+
+    /* 4. 버튼 디자인 */
+    .stButton > button {
+        background: linear-gradient(to right, #2980B9, #2C3E50) !important;
+        color: #FFFFFF !important;
+        -webkit-text-fill-color: #FFFFFF !important;
+        border: none !important;
+        font-weight: bold !important;
+    }
+
+    /* 5. 상단 메뉴 버튼 (글씨 투명화 성공 코드) */
+    [data-testid="stSidebarCollapsedControl"] {
+        color: transparent !important;
+        background-color: #FFFFFF !important;
+        border-radius: 0 10px 10px 0;
+        border: 1px solid #ddd;
+        width: 40px !important;
+        height: 40px !important;
+        z-index: 99999;
+    }
+    [data-testid="stSidebarCollapsedControl"]::after {
+        content: "☰";
+        color: #2C3E50 !important;
+        font-size: 24px;
+        font-weight: bold;
+        position: absolute;
+    }
+    
+    /* 6. 크리스마스 애니메이션 스타일 */
+    .snow-bg {
+        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+        background: rgba(0, 0, 0, 0.9); z-index: 999999;
+        display: flex; flex-direction: column; justify-content: center; align-items: center;
+        text-align: center; color: white !important;
+        pointer-events: none;
+    }
+    
+    /* 7. 채팅 메시지 박스 */
+    [data-testid="stChatMessage"] { background-color: #FFFFFF; border: 1px solid #eee; }
+    [data-testid="stChatMessage"][data-testid="user"] { background-color: #E3F2FD; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -101,9 +157,9 @@ with st.sidebar:
         if 'k' in qp:
             try:
                 k_val = qp['k'][0] if isinstance(qp['k'], list) else qp['k']
+                # 여기서 base64가 사용됩니다. (이제 에러 안 남)
                 restored_key = base64.b64decode(k_val).decode('utf-8')
                 
-                # 유효성 재검증
                 genai.configure(api_key=restored_key)
                 list(genai.list_models())
                 
@@ -112,7 +168,6 @@ with st.sidebar:
                 time.sleep(0.1)
                 st.rerun()
             except:
-                # 복구 실패 시 URL 파라미터 삭제
                 try:
                     st.query_params.clear()
                 except:
@@ -127,20 +182,15 @@ with st.sidebar:
         
         if submit_button:
             if api_key_input:
-                # [핵심 수정] 키 입력값 강력 세탁 (공백 제거)
-                # strip() 만으로는 중간 공백이나 특수 줄바꿈이 안 지워질 수 있음
+                # [키 세탁] 공백 제거
                 clean_key = "".join(api_key_input.split())
                 
-                # 일단 세션에 저장
                 st.session_state['api_key'] = clean_key 
-                
                 try:
-                    # 설정 및 검증 시도
                     genai.configure(api_key=clean_key)
-                    # 실제 모델 목록을 가져와서 키가 진짜인지 확인
                     list(genai.list_models()) 
                     
-                    # 성공 시 URL에 저장 (자동 로그인용)
+                    # [키 저장] 여기서 base64 사용
                     encoded_key = base64.b64encode(clean_key.encode()).decode()
                     try:
                         st.query_params['k'] = encoded_key
@@ -150,15 +200,11 @@ with st.sidebar:
                     st.success("✅ 접속 완료")
                     time.sleep(0.5)
                     st.rerun()
-                    
                 except Exception as e:
-                    # 실패 시 세션 삭제
                     if 'api_key' in st.session_state:
                         del st.session_state['api_key']
-                    
-                    # [핵심 수정] 구체적인 에러 원인 출력
                     st.error(f"❌ 인증 실패: {e}")
-                    st.info("💡 팁: API 키를 새로 발급받아 보세요. (Google AI Studio)")
+                    st.info("💡 공백이 제거된 키로 시도했습니다. 키 값을 다시 확인해주세요.")
             else:
                 st.warning("⚠️ 키를 입력해주세요.")
 
@@ -188,7 +234,7 @@ if 'logout_anim' in st.session_state and st.session_state['logout_anim']:
     
     time.sleep(3.5)
     
-    # 로그아웃 시 URL 정보까지 싹 지움
+    # URL 파라미터 삭제
     try:
         st.query_params.clear()
     except:
@@ -341,7 +387,7 @@ with tab1:
                 check_btn = st.form_submit_button("인증 확인")
                 
                 if check_btn:
-                    # 'ktmos0402!'의 해시값 (분할 검증)
+                    # 'ktmos0402!'의 해시값
                     k1 = "kt"
                     k2 = "mos"
                     k3 = "0402"
