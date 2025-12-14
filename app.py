@@ -91,42 +91,34 @@ with st.sidebar:
     st.markdown("### 🏛️ Control Center")
     st.markdown("---")
     
-    # [기능 추가] 새로고침 시 URL에서 키 복구 시도
+    # [자동 로그인] URL 파라미터 체크
     if 'api_key' not in st.session_state:
-        # URL 쿼리 파라미터 확인 (st.query_params 사용 - Streamlit 최신 버전)
-        # 구버전 호환성을 위해 try-except 처리
         try:
             qp = st.query_params
         except:
             qp = st.experimental_get_query_params()
 
-        # URL에 저장된 키('k')가 있다면 복구 시도
         if 'k' in qp:
             try:
-                # 저장된 키가 리스트인 경우와 문자열인 경우 모두 처리
                 k_val = qp['k'][0] if isinstance(qp['k'], list) else qp['k']
-                
-                # Base64 디코딩
                 restored_key = base64.b64decode(k_val).decode('utf-8')
                 
-                # 유효성 검사
+                # 유효성 재검증
                 genai.configure(api_key=restored_key)
                 list(genai.list_models())
                 
-                # 세션 복구
                 st.session_state['api_key'] = restored_key
-                st.toast("🔄 이전 접속 상태를 복구했습니다.", icon="✨")
+                st.toast("🔄 이전 세션이 복구되었습니다.", icon="✨")
                 time.sleep(0.1)
                 st.rerun()
             except:
-                # 복구 실패 시 URL 청소
+                # 복구 실패 시 URL 파라미터 삭제
                 try:
                     st.query_params.clear()
                 except:
                     st.experimental_set_query_params()
 
-    # ---------------------------------------------------------
-
+    # 로그인 화면
     if 'api_key' not in st.session_state:
         with st.form(key='login_form'):
             st.markdown("<h4 style='color:white; margin-bottom:5px;'>🔐 Access Key</h4>", unsafe_allow_html=True)
@@ -135,13 +127,20 @@ with st.sidebar:
         
         if submit_button:
             if api_key_input:
-                clean_key = api_key_input.strip()
+                # [핵심 수정] 키 입력값 강력 세탁 (공백 제거)
+                # strip() 만으로는 중간 공백이나 특수 줄바꿈이 안 지워질 수 있음
+                clean_key = "".join(api_key_input.split())
+                
+                # 일단 세션에 저장
                 st.session_state['api_key'] = clean_key 
+                
                 try:
+                    # 설정 및 검증 시도
                     genai.configure(api_key=clean_key)
+                    # 실제 모델 목록을 가져와서 키가 진짜인지 확인
                     list(genai.list_models()) 
                     
-                    # [기능 추가] 로그인 성공 시 URL에 키 암호화 저장
+                    # 성공 시 URL에 저장 (자동 로그인용)
                     encoded_key = base64.b64encode(clean_key.encode()).decode()
                     try:
                         st.query_params['k'] = encoded_key
@@ -151,13 +150,19 @@ with st.sidebar:
                     st.success("✅ 접속 완료")
                     time.sleep(0.5)
                     st.rerun()
+                    
                 except Exception as e:
+                    # 실패 시 세션 삭제
                     if 'api_key' in st.session_state:
                         del st.session_state['api_key']
-                    st.error("❌ 유효하지 않은 키입니다.")
+                    
+                    # [핵심 수정] 구체적인 에러 원인 출력
+                    st.error(f"❌ 인증 실패: {e}")
+                    st.info("💡 팁: API 키를 새로 발급받아 보세요. (Google AI Studio)")
             else:
                 st.warning("⚠️ 키를 입력해주세요.")
 
+    # 로그아웃 화면
     else:
         st.success("🟢 정상 가동 중")
         st.markdown("<br>", unsafe_allow_html=True)
@@ -183,7 +188,7 @@ if 'logout_anim' in st.session_state and st.session_state['logout_anim']:
     
     time.sleep(3.5)
     
-    # [수정] 로그아웃 시 URL 파라미터도 함께 삭제
+    # 로그아웃 시 URL 정보까지 싹 지움
     try:
         st.query_params.clear()
     except:
@@ -336,7 +341,7 @@ with tab1:
                 check_btn = st.form_submit_button("인증 확인")
                 
                 if check_btn:
-                    # 'ktmos0402!'의 해시값 (안전 분할)
+                    # 'ktmos0402!'의 해시값 (분할 검증)
                     k1 = "kt"
                     k2 = "mos"
                     k3 = "0402"
