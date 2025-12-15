@@ -19,29 +19,26 @@ except ImportError:
     yt_dlp = None
 
 # ==========================================
-# 1. 페이지 설정 (핵심 수정: 사이드바 강제 확장)
+# 1. 페이지 설정 (사이드바 기본 열림 설정)
 # ==========================================
 st.set_page_config(
     page_title="AUDIT AI Agent",
     page_icon="🛡️",
     layout="centered",
-    initial_sidebar_state="expanded" # [🚨핵심] 시작하자마자 사이드바가 열립니다!
+    initial_sidebar_state="expanded" # 시작 시 사이드바 열림
 )
 
 # ==========================================
-# 2. 🎨 디자인 테마 (사이드바 CSS 충돌 제거)
+# 2. 🎨 디자인 테마 (핀셋 보안 + 사이드바 복구 + 탭 강화)
 # ==========================================
 st.markdown("""
     <style>
-    /* 1. 기본 배경 */
+    /* 1. 기본 배경 및 폰트 */
     .stApp { background-color: #F4F6F9 !important; }
     * { font-family: 'Pretendard', sans-serif !important; }
 
-    /* 2. 사이드바 디자인 (충돌나던 display:block 제거함) */
-    [data-testid="stSidebar"] { 
-        background-color: #2C3E50 !important; 
-    }
-    /* 사이드바 내부 텍스트 색상 */
+    /* 2. 사이드바 디자인 */
+    [data-testid="stSidebar"] { background-color: #2C3E50 !important; }
     [data-testid="stSidebar"] * { color: #FFFFFF !important; }
 
     /* 3. 입력창 디자인 */
@@ -72,10 +69,10 @@ st.markdown("""
         font-weight: bold !important;
     }
 
-    /* 5. 상단 메뉴 버튼 (Keyboard 텍스트 해결) */
+    /* 5. [핵심] 상단 메뉴 버튼 (Keyboard 텍스트 제거 + 버튼 보임) */
     [data-testid="stSidebarCollapsedControl"] {
-        visibility: visible !important;
-        color: transparent !important;
+        visibility: visible !important; /* 버튼 자체는 보여야 함 */
+        color: transparent !important; /* 글씨만 투명하게 */
         background-color: #FFFFFF !important;
         border-radius: 0 10px 10px 0;
         border: 1px solid #ddd;
@@ -83,6 +80,7 @@ st.markdown("""
         height: 40px !important;
         z-index: 9999999 !important;
     }
+    /* ☰ 아이콘 덮어쓰기 */
     [data-testid="stSidebarCollapsedControl"]::after {
         content: "☰";
         visibility: visible !important;
@@ -106,46 +104,42 @@ st.markdown("""
     [data-testid="stChatMessage"] { background-color: #FFFFFF; border: 1px solid #eee; }
     [data-testid="stChatMessage"][data-testid="user"] { background-color: #E3F2FD; }
 
-    /* 8. 탭 메뉴 폰트 확대 */
-    .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {
+    /* 🚨 8. [탭 메뉴 강화] 폰트 20px + Bold */
+    button[data-baseweb="tab"] div p {
         font-size: 20px !important;
-        font-weight: 800 !important;
+        font-weight: 800 !important; /* Extra Bold */
         color: #444444 !important;
     }
-    .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] [data-testid="stMarkdownContainer"] p {
+    /* 선택된 탭 색상 */
+    button[data-baseweb="tab"][aria-selected="true"] div p {
         color: #2980B9 !important;
     }
 
-    /* 9. [보안] 개인정보 요소 숨김 (헤더는 살리고 내용만 숨김) */
-    header[data-testid="stHeader"] {
-        background: transparent !important;
-    }
+    /* 🚨 9. [보안] 핀셋 숨김 기술 (사이드바는 살리고 정보만 지움) */
     
-    /* 우측 툴바(GitHub, 햄버거 등) 숨김 */
-    [data-testid="stToolbar"] {
-        visibility: hidden !important;
-        display: none !important;
-    }
-    /* 하단 Footer 숨김 */
-    footer {
-        visibility: hidden !important;
-        display: none !important;
-    }
-    /* Manage App 버튼 숨김 */
-    .stDeployButton {
-        visibility: hidden !important;
-        display: none !important;
-    }
-    /* 데코레이션 바 숨김 */
-    [data-testid="stDecoration"] {
-        visibility: hidden !important;
-        display: none !important;
-    }
+    /* (1) Manage App 버튼 숨김 */
+    .stDeployButton { display: none !important; }
+    
+    /* (2) 우측 상단 툴바(GitHub, 점3개 메뉴) 숨김 */
+    [data-testid="stToolbar"] { display: none !important; }
+    
+    /* (3) 상단 알록달록 데코레이션 라인 숨김 */
+    [data-testid="stDecoration"] { display: none !important; }
+    
+    /* (4) 하단 Footer (Made with Streamlit) 숨김 */
+    footer { display: none !important; }
+    
+    /* (5) 햄버거 메뉴 숨김 */
+    #MainMenu { display: none !important; }
+    
+    /* (6) 헤더 배경 투명화 (공간은 유지해서 사이드바 버튼이 살도록 함) */
+    header { background: transparent !important; }
+
     </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 3. 로그인 처리 로직 (콜백)
+# 3. 로그인 처리 로직 (콜백 함수)
 # ==========================================
 def try_login():
     if 'login_input_key' in st.session_state:
