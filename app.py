@@ -82,6 +82,23 @@ st.markdown("""
         background-color: #FF5252 !important;
         color: white !important;
     }
+   /*  크리스마스 애니메이션 스타일 */
+    .snow-bg {
+        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+        background: rgba(0, 0, 0, 0.9); z-index: 999999;
+        display: flex; flex-direction: column; justify-content: center; align-items: center;
+        text-align: center; color: white !important;
+        pointer-events: none;
+    }
+   /* 탭 메뉴 폰트 확대 (20px Bold) */
+    button[data-baseweb="tab"] div p {
+        font-size: 20px !important;
+        font-weight: 800 !important;
+        color: #444444 !important;
+    }
+    button[data-baseweb="tab"][aria-selected="true"] div p {
+        color: #2980B9 !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
