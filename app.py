@@ -461,4 +461,95 @@ with tab2:
     if submit_chat and user_input:
         if 'api_key' not in st.session_state: st.error("🔒 로그인 필요")
         else:
-            st
+            st.session_state.messages.append({"role": "user", "content": user_input})
+            with st.spinner("🤖 Audit AI 에이전트가 답변을 생성하고 있습니다..."):
+                try:
+                    genai.configure(api_key=st.session_state['api_key'])
+                    context = ""
+                    if ref_content: context += f"[참고자료]\n{ref_content}\n"
+                    if uploaded_file: 
+                        c = read_file(uploaded_file)
+                        if c: context += f"[검토대상파일]\n{c}\n"
+                    
+                    full_prompt = f"""당신은 'AI 파인더'입니다. 친절하고 명확하게 답변하세요.
+                    인사말: "안녕하세요. 여러분의 궁금증을 해소해 드릴 'AI 파인더'입니다." (필요시 사용)
+                    [컨텍스트] {context}
+                    [질문] {user_input}"""
+                    
+                    model = get_model()
+                    response = model.generate_content(full_prompt)
+                    st.session_state.messages.append({"role": "assistant", "content": response.text})
+                except Exception as e: st.error(f"오류: {e}")
+
+    st.markdown("---")
+    msgs = st.session_state.messages
+    if len(msgs) >= 2:
+        for i in range(len(msgs) - 1, 0, -2):
+            asst_msg = msgs[i]
+            user_msg = msgs[i-1]
+            with st.chat_message("user", avatar="👤"): st.write(user_msg['content'])
+            with st.chat_message("assistant", avatar="🛡️"): st.markdown(asst_msg['content'])
+            st.divider()
+
+# --- Tab 3: 스마트 요약 ---
+with tab3:
+    st.markdown("### 📰 스마트 요약 & 인사이트")
+    
+    summary_type = st.radio("입력 방식 선택", ["🌐 URL 입력", "📁 미디어 파일 업로드", "✍️ 텍스트 입력"])
+    
+    final_input = None
+    is_multimodal = False
+
+    if "URL" in summary_type:
+        target_url = st.text_input("🔗 URL을 붙여넣으세요")
+        if target_url:
+            if "youtu" in target_url:
+                with st.spinner("📺 유튜브 자막을 확인하고 있습니다..."):
+                    text_data = get_youtube_transcript(target_url)
+                    if text_data:
+                        st.success("✅ 자막 확보 완료")
+                        final_input = text_data
+                    else:
+                        st.warning("⚠️ 자막 없음 -> 오디오 직접 분석을 시도합니다.")
+                        audio_file = download_and_upload_youtube_audio(target_url)
+                        if audio_file:
+                            final_input = audio_file
+                            is_multimodal = True
+            else:
+                with st.spinner("🌐 웹페이지 콘텐츠를 가져오고 있습니다..."):
+                    final_input = get_web_content(target_url)
+
+    elif "미디어" in summary_type:
+        media_file = st.file_uploader("영상/음성 파일 (MP3, WAV, MP4, M4A)", type=['mp3', 'wav', 'mp4', 'm4a'])
+        if media_file:
+            final_input = process_media_file(media_file)
+            is_multimodal = True
+            if final_input:
+                st.success("✅ 파일 준비 완료! 요약 버튼을 눌러주세요.")
+
+    else:
+        final_input = st.text_area("내용을 직접 입력하세요", height=200)
+
+    if st.button("✨ 요약 시작", use_container_width=True):
+        if 'api_key' not in st.session_state: st.error("🔒 로그인 필요")
+        elif not final_input: st.warning("분석할 대상을 입력하세요.")
+        else:
+            st.toast("🤖 AI가 사용자의 질문을 충분히 이해하고 분석 중입니다.", icon="🧠")
+            
+            with st.spinner('📊 전체 내용을 분석하여 요약 보고서를 작성 중입니다...'):
+                try:
+                    prompt = """[역할] 스마트 정보 분석가
+[작업] 다음 내용을 분석하여 보고서 작성
+1. 핵심 요약 (Executive Summary)
+2. 상세 내용 (Key Details)
+3. 감사/리스크 인사이트 (Insights)"""
+                    model = get_model()
+                    
+                    if is_multimodal:
+                        response = model.generate_content([prompt, final_input])
+                    else: 
+                        response = model.generate_content(f"{prompt}\n\n{final_input[:30000]}")
+                        
+                    st.success("분석 완료")
+                    st.markdown(response.text)
+                except Exception as e: st.error(f"오류: {e}")
