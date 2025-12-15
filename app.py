@@ -228,23 +228,31 @@ def init_google_sheet_connection():
     except Exception as e:
         return None
 
-# [신규] 자율점검 결과 저장 함수
+# [수정됨] 중복 체크 기능이 추가된 저장 함수
 def save_audit_result(emp_id, name, dept, answer):
     client = init_google_sheet_connection()
     if client is None:
         return False, "구글 시트 연결 실패 (Secrets 설정을 확인하세요)"
     
     try:
-        # 시트 이름: Audit_Result_2026
+        # 시트 열기
         sheet = client.open("Audit_Result_2026").sheet1
         
-        # 한국 시간
+        # 1. 중복 체크 (가장 중요!)
+        # B열(사번)에 있는 모든 데이터를 가져옵니다.
+        existing_ids = sheet.col_values(2) 
+        
+        if emp_id in existing_ids:
+            # 이미 명단에 사번이 있다면 저장을 막습니다.
+            return False, "이미 참여하셨습니다. (중복 제출 불가)"
+            
+        # 2. 중복이 아니면 저장 진행
         korea_tz = pytz.timezone("Asia/Seoul")
         now = datetime.datetime.now(korea_tz).strftime("%Y-%m-%d %H:%M:%S")
         
-        # 행 추가
         sheet.append_row([now, emp_id, name, dept, answer, "완료"])
         return True, "저장 성공"
+        
     except Exception as e:
         return False, f"저장 오류: {e}"
 
@@ -605,6 +613,7 @@ with tab3:
                     st.markdown(response.text)
 
                 except Exception as e: st.error(f"오류: {e}")
+
 
 
 
