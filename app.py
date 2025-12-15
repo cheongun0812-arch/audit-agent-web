@@ -19,17 +19,16 @@ except ImportError:
     yt_dlp = None
 
 # ==========================================
-# 1. 페이지 설정 (사이드바 강제 확장 고정)
+# 1. 페이지 설정
 # ==========================================
 st.set_page_config(
     page_title="AUDIT AI Agent",
     page_icon="🛡️",
-    layout="centered",
-    initial_sidebar_state="expanded" # [🚨핵심] 앱 시작 시 무조건 로그인창(사이드바) 열림
+    layout="centered"
 )
 
 # ==========================================
-# 2. 🎨 디자인 테마 (현관문 복구 + 핀셋 보안)
+# 2. 🎨 디자인 테마 (검증된 V71 코드 100% 유지)
 # ==========================================
 st.markdown("""
     <style>
@@ -72,73 +71,7 @@ st.markdown("""
     [data-testid="stChatMessage"] { background-color: #FFFFFF; border: 1px solid #eee; }
     [data-testid="stChatMessage"][data-testid="user"] { background-color: #E3F2FD; }
 
-    /* 1. 기본 배경 및 폰트 */
-    .stApp { background-color: #F4F6F9 !important; }
-    * { font-family: 'Pretendard', sans-serif !important; }
-
-    /* 2. 사이드바 디자인 (무조건 보이게 설정) */
-    [data-testid="stSidebar"] { 
-        background-color: #2C3E50 !important; 
-        display: block !important;
-    }
-    [data-testid="stSidebar"] * { color: #FFFFFF !important; }
-
-    /* 3. 입력창 디자인 */
-    input.stTextInput, textarea.stTextArea {
-        background-color: #FFFFFF !important;
-        color: #000000 !important; 
-        -webkit-text-fill-color: #000000 !important;
-        caret-color: #000000 !important;
-        border: 1px solid #BDC3C7 !important;
-    }
-    input.stTextInput:focus, textarea.stTextArea:focus {
-        background-color: #FFFFFF !important;
-        color: #000000 !important;
-        border-color: #2980B9 !important;
-    }
-    ::placeholder {
-        color: #666666 !important;
-        -webkit-text-fill-color: #666666 !important;
-        opacity: 1 !important;
-    }
-
-    /* 4. 버튼 디자인 */
-    .stButton > button {
-        background: linear-gradient(to right, #2980B9, #2C3E50) !important;
-        color: #FFFFFF !important;
-        -webkit-text-fill-color: #FFFFFF !important;
-        border: none !important;
-        font-weight: bold !important;
-    }
-
-    /* 🚨 5. [현관문 복구] 상단 메뉴 버튼 강제 노출 */
-    /* 헤더가 가려져도 이 버튼만큼은 최상위(z-index)로 끌어올려 무조건 보이게 함 */
-    [data-testid="stSidebarCollapsedControl"] {
-        display: block !important;
-        visibility: visible !important;
-        color: transparent !important; /* 글씨만 투명 (keyboard... 제거용) */
-        background-color: #FFFFFF !important;
-        border-radius: 0 10px 10px 0;
-        border: 1px solid #ddd;
-        width: 40px !important;
-        height: 40px !important;
-        z-index: 9999999 !important; /* 화면 맨 위로 */
-        position: fixed;
-        top: 15px; /* 위치 고정 */
-        left: 0;
-    }
-    /* ☰ 아이콘 그리기 */
-    [data-testid="stSidebarCollapsedControl"]::after {
-        content: "☰";
-        visibility: visible !important;
-        color: #2C3E50 !important;
-        font-size: 24px !important;
-        font-weight: bold !important;
-        position: absolute;
-        top: 5px; left: 10px;
-    }
-    
-    /* 6. 크리스마스 애니메이션 스타일 */
+    /* 크리스마스 애니메이션 스타일 */
     .snow-bg {
         position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
         background: rgba(0, 0, 0, 0.9); z-index: 999999;
@@ -147,53 +80,44 @@ st.markdown("""
         pointer-events: none;
     }
     
-    /* 7. 채팅 메시지 박스 */
+    /* 채팅 메시지 박스 */
     [data-testid="stChatMessage"] { background-color: #FFFFFF; border: 1px solid #eee; }
     [data-testid="stChatMessage"][data-testid="user"] { background-color: #E3F2FD; }
 
-    /* 8. 탭 메뉴 폰트 확대 (20px Bold) */
-    button[data-baseweb="tab"] div p {
-        font-size: 20px !important;
-        font-weight: 800 !important;
-        color: #444444 !important;
+    /* 🚨 [신규] 탭 메뉴 폰트 크기 및 굵기 강화 */
+    button[data-baseweb="tab"] {
+        font-size: 20px !important; /* 폰트 크기 확대 */
+        font-weight: 800 !important; /* 글씨체 아주 굵게 (Bold) */
+        color: #444 !important;      /* 기본 색상 진하게 */
     }
-    button[data-baseweb="tab"][aria-selected="true"] div p {
-        color: #2980B9 !important;
+    /* 선택된 탭 강조 */
+    button[data-baseweb="tab"][aria-selected="true"] {
+        color: #2980B9 !important; /* 선택시 파란색 */
     }
 
-    /* 🚨 9. [보안 수정] 헤더는 살리고, 내부 개인정보만 핀셋 삭제 */
+    /* 🚨 [보안] 개인정보 노출 요소 숨김 (Manage app, GitHub 등) */
+    #MainMenu {visibility: hidden;}          /* 우측 상단 햄버거 메뉴 숨김 */
+    footer {visibility: hidden;}             /* 하단 Made with Streamlit 숨김 */
+    header {visibility: hidden;}             /* 상단 헤더 바 숨김 (데코레이션 바 포함) */
+    .stDeployButton {display:none;}          /* Manage app 버튼 숨김 */
+    [data-testid="stToolbar"] {visibility: hidden !important;} /* 툴바 숨김 */
+    [data-testid="stDecoration"] {visibility: hidden !important;} /* 상단 컬러바 숨김 */
+    [data-testid="stStatusWidget"] {visibility: hidden !important;} /* 상태 위젯 숨김 */
     
-    /* (1) 헤더 컨테이너: 보이게 하되 배경만 투명 (이래야 사이드바 버튼이 삼) */
-    header[data-testid="stHeader"] {
+    /* 헤더를 숨겨도 사이드바 열기 버튼은 보여야 함 */
+    [data-testid="stSidebarCollapsedControl"] {
         visibility: visible !important;
-        background: transparent !important;
     }
-
-    /* (2) Manage App 버튼 (ID 노출 주범) -> 삭제 */
-    .stDeployButton { display: none !important; }
-    
-    /* (3) 우측 상단 툴바 (GitHub, 점3개 메뉴) -> 삭제 */
-    [data-testid="stToolbar"] { display: none !important; }
-    
-    /* (4) 상단 알록달록 데코레이션 바 -> 삭제 */
-    [data-testid="stDecoration"] { display: none !important; }
-    
-    /* (5) 하단 Footer -> 삭제 */
-    footer { display: none !important; }
-    
-    /* (6) 햄버거 메뉴(우측 상단) -> 삭제 */
-    #MainMenu { display: none !important; }
-
     </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 3. 로그인 처리 로직 (콜백 함수)
+# 3. 로그인 처리 로직 (즉시 실행)
 # ==========================================
 def try_login():
     if 'login_input_key' in st.session_state:
         raw_key = st.session_state['login_input_key']
-        clean_key = "".join(raw_key.split()) # 공백 제거
+        clean_key = "".join(raw_key.split())
         
         if not clean_key:
             st.session_state['login_error'] = "⚠️ 키를 입력해주세요."
@@ -201,7 +125,7 @@ def try_login():
 
         try:
             genai.configure(api_key=clean_key)
-            list(genai.list_models()) # 검증
+            list(genai.list_models())
             
             st.session_state['api_key'] = clean_key
             st.session_state['login_error'] = None 
@@ -222,7 +146,6 @@ with st.sidebar:
     st.markdown("### 🏛️ Control Center")
     st.markdown("---")
     
-    # 자동 로그인 복구
     if 'api_key' not in st.session_state:
         try:
             qp = st.query_params
@@ -233,8 +156,10 @@ with st.sidebar:
             try:
                 k_val = qp['k'][0] if isinstance(qp['k'], list) else qp['k']
                 restored_key = base64.b64decode(k_val).decode('utf-8')
+                
                 genai.configure(api_key=restored_key)
                 list(genai.list_models())
+                
                 st.session_state['api_key'] = restored_key
                 st.toast("🔄 이전 세션이 복구되었습니다.", icon="✨")
                 time.sleep(0.1)
@@ -245,7 +170,6 @@ with st.sidebar:
                 except:
                     st.experimental_set_query_params()
 
-    # 로그인 전 (폼 표시)
     if 'api_key' not in st.session_state:
         with st.form(key='login_form'):
             st.markdown("<h4 style='color:white; margin-bottom:5px;'>🔐 Access Key</h4>", unsafe_allow_html=True)
@@ -255,7 +179,6 @@ with st.sidebar:
         if 'login_error' in st.session_state and st.session_state['login_error']:
             st.error(st.session_state['login_error'])
 
-    # 로그인 후 (로그아웃 버튼 표시)
     else:
         st.success("🟢 정상 가동 중")
         st.markdown("<br>", unsafe_allow_html=True)
@@ -593,4 +516,3 @@ with tab3:
                     st.success("분석 완료")
                     st.markdown(response.text)
                 except Exception as e: st.error(f"오류: {e}")
-
