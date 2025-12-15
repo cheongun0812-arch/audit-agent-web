@@ -8,4 +8,5 @@ requests
 yt-dlp
 gspread
 oauth2client
+pandas
 
