@@ -6,4 +6,6 @@ youtube-transcript-api
 beautifulsoup4
 requests
 yt-dlp
+gspread
+oauth2client
 
