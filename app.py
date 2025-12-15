@@ -71,52 +71,29 @@ st.markdown("""
     [data-testid="stChatMessage"] { background-color: #FFFFFF; border: 1px solid #eee; }
     [data-testid="stChatMessage"][data-testid="user"] { background-color: #E3F2FD; }
 
-    /* 크리스마스 애니메이션 스타일 */
-    .snow-bg {
-        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-        background: rgba(0, 0, 0, 0.9); z-index: 999999;
-        display: flex; flex-direction: column; justify-content: center; align-items: center;
-        text-align: center; color: white !important;
-        pointer-events: none;
+    /* 🎄 크리스마스 로그아웃 버튼 스타일 */
+    .logout-btn {
+        border: 2px solid #FF5252 !important;
+        background: transparent !important;
+        color: #FF5252 !important;
+        border-radius: 20px !important;
     }
-    
-    /* 채팅 메시지 박스 */
-    [data-testid="stChatMessage"] { background-color: #FFFFFF; border: 1px solid #eee; }
-    [data-testid="stChatMessage"][data-testid="user"] { background-color: #E3F2FD; }
-
-    /* 🚨 [신규] 탭 메뉴 폰트 크기 및 굵기 강화 */
-    button[data-baseweb="tab"] {
-        font-size: 20px !important; /* 폰트 크기 확대 */
-        font-weight: 800 !important; /* 글씨체 아주 굵게 (Bold) */
-        color: #444 !important;      /* 기본 색상 진하게 */
-    }
-    /* 선택된 탭 강조 */
-    button[data-baseweb="tab"][aria-selected="true"] {
-        color: #2980B9 !important; /* 선택시 파란색 */
-    }
-
-    /* 🚨 [보안] 개인정보 노출 요소 숨김 (Manage app, GitHub 등) */
-    #MainMenu {visibility: hidden;}          /* 우측 상단 햄버거 메뉴 숨김 */
-    footer {visibility: hidden;}             /* 하단 Made with Streamlit 숨김 */
-    header {visibility: hidden;}             /* 상단 헤더 바 숨김 (데코레이션 바 포함) */
-    .stDeployButton {display:none;}          /* Manage app 버튼 숨김 */
-    [data-testid="stToolbar"] {visibility: hidden !important;} /* 툴바 숨김 */
-    [data-testid="stDecoration"] {visibility: hidden !important;} /* 상단 컬러바 숨김 */
-    [data-testid="stStatusWidget"] {visibility: hidden !important;} /* 상태 위젯 숨김 */
-    
-    /* 헤더를 숨겨도 사이드바 열기 버튼은 보여야 함 */
-    [data-testid="stSidebarCollapsedControl"] {
-        visibility: visible !important;
+    .logout-btn:hover {
+        background-color: #FF5252 !important;
+        color: white !important;
     }
     </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 3. 로그인 처리 로직 (즉시 실행)
+# 3. 로그인 처리 로직 (콜백 함수) - [V72 핵심]
 # ==========================================
 def try_login():
+    """버튼 클릭 시 즉시 실행되는 로그인 검증 함수"""
+    # 세션에 저장된 input 값을 가져옴
     if 'login_input_key' in st.session_state:
         raw_key = st.session_state['login_input_key']
+        # 공백 제거 세탁
         clean_key = "".join(raw_key.split())
         
         if not clean_key:
@@ -124,12 +101,16 @@ def try_login():
             return
 
         try:
+            # 1. 키 설정
             genai.configure(api_key=clean_key)
+            # 2. 유효성 검사 (실제 통신)
             list(genai.list_models())
             
+            # 3. 성공 시: 메인 세션에 키 저장
             st.session_state['api_key'] = clean_key
-            st.session_state['login_error'] = None 
+            st.session_state['login_error'] = None # 에러 초기화
             
+            # 4. 자동 로그인용 URL 저장
             encoded_key = base64.b64encode(clean_key.encode()).decode()
             try:
                 st.query_params['k'] = encoded_key
@@ -137,6 +118,7 @@ def try_login():
                 st.experimental_set_query_params(k=encoded_key)
                 
         except Exception as e:
+            # 실패 시 에러 메시지 저장
             st.session_state['login_error'] = f"❌ 인증 실패: {e}"
 
 # ==========================================
@@ -146,6 +128,7 @@ with st.sidebar:
     st.markdown("### 🏛️ Control Center")
     st.markdown("---")
     
+    # [자동 로그인] URL 파라미터 복구 로직
     if 'api_key' not in st.session_state:
         try:
             qp = st.query_params
@@ -170,15 +153,26 @@ with st.sidebar:
                 except:
                     st.experimental_set_query_params()
 
+    # ------------------------------------------------------------------
+    # [상태 A] 로그인이 안 된 경우 -> 로그인 폼 표시
+    # ------------------------------------------------------------------
     if 'api_key' not in st.session_state:
         with st.form(key='login_form'):
             st.markdown("<h4 style='color:white; margin-bottom:5px;'>🔐 Access Key</h4>", unsafe_allow_html=True)
+            
+            # [중요] key를 지정하여 콜백 함수에서 값을 읽을 수 있게 함
             st.text_input("Key", type="password", placeholder="API 키를 입력하세요", label_visibility="collapsed", key="login_input_key")
+            
+            # [V72 핵심] on_click=try_login 추가 (클릭 즉시 실행)
             submit_button = st.form_submit_button(label="시스템 접속 (Login)", on_click=try_login)
         
+        # 콜백에서 발생한 에러가 있다면 표시
         if 'login_error' in st.session_state and st.session_state['login_error']:
             st.error(st.session_state['login_error'])
 
+    # ------------------------------------------------------------------
+    # [상태 B] 로그인이 된 경우 -> 로그아웃 버튼 표시
+    # ------------------------------------------------------------------
     else:
         st.success("🟢 정상 가동 중")
         st.markdown("<br>", unsafe_allow_html=True)
@@ -203,15 +197,18 @@ if 'logout_anim' in st.session_state and st.session_state['logout_anim']:
 """, unsafe_allow_html=True)
     
     time.sleep(3.5)
+    
+    # 로그아웃 시 URL 정보 삭제
     try:
         st.query_params.clear()
     except:
         st.experimental_set_query_params()
+        
     st.session_state.clear()
     st.rerun()
 
 # ==========================================
-# 6. 핵심 기능 함수
+# 6. 핵심 기능 함수 (안정성 강화)
 # ==========================================
 def get_model():
     if 'api_key' in st.session_state:
@@ -255,11 +252,14 @@ def process_media_file(uploaded_file):
                 myfile = genai.get_file(myfile.name)
         
         os.remove(tmp_path)
+        
         if myfile.state.name == "FAILED":
             st.error("❌ 파일 변환 실패")
             return None
+            
         st.toast("✅ AI 분석 준비 완료!", icon="🎉")
         return myfile
+
     except Exception as e:
         st.error(f"파일 처리 오류: {e}")
         return None
@@ -270,6 +270,7 @@ def download_and_upload_youtube_audio(url):
         return None
     try:
         st.toast("유튜브 오디오 추출을 시작합니다...", icon="🎵")
+        
         ydl_opts = {
             'format': 'bestaudio/best',
             'outtmpl': 'temp_audio.%(ext)s',
@@ -280,16 +281,19 @@ def download_and_upload_youtube_audio(url):
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
+        
         audio_files = glob.glob("temp_audio.*")
         if not audio_files: return None
         audio_path = audio_files[0]
         
         st.toast("🤖 AI에게 데이터를 전달합니다...", icon="📂")
         myfile = genai.upload_file(audio_path)
+        
         with st.spinner('🎧 유튜브 콘텐츠를 심층 분석 중입니다...'):
             while myfile.state.name == "PROCESSING":
                 time.sleep(2)
                 myfile = genai.get_file(myfile.name)
+        
         os.remove(audio_path)
         return myfile
     except Exception as e:
@@ -347,6 +351,7 @@ with tab1:
                 check_btn = st.form_submit_button("인증 확인")
                 
                 if check_btn:
+                    # 'ktmos0402!' 해시 분할 검증
                     k1 = "kt"
                     k2 = "mos"
                     k3 = "0402"
@@ -425,6 +430,7 @@ with tab2:
         if 'api_key' not in st.session_state: st.error("🔒 로그인 필요")
         else:
             st.session_state.messages.append({"role": "user", "content": user_input})
+            
             with st.spinner("🤖 Audit AI 에이전트가 답변을 생성하고 있습니다..."):
                 try:
                     genai.configure(api_key=st.session_state['api_key'])
