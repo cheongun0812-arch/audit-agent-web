@@ -199,7 +199,7 @@ with st.sidebar:
             st.rerun()
 
     st.markdown("---")
-    st.markdown("<div style='color:white; text-align:center; font-size:12px; opacity:0.8;'>ktmos Audit AI Solution © 2026<br>Engine: Gemini 1.5 Pro</div>", unsafe_allow_html=True)
+    st.markdown("<div style='color:white; text-align:center; font-size:12px; opacity:0.8;'>ktMOS북부 Audit AI Solution © 2026<br>Engine: Gemini 1.5 Pro</div>", unsafe_allow_html=True)
 
 # ==========================================
 # 5. 🎅 크리스마스 작별 애니메이션
@@ -540,6 +540,7 @@ with tab3:
                     st.markdown(response.text)
 
                 except Exception as e: st.error(f"오류: {e}")
+
 
 
 
