@@ -175,7 +175,7 @@ with st.sidebar:
     # ------------------------------------------------------------------
     if 'api_key' not in st.session_state:
         with st.form(key='login_form'):
-            st.markdown("<h4 style='color:white; margin-bottom:5px;'>🔐 Access Key</h4>", unsafe_allow_html=True)
+            st.markdown("<h4 style='color:grey; margin-bottom:5px;'>🔐 Access Key</h4>", unsafe_allow_html=True)
             
             # [중요] key를 지정하여 콜백 함수에서 값을 읽을 수 있게 함
             st.text_input("Key", type="password", placeholder="API 키를 입력하세요", label_visibility="collapsed", key="login_input_key")
@@ -199,7 +199,7 @@ with st.sidebar:
             st.rerun()
 
     st.markdown("---")
-    st.markdown("<div style='color:white; text-align:center; font-size:12px; opacity:0.8;'>Audit AI Solution © 2025<br>Engine: Gemini 1.5 Pro</div>", unsafe_allow_html=True)
+    st.markdown("<div style='color:white; text-align:center; font-size:12px; opacity:0.8;'>ktmos Audit AI Solution © 2026<br>Engine: Gemini 1.5 Pro</div>", unsafe_allow_html=True)
 
 # ==========================================
 # 5. 🎅 크리스마스 작별 애니메이션
@@ -538,4 +538,5 @@ with tab3:
                         
                     st.success("분석 완료")
                     st.markdown(response.text)
+
                 except Exception as e: st.error(f"오류: {e}")
