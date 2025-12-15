@@ -19,28 +19,29 @@ except ImportError:
     yt_dlp = None
 
 # ==========================================
-# 1. 페이지 설정
+# 1. 페이지 설정 (핵심 수정: 사이드바 강제 확장)
 # ==========================================
 st.set_page_config(
     page_title="AUDIT AI Agent",
     page_icon="🛡️",
-    layout="centered"
+    layout="centered",
+    initial_sidebar_state="expanded" # [🚨핵심] 시작하자마자 사이드바가 열립니다!
 )
 
 # ==========================================
-# 2. 🎨 디자인 테마 (사이드바 복구 + 핀셋 보안)
+# 2. 🎨 디자인 테마 (사이드바 CSS 충돌 제거)
 # ==========================================
 st.markdown("""
     <style>
-    /* 1. 기본 배경 및 폰트 */
+    /* 1. 기본 배경 */
     .stApp { background-color: #F4F6F9 !important; }
     * { font-family: 'Pretendard', sans-serif !important; }
 
-    /* 2. 사이드바 디자인 (정상 표시) */
+    /* 2. 사이드바 디자인 (충돌나던 display:block 제거함) */
     [data-testid="stSidebar"] { 
         background-color: #2C3E50 !important; 
-        display: block !important; /* 강제 표시 */
     }
+    /* 사이드바 내부 텍스트 색상 */
     [data-testid="stSidebar"] * { color: #FFFFFF !important; }
 
     /* 3. 입력창 디자인 */
@@ -54,7 +55,6 @@ st.markdown("""
     input.stTextInput:focus, textarea.stTextArea:focus {
         background-color: #FFFFFF !important;
         color: #000000 !important;
-        -webkit-text-fill-color: #000000 !important;
         border-color: #2980B9 !important;
     }
     ::placeholder {
@@ -74,23 +74,23 @@ st.markdown("""
 
     /* 5. 상단 메뉴 버튼 (Keyboard 텍스트 해결) */
     [data-testid="stSidebarCollapsedControl"] {
+        visibility: visible !important;
         color: transparent !important;
         background-color: #FFFFFF !important;
         border-radius: 0 10px 10px 0;
         border: 1px solid #ddd;
         width: 40px !important;
         height: 40px !important;
-        z-index: 99999;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
+        z-index: 9999999 !important;
     }
     [data-testid="stSidebarCollapsedControl"]::after {
         content: "☰";
+        visibility: visible !important;
         color: #2C3E50 !important;
         font-size: 24px !important;
         font-weight: bold !important;
         position: absolute;
+        top: 5px; left: 10px;
     }
     
     /* 6. 크리스마스 애니메이션 스타일 */
@@ -116,42 +116,36 @@ st.markdown("""
         color: #2980B9 !important;
     }
 
-    /* 🚨 9. [수정된 보안] 헤더는 살리고, 내부의 개인정보 요소만 핀셋 삭제 */
-    
-    /* (1) 헤더 컨테이너는 유지 (사이드바 버튼이 여기 살거든요) */
+    /* 9. [보안] 개인정보 요소 숨김 (헤더는 살리고 내용만 숨김) */
     header[data-testid="stHeader"] {
         background: transparent !important;
-        visibility: visible !important; /* 다시 보이게 복구! */
     }
-
-    /* (2) 우측 상단 툴바 (GitHub 아이콘, 햄버거 메뉴 등) -> 삭제 */
+    
+    /* 우측 툴바(GitHub, 햄버거 등) 숨김 */
     [data-testid="stToolbar"] {
-        display: none !important; 
         visibility: hidden !important;
+        display: none !important;
     }
-
-    /* (3) 하단 Footer (Made with Streamlit) -> 삭제 */
+    /* 하단 Footer 숨김 */
     footer {
-        display: none !important;
         visibility: hidden !important;
-    }
-
-    /* (4) Manage App 버튼 (ID 노출 주범) -> 삭제 */
-    .stDeployButton, [data-testid="stDeployButton"] {
         display: none !important;
-        visibility: hidden !important;
     }
-
-    /* (5) 상단 알록달록 데코레이션 바 -> 삭제 */
+    /* Manage App 버튼 숨김 */
+    .stDeployButton {
+        visibility: hidden !important;
+        display: none !important;
+    }
+    /* 데코레이션 바 숨김 */
     [data-testid="stDecoration"] {
-        display: none !important;
         visibility: hidden !important;
+        display: none !important;
     }
     </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 3. 로그인 처리 로직 (콜백 함수)
+# 3. 로그인 처리 로직 (콜백)
 # ==========================================
 def try_login():
     if 'login_input_key' in st.session_state:
@@ -196,10 +190,8 @@ with st.sidebar:
             try:
                 k_val = qp['k'][0] if isinstance(qp['k'], list) else qp['k']
                 restored_key = base64.b64decode(k_val).decode('utf-8')
-                
                 genai.configure(api_key=restored_key)
                 list(genai.list_models())
-                
                 st.session_state['api_key'] = restored_key
                 st.toast("🔄 이전 세션이 복구되었습니다.", icon="✨")
                 time.sleep(0.1)
