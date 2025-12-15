@@ -33,6 +33,45 @@ st.set_page_config(
 # ==========================================
 st.markdown("""
     <style>
+    .stApp { background-color: #F4F6F9; }
+    [data-testid="stSidebar"] { background-color: #2C3E50; }
+    [data-testid="stSidebar"] * { color: #FFFFFF !important; }
+    
+    .stTextInput input, .stTextArea textarea {
+        background-color: #FFFFFF !important;
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+        border: 1px solid #BDC3C7 !important;
+    }
+    
+    .stButton > button {
+        background: linear-gradient(to right, #2980B9, #2C3E50) !important;
+        color: #FFFFFF !important;
+        border: none !important;
+        font-weight: bold !important;
+    }
+
+    /* 상단 메뉴 버튼 (책갈피) */
+    [data-testid="stSidebarCollapsedControl"] {
+        color: transparent !important;
+        background-color: #FFFFFF !important;
+        border-radius: 0 10px 10px 0;
+        border: 1px solid #ddd;
+        width: 40px; height: 40px;
+        z-index: 99999;
+    }
+    [data-testid="stSidebarCollapsedControl"]::after {
+        content: "☰";
+        color: #333;
+        font-size: 24px;
+        font-weight: bold;
+        position: absolute;
+        top: 5px; left: 10px;
+    }
+    
+    [data-testid="stChatMessage"] { background-color: #FFFFFF; border: 1px solid #eee; }
+    [data-testid="stChatMessage"][data-testid="user"] { background-color: #E3F2FD; }
+
     /* 1. 기본 배경 및 폰트 */
     .stApp { background-color: #F4F6F9 !important; }
     * { font-family: 'Pretendard', sans-serif !important; }
@@ -554,3 +593,4 @@ with tab3:
                     st.success("분석 완료")
                     st.markdown(response.text)
                 except Exception as e: st.error(f"오류: {e}")
+
