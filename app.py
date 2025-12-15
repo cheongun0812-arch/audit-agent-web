@@ -28,7 +28,7 @@ st.set_page_config(
 )
 
 # ==========================================
-# 2. 🎨 디자인 테마 (키보드 해결 + 탭 강화 + 보안 숨김)
+# 2. 🎨 디자인 테마 (강력한 CSS 적용)
 # ==========================================
 st.markdown("""
     <style>
@@ -69,19 +69,24 @@ st.markdown("""
         font-weight: bold !important;
     }
 
-    /* 5. [유지] 상단 메뉴 버튼 (Keyboard 텍스트 해결 코드) */
+    /* 🚨 5. [유지] 상단 메뉴 버튼 (Keyboard 텍스트 해결 코드) */
+    /* Header가 숨겨져도 이 버튼은 보여야 하므로 z-index를 높이고 visibility를 켭니다 */
     [data-testid="stSidebarCollapsedControl"] {
-        color: transparent !important; /* 텍스트 투명화 */
+        visibility: visible !important;
+        color: transparent !important;
         background-color: #FFFFFF !important;
         border-radius: 0 10px 10px 0;
         border: 1px solid #ddd;
         width: 40px !important;
         height: 40px !important;
-        z-index: 99999;
+        z-index: 9999999 !important; /* 최상위 노출 */
+        position: fixed;
+        top: 20px;
+        left: 0;
     }
-    /* ☰ 아이콘 덮어쓰기 */
     [data-testid="stSidebarCollapsedControl"]::after {
         content: "☰";
+        visibility: visible !important;
         color: #2C3E50 !important;
         font-size: 24px !important;
         font-weight: bold !important;
@@ -102,40 +107,54 @@ st.markdown("""
     [data-testid="stChatMessage"] { background-color: #FFFFFF; border: 1px solid #eee; }
     [data-testid="stChatMessage"][data-testid="user"] { background-color: #E3F2FD; }
 
-    /* 🚨 8. [요청 반영] 탭 메뉴 폰트 크기 및 굵기 강화 */
-    button[data-baseweb="tab"] {
-        font-size: 20px !important; /* 폰트 크기 확대 */
-        font-weight: 800 !important; /* 글씨체 아주 굵게 (Bold) */
-        color: #444 !important;      /* 기본 색상 */
+    /* 🚨 8. [강력 수정] 탭 메뉴 폰트 확대 (타겟 정밀화) */
+    /* 탭 안의 텍스트(p태그)를 직접 지정하여 키웁니다 */
+    .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {
+        font-size: 20px !important;
+        font-weight: 800 !important; /* Extra Bold */
+        color: #444444 !important;
     }
-    /* 선택된 탭 강조 */
-    button[data-baseweb="tab"][aria-selected="true"] {
-        color: #2980B9 !important; /* 선택시 파란색 */
+    /* 선택된 탭은 파란색으로 */
+    .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] [data-testid="stMarkdownContainer"] p {
+        color: #2980B9 !important;
     }
 
-    /* 🚨 9. [보안 요청] 개인정보 노출 요소 숨김 (Manage app, GitHub 등) */
-    #MainMenu {visibility: hidden;}          /* 우측 상단 햄버거 메뉴 숨김 */
-    footer {visibility: hidden;}             /* 하단 Made with Streamlit 숨김 */
-    header {visibility: hidden;}             /* 상단 헤더 바 숨김 */
-    .stDeployButton {display:none;}          /* Manage app 버튼 아예 삭제 */
-    [data-testid="stToolbar"] {visibility: hidden !important;} /* 툴바 숨김 */
-    [data-testid="stDecoration"] {visibility: hidden !important;} /* 상단 데코레이션 바 숨김 */
-    [data-testid="stStatusWidget"] {visibility: hidden !important;} /* 상태 위젯 숨김 */
-    
-    /* 헤더를 숨겨도 사이드바 열기 버튼은 보여야 함 */
-    [data-testid="stSidebarCollapsedControl"] {
-        visibility: visible !important;
+    /* 🚨 9. [보안] 개인정보(Manage App, Header, Footer) 완전 은폐 */
+    /* 상단 헤더 바 전체 숨김 (단, 사이드바 버튼은 위에서 살림) */
+    header[data-testid="stHeader"] {
+        visibility: hidden !important;
+        height: 0px !important;
+    }
+    /* 우측 상단 툴바(Manage app, 햄버거 등) 숨김 */
+    [data-testid="stToolbar"] {
+        visibility: hidden !important;
+        display: none !important;
+    }
+    /* 하단 Footer 숨김 */
+    footer {
+        visibility: hidden !important;
+        display: none !important;
+    }
+    /* Manage App 버튼 특정 클래스 숨김 */
+    .stDeployButton {
+        visibility: hidden !important;
+        display: none !important;
+    }
+    /* 상단 데코레이션 라인 숨김 */
+    [data-testid="stDecoration"] {
+        visibility: hidden !important;
+        display: none !important;
     }
     </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 3. 로그인 처리 로직 (콜백 함수 - 즉시 실행)
+# 3. 로그인 처리 로직 (콜백 함수)
 # ==========================================
 def try_login():
     if 'login_input_key' in st.session_state:
         raw_key = st.session_state['login_input_key']
-        clean_key = "".join(raw_key.split()) # 공백 제거
+        clean_key = "".join(raw_key.split())
         
         if not clean_key:
             st.session_state['login_error'] = "⚠️ 키를 입력해주세요."
@@ -143,12 +162,11 @@ def try_login():
 
         try:
             genai.configure(api_key=clean_key)
-            list(genai.list_models()) # 유효성 검사
+            list(genai.list_models())
             
             st.session_state['api_key'] = clean_key
             st.session_state['login_error'] = None 
             
-            # 자동 로그인용 URL 저장
             encoded_key = base64.b64encode(clean_key.encode()).decode()
             try:
                 st.query_params['k'] = encoded_key
@@ -165,7 +183,6 @@ with st.sidebar:
     st.markdown("### 🏛️ Control Center")
     st.markdown("---")
     
-    # [자동 로그인] URL 파라미터 복구
     if 'api_key' not in st.session_state:
         try:
             qp = st.query_params
@@ -190,7 +207,6 @@ with st.sidebar:
                 except:
                     st.experimental_set_query_params()
 
-    # 로그인 폼
     if 'api_key' not in st.session_state:
         with st.form(key='login_form'):
             st.markdown("<h4 style='color:white; margin-bottom:5px;'>🔐 Access Key</h4>", unsafe_allow_html=True)
@@ -200,7 +216,6 @@ with st.sidebar:
         if 'login_error' in st.session_state and st.session_state['login_error']:
             st.error(st.session_state['login_error'])
 
-    # 로그아웃 버튼
     else:
         st.success("🟢 정상 가동 중")
         st.markdown("<br>", unsafe_allow_html=True)
@@ -446,95 +461,4 @@ with tab2:
     if submit_chat and user_input:
         if 'api_key' not in st.session_state: st.error("🔒 로그인 필요")
         else:
-            st.session_state.messages.append({"role": "user", "content": user_input})
-            with st.spinner("🤖 Audit AI 에이전트가 답변을 생성하고 있습니다..."):
-                try:
-                    genai.configure(api_key=st.session_state['api_key'])
-                    context = ""
-                    if ref_content: context += f"[참고자료]\n{ref_content}\n"
-                    if uploaded_file: 
-                        c = read_file(uploaded_file)
-                        if c: context += f"[검토대상파일]\n{c}\n"
-                    
-                    full_prompt = f"""당신은 'AI 파인더'입니다. 친절하고 명확하게 답변하세요.
-                    인사말: "안녕하세요. 여러분의 궁금증을 해소해 드릴 'AI 파인더'입니다." (필요시 사용)
-                    [컨텍스트] {context}
-                    [질문] {user_input}"""
-                    
-                    model = get_model()
-                    response = model.generate_content(full_prompt)
-                    st.session_state.messages.append({"role": "assistant", "content": response.text})
-                except Exception as e: st.error(f"오류: {e}")
-
-    st.markdown("---")
-    msgs = st.session_state.messages
-    if len(msgs) >= 2:
-        for i in range(len(msgs) - 1, 0, -2):
-            asst_msg = msgs[i]
-            user_msg = msgs[i-1]
-            with st.chat_message("user", avatar="👤"): st.write(user_msg['content'])
-            with st.chat_message("assistant", avatar="🛡️"): st.markdown(asst_msg['content'])
-            st.divider()
-
-# --- Tab 3: 스마트 요약 ---
-with tab3:
-    st.markdown("### 📰 스마트 요약 & 인사이트")
-    
-    summary_type = st.radio("입력 방식 선택", ["🌐 URL 입력", "📁 미디어 파일 업로드", "✍️ 텍스트 입력"])
-    
-    final_input = None
-    is_multimodal = False
-
-    if "URL" in summary_type:
-        target_url = st.text_input("🔗 URL을 붙여넣으세요")
-        if target_url:
-            if "youtu" in target_url:
-                with st.spinner("📺 유튜브 자막을 확인하고 있습니다..."):
-                    text_data = get_youtube_transcript(target_url)
-                    if text_data:
-                        st.success("✅ 자막 확보 완료")
-                        final_input = text_data
-                    else:
-                        st.warning("⚠️ 자막 없음 -> 오디오 직접 분석을 시도합니다.")
-                        audio_file = download_and_upload_youtube_audio(target_url)
-                        if audio_file:
-                            final_input = audio_file
-                            is_multimodal = True
-            else:
-                with st.spinner("🌐 웹페이지 콘텐츠를 가져오고 있습니다..."):
-                    final_input = get_web_content(target_url)
-
-    elif "미디어" in summary_type:
-        media_file = st.file_uploader("영상/음성 파일 (MP3, WAV, MP4, M4A)", type=['mp3', 'wav', 'mp4', 'm4a'])
-        if media_file:
-            final_input = process_media_file(media_file)
-            is_multimodal = True
-            if final_input:
-                st.success("✅ 파일 준비 완료! 요약 버튼을 눌러주세요.")
-
-    else:
-        final_input = st.text_area("내용을 직접 입력하세요", height=200)
-
-    if st.button("✨ 요약 시작", use_container_width=True):
-        if 'api_key' not in st.session_state: st.error("🔒 로그인 필요")
-        elif not final_input: st.warning("분석할 대상을 입력하세요.")
-        else:
-            st.toast("🤖 AI가 사용자의 질문을 충분히 이해하고 분석 중입니다.", icon="🧠")
-            
-            with st.spinner('📊 전체 내용을 분석하여 요약 보고서를 작성 중입니다...'):
-                try:
-                    prompt = """[역할] 스마트 정보 분석가
-[작업] 다음 내용을 분석하여 보고서 작성
-1. 핵심 요약 (Executive Summary)
-2. 상세 내용 (Key Details)
-3. 감사/리스크 인사이트 (Insights)"""
-                    model = get_model()
-                    
-                    if is_multimodal:
-                        response = model.generate_content([prompt, final_input])
-                    else: 
-                        response = model.generate_content(f"{prompt}\n\n{final_input[:30000]}")
-                        
-                    st.success("분석 완료")
-                    st.markdown(response.text)
-                except Exception as e: st.error(f"오류: {e}")
+            st
