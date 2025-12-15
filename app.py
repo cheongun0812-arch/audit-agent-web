@@ -178,7 +178,7 @@ with st.sidebar:
             st.markdown("<h4 style='color:white; margin-bottom:5px;'>🔐 Access Key</h4>", unsafe_allow_html=True)
             
             # [중요] key를 지정하여 콜백 함수에서 값을 읽을 수 있게 함
-            st.text_input("Key", type="password", placeholder="API 키를 입력하세요", label_visibility="collapsed", 'color:white, key="login_input_key")
+            st.text_input("Key", type="password", placeholder="API 키를 입력하세요", label_visibility="collapsed", key="login_input_key")
             
             # [V72 핵심] on_click=try_login 추가 (클릭 즉시 실행)
             submit_button = st.form_submit_button(label="시스템 접속 (Login)", on_click=try_login)
@@ -540,5 +540,6 @@ with tab3:
                     st.markdown(response.text)
 
                 except Exception as e: st.error(f"오류: {e}")
+
 
 
