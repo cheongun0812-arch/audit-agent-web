@@ -429,37 +429,69 @@ with tab1:
                                 st.markdown(res.text)
                             except Exception as e: st.error(f"오류: {e}")
 
-# --- [Tab 2] 챗봇 (로그인 선제적 방어) ---
+# --- [Tab 2] 챗봇 (문맥 기억 + 간결한 답변 업그레이드) ---
 with tab2:
-    st.markdown("### 🗣️ 실시간 질의응답")
+    st.markdown("### 🗣️ 실시간 질의응답 (Context Aware)")
+    st.info("💡 앞선 대화 내용을 기억합니다. 꼬리에 꼬리를 무는 질문을 해보세요!")
     
-    # [수정됨] 로그인 방어벽
-    if 'api_key' not in st.session_state:
-        st.warning("🔒 이 기능을 사용하려면 먼저 로그인이 필요합니다.")
-        st.info("👈 좌측 사이드바에서 '시스템 접속(Login)'을 먼저 진행해주세요.")
-    else:
-        with st.form(key='chat_form', clear_on_submit=True):
-            user_input = st.text_input("질문 입력", placeholder="예: 하도급법 위반 사례를 알려줘")
-            submit_chat = st.form_submit_button("전송 📤", use_container_width=True)
+    # 1. 채팅 기록 초기화
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
 
-        if "messages" not in st.session_state: st.session_state.messages = []
+    # 2. 채팅 화면 표시 (이전 대화 내용 보여주기)
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    # 3. 사용자 입력 처리
+    if user_input := st.chat_input("질문을 입력하세요 (예: FCPA의 주요 내용은?)"):
         
-        if submit_chat and user_input:
+        # 3-1. 로그인 체크
+        if 'api_key' not in st.session_state:
+            st.warning("🔒 로그인이 필요합니다. 사이드바에서 키를 입력해주세요.")
+        else:
+            # 사용자 질문 화면에 표시 및 저장
+            st.chat_message("user").markdown(user_input)
             st.session_state.messages.append({"role": "user", "content": user_input})
-            with st.spinner("생성 중..."):
-                try:
-                    model = get_model()
-                    res = model.generate_content(f"질문: {user_input}")
-                    st.session_state.messages.append({"role": "assistant", "content": res.text})
-                except Exception as e: st.error(f"오류: {e}")
-        
-        msgs = st.session_state.messages
-        if len(msgs) >= 2:
-            for i in range(len(msgs) - 1, -1, -1):
-                role = msgs[i]['role']
-                content = msgs[i]['content']
-                with st.chat_message(role): st.write(content)
 
+            # 3-2. AI 응답 생성
+            with st.chat_message("assistant"):
+                with st.spinner("생각 정리 중..."):
+                    try:
+                        # 모델 불러오기
+                        model = get_model()
+                        
+                        # [핵심 1] 과거 대화 기록을 Gemini가 이해하는 포맷으로 변환 (Memory)
+                        # Streamlit의 session_state를 Gemini의 history 포맷으로 바꿉니다.
+                        history_for_gemini = []
+                        for msg in st.session_state.messages[:-1]: # 방금 입력한 질문은 제외하고 과거만
+                            role = "user" if msg["role"] == "user" else "model"
+                            history_for_gemini.append({"role": role, "parts": [msg["content"]]})
+                        
+                        # [핵심 2] 대화 세션 시작 (과거 기록 주입)
+                        chat = model.start_chat(history=history_for_gemini)
+                        
+                        # [핵심 3] 강력한 시스템 지시사항(System Prompt)과 함께 질문 전송
+                        # 질문 뒤에 '지시사항'을 몰래 붙여서 보냅니다. 사용자는 모르게 AI만 봅니다.
+                        system_instruction = """
+                        [지침]
+                        1. 너는 '감사실 전문 AI 비서'다.
+                        2. 답변은 무조건 **핵심만 간결하게** 작성하라. (장황한 서론/결론 금지)
+                        3. 이전 대화의 **맥락(Context)을 파악**하여 대명사(그것, 대상 등)가 무엇을 지칭하는지 정확히 해석하라.
+                        4. 전문 용어는 정확히 쓰되, 설명은 명확하게 하라.
+                        """
+                        
+                        full_prompt = f"{system_instruction}\n\n[사용자 질문]: {user_input}"
+                        
+                        response = chat.send_message(full_prompt)
+                        
+                        # 답변 표시 및 저장
+                        st.markdown(response.text)
+                        st.session_state.messages.append({"role": "assistant", "content": response.text})
+                        
+                    except Exception as e:
+                        st.error(f"오류가 발생했습니다: {e}")
+                        
 # --- [Tab 3] 스마트 요약 (로그인 선제적 방어) ---
 with tab3:
     st.markdown("### 📰 스마트 요약 & 인사이트")
@@ -533,4 +565,5 @@ with tab_admin:
                     st.download_button("📥 엑셀 다운로드", df.to_csv(index=False).encode('utf-8-sig'), "result.csv")
                 else: st.info("데이터가 없습니다.")
             except Exception as e: st.error(f"조회 실패: {e}")
+
 
