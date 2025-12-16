@@ -429,68 +429,64 @@ with tab1:
                                 st.markdown(res.text)
                             except Exception as e: st.error(f"오류: {e}")
 
-# --- [Tab 2] 챗봇 (문맥 기억 + 간결한 답변 업그레이드) ---
+# --- [Tab 2] 챗봇 (부드러운 말투 + 최신순 정렬) ---
 with tab2:
-    st.markdown("### 🗣️ 실시간 질의응답 (Context Aware)")
-    st.info("💡 앞선 대화 내용을 기억합니다. 꼬리에 꼬리를 무는 질문을 해보세요!")
-    
+    st.markdown("### 🗣️ 실시간 질의응답")
+    st.caption("💡 가장 최근 대화가 상단에 표시됩니다.")
+
     # 1. 채팅 기록 초기화
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # 2. 채팅 화면 표시 (이전 대화 내용 보여주기)
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-
-    # 3. 사용자 입력 처리
-    if user_input := st.chat_input("질문을 입력하세요 (예: FCPA의 주요 내용은?)"):
+    # 2. 사용자 입력 처리 (입력을 먼저 받아서 처리하고, 나중에 화면을 그립니다)
+    if user_input := st.chat_input("질문을 입력하세요 (예: FCPA 적용 대상이 뭐야?)"):
         
-        # 3-1. 로그인 체크
+        # 2-1. 로그인 체크
         if 'api_key' not in st.session_state:
             st.warning("🔒 로그인이 필요합니다. 사이드바에서 키를 입력해주세요.")
         else:
-            # 사용자 질문 화면에 표시 및 저장
-            st.chat_message("user").markdown(user_input)
+            # (1) 사용자 질문 저장
             st.session_state.messages.append({"role": "user", "content": user_input})
 
-            # 3-2. AI 응답 생성
-            with st.chat_message("assistant"):
+            # (2) AI 응답 생성
+            try:
+                model = get_model()
+                
+                # 대화 맥락(History) 만들기
+                history_for_gemini = []
+                # 최근 대화 몇 개만 가져오기 (토큰 절약 및 효율성)
+                for msg in st.session_state.messages[:-1]: 
+                    role = "user" if msg["role"] == "user" else "model"
+                    history_for_gemini.append({"role": role, "parts": [msg["content"]]})
+                
+                chat = model.start_chat(history=history_for_gemini)
+                
+                # [핵심] 부드럽지만 명확한 페르소나 주입
+                system_instruction = """
+                [지침]
+                1. 너는 '감사실의 친절하고 스마트한 AI 파트너'다.
+                2. 답변은 **핵심 위주로 간결하게** 하되, 문체는 딱딱하지 않고 **부드러운 '해요체'**를 사용하라.
+                   (예: "~입니다." 보다는 "~인데요," / "~확인했습니다." 보다는 "~확인했어요." 등)
+                3. 이전 대화의 **맥락(Context)**을 파악하여 대명사(그것, 대상 등)가 무엇을 의미하는지 정확히 해석하고 답변하라.
+                4. 너무 장황한 서론이나 불필요한 인사는 생략하고 본론을 부드럽게 전달하라.
+                """
+                
+                full_prompt = f"{system_instruction}\n\n[사용자 질문]: {user_input}"
+                
                 with st.spinner("생각 정리 중..."):
-                    try:
-                        # 모델 불러오기
-                        model = get_model()
-                        
-                        # [핵심 1] 과거 대화 기록을 Gemini가 이해하는 포맷으로 변환 (Memory)
-                        # Streamlit의 session_state를 Gemini의 history 포맷으로 바꿉니다.
-                        history_for_gemini = []
-                        for msg in st.session_state.messages[:-1]: # 방금 입력한 질문은 제외하고 과거만
-                            role = "user" if msg["role"] == "user" else "model"
-                            history_for_gemini.append({"role": role, "parts": [msg["content"]]})
-                        
-                        # [핵심 2] 대화 세션 시작 (과거 기록 주입)
-                        chat = model.start_chat(history=history_for_gemini)
-                        
-                        # [핵심 3] 강력한 시스템 지시사항(System Prompt)과 함께 질문 전송
-                        # 질문 뒤에 '지시사항'을 몰래 붙여서 보냅니다. 사용자는 모르게 AI만 봅니다.
-                        system_instruction = """
-                        [지침]
-                        1. 너는 '감사실 전문 AI 비서'다.
-                        2. 답변은 무조건 **핵심만 간결하게** 작성하라. (장황한 서론/결론 금지)
-                        3. 이전 대화의 **맥락(Context)을 파악**하여 대명사(그것, 대상 등)가 무엇을 지칭하는지 정확히 해석하라.
-                        4. 전문 용어는 정확히 쓰되, 설명은 명확하게 하라.
-                        """
-                        
-                        full_prompt = f"{system_instruction}\n\n[사용자 질문]: {user_input}"
-                        
-                        response = chat.send_message(full_prompt)
-                        
-                        # 답변 표시 및 저장
-                        st.markdown(response.text)
-                        st.session_state.messages.append({"role": "assistant", "content": response.text})
-                        
-                    except Exception as e:
-                        st.error(f"오류가 발생했습니다: {e}")
+                    response = chat.send_message(full_prompt)
+                    # (3) AI 답변 저장
+                    st.session_state.messages.append({"role": "assistant", "content": response.text})
+                    
+            except Exception as e:
+                st.error(f"오류가 발생했습니다: {e}")
+
+    # 3. 화면 표시 (여기서 순서를 뒤집습니다!)
+    # reversed()를 사용하여 가장 최근 메시지(리스트의 맨 뒤)부터 먼저 보여줍니다.
+    if st.session_state.messages:
+        for message in reversed(st.session_state.messages):
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
                         
 # --- [Tab 3] 스마트 요약 (로그인 선제적 방어) ---
 with tab3:
@@ -565,5 +561,6 @@ with tab_admin:
                     st.download_button("📥 엑셀 다운로드", df.to_csv(index=False).encode('utf-8-sig'), "result.csv")
                 else: st.info("데이터가 없습니다.")
             except Exception as e: st.error(f"조회 실패: {e}")
+
 
 
