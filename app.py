@@ -13,6 +13,7 @@ import hashlib
 import base64
 import datetime
 import pytz # 한국 시간용
+import pandas as pd
 
 # [추가됨] 구글 시트 연동 라이브러리
 try:
@@ -374,15 +375,14 @@ def get_web_content(url):
 st.markdown("<h1 style='text-align: center; color: #2C3E50;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
 st.markdown("<div style='text-align: center; color: #555; margin-bottom: 20px;'>Professional Legal & Audit Assistant System</div>", unsafe_allow_html=True)
 
-# [수정됨] 탭 구성: 자율점검 탭 추가
-tab_audit, tab1, tab2, tab3 = st.tabs(["✅ 1월 자율점검", "📄 문서 정밀 검토", "💬 AI 에이전트", "📰 스마트 요약"])
+# [수정됨] 탭 구성: 관리자 탭(tab_admin) 추가
+tab_audit, tab1, tab2, tab3, tab_admin = st.tabs(["✅ 1월 자율점검", "📄 문서 정밀 검토", "💬 AI 에이전트", "📰 스마트 요약", "🔒 관리자"])
 
 # --- Tab New: 자율점검 ---
 with tab_audit:
     st.markdown("### 📝 2026년 1월 준법 자율점검")
     st.info("📢 **이달의 주제: 청탁금지법 및 부패방지 준수**")
     
-    # 교육 자료 영역 (매월 수정 가능)
     st.markdown("""
     <div style="background-color: #f9f9f9; padding: 15px; border-radius: 10px; border: 1px solid #ddd; margin-bottom: 20px;">
         <strong>[교육 내용]</strong><br><br>
@@ -420,7 +420,7 @@ with tab_audit:
                         st.balloons()
                     else:
                         st.error(f"❌ 제출 실패: {msg}")
-
+                        
 # --- Tab 1: 문서 검토 ---
 with tab1:
     st.markdown("### 📂 작업 및 파일 설정")
@@ -614,7 +614,52 @@ with tab3:
 
                 except Exception as e: st.error(f"오류: {e}")
 
+# --- [신규] Tab 4: 관리자 대시보드 ---
+with tab_admin:
+    st.markdown("### 🔒 관리자 전용 대시보드")
+    
+    # 비밀번호 입력 (임시 비밀번호: audit2026)
+    admin_pw = st.text_input("관리자 비밀번호를 입력하세요", type="password", key="admin_pw_input")
+    
+    if admin_pw == "audit2026":
+        st.success("🔓 관리자 모드 접속 완료")
+        
+        # 새로고침 버튼
+        if st.button("🔄 데이터 최신화"):
+            st.rerun()
 
-
-
-
+        # 데이터 불러오기
+        try:
+            client = init_google_sheet_connection()
+            sheet = client.open("Audit_Result_2026").sheet1
+            data = sheet.get_all_records()
+            
+            if len(data) > 0:
+                df = pd.DataFrame(data)
+                
+                # 1. 현황판 (Metrics)
+                st.markdown("#### 📊 실시간 참여 현황")
+                m1, m2, m3 = st.columns(3)
+                m1.metric("총 참여 인원", f"{len(df)}명")
+                m2.metric("오늘 참여", f"{len(df[df['시간'].str.contains(datetime.datetime.now().strftime('%Y-%m-%d'))])}명")
+                m3.metric("진행률 (목표 1000명)", f"{len(df)/1000*100:.1f}%")
+                
+                # 2. 데이터 표
+                st.markdown("#### 📋 상세 데이터")
+                st.dataframe(df, use_container_width=True)
+                
+                # 3. 엑셀 다운로드
+                csv = df.to_csv(index=False).encode('utf-8-sig')
+                st.download_button(
+                    "📥 결과 엑셀 다운로드 (CSV)",
+                    csv,
+                    "compliance_result.csv",
+                    "text/csv"
+                )
+            else:
+                st.warning("아직 데이터가 없습니다.")
+                
+        except Exception as e:
+            st.error(f"데이터 불러오기 실패: {e}")
+    elif admin_pw:
+        st.error("비밀번호가 틀렸습니다.")
