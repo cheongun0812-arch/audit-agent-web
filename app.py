@@ -1,3 +1,7 @@
+import streamlit as st
+import os
+import google.generativeai as genai
+from docx import Document
 import PyPDF2
 from youtube_transcript_api import YouTubeTranscriptApi
 import requests
@@ -529,3 +533,4 @@ with tab_admin:
                     st.download_button("📥 엑셀 다운로드", df.to_csv(index=False).encode('utf-8-sig'), "result.csv")
                 else: st.info("데이터가 없습니다.")
             except Exception as e: st.error(f"조회 실패: {e}")
+
