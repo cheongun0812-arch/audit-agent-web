@@ -1,7 +1,3 @@
-import streamlit as st
-import os
-import google.generativeai as genai
-from docx import Document
 import PyPDF2
 from youtube_transcript_api import YouTubeTranscriptApi
 import requests
@@ -335,7 +331,7 @@ st.markdown("<div style='text-align: center; color: #555; margin-bottom: 20px;'>
 # 탭 구성 (총 5개)
 tab_audit, tab1, tab2, tab3, tab_admin = st.tabs(["✅ 1월 자율점검", "📄 문서 정밀 검토", "💬 AI 에이전트", "📰 스마트 요약", "🔒 관리자"])
 
-# --- [Tab New] 자율점검 (카멜레온) ---
+# --- [Tab New] 자율점검 (카멜레온 - 전직원 개방) ---
 with tab_audit:
     # [관리자 설정 구역] 매달 여기만 수정하세요!
     current_campaign_title = "1월: 설 명절 '청탁금지법' 자율점검"
@@ -373,69 +369,78 @@ with tab_audit:
                         st.balloons()
                     else: st.error(f"❌ 실패: {msg}")
 
-# --- [Tab 1] 문서 정밀 검토 (기존 기능 복원) ---
+# --- [Tab 1] 문서 정밀 검토 (로그인 선제적 방어) ---
 with tab1:
     st.markdown("### 📂 작업 및 파일 설정")
-    option = st.selectbox("작업 유형 선택", ("법률 리스크 정밀 검토", "감사 보고서 검증", "오타 수정 및 문구 교정", "기안문/공문 초안 생성"))
     
-    is_authenticated = True
-    if option == "감사 보고서 검증":
-        if 'audit_verified' not in st.session_state:
-            is_authenticated = False
-            st.warning("🔒 이 메뉴는 감사실 전용 메뉴입니다.")
-            with st.form("auth_form"):
-                pass_input = st.text_input("계속하시려면 인증키를 입력하세요", type="password")
-                if st.form_submit_button("인증 확인"):
-                    real_key = "ktmos0402!"
-                    if hashlib.sha256(pass_input.encode()).hexdigest() == hashlib.sha256(real_key.encode()).hexdigest():
-                        st.session_state['audit_verified'] = True
-                        st.success("🔓 인증되었습니다.")
-                        st.rerun()
-                    else: st.error("❌ 인증키가 올바르지 않습니다.")
-    
-    st.markdown("---")
-    if is_authenticated:
-        uploaded_file = st.file_uploader("검토 파일 업로드", type=['txt', 'pdf', 'docx'], key="target")
-        uploaded_refs = st.file_uploader("참고 파일 업로드", type=['txt', 'pdf', 'docx'], accept_multiple_files=True)
+    # [수정됨] 로그인 방어벽
+    if 'api_key' not in st.session_state:
+        st.warning("🔒 이 기능을 사용하려면 먼저 로그인이 필요합니다.")
+        st.info("👈 좌측 사이드바에서 '시스템 접속(Login)'을 먼저 진행해주세요.")
+    else:
+        option = st.selectbox("작업 유형 선택", ("법률 리스크 정밀 검토", "감사 보고서 검증", "오타 수정 및 문구 교정", "기안문/공문 초안 생성"))
         
-        ref_content = ""
-        if uploaded_refs:
-            for ref_file in uploaded_refs:
-                c = read_file(ref_file)
-                if c: ref_content += c + "\n"
+        is_authenticated = True
+        if option == "감사 보고서 검증":
+            if 'audit_verified' not in st.session_state:
+                is_authenticated = False
+                st.warning("🔒 이 메뉴는 감사실 전용 메뉴입니다.")
+                with st.form("auth_form"):
+                    pass_input = st.text_input("계속하시려면 인증키를 입력하세요", type="password")
+                    if st.form_submit_button("인증 확인"):
+                        real_key = "ktmos0402!"
+                        if hashlib.sha256(pass_input.encode()).hexdigest() == hashlib.sha256(real_key.encode()).hexdigest():
+                            st.session_state['audit_verified'] = True
+                            st.success("🔓 인증되었습니다.")
+                            st.rerun()
+                        else: st.error("❌ 인증키가 올바르지 않습니다.")
         
-        if st.button("🚀 분석 리포트 생성", use_container_width=True):
-            if 'api_key' not in st.session_state: st.error("🔒 로그인 필요")
-            elif not uploaded_file: st.warning("⚠️ 검토할 파일을 업로드해주세요.")
-            else:
-                st.toast("🤖 AI가 문서를 정밀 분석 중입니다.", icon="🔍")
-                persona_name = "AI 감사 전문가"
-                if "법률" in option: persona_name = "법률 전문가 AI"
-                elif "오타" in option: persona_name = "AI 에디터"
-                
-                with st.spinner(f'🧠 {persona_name}가 분석 중입니다...'):
-                    content = read_file(uploaded_file)
-                    if content:
-                        prompt = f"[역할] {persona_name}\n[작업] {option}\n[참고] {ref_content}\n[내용] {content}"
-                        try:
-                            model = get_model()
-                            res = model.generate_content(prompt)
-                            st.success("분석 완료")
-                            st.markdown(res.text)
-                        except Exception as e: st.error(f"오류: {e}")
+        st.markdown("---")
+        if is_authenticated:
+            uploaded_file = st.file_uploader("검토 파일 업로드", type=['txt', 'pdf', 'docx'], key="target")
+            uploaded_refs = st.file_uploader("참고 파일 업로드", type=['txt', 'pdf', 'docx'], accept_multiple_files=True)
+            
+            ref_content = ""
+            if uploaded_refs:
+                for ref_file in uploaded_refs:
+                    c = read_file(ref_file)
+                    if c: ref_content += c + "\n"
+            
+            if st.button("🚀 분석 리포트 생성", use_container_width=True):
+                if not uploaded_file: st.warning("⚠️ 검토할 파일을 업로드해주세요.")
+                else:
+                    st.toast("🤖 AI가 문서를 정밀 분석 중입니다.", icon="🔍")
+                    persona_name = "AI 감사 전문가"
+                    if "법률" in option: persona_name = "법률 전문가 AI"
+                    elif "오타" in option: persona_name = "AI 에디터"
+                    
+                    with st.spinner(f'🧠 {persona_name}가 분석 중입니다...'):
+                        content = read_file(uploaded_file)
+                        if content:
+                            prompt = f"[역할] {persona_name}\n[작업] {option}\n[참고] {ref_content}\n[내용] {content}"
+                            try:
+                                model = get_model()
+                                res = model.generate_content(prompt)
+                                st.success("분석 완료")
+                                st.markdown(res.text)
+                            except Exception as e: st.error(f"오류: {e}")
 
-# --- [Tab 2] 챗봇 (기존 기능 복원) ---
+# --- [Tab 2] 챗봇 (로그인 선제적 방어) ---
 with tab2:
     st.markdown("### 🗣️ 실시간 질의응답")
-    with st.form(key='chat_form', clear_on_submit=True):
-        user_input = st.text_input("질문 입력", placeholder="예: 하도급법 위반 사례를 알려줘")
-        submit_chat = st.form_submit_button("전송 📤", use_container_width=True)
-
-    if "messages" not in st.session_state: st.session_state.messages = []
     
-    if submit_chat and user_input:
-        if 'api_key' not in st.session_state: st.error("🔒 로그인 필요")
-        else:
+    # [수정됨] 로그인 방어벽
+    if 'api_key' not in st.session_state:
+        st.warning("🔒 이 기능을 사용하려면 먼저 로그인이 필요합니다.")
+        st.info("👈 좌측 사이드바에서 '시스템 접속(Login)'을 먼저 진행해주세요.")
+    else:
+        with st.form(key='chat_form', clear_on_submit=True):
+            user_input = st.text_input("질문 입력", placeholder="예: 하도급법 위반 사례를 알려줘")
+            submit_chat = st.form_submit_button("전송 📤", use_container_width=True)
+
+        if "messages" not in st.session_state: st.session_state.messages = []
+        
+        if submit_chat and user_input:
             st.session_state.messages.append({"role": "user", "content": user_input})
             with st.spinner("생성 중..."):
                 try:
@@ -443,18 +448,19 @@ with tab2:
                     res = model.generate_content(f"질문: {user_input}")
                     st.session_state.messages.append({"role": "assistant", "content": res.text})
                 except Exception as e: st.error(f"오류: {e}")
-    
-    msgs = st.session_state.messages
-    if len(msgs) >= 2:
-        for i in range(len(msgs) - 1, -1, -1):
-            role = msgs[i]['role']
-            content = msgs[i]['content']
-            with st.chat_message(role): st.write(content)
+        
+        msgs = st.session_state.messages
+        if len(msgs) >= 2:
+            for i in range(len(msgs) - 1, -1, -1):
+                role = msgs[i]['role']
+                content = msgs[i]['content']
+                with st.chat_message(role): st.write(content)
 
-# --- [Tab 3] 스마트 요약 (로그인 방어 적용) ---
+# --- [Tab 3] 스마트 요약 (로그인 선제적 방어) ---
 with tab3:
     st.markdown("### 📰 스마트 요약 & 인사이트")
     
+    # [수정됨] 로그인 방어벽
     if 'api_key' not in st.session_state:
         st.warning("🔒 이 기능을 사용하려면 먼저 로그인이 필요합니다.")
         st.info("👈 좌측 사이드바에서 '시스템 접속(Login)'을 먼저 진행해주세요.")
@@ -501,7 +507,7 @@ with tab3:
                         st.markdown(res.text)
                     except Exception as e: st.error(f"오류: {e}")
 
-# --- [Tab Admin] 관리자 대시보드 (신규) ---
+# --- [Tab Admin] 관리자 대시보드 (업그레이드) ---
 with tab_admin:
     st.markdown("### 🔒 관리자 전용 대시보드")
     if st.text_input("비밀번호", type="password", key="admin_pw") == "audit2026":
@@ -523,4 +529,3 @@ with tab_admin:
                     st.download_button("📥 엑셀 다운로드", df.to_csv(index=False).encode('utf-8-sig'), "result.csv")
                 else: st.info("데이터가 없습니다.")
             except Exception as e: st.error(f"조회 실패: {e}")
-
