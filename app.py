@@ -229,25 +229,37 @@ def init_google_sheet_connection():
     except Exception as e:
         return None
 
-# [수정됨] 중복 체크 기능이 추가된 저장 함수
-def save_audit_result(emp_id, name, dept, answer):
+# [업그레이드] 시트 자동 생성 및 저장 함수
+def save_audit_result(emp_id, name, dept, answer, sheet_name):
+    """
+    sheet_name: 예) "1월_설명절_자율점검", "상반기_클린캠페인" 등
+    """
     client = init_google_sheet_connection()
     if client is None:
-        return False, "구글 시트 연결 실패 (Secrets 설정을 확인하세요)"
+        return False, "구글 시트 연결 실패"
     
     try:
-        # 시트 열기
-        sheet = client.open("Audit_Result_2026").sheet1
+        # 1. 통합 문서(엑셀 파일 전체) 열기
+        spreadsheet = client.open("Audit_Result_2026")
         
-        # 1. 중복 체크 (가장 중요!)
-        # B열(사번)에 있는 모든 데이터를 가져옵니다.
-        existing_ids = sheet.col_values(2) 
+        # 2. 해당 이름의 시트(탭)가 있는지 확인하고 열기
+        try:
+            sheet = spreadsheet.worksheet(sheet_name)
+        except gspread.exceptions.WorksheetNotFound:
+            # 3. [핵심] 시트가 없으면 -> '새로 생성' 합니다!
+            # (rows=100, cols=10은 초기 크기, 부족하면 구글이 알아서 늘려줍니다)
+            sheet = spreadsheet.add_worksheet(title=sheet_name, rows=100, cols=10)
+            
+            # 새로 만들었으니 '첫 줄(헤더)'을 써줍니다.
+            sheet.append_row(["저장시간", "사번", "성명", "부서", "답변", "비고"])
+            
+        # 4. 중복 체크 (해당 시트 안에서만 체크)
+        existing_ids = sheet.col_values(2) # 2번째 열(사번) 가져오기
         
         if emp_id in existing_ids:
-            # 이미 명단에 사번이 있다면 저장을 막습니다.
-            return False, "이미 참여하셨습니다. (중복 제출 불가)"
+            return False, f"이미 '{sheet_name}'에 참여하셨습니다. (중복 불가)"
             
-        # 2. 중복이 아니면 저장 진행
+        # 5. 데이터 저장
         korea_tz = pytz.timezone("Asia/Seoul")
         now = datetime.datetime.now(korea_tz).strftime("%Y-%m-%d %H:%M:%S")
         
@@ -255,7 +267,7 @@ def save_audit_result(emp_id, name, dept, answer):
         return True, "저장 성공"
         
     except Exception as e:
-        return False, f"저장 오류: {e}"
+        return False, f"시스템 오류: {e}"
 
 def get_model():
     if 'api_key' in st.session_state:
@@ -415,20 +427,26 @@ with tab_audit:
         
         submit_btn = st.form_submit_button("점검 완료 및 제출", use_container_width=True)
         
-        if submit_btn:
+       if submit_btn:
             if not emp_id or not name:
                 st.warning("⚠️ 사번과 성명은 필수 입력 사항입니다.")
             elif not agree_check:
                 st.error("❌ 서약 항목에 체크해 주셔야 제출이 가능합니다.")
             else:
                 with st.spinner("감사실 서버로 전송 중..."):
-                    # 저장 함수 호출 (중복 체크 포함됨)
-                    success, msg = save_audit_result(emp_id, name, dept, "서약함(1월_PASS)")
+                    
+                    # =============== [여기가 핵심입니다!] ===============
+                    # 이번 달에 저장할 시트 이름을 마음대로 정해서 넣으세요.
+                    target_sheet_name = "1월_설명절_캠페인" 
+                    # ===================================================
+
+                    success, msg = save_audit_result(emp_id, name, dept, "서약함(PASS)", target_sheet_name)
+                    
                     if success:
-                        st.success(f"✅ {name}님, 제출이 완료되었습니다! 행복한 설 명절 보내세요. 🙇")
+                        st.success(f"✅ {name}님, 제출 완료! ({target_sheet_name}에 저장됨)")
                         st.balloons()
                     else:
-                        st.error(f"❌ 제출 실패: {msg}")
+                        st.error(f"❌ 실패: {msg}")
                         
 # --- Tab 1: 문서 검토 ---
 with tab1:
@@ -679,5 +697,6 @@ with tab_admin:
             st.error(f"데이터 불러오기 실패: {e}")
     elif admin_pw:
         st.error("비밀번호가 틀렸습니다.")
+
 
 
