@@ -377,19 +377,27 @@ st.markdown("<div style='text-align: center; color: #555; margin-bottom: 20px;'>
 
 # [수정됨] 탭 구성: 관리자 탭(tab_admin) 추가
 tab_audit, tab1, tab2, tab3, tab_admin = st.tabs(["✅ 1월 자율점검", "📄 문서 정밀 검토", "💬 AI 에이전트", "📰 스마트 요약", "🔒 관리자"])
-
-# --- Tab New: 자율점검 ---
+# --- Tab New: 자율점검 (1월 콘텐츠 업데이트) ---
 with tab_audit:
-    st.markdown("### 📝 2026년 1월 준법 자율점검")
-    st.info("📢 **이달의 주제: 청탁금지법 및 부패방지 준수**")
+    st.markdown("### 🎍 2026년 1월: 설 명절 '청탁금지법' 자율점검")
     
+    # [디자인 업그레이드] 교육 자료 영역
     st.markdown("""
-    <div style="background-color: #f9f9f9; padding: 15px; border-radius: 10px; border: 1px solid #ddd; margin-bottom: 20px;">
-        <strong>[교육 내용]</strong><br><br>
-        임직원은 직무와 관련하여 대가성 여부를 불문하고 금품 등을 받거나 요구, 약속해서는 안 됩니다.<br>
-        1. <strong>직무 관련성:</strong> 직무와 관련하여 금품을 수수하는 행위 금지<br>
-        2. <strong>금품등의 정의:</strong> 금전, 유가증권, 부동산, 물품, 숙박권, 회원권 등 일체<br>
-        3. <strong>신고 절차:</strong> 금품 등을 제공받은 경우 즉시 감사실 신고 및 반환
+    <div style="background-color: #FFF8E1; padding: 20px; border-radius: 10px; border: 1px solid #FFECB3; margin-bottom: 20px;">
+        <h4 style="color: #795548; margin-top: 0;">📢 설 명절, 마음만 주고 받으세요!</h4>
+        <p style="color: #555; font-size: 14px;">
+            임직원은 설 명절을 맞아 직무관련자(협력사 등)로부터 금품 등을 받거나 요구해서는 안 됩니다.
+            건전한 명절 문화를 위해 아래 수칙을 반드시 준수해 주세요.
+        </p>
+        <hr style="border: 0; border-top: 1px dashed #D7CCC8;">
+        <ul style="color: #444; font-size: 14px; line-height: 1.6;">
+            <li><strong>🙅‍♂️ 금지 행위:</strong> 직무 관련성 있는 자로부터의 금전, 선물, 향응 수수</li>
+            <li><strong>📦 선물 반송:</strong> 불가피하게 선물을 받은 경우, 즉시 반송하고 감사실에 신고</li>
+            <li><strong>💡 예외 허용:</strong> 원활한 직무수행 목적의 음식물(3만원), 선물(5만원) 등 법정 가액 준수</li>
+        </ul>
+        <p style="text-align: right; color: #888; font-size: 12px; margin-bottom: 0;">
+            *위반 시 징계 및 과태료 부과 대상이 될 수 있습니다.
+        </p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -402,8 +410,8 @@ with tab_audit:
         dept = col3.text_input("부서명")
         
         st.markdown("---")
-        st.markdown("**Q. 위 교육 내용을 충분히 숙지하였으며, 업무 수행 시 이를 준수할 것을 서약합니까?**")
-        agree_check = st.checkbox("네, 내용을 확인하였으며 서약합니다.")
+        st.info("Q. 본인은 위 '청탁금지법 준수' 교육 내용을 확인하였으며, 이번 설 명절 기간 동안 이를 철저히 준수할 것을 서약합니다.")
+        agree_check = st.checkbox("네, 확인하였으며 서약합니다.")
         
         submit_btn = st.form_submit_button("점검 완료 및 제출", use_container_width=True)
         
@@ -411,12 +419,13 @@ with tab_audit:
             if not emp_id or not name:
                 st.warning("⚠️ 사번과 성명은 필수 입력 사항입니다.")
             elif not agree_check:
-                st.error("❌ 교육 내용을 확인하고 서약(체크)해주셔야 제출이 가능합니다.")
+                st.error("❌ 서약 항목에 체크해 주셔야 제출이 가능합니다.")
             else:
                 with st.spinner("감사실 서버로 전송 중..."):
-                    success, msg = save_audit_result(emp_id, name, dept, "서약함(PASS)")
+                    # 저장 함수 호출 (중복 체크 포함됨)
+                    success, msg = save_audit_result(emp_id, name, dept, "서약함(1월_PASS)")
                     if success:
-                        st.success(f"✅ {name}님, 제출이 완료되었습니다! (감사실 자동 전송됨)")
+                        st.success(f"✅ {name}님, 제출이 완료되었습니다! 행복한 설 명절 보내세요. 🙇")
                         st.balloons()
                     else:
                         st.error(f"❌ 제출 실패: {msg}")
@@ -663,3 +672,4 @@ with tab_admin:
             st.error(f"데이터 불러오기 실패: {e}")
     elif admin_pw:
         st.error("비밀번호가 틀렸습니다.")
+
