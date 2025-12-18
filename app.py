@@ -514,7 +514,11 @@ with tab3:
 # --- [Tab Admin] 관리자 대시보드 (업그레이드) ---
 with tab_admin:
     st.markdown("### 🔒 관리자 전용 대시보드")
-    if st.text_input("비밀번호", type="password", key="admin_pw") == "audit2026":
+    
+    # [수정됨] 패스워드 "ktmos0402!"로 변경 + 공백 제거(.strip()) 추가
+    admin_pw_input = st.text_input("비밀번호", type="password", key="admin_pw")
+    
+    if admin_pw_input.strip() == "ktmos0402!":
         st.success("접속 완료")
         
         target_sheet = st.text_input("조회할 시트 이름", value="1월_설명절_캠페인")
@@ -533,4 +537,3 @@ with tab_admin:
                     st.download_button("📥 엑셀 다운로드", df.to_csv(index=False).encode('utf-8-sig'), "result.csv")
                 else: st.info("데이터가 없습니다.")
             except Exception as e: st.error(f"조회 실패: {e}")
-
