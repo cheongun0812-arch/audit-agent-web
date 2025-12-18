@@ -392,7 +392,7 @@ with tab1:
                 with st.form("auth_form"):
                     pass_input = st.text_input("계속하시려면 인증키를 입력하세요", type="password")
                     if st.form_submit_button("인증 확인"):
-                        real_key = "ktmos0402!"
+                        real_key = "audit0402!"
                         if hashlib.sha256(pass_input.encode()).hexdigest() == hashlib.sha256(real_key.encode()).hexdigest():
                             st.session_state['audit_verified'] = True
                             st.success("🔓 인증되었습니다.")
@@ -561,6 +561,7 @@ with tab_admin:
                     st.download_button("📥 엑셀 다운로드", df.to_csv(index=False).encode('utf-8-sig'), "result.csv")
                 else: st.info("데이터가 없습니다.")
             except Exception as e: st.error(f"조회 실패: {e}")
+
 
 
 
