@@ -248,7 +248,6 @@ with tab_admin:
                 else: st.info("데이터가 아직 없습니다.")
             except Exception as e: st.error(f"오류: {e}")
 
-# --- [Tab 1, 2, 3] 기존 기능 보존 ---
 with tab1:
     if 'api_key' not in st.session_state: st.warning("🔒 로그인이 필요합니다.")
     else:
@@ -350,4 +349,5 @@ with tab_admin:
                         st.download_button("📥 CSV 다운로드", df.to_csv(index=False).encode('utf-8-sig'), "result.csv")
                 else: st.info("데이터가 없습니다.")
             except Exception as e: st.error(f"오류: {e}")
+
 
