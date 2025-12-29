@@ -248,4 +248,106 @@ with tab_admin:
                 else: st.info("데이터가 아직 없습니다.")
             except Exception as e: st.error(f"오류: {e}")
 
-# (기존의 Tab 1, 2, 3 로직은 원본 그대로 유지됨을 전제로 합니다)
+# --- [Tab 1, 2, 3] 기존 기능 보존 ---
+with tab1:
+    if 'api_key' not in st.session_state: st.warning("🔒 로그인이 필요합니다.")
+    else:
+        option = st.selectbox("작업 유형", ("법률 리스크 정밀 검토", "감사 보고서 검증", "오타 수정"))
+        up_file = st.file_uploader("파일 업로드", type=['txt', 'pdf', 'docx'])
+        if st.button("🚀 분석 시작"):
+            if up_file:
+                res = get_model().generate_content(f"{option} 관점 분석: {read_file(up_file)}")
+                st.markdown(res.text)
+
+with tab2:
+    if 'api_key' not in st.session_state: st.warning("🔒 로그인이 필요합니다.")
+    else:
+        q = st.chat_input("질문하세요")
+        if q:
+            with st.chat_message("user"): st.write(q)
+            with st.chat_message("assistant"): st.write(get_model().generate_content(q).text)
+
+with tab3:
+    if 'api_key' not in st.session_state: st.warning("🔒 로그인이 필요합니다.")
+    else: st.info("기능 준비 중입니다.")
+
+# --- [Tab Admin] 관리자 대시보드 (순서 고정 및 시각화 강화) ---
+with tab_admin:
+    st.markdown("### 🔒 관리자 전용 대시보드")
+    pw = st.text_input("비밀번호", type="password", key="admin_pw_final")
+    
+    if pw.strip() == "ktmos0402!":
+        # [반영] 인력현황 기반 정원 및 조직 순서 강제 고정
+        target_dict = {
+            "경영총괄": 45, "사업총괄": 37, "강북본부": 222, "강남본부": 174, 
+            "서부본부": 290, "강원본부": 104, "품질지원단": 138, "감사실": 3
+        }
+        ordered_units = list(target_dict.keys())
+        total_target = 1013
+
+        if st.button("🔄 실시간 참여 현황 업데이트"):
+            try:
+                client = init_google_sheet_connection()
+                ss = client.open("Audit_Result_2026")
+                ws = ss.worksheet("1월_설명절_캠페인")
+                df = pd.DataFrame(ws.get_all_records())
+                
+                if not df.empty:
+                    curr = len(df)
+                    
+                    # 1. 핵심 지표
+                    m1, m2, m3, m4 = st.columns(4)
+                    m1.metric("전체 대상", f"{total_target}명")
+                    m2.metric("참여 완료", f"{curr}명")
+                    m3.metric("미참여", f"{total_target - curr}명")
+                    m4.metric("참여율", f"{(curr/total_target)*100:.1f}%")
+
+                    # 2. 게이지 차트
+                    # 
+                    fig_gauge = go.Figure(go.Indicator(
+                        mode = "gauge+number", value = curr,
+                        title = {'text': "전체 참여 진척도", 'font': {'size': 20}},
+                        gauge = {'axis': {'range': [None, total_target]},
+                                 'bar': {'color': "#2980B9"},
+                                 'steps': [{'range': [0, 500], 'color': "#FADBD8"},
+                                           {'range': [500, 800], 'color': "#FCF3CF"},
+                                           {'range': [800, 1013], 'color': "#D4EFDF"}]}
+                    ))
+                    st.plotly_chart(fig_gauge, use_container_width=True)
+
+                    # 3. 조직별 데이터 가공 (순서 고정 로직)
+                    counts = df['총괄/본부/단'].value_counts().to_dict()
+                    stats = []
+                    for u in ordered_units:
+                        t = target_dict[u]
+                        act = counts.get(u, 0)
+                        stats.append({"조직": u, "참여완료": act, "미참여": max(0, t - act), "참여율": round((act/t)*100, 1)})
+                    
+                    stats_df = pd.DataFrame(stats)
+                    # Plotly 차트에서 X축 순서를 강제하기 위해 카테고리형으로 변환
+                    stats_df['조직'] = pd.Categorical(stats_df['조직'], categories=ordered_units, ordered=True)
+                    stats_df = stats_df.sort_values('조직')
+
+                    # 4. 누적 막대 차트 (순서 고정)
+                    # 
+                    fig_bar = px.bar(
+                        stats_df, x="조직", y=["참여완료", "미참여"],
+                        title="조직별 목표 대비 실적",
+                        color_discrete_map={"참여완료": "#2ECC71", "미참여": "#E74C3C"},
+                        text_auto=True
+                    )
+                    st.plotly_chart(fig_bar, use_container_width=True, config={'displayModeBar': True})
+
+                    # 5. 참여율 라인 차트 (순서 고정)
+                    # 
+                    fig_line = px.line(stats_df, x="조직", y="참여율", markers=True, text="참여율", title="조직별 참여율 (%)")
+                    fig_line.update_traces(line_color='#F1C40F', line_width=4, textposition="top center")
+                    st.plotly_chart(fig_line, use_container_width=True, config={'displayModeBar': True})
+                    
+                    st.info("💡 📷 아이콘을 클릭하여 보고용 이미지를 저장하세요.")
+                    with st.expander("📝 상세 명단"):
+                        st.dataframe(df, use_container_width=True)
+                        st.download_button("📥 CSV 다운로드", df.to_csv(index=False).encode('utf-8-sig'), "result.csv")
+                else: st.info("데이터가 없습니다.")
+            except Exception as e: st.error(f"오류: {e}")
+
