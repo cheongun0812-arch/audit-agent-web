@@ -249,6 +249,7 @@ with tab_admin:
     st.markdown("### 🔒 관리자 전용 대시보드")
     pw = st.text_input("비밀번호", type="password")
     if pw == "ktmos0402!":
+        # 인력현황 반영
         target_dict = {"서부본부": 290, "강북본부": 222, "강남본부": 174, "품질지원단": 138, "강원본부": 104, "경영총괄": 45, "사업총괄": 37, "감사실": 3}
         total_target = sum(target_dict.values()) # 1,013명
 
@@ -273,7 +274,6 @@ with tab_admin:
                     st.markdown("---")
 
                     # 2. 화려한 게이지 차트
-                    # 
                     fig_gauge = go.Figure(go.Indicator(
                         mode = "gauge+number", value = curr,
                         title = {'text': "전체 점검 실시 현황", 'font': {'size': 20}},
@@ -294,7 +294,7 @@ with tab_admin:
                     
                     stats_df = pd.DataFrame(stats)
                     
-                    # 
+                    # 화려한 누적 막대 차트 (Plotly Express)
                     fig_bar = px.bar(
                         stats_df, x="조직", y=["참여완료", "미참여"],
                         title="본부별 목표 대비 참여 인원 현황",
@@ -304,7 +304,6 @@ with tab_admin:
                     st.plotly_chart(fig_bar, use_container_width=True, config={'displayModeBar': True})
 
                     # 참여율 라인 차트
-                    # 
                     fig_line = px.line(stats_df, x="조직", y="참여율", markers=True, text="참여율", title="조직별 참여율 (%)")
                     fig_line.update_traces(line_color='#F1C40F', line_width=4, textposition="top center")
                     st.plotly_chart(fig_line, use_container_width=True, config={'displayModeBar': True})
