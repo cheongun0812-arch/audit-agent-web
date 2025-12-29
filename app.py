@@ -236,8 +236,7 @@ with tab_admin:
 
                     st.markdown("---")
 
-                    # 2. 화려한 게이지 차트
-                    # 
+                    # 2. 전체 참여 진척도 (게이지 차트)
                     fig_gauge = go.Figure(go.Indicator(
                         mode = "gauge+number", value = curr,
                         title = {'text': "전체 참여 진척도", 'font': {'size': 20}},
@@ -249,39 +248,46 @@ with tab_admin:
                     ))
                     st.plotly_chart(fig_gauge, use_container_width=True)
 
-                    # 3. 조직별 데이터 가공 (순서 강제 고정)
+                    # 3. [핵심 수정] 조직별 데이터 가공 및 순서 강제 고정
+                    # 요청하신 순서: 경영총괄 -> 사업총괄 -> 강북 -> 강남 -> 서부 -> 강원 -> 품질 -> 감사
+                    ordered_units = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
+                    
+                    # 실제 정원 데이터 매칭
+                    target_map = {"경영총괄": 45, "사업총괄": 37, "강북본부": 222, "강남본부": 174, "서부본부": 290, "강원본부": 104, "품질지원단": 138, "감사실": 3}
+                    
                     counts = df['총괄/본부/단'].value_counts().to_dict()
-                    stats = []
+                    stats_list = []
+                    
                     for u in ordered_units:
-                        t = target_dict[u]
+                        t = target_map.get(u, 0)
                         act = counts.get(u, 0)
-                        stats.append({"조직": u, "참여완료": act, "미참여": max(0, t - act), "참여율(%)": round((act/t)*100, 1)})
-                    stats_df = pd.DataFrame(stats)
+                        stats_list.append({
+                            "조직": u, 
+                            "참여완료": act, 
+                            "미참여": max(0, t - act), 
+                            "참여율(%)": round((act/t)*100, 1) if t > 0 else 0
+                        })
+                    
+                    stats_df = pd.DataFrame(stats_list)
 
-                    # 4. 화려한 누적 막대 차트 (순서 고정)
-                    # 
+                    # 4. 조직별 참여 인원 현황 (누적 막대 그래프)
                     fig_bar = px.bar(
                         stats_df, x="조직", y=["참여완료", "미참여"],
-                        title="조직별 목표 대비 실적 (순서 고정)",
+                        title="📊 조직별 참여 인원 현황 (순서 고정)",
                         color_discrete_map={"참여완료": "#2ECC71", "미참여": "#E74C3C"},
                         text_auto=True,
-                        category_orders={"조직": ordered_units}
+                        category_orders={"조직": ordered_units} # 그래프 X축 순서 강제 고정
                     )
-                    st.plotly_chart(fig_bar, use_container_width=True, config={'displayModeBar': True})
+                    fig_bar.update_layout(legend_title_text='구분', xaxis_title=None, yaxis_title="인원 수")
+                    st.plotly_chart(fig_bar, use_container_width=True)
 
-                    # 5. 참여율 라인 차트 (순서 고정)
-                    # 
+                    # 5. 조직별 참여율 (%) (꺾은선 그래프)
                     fig_line = px.line(
-                        stats_df, x="조직", y="참여율(%)", markers=True, text="참여율(%)", 
-                        title="조직별 참여율 (%) (순서 고정)",
-                        category_orders={"조직": ordered_units}
+                        stats_df, x="조직", y="참여율(%)", 
+                        title="📈 조직별 참여율 현황 (%)",
+                        markers=True, text="참여율(%)",
+                        category_orders={"조직": ordered_units} # 그래프 X축 순서 강제 고정
                     )
                     fig_line.update_traces(line_color='#F1C40F', line_width=4, textposition="top center")
-                    st.plotly_chart(fig_line, use_container_width=True, config={'displayModeBar': True})
-                    
-                    st.info("💡 차트 우측 상단 카메라 아이콘으로 이미지를 저장해 보고서에 활용하세요.")
-                else: st.info("아직 수집된 데이터가 없습니다.")
-            except Exception as e: st.error(f"데이터 조회 오류: {e}")
-
-
-
+                    fig_line.update_layout(xaxis_title=None, yaxis_title="참여율(%)")
+                    st.plotly_chart(fig_line, use_container_width=True)
