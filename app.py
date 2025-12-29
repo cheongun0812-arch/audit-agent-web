@@ -14,7 +14,7 @@ import base64
 import datetime
 import pytz 
 import pandas as pd # 데이터 분석용
-import plotly.graph_objects as go # 화려한 그래프용
+import plotly.graph_objects as go # 화려한 대시보드용
 import plotly.express as px
 
 # [신규] 구글 시트 라이브러리
@@ -40,7 +40,7 @@ st.set_page_config(
 )
 
 # ==========================================
-# 2. 🎨 디자인 테마 (원본 코드 100% 유지)
+# 2. 🎨 디자인 테마 (원본 유지)
 # ==========================================
 st.markdown("""
     <style>
@@ -205,7 +205,7 @@ def init_google_sheet_connection():
     except Exception as e:
         return None
 
-# [신규] 시트 자동 생성 및 저장 함수 (총괄/본부/단 추가)
+# [수정] 시트 자동 생성 및 저장 함수 (총괄/본부/단 정보 추가)
 def save_audit_result(emp_id, name, unit, dept, answer, sheet_name):
     client = init_google_sheet_connection()
     if client is None: return False, "구글 시트 연결 실패 (Secrets 확인)"
@@ -215,13 +215,13 @@ def save_audit_result(emp_id, name, unit, dept, answer, sheet_name):
         try:
             sheet = spreadsheet.worksheet(sheet_name)
         except gspread.exceptions.WorksheetNotFound:
-            # 시트 없으면 생성 (헤더에 총괄/본부/단 추가)
+            # 시트 없으면 생성 (헤더 구조: 저장시간, 사번, 성명, 총괄/본부/단, 부서, 답변, 비고)
             sheet = spreadsheet.add_worksheet(title=sheet_name, rows=2000, cols=10)
             sheet.append_row(["저장시간", "사번", "성명", "총괄/본부/단", "부서", "답변", "비고"])
             
         # 중복 체크
         existing_ids = sheet.col_values(2)
-        if emp_id in existing_ids:
+        if str(emp_id) in existing_ids:
             return False, f"이미 '{sheet_name}'에 참여하셨습니다. (중복 불가)"
             
         # 저장
@@ -337,10 +337,12 @@ st.markdown("<div style='text-align: center; color: #555; margin-bottom: 20px;'>
 # 탭 구성 (총 5개)
 tab_audit, tab1, tab2, tab3, tab_admin = st.tabs(["✅ 1월 자율점검", "📄 문서 정밀 검토", "💬 AI 에이전트", "📰 스마트 요약", "🔒 관리자"])
 
-# --- [Tab New] 자율점검 (수정됨: 총괄/본부/단 추가) ---
+# --- [Tab New] 자율점검 (참여자 정보 추가 반영) ---
 with tab_audit:
+    # [관리자 설정 구역]
     current_campaign_title = "1월: 설 명절 '청탁금지법' 자율점검"
     current_sheet_name = "1월_설명절_캠페인"  
+    # ----------------------------------------
 
     st.markdown(f"### 🎍 {current_campaign_title}")
     st.markdown("""
@@ -358,10 +360,10 @@ with tab_audit:
         emp_id = c1.text_input("사번", placeholder="예: 12345")
         name = c2.text_input("성명")
         
-        # [신규 추가] 총괄/본부/단 선택
+        # [수정] 총괄/본부/단 선택 리스트 추가
         unit_list = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
-        unit = st.selectbox("총괄 / 본부 / 단", unit_list)
-        dept = st.text_input("부서")
+        unit = st.selectbox("총괄 / 본부 / 단 (필수)", unit_list)
+        dept = st.text_input("상세 부서명")
         
         st.markdown("**Q. 위 내용을 확인하였으며, 설 명절 기간 동안 이를 철저히 준수할 것을 서약합니다.**")
         agree_check = st.checkbox("네, 확인하였으며 서약합니다.")
@@ -371,7 +373,7 @@ with tab_audit:
             elif not agree_check: st.error("❌ 서약에 체크해주세요.")
             else:
                 with st.spinner("제출 중..."):
-                    # unit 정보 추가하여 저장
+                    # unit 인자 추가하여 저장
                     success, msg = save_audit_result(emp_id, name, unit, dept, "서약함(PASS)", current_sheet_name)
                     if success:
                         st.success(f"✅ {name}님, 제출 완료! ({current_sheet_name}에 저장됨)")
@@ -385,7 +387,6 @@ with tab1:
         st.warning("🔒 이 기능을 사용하려면 먼저 로그인이 필요합니다.")
     else:
         option = st.selectbox("작업 유형 선택", ("법률 리스크 정밀 검토", "감사 보고서 검증", "오타 수정 및 문구 교정", "기안문/공문 초안 생성"))
-        
         is_authenticated = True
         if option == "감사 보고서 검증":
             if 'audit_verified' not in st.session_state:
@@ -397,25 +398,16 @@ with tab1:
                         real_key = "ktmos0402!"
                         if hashlib.sha256(pass_input.encode()).hexdigest() == hashlib.sha256(real_key.encode()).hexdigest():
                             st.session_state['audit_verified'] = True
-                            st.success("🔓 인증되었습니다.")
                             st.rerun()
-                        else: st.error("❌ 인증키가 올바르지 않습니다.")
-        
-        st.markdown("---")
         if is_authenticated:
-            uploaded_file = st.file_uploader("검토 파일 업로드", type=['txt', 'pdf', 'docx'], key="target")
-            uploaded_refs = st.file_uploader("참고 파일 업로드", type=['txt', 'pdf', 'docx'], accept_multiple_files=True)
+            uploaded_file = st.file_uploader("검토 파일 업로드", type=['txt', 'pdf', 'docx'])
             if st.button("🚀 분석 리포트 생성", use_container_width=True):
-                if not uploaded_file: st.warning("⚠️ 검토할 파일을 업로드해주세요.")
-                else:
+                if uploaded_file:
                     content = read_file(uploaded_file)
                     if content:
-                        prompt = f"[작업] {option}\n[내용] {content}"
-                        try:
-                            model = get_model()
-                            res = model.generate_content(prompt)
-                            st.markdown(res.text)
-                        except Exception as e: st.error(f"오류: {e}")
+                        model = get_model()
+                        res = model.generate_content(f"[작업] {option}\n[내용] {content}")
+                        st.markdown(res.text)
 
 # --- [Tab 2] 챗봇 (기본 유지) ---
 with tab2:
@@ -425,15 +417,13 @@ with tab2:
     else:
         with st.form(key='chat_form', clear_on_submit=True):
             user_input = st.text_input("질문 입력")
-            submit_chat = st.form_submit_button("전송 📤", use_container_width=True)
+            submit_chat = st.form_submit_button("전송 📤")
         if "messages" not in st.session_state: st.session_state.messages = []
         if submit_chat and user_input:
             st.session_state.messages.append({"role": "user", "content": user_input})
-            try:
-                model = get_model()
-                res = model.generate_content(user_input)
-                st.session_state.messages.append({"role": "assistant", "content": res.text})
-            except Exception as e: st.error(f"오류: {e}")
+            model = get_model()
+            res = model.generate_content(user_input)
+            st.session_state.messages.append({"role": "assistant", "content": res.text})
         for m in reversed(st.session_state.messages):
             with st.chat_message(m['role']): st.write(m['content'])
 
@@ -442,12 +432,8 @@ with tab3:
     st.markdown("### 📰 스마트 요약 & 인사이트")
     if 'api_key' not in st.session_state:
         st.warning("🔒 이 기능을 사용하려면 먼저 로그인이 필요합니다.")
-    else:
-        summary_type = st.radio("입력 방식", ["🌐 URL 입력", "📁 미디어 파일 업로드", "✍️ 텍스트 입력"])
-        if st.button("✨ 요약 시작", use_container_width=True):
-            st.info("기능이 준비 중이거나 입력 값이 없습니다.")
 
-# --- [Tab Admin] 관리자 대시보드 (수정됨: 화려한 그래프 및 인력현황 통계) ---
+# --- [Tab Admin] 관리자 대시보드 (화려한 그래프 반영) ---
 with tab_admin:
     st.markdown("### 🔒 관리자 전용 대시보드")
     admin_pw_input = st.text_input("비밀번호", type="password", key="admin_pw")
@@ -455,15 +441,15 @@ with tab_admin:
     if admin_pw_input.strip() == "ktmos0402!":
         st.success("접속 완료")
         
-        # [데이터 분석] 인력현황 기준 데이터
-        target_counts = {
+        # [데이터 정의] 제공된 인력현황 기반 정원 데이터
+        target_dict = {
             "서부본부": 290, "강북본부": 222, "강남본부": 174, 
             "품질지원단": 138, "강원본부": 104, "경영총괄": 45, 
             "사업총괄": 37, "감사실": 3
         }
-        total_target = sum(target_counts.values()) # 총 1,013명
+        total_target = sum(target_dict.values()) # 총 1,013명
 
-        if st.button("🔄 실시간 참여 현황 조회"):
+        if st.button("🔄 실시간 참여 현황 업데이트"):
             try:
                 client = init_google_sheet_connection()
                 spreadsheet = client.open("Audit_Result_2026")
@@ -475,28 +461,28 @@ with tab_admin:
                     curr_total = len(df)
                     participation_rate = (curr_total / total_target) * 100
 
-                    # 1. 핵심 숫자 표시 (Metrics)
+                    # 1. 핵심 지표 표시 (Key Metrics)
                     m1, m2, m3, m4 = st.columns(4)
                     m1.metric("전체 대상자", f"{total_target}명")
                     m2.metric("참여 완료", f"{curr_total}명")
                     m3.metric("미참여", f"{total_target - curr_total}명")
-                    m4.metric("전체 참여율", f"{participation_rate:.1f}%")
+                    m4.metric("참여율", f"{participation_rate:.1f}%")
 
                     st.markdown("---")
 
-                    # 2. 화려한 게이지 차트 (전체 참여율)
+                    # 2. 화려한 게이지 차트 (Plotly)
                     fig_gauge = go.Figure(go.Indicator(
                         mode = "gauge+number",
                         value = curr_total,
                         domain = {'x': [0, 1], 'y': [0, 1]},
-                        title = {'text': "전체 점검 실시 현황", 'font': {'size': 24}},
+                        title = {'text': "전체 점검 실시 현황", 'font': {'size': 20}},
                         gauge = {
                             'axis': {'range': [None, total_target]},
                             'bar': {'color': "#2980B9"},
                             'steps': [
-                                {'range': [0, total_target*0.5], 'color': "#FFEBEE"},
-                                {'range': [total_target*0.5, total_target*0.8], 'color': "#FFF9C4"},
-                                {'range': [total_target*0.8, total_target], 'color': "#E8F5E9"}
+                                {'range': [0, total_target*0.5], 'color': "#FADBD8"},
+                                {'range': [total_target*0.5, total_target*0.8], 'color': "#FCF3CF"},
+                                {'range': [total_target*0.8, total_target], 'color': "#D4EFDF"}
                             ],
                             'threshold': {'line': {'color': "red", 'width': 4}, 'thickness': 0.75, 'value': curr_total}
                         }
@@ -504,44 +490,46 @@ with tab_admin:
                     fig_gauge.update_layout(height=350)
                     st.plotly_chart(fig_gauge, use_container_width=True)
 
-                    # 3. 조직별 참여율 막대 그래프
-                    st.subheader("📊 조직별 참여 현황 상세")
+                    # 3. 조직별 참여율 분석 차트
+                    st.subheader("📊 조직별 참여 상세 (목표 대비 실적)")
                     
-                    # 실제 시트 데이터에서 조직별 카운트 (총괄/본부/단 열 기준)
+                    # 시트 데이터에서 '총괄/본부/단' 열 기준 집계
                     actual_counts = df['총괄/본부/단'].value_counts().to_dict()
                     
-                    stats = []
-                    for unit, target in target_counts.items():
+                    stats_list = []
+                    for unit, target in target_dict.items():
                         actual = actual_counts.get(unit, 0)
-                        stats.append({
+                        stats_list.append({
                             "조직": unit,
                             "참여완료": actual,
                             "미참여": max(0, target - actual),
-                            "참여율": round((actual/target)*100, 1)
+                            "참여율(%)": round((actual/target)*100, 1)
                         })
                     
-                    stats_df = pd.DataFrame(stats)
+                    stats_df = pd.DataFrame(stats_list)
 
-                    # 가로 누적 막대 차트
+                    # 화려한 누적 막대 차트 (Plotly Express)
                     fig_bar = px.bar(
-                        stats_df, x=["참여완료", "미참여"], y="조직",
-                        orientation='h', barmode='stack',
-                        title="조직별 목표 대비 실적",
+                        stats_df, x="조직", y=["참여완료", "미참여"],
+                        title="조직별 참여 인원 현황",
                         color_discrete_map={"참여완료": "#2ECC71", "미참여": "#E74C3C"},
                         text_auto=True
                     )
-                    
-                    # 참여율 선 그래프 추가 (이중 축 느낌)
-                    fig_rate = px.line(stats_df, x="참여율", y="조직", markers=True, title="조직별 참여율(%)")
-                    fig_rate.update_traces(line_color='#F1C40F', line_width=4)
-
                     st.plotly_chart(fig_bar, use_container_width=True)
-                    st.plotly_chart(fig_rate, use_container_width=True)
 
-                    with st.expander("📝 상세 참여 명단 보기"):
+                    # 참여율 라인 차트
+                    fig_line = px.line(
+                        stats_df, x="조직", y="참여율(%)",
+                        title="조직별 참여율 (%)",
+                        markers=True, text="참여율(%)"
+                    )
+                    fig_line.update_traces(line_color='#F1C40F', line_width=4, textposition="top center")
+                    st.plotly_chart(fig_line, use_container_width=True)
+
+                    with st.expander("📝 상세 참여 데이터 명단 보기"):
                         st.dataframe(df, use_container_width=True)
-                        st.download_button("📥 데이터 다운로드 (CSV)", df.to_csv(index=False).encode('utf-8-sig'), "audit_result.csv")
-                else: 
-                    st.info("데이터가 없습니다. 첫 점검자가 발생하면 대시보드가 활성화됩니다.")
-            except Exception as e: 
-                st.error(f"조회 중 오류 발생: {e}. 구글 시트 구조를 확인해주세요.")
+                        st.download_button("📥 데이터 다운로드(CSV)", df.to_csv(index=False).encode('utf-8-sig'), "audit_result.csv")
+                else:
+                    st.info("데이터가 없습니다. 첫 참여자가 발생하면 대시보드가 활성화됩니다.")
+            except Exception as e:
+                st.error(f"데이터 조회 중 오류 발생: {e}. 구글 시트 구조를 확인하세요.")
