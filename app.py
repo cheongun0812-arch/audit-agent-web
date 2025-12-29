@@ -91,12 +91,15 @@ with st.sidebar:
             st.form_submit_button(label="시스템 접속 (Login)", on_click=try_login)
         if 'login_error' in st.session_state and st.session_state['login_error']:
             st.error(st.session_state['login_error'])
-    else:
-        st.success("🟢 시스템 정상 가동")
-        if st.button("Logout (세션 종료)", use_container_width=True, on_click=perform_logout):
-            pass
-    st.markdown("---")
-    st.markdown("<div style='color:white; text-align:center; font-size:12px; opacity:0.8;'>ktMOS북부 Audit AI Solution © 2026</div>", unsafe_allow_html=True)
+    # 사이드바 구성 부분 (Tab Admin 등 다른 기능은 유지)
+else:
+    st.success("🟢 시스템 정상 가동")
+    # on_click을 제거하고 조건문 내부에서 logout() 처리
+    if st.button("Logout (세션 종료)", use_container_width=True):
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.query_params.clear()
+        st.rerun() # 이제 정상적으로 작동합니다.
 
 # ==========================================
 # 4. 시트 연동 및 데이터 처리
@@ -224,3 +227,4 @@ with tab_admin:
                 st.info("데이터가 아직 없습니다.")
         except Exception as e:
             st.error(f"데이터 연동 중 오류가 발생했습니다: {e}")
+
