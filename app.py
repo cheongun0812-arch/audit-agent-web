@@ -129,10 +129,11 @@ with st.sidebar:
         except: pass
 
     if 'api_key' not in st.session_state:
-        with st.form(key='login_form_final'):
+        with st.form(key='login_sidebar_form_reset'):
             st.markdown("<h4 style='color:white;'>🔐 Access Key</h4>", unsafe_allow_html=True)
-            st.text_input("Key", type="password", label_visibility="collapsed", key="login_input_key")
-            st.form_submit_button(label="시스템 접속 (Login)", on_click=try_login)
+            # placeholder 항목을 추가하여 안내 문구가 나오도록 수정했습니다.
+            st.text_input("Key", type="password", placeholder="API 키를 입력하세요", label_visibility="collapsed", key="login_input_key")
+            st.form_submit_button(label="시스템 접속", on_click=try_login)
     else:
         st.success("🟢 정상 가동 중")
         if st.button("Logout", type="primary", use_container_width=True, on_click=perform_logout):
@@ -282,4 +283,5 @@ with tab_admin:
                     st.info("💡 차트 우측 상단 카메라 아이콘으로 이미지를 저장해 보고서에 활용하세요.")
                 else: st.info("아직 수집된 데이터가 없습니다.")
             except Exception as e: st.error(f"데이터 조회 오류: {e}")
+
 
