@@ -356,14 +356,15 @@ with tab_audit:
     """, unsafe_allow_html=True)
 
     with st.form("audit_submit_form", clear_on_submit=True):
-        c1, c2 = st.columns(2)
+        # [수정] 입력란을 4개 열로 구성 (사번, 성명, 조직, 부서)
+        c1, c2, c3, c4 = st.columns(4)
         emp_id = c1.text_input("사번", placeholder="예: 12345")
         name = c2.text_input("성명")
         
-        # [수정] 총괄/본부/단 선택 리스트 추가
+        # [데이터 반영] 분석된 조직 목록
         unit_list = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
-        unit = st.selectbox("총괄 / 본부 / 단 (필수)", unit_list)
-        dept = st.text_input("상세 부서명")
+        unit = c3.selectbox("총괄 / 본부 / 단", unit_list)
+        dept = c4.text_input("상세 부서명")
         
         st.markdown("**Q. 위 내용을 확인하였으며, 설 명절 기간 동안 이를 철저히 준수할 것을 서약합니다.**")
         agree_check = st.checkbox("네, 확인하였으며 서약합니다.")
@@ -387,6 +388,7 @@ with tab1:
         st.warning("🔒 이 기능을 사용하려면 먼저 로그인이 필요합니다.")
     else:
         option = st.selectbox("작업 유형 선택", ("법률 리스크 정밀 검토", "감사 보고서 검증", "오타 수정 및 문구 교정", "기안문/공문 초안 생성"))
+        
         is_authenticated = True
         if option == "감사 보고서 검증":
             if 'audit_verified' not in st.session_state:
@@ -399,8 +401,10 @@ with tab1:
                         if hashlib.sha256(pass_input.encode()).hexdigest() == hashlib.sha256(real_key.encode()).hexdigest():
                             st.session_state['audit_verified'] = True
                             st.rerun()
+        
+        st.markdown("---")
         if is_authenticated:
-            uploaded_file = st.file_uploader("검토 파일 업로드", type=['txt', 'pdf', 'docx'])
+            uploaded_file = st.file_uploader("검토 파일 업로드", type=['txt', 'pdf', 'docx'], key="target")
             if st.button("🚀 분석 리포트 생성", use_container_width=True):
                 if uploaded_file:
                     content = read_file(uploaded_file)
@@ -441,7 +445,7 @@ with tab_admin:
     if admin_pw_input.strip() == "ktmos0402!":
         st.success("접속 완료")
         
-        # [데이터 정의] 제공된 인력현황 기반 정원 데이터
+        # [데이터 분석] 제공된 인력현황 기반 정원 데이터 고정 반영
         target_dict = {
             "서부본부": 290, "강북본부": 222, "강남본부": 174, 
             "품질지원단": 138, "강원본부": 104, "경영총괄": 45, 
@@ -461,40 +465,43 @@ with tab_admin:
                     curr_total = len(df)
                     participation_rate = (curr_total / total_target) * 100
 
-                    # 1. 핵심 지표 표시 (Key Metrics)
+                    # 1. 핵심 숫자 표시 (Key Metrics)
                     m1, m2, m3, m4 = st.columns(4)
                     m1.metric("전체 대상자", f"{total_target}명")
                     m2.metric("참여 완료", f"{curr_total}명")
                     m3.metric("미참여", f"{total_target - curr_total}명")
-                    m4.metric("참여율", f"{participation_rate:.1f}%")
+                    m4.metric("전체 참여율", f"{participation_rate:.1f}%")
 
                     st.markdown("---")
 
-                    # 2. 화려한 게이지 차트 (Plotly)
+                    # 2. 화려한 게이지 차트 (전체 진척도)
                     fig_gauge = go.Figure(go.Indicator(
                         mode = "gauge+number",
                         value = curr_total,
                         domain = {'x': [0, 1], 'y': [0, 1]},
-                        title = {'text': "전체 점검 실시 현황", 'font': {'size': 20}},
+                        title = {'text': "실시간 점검 완료 현황 (명)", 'font': {'size': 20}},
                         gauge = {
                             'axis': {'range': [None, total_target]},
                             'bar': {'color': "#2980B9"},
                             'steps': [
-                                {'range': [0, total_target*0.5], 'color': "#FADBD8"},
-                                {'range': [total_target*0.5, total_target*0.8], 'color': "#FCF3CF"},
-                                {'range': [total_target*0.8, total_target], 'color': "#D4EFDF"}
+                                {'range': [0, total_target*0.5], 'color': "#FADBD8"}, # 50% 미만 빨강 계열
+                                {'range': [total_target*0.5, total_target*0.8], 'color': "#FCF3CF"}, # 80% 미만 노랑 계열
+                                {'range': [total_target*0.8, total_target], 'color': "#D4EFDF"}  # 80% 이상 초록 계열
                             ],
                             'threshold': {'line': {'color': "red", 'width': 4}, 'thickness': 0.75, 'value': curr_total}
                         }
                     ))
                     fig_gauge.update_layout(height=350)
-                    st.plotly_chart(fig_gauge, use_container_width=True)
+                    st.plotly_chart(fig_gauge, use_container_width=True, config={'displayModeBar': True}) # 카메라 아이콘 지원
 
-                    # 3. 조직별 참여율 분석 차트
-                    st.subheader("📊 조직별 참여 상세 (목표 대비 실적)")
+                    # 3. 조직별 참여 상세 (목표 대비 실적)
+                    st.subheader("📊 조직별 참여 상세 분석")
                     
                     # 시트 데이터에서 '총괄/본부/단' 열 기준 집계
-                    actual_counts = df['총괄/본부/단'].value_counts().to_dict()
+                    if '총괄/본부/단' in df.columns:
+                        actual_counts = df['총괄/본부/단'].value_counts().to_dict()
+                    else:
+                        actual_counts = {}
                     
                     stats_list = []
                     for unit, target in target_dict.items():
@@ -509,27 +516,29 @@ with tab_admin:
                     stats_df = pd.DataFrame(stats_list)
 
                     # 화려한 누적 막대 차트 (Plotly Express)
-                    fig_bar = px.bar(
+                    #                     fig_bar = px.bar(
                         stats_df, x="조직", y=["참여완료", "미참여"],
-                        title="조직별 참여 인원 현황",
+                        title="본부별 목표 대비 참여 인원 현황",
                         color_discrete_map={"참여완료": "#2ECC71", "미참여": "#E74C3C"},
                         text_auto=True
                     )
-                    st.plotly_chart(fig_bar, use_container_width=True)
+                    st.plotly_chart(fig_bar, use_container_width=True, config={'displayModeBar': True})
 
-                    # 참여율 라인 차트
-                    fig_line = px.line(
+                    # 조직별 참여율 라인 차트
+                    #                     fig_line = px.line(
                         stats_df, x="조직", y="참여율(%)",
                         title="조직별 참여율 (%)",
                         markers=True, text="참여율(%)"
                     )
                     fig_line.update_traces(line_color='#F1C40F', line_width=4, textposition="top center")
-                    st.plotly_chart(fig_line, use_container_width=True)
+                    st.plotly_chart(fig_line, use_container_width=True, config={'displayModeBar': True})
+
+                    st.info("💡 각 그래프 우측 상단의 카메라 아이콘을 클릭하면 보고용 이미지로 저장할 수 있습니다.")
 
                     with st.expander("📝 상세 참여 데이터 명단 보기"):
                         st.dataframe(df, use_container_width=True)
                         st.download_button("📥 데이터 다운로드(CSV)", df.to_csv(index=False).encode('utf-8-sig'), "audit_result.csv")
                 else:
-                    st.info("데이터가 없습니다. 첫 참여자가 발생하면 대시보드가 활성화됩니다.")
+                    st.info("데이터가 아직 없습니다. 첫 참여자가 발생하면 대시보드가 활성화됩니다.")
             except Exception as e:
-                st.error(f"데이터 조회 중 오류 발생: {e}. 구글 시트 구조를 확인하세요.")
+                st.error(f"조회 오류: {e}. 시트 헤더가 [저장시간, 사번, 성명, 총괄/본부/단, 부서, 답변, 비고] 순서인지 확인해주세요.")
