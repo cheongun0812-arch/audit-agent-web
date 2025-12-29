@@ -178,25 +178,31 @@ with tab_audit:
     current_sheet = "1월_설명절_캠페인"
     st.markdown("### 🎍 1월: 설 명절 '청탁금지법' 자율점검")
     
-    with st.form("audit_form_final", clear_on_submit=True):
+    with st.form("audit_form", clear_on_submit=True):
         c1, c2, c3, c4 = st.columns(4)
-        emp_id = c1.text_input("사번", placeholder="12345", key="audit_id")
-        name = c2.text_input("성명", key="audit_name")
+        emp_id = c1.text_input("사번", placeholder="예: 12345")
+        name = c2.text_input("성명")
         
-        # [고정 순서] 요청하신 조직 체계 순서 반영
-        ordered_units = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
-        unit = c3.selectbox("총괄 / 본부 / 단", ordered_units, key="audit_unit")
-        dept = c4.text_input("상세 부서명", key="audit_dept")
+        # [추가] 요청하신 조직 체계 순서로 선택 항목 배열
+        unit_options = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
+        unit = c3.selectbox("총괄 / 본부 / 단", unit_options)
         
-        st.markdown("**Q. 위 내용을 확인하였으며 준수할 것을 서약합니까?**")
-        agree = st.checkbox("네, 확인하였으며 서약합니다.", key="audit_agree")
+        dept = c4.text_input("상세 부서명")
+        
+        st.markdown("**Q. 위 내용을 확인하였으며, 이를 철저히 준수할 것을 서약합니까?**")
+        agree = st.checkbox("네, 확인하였으며 서약합니다.")
         
         if st.form_submit_button("점검 완료 및 제출", use_container_width=True):
-            if not emp_id or not name or not agree: st.warning("⚠️ 모든 항목을 입력하고 서약에 체크해 주세요.")
+            if not emp_id or not name or not agree:
+                st.warning("⚠️ 모든 항목을 입력하고 서약에 체크해 주세요.")
             else:
-                ok, msg = save_audit_result(emp_id, name, unit, dept, "서약함(PASS)", current_sheet)
-                if ok: st.success("✅ 제출 완료!"); st.balloons()
-                else: st.error(f"❌ 실패: {msg}")
+                # save_audit_result 함수에 unit(조직) 인자를 추가하여 저장
+                success, msg = save_audit_result(emp_id, name, unit, dept, "서약함(PASS)", current_sheet)
+                if success:
+                    st.success(f"✅ 제출 완료! ({name}님)")
+                    st.balloons()
+                else:
+                    st.error(f"❌ 실패: {msg}")
 
 # --- [Tab Admin] 관리자 대시보드 (그래프 순서 강제 고정) ---
 with tab_admin:
@@ -276,3 +282,4 @@ with tab_admin:
                     st.info("💡 차트 우측 상단 카메라 아이콘으로 이미지를 저장해 보고서에 활용하세요.")
                 else: st.info("아직 수집된 데이터가 없습니다.")
             except Exception as e: st.error(f"데이터 조회 오류: {e}")
+
