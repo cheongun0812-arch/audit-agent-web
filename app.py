@@ -127,7 +127,6 @@ with st.sidebar:
                 st.session_state['api_key'] = restored_key
                 st.rerun()
         except: pass
-
     if 'api_key' not in st.session_state:
         with st.form(key='login_sidebar_form_reset'):
             st.markdown("<h4 style='color:white;'>🔐 Access Key</h4>", unsafe_allow_html=True)
@@ -283,5 +282,6 @@ with tab_admin:
                     st.info("💡 차트 우측 상단 카메라 아이콘으로 이미지를 저장해 보고서에 활용하세요.")
                 else: st.info("아직 수집된 데이터가 없습니다.")
             except Exception as e: st.error(f"데이터 조회 오류: {e}")
+
 
 
