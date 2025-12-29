@@ -150,50 +150,77 @@ with tab_audit:
                 if success: st.success("✅ 제출 성공!"); st.balloons()
                 else: st.error(f"❌ 실패: {msg}")
 
-# --- [Tab Admin] 화려한 관리자 대시보드 (핵심 업데이트) ---
+# --- [Tab Admin] 관리자 대시보드 (시각화 툴바 강제 활성화 버전) ---
 with tab_admin:
     st.markdown("### 🔒 실시간 참여 통계 리포트")
-    admin_pw = st.text_input("관리자 암호", type="password", key="admin_main_pw")
+    admin_pw = st.text_input("관리자 암호", type="password", key="admin_pw_final")
+    
     if admin_pw == "ktmos0402!":
         target_dict = {"서부본부": 290, "강북본부": 222, "강남본부": 174, "품질지원단": 138, "강원본부": 104, "경영총괄": 45, "사업총괄": 37, "감사실": 3}
         total_target = 1013
+
         try:
             client = init_google_sheet_connection()
             ss = client.open("Audit_Result_2026")
             ws = ss.worksheet("1월_자율점검_캠페인")
-            df = pd.DataFrame(ws.get_all_records())
+            records = ws.get_all_records()
             
-            if not df.empty:
-                curr = len(df)
-                # 1. 상단 게이지 차트 (화려한 참여율 표시)
+            if records:
+                df = pd.DataFrame(records)
+                curr_total = len(df)
+
+                # 1. 게이지 차트
                 fig_gauge = go.Figure(go.Indicator(
-                    mode = "gauge+number", value = curr,
-                    title = {'text': f"전체 참여율: {(curr/total_target)*100:.1f}%", 'font': {'size': 20}},
+                    mode = "gauge+number", value = curr_total,
+                    title = {'text': f"전체 참여율: {(curr_total/total_target)*100:.1f}%", 'font': {'size': 20}},
                     gauge = {
                         'axis': {'range': [None, total_target]},
                         'bar': {'color': "#2980B9"},
-                        'steps': [{'range': [0, 500], 'color': "#FADBD8"}, {'range': [500, 800], 'color': "#FCF3CF"}, {'range': [800, 1013], 'color': "#D4EFDF"}]
+                        'steps': [
+                            {'range': [0, 500], 'color': "#eeeeee"},
+                            {'range': [500, 1013], 'color': "#d4edda"}
+                        ],
+                        'threshold': {'line': {'color': "red", 'width': 4}, 'thickness': 0.75, 'value': curr_total}
                     }
                 ))
-                fig_gauge.update_layout(height=300)
-                st.plotly_chart(fig_gauge, use_container_width=True)
+                fig_gauge.update_layout(height=300, margin=dict(t=50, b=20))
+                st.plotly_chart(fig_gauge, use_container_width=True, config={'displayModeBar': True}) # 툴바 강제 활성화
 
-                # 2. 조직별 화려한 바 차트
                 st.markdown("---")
+                
+                # 2. 조직별 바 차트 (색상 화려하게 보정)
                 counts = df['총괄/본부/단'].value_counts()
                 stats = [{"조직": u, "참여완료": counts.get(u, 0), "참여율": round((counts.get(u, 0)/t)*100, 1)} for u, t in target_dict.items()]
                 stats_df = pd.DataFrame(stats)
+
+                # 
+                fig_bar = px.bar(
+                    stats_df, x="조직", y="참여완료", color="조직", # 조직별로 다른 색상 부여
+                    text="참여율", title="본부별 참여 실적 (단위: %)",
+                    color_discrete_sequence=px.colors.qualitative.Bold # 더 선명하고 화려한 색상셋
+                )
                 
-                fig_bar = px.bar(stats_df, x="조직", y="참여완료", color="참여완료", text="참여율", 
-                                 title="본부별 실시간 참여 실적 (%)", color_continuous_scale='Viridis')
                 fig_bar.update_traces(texttemplate='%{text}%', textposition='outside')
-                st.info("💡 차트 우측 상단 📷 아이콘을 클릭하여 이미지를 다운로드 하세요. 이메일 본문에 복사 가능합니다.")
-                st.plotly_chart(fig_bar, use_container_width=True)
+                fig_bar.update_layout(
+                    plot_bgcolor='white',
+                    xaxis_tickangle=-45,
+                    margin=dict(t=50, b=20),
+                    showlegend=False
+                )
+
+                st.success("📸 **차트 저장 방법**: 차트 오른쪽 상단의 카메라 아이콘(Download plot as a png)을 누르시면 이미지 파일로 저장됩니다.")
+                
+                # config 설정을 통해 툴바가 항상 보이도록 설정
+                st.plotly_chart(fig_bar, use_container_width=True, config={
+                    'displayModeBar': True, 
+                    'modeBarButtonsToAdd': ['toImage'],
+                    'displaylogo': False
+                })
 
                 # 3. 데이터 다운로드
-                st.markdown("---")
-                st.download_button("📥 전체 명단 엑셀(CSV) 다운로드", df.to_csv(index=False).encode('utf-8-sig'), 
-                                   f"audit_report_{datetime.now().strftime('%m%d')}.csv", "text/csv", use_container_width=True)
-                st.dataframe(df, use_container_width=True)
-            else: st.info("데이터가 아직 없습니다.")
-        except: st.info("데이터 로딩 중...")
+                st.download_button("📥 전체 명단 CSV 다운로드", df.to_csv(index=False).encode('utf-8-sig'), 
+                                   "audit_result.csv", "text/csv", use_container_width=True)
+            else:
+                st.info("데이터가 아직 없습니다.")
+        except Exception as e:
+            st.error(f"데이터 연동 중 오류가 발생했습니다: {e}")
