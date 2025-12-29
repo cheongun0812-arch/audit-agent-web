@@ -14,8 +14,6 @@ import base64
 import datetime
 import pytz 
 import pandas as pd # 데이터 분석용
-import plotly.graph_objects as go # 화려한 대시보드용
-import plotly.express as px
 
 # [신규] 구글 시트 라이브러리
 try:
@@ -40,7 +38,7 @@ st.set_page_config(
 )
 
 # ==========================================
-# 2. 🎨 디자인 테마 (원본 유지)
+# 2. 🎨 디자인 테마 (검증된 V71 코드 100% 유지)
 # ==========================================
 st.markdown("""
     <style>
@@ -83,6 +81,26 @@ st.markdown("""
     [data-testid="stChatMessage"] { background-color: #FFFFFF; border: 1px solid #eee; }
     [data-testid="stChatMessage"][data-testid="user"] { background-color: #E3F2FD; }
 
+    /* 🎄 크리스마스 로그아웃 버튼 스타일 */
+    .logout-btn {
+        border: 2px solid #FF5252 !important;
+        background: transparent !important;
+        color: #FF5252 !important;
+        border-radius: 20px !important;
+    }
+    .logout-btn:hover {
+        background-color: #FF5252 !important;
+        color: white !important;
+    }
+   /* 크리스마스 애니메이션 스타일 */
+    .snow-bg {
+        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+        background: rgba(0, 0, 0, 0.9); z-index: 999999;
+        display: flex; flex-direction: column; justify-content: center; align-items: center;
+        text-align: center; color: white !important;
+        pointer-events: none;
+    }
+   /* 탭 메뉴 폰트 확대 (20px Bold) */
     button[data-baseweb="tab"] div p {
         font-size: 18px !important;
         font-weight: 800 !important;
@@ -185,8 +203,8 @@ def init_google_sheet_connection():
     except Exception as e:
         return None
 
-# [수정] 시트 자동 생성 및 저장 함수 (총괄/본부/단 정보 추가)
-def save_audit_result(emp_id, name, unit, dept, answer, sheet_name):
+# [신규] 시트 자동 생성 및 저장 함수 (카멜레온 전략)
+def save_audit_result(emp_id, name, dept, answer, sheet_name):
     client = init_google_sheet_connection()
     if client is None: return False, "구글 시트 연결 실패 (Secrets 확인)"
     
@@ -195,19 +213,19 @@ def save_audit_result(emp_id, name, unit, dept, answer, sheet_name):
         try:
             sheet = spreadsheet.worksheet(sheet_name)
         except gspread.exceptions.WorksheetNotFound:
-            # 시트 없으면 생성 (헤더 구조: 저장시간, 사번, 성명, 총괄/본부/단, 부서, 답변, 비고)
-            sheet = spreadsheet.add_worksheet(title=sheet_name, rows=2000, cols=10)
-            sheet.append_row(["저장시간", "사번", "성명", "총괄/본부/단", "부서", "답변", "비고"])
+            # 시트 없으면 생성
+            sheet = spreadsheet.add_worksheet(title=sheet_name, rows=100, cols=10)
+            sheet.append_row(["저장시간", "사번", "성명", "부서", "답변", "비고"])
             
         # 중복 체크
         existing_ids = sheet.col_values(2)
-        if str(emp_id) in existing_ids:
+        if emp_id in existing_ids:
             return False, f"이미 '{sheet_name}'에 참여하셨습니다. (중복 불가)"
             
         # 저장
         korea_tz = pytz.timezone("Asia/Seoul")
         now = datetime.datetime.now(korea_tz).strftime("%Y-%m-%d %H:%M:%S")
-        sheet.append_row([now, emp_id, name, unit, dept, answer, "완료"])
+        sheet.append_row([now, emp_id, name, dept, answer, "완료"])
         return True, "저장 성공"
     except Exception as e: return False, f"시스템 오류: {e}"
 
@@ -317,10 +335,12 @@ st.markdown("<div style='text-align: center; color: #555; margin-bottom: 20px;'>
 # 탭 구성 (총 5개)
 tab_audit, tab1, tab2, tab3, tab_admin = st.tabs(["✅ 1월 자율점검", "📄 문서 정밀 검토", "💬 AI 에이전트", "📰 스마트 요약", "🔒 관리자"])
 
-# --- [Tab New] 자율점검 (참여자 정보 추가 반영: 4열 배치) ---
+# --- [Tab New] 자율점검 (카멜레온 - 전직원 개방) ---
 with tab_audit:
+    # [관리자 설정 구역] 매달 여기만 수정하세요!
     current_campaign_title = "1월: 설 명절 '청탁금지법' 자율점검"
     current_sheet_name = "1월_설명절_캠페인"  
+    # ----------------------------------------
 
     st.markdown(f"### 🎍 {current_campaign_title}")
     st.markdown("""
@@ -334,15 +354,10 @@ with tab_audit:
     """, unsafe_allow_html=True)
 
     with st.form("audit_submit_form", clear_on_submit=True):
-        # 참여자 정보 입력란을 4개 열(사번, 성명, 조직, 부서)로 구성
-        c1, c2, c3, c4 = st.columns(4)
+        c1, c2, c3 = st.columns(3)
         emp_id = c1.text_input("사번", placeholder="예: 12345")
         name = c2.text_input("성명")
-        
-        # 분석된 조직 목록 반영
-        unit_list = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
-        unit = c3.selectbox("총괄 / 본부 / 단", unit_list)
-        dept = c4.text_input("상세 부서명")
+        dept = c3.text_input("부서")
         
         st.markdown("**Q. 위 내용을 확인하였으며, 설 명절 기간 동안 이를 철저히 준수할 것을 서약합니다.**")
         agree_check = st.checkbox("네, 확인하였으며 서약합니다.")
@@ -352,18 +367,20 @@ with tab_audit:
             elif not agree_check: st.error("❌ 서약에 체크해주세요.")
             else:
                 with st.spinner("제출 중..."):
-                    # unit 인자 추가하여 저장
-                    success, msg = save_audit_result(emp_id, name, unit, dept, "서약함(PASS)", current_sheet_name)
+                    success, msg = save_audit_result(emp_id, name, dept, "서약함(PASS)", current_sheet_name)
                     if success:
                         st.success(f"✅ {name}님, 제출 완료! ({current_sheet_name}에 저장됨)")
                         st.balloons()
                     else: st.error(f"❌ 실패: {msg}")
 
-# --- [Tab 1] 문서 정밀 검토 (기본 유지) ---
+# --- [Tab 1] 문서 정밀 검토 (로그인 선제적 방어) ---
 with tab1:
     st.markdown("### 📂 작업 및 파일 설정")
+    
+    # [수정됨] 로그인 방어벽
     if 'api_key' not in st.session_state:
         st.warning("🔒 이 기능을 사용하려면 먼저 로그인이 필요합니다.")
+        st.info("👈 좌측 사이드바에서 '시스템 접속(Login)'을 먼저 진행해주세요.")
     else:
         option = st.selectbox("작업 유형 선택", ("법률 리스크 정밀 검토", "감사 보고서 검증", "오타 수정 및 문구 교정", "기안문/공문 초안 생성"))
         
@@ -378,148 +395,145 @@ with tab1:
                         real_key = "ktmos0402!"
                         if hashlib.sha256(pass_input.encode()).hexdigest() == hashlib.sha256(real_key.encode()).hexdigest():
                             st.session_state['audit_verified'] = True
+                            st.success("🔓 인증되었습니다.")
                             st.rerun()
+                        else: st.error("❌ 인증키가 올바르지 않습니다.")
         
         st.markdown("---")
         if is_authenticated:
             uploaded_file = st.file_uploader("검토 파일 업로드", type=['txt', 'pdf', 'docx'], key="target")
+            uploaded_refs = st.file_uploader("참고 파일 업로드", type=['txt', 'pdf', 'docx'], accept_multiple_files=True)
+            
+            ref_content = ""
+            if uploaded_refs:
+                for ref_file in uploaded_refs:
+                    c = read_file(ref_file)
+                    if c: ref_content += c + "\n"
+            
             if st.button("🚀 분석 리포트 생성", use_container_width=True):
-                if uploaded_file:
-                    content = read_file(uploaded_file)
-                    if content:
-                        model = get_model()
-                        res = model.generate_content(f"[작업] {option}\n[내용] {content}")
-                        st.markdown(res.text)
+                if not uploaded_file: st.warning("⚠️ 검토할 파일을 업로드해주세요.")
+                else:
+                    st.toast("🤖 AI가 문서를 정밀 분석 중입니다.", icon="🔍")
+                    persona_name = "AI 감사 전문가"
+                    if "법률" in option: persona_name = "법률 전문가 AI"
+                    elif "오타" in option: persona_name = "AI 에디터"
+                    
+                    with st.spinner(f'🧠 {persona_name}가 분석 중입니다...'):
+                        content = read_file(uploaded_file)
+                        if content:
+                            prompt = f"[역할] {persona_name}\n[작업] {option}\n[참고] {ref_content}\n[내용] {content}"
+                            try:
+                                model = get_model()
+                                res = model.generate_content(prompt)
+                                st.success("분석 완료")
+                                st.markdown(res.text)
+                            except Exception as e: st.error(f"오류: {e}")
 
-# --- [Tab 2] 챗봇 (기본 유지) ---
+# --- [Tab 2] 챗봇 (로그인 선제적 방어) ---
 with tab2:
     st.markdown("### 🗣️ 실시간 질의응답")
+    
+    # [수정됨] 로그인 방어벽
     if 'api_key' not in st.session_state:
         st.warning("🔒 이 기능을 사용하려면 먼저 로그인이 필요합니다.")
+        st.info("👈 좌측 사이드바에서 '시스템 접속(Login)'을 먼저 진행해주세요.")
     else:
         with st.form(key='chat_form', clear_on_submit=True):
-            user_input = st.text_input("질문 입력")
-            submit_chat = st.form_submit_button("전송 📤")
+            user_input = st.text_input("질문 입력", placeholder="예: 하도급법 위반 사례를 알려줘")
+            submit_chat = st.form_submit_button("전송 📤", use_container_width=True)
+
         if "messages" not in st.session_state: st.session_state.messages = []
+        
         if submit_chat and user_input:
             st.session_state.messages.append({"role": "user", "content": user_input})
-            model = get_model()
-            res = model.generate_content(user_input)
-            st.session_state.messages.append({"role": "assistant", "content": res.text})
-        for m in reversed(st.session_state.messages):
-            with st.chat_message(m['role']): st.write(m['content'])
+            with st.spinner("생성 중..."):
+                try:
+                    model = get_model()
+                    res = model.generate_content(f"질문: {user_input}")
+                    st.session_state.messages.append({"role": "assistant", "content": res.text})
+                except Exception as e: st.error(f"오류: {e}")
+        
+        msgs = st.session_state.messages
+        if len(msgs) >= 2:
+            for i in range(len(msgs) - 1, -1, -1):
+                role = msgs[i]['role']
+                content = msgs[i]['content']
+                with st.chat_message(role): st.write(content)
 
-# --- [Tab 3] 스마트 요약 (기본 유지) ---
+# --- [Tab 3] 스마트 요약 (로그인 선제적 방어) ---
 with tab3:
     st.markdown("### 📰 스마트 요약 & 인사이트")
+    
+    # [수정됨] 로그인 방어벽
     if 'api_key' not in st.session_state:
         st.warning("🔒 이 기능을 사용하려면 먼저 로그인이 필요합니다.")
+        st.info("👈 좌측 사이드바에서 '시스템 접속(Login)'을 먼저 진행해주세요.")
+    else:
+        summary_type = st.radio("입력 방식", ["🌐 URL 입력", "📁 미디어 파일 업로드", "✍️ 텍스트 입력"])
+        final_input = None
+        is_multimodal = False
 
-# --- [Tab Admin] 관리자 대시보드 (화려한 그래프 반영 및 들여쓰기 오류 수정) ---
+        if "URL" in summary_type:
+            target_url = st.text_input("🔗 URL을 붙여넣으세요")
+            if target_url:
+                if "youtu" in target_url:
+                    with st.spinner("📺 유튜브 자막 확인 중..."):
+                        text_data = get_youtube_transcript(target_url)
+                        if text_data: final_input = text_data
+                        else:
+                            audio_file = download_and_upload_youtube_audio(target_url)
+                            if audio_file:
+                                final_input = audio_file
+                                is_multimodal = True
+                else:
+                    with st.spinner("🌐 웹페이지 분석 중..."):
+                        final_input = get_web_content(target_url)
+        
+        elif "미디어" in summary_type:
+            media_file = st.file_uploader("파일 업로드", type=['mp3', 'wav', 'mp4', 'm4a'])
+            if media_file:
+                final_input = process_media_file(media_file)
+                is_multimodal = True
+
+        else:
+            final_input = st.text_area("내용 입력", height=200)
+
+        if st.button("✨ 요약 시작", use_container_width=True):
+            if not final_input: st.warning("분석 대상을 입력하세요.")
+            else:
+                with st.spinner('📊 보고서 작성 중...'):
+                    try:
+                        prompt = "[요청] 핵심 요약, 상세 내용, 인사이트 도출"
+                        model = get_model()
+                        if is_multimodal: res = model.generate_content([prompt, final_input])
+                        else: res = model.generate_content(f"{prompt}\n\n{final_input[:30000]}")
+                        st.success("분석 완료")
+                        st.markdown(res.text)
+                    except Exception as e: st.error(f"오류: {e}")
+
+# --- [Tab Admin] 관리자 대시보드 (업그레이드) ---
 with tab_admin:
     st.markdown("### 🔒 관리자 전용 대시보드")
+    
+    # [수정됨] 패스워드 "ktmos0402!"로 변경 + 공백 제거(.strip()) 추가
     admin_pw_input = st.text_input("비밀번호", type="password", key="admin_pw")
     
     if admin_pw_input.strip() == "ktmos0402!":
         st.success("접속 완료")
         
-        # 인력현황 기반 정원 데이터 고정 반영
-        target_dict = {
-            "서부본부": 290, "강북본부": 222, "강남본부": 174, 
-            "품질지원단": 138, "강원본부": 104, "경영총괄": 45, 
-            "사업총괄": 37, "감사실": 3
-        }
-        total_target = sum(target_dict.values()) # 총 1,013명
-
-        if st.button("🔄 실시간 참여 현황 업데이트"):
+        target_sheet = st.text_input("조회할 시트 이름", value="1월_설명절_캠페인")
+        
+        if st.button("🔄 데이터 조회"):
             try:
                 client = init_google_sheet_connection()
                 spreadsheet = client.open("Audit_Result_2026")
-                sheet = spreadsheet.worksheet("1월_설명절_캠페인")
+                sheet = spreadsheet.worksheet(target_sheet)
                 data = sheet.get_all_records()
                 
                 if data:
                     df = pd.DataFrame(data)
-                    curr_total = len(df)
-                    participation_rate = (curr_total / total_target) * 100
-
-                    # 1. 핵심 숫자 표시 (Key Metrics)
-                    m1, m2, m3, m4 = st.columns(4)
-                    m1.metric("전체 대상자", f"{total_target}명")
-                    m2.metric("참여 완료", f"{curr_total}명")
-                    m3.metric("미참여", f"{total_target - curr_total}명")
-                    m4.metric("참여율", f"{participation_rate:.1f}%")
-
-                    st.markdown("---")
-
-                    # 2. 화려한 게이지 차트 (전체 진척도)
-                    # 
-                    fig_gauge = go.Figure(go.Indicator(
-                        mode = "gauge+number",
-                        value = curr_total,
-                        domain = {'x': [0, 1], 'y': [0, 1]},
-                        title = {'text': "실시간 점검 완료 현황 (명)", 'font': {'size': 20}},
-                        gauge = {
-                            'axis': {'range': [None, total_target]},
-                            'bar': {'color': "#2980B9"},
-                            'steps': [
-                                {'range': [0, total_target*0.5], 'color': "#FADBD8"}, # 50% 미만 빨강 계열
-                                {'range': [total_target*0.5, total_target*0.8], 'color': "#FCF3CF"}, # 80% 미만 노랑 계열
-                                {'range': [total_target*0.8, total_target], 'color': "#D4EFDF"}  # 80% 이상 초록 계열
-                            ],
-                            'threshold': {'line': {'color': "red", 'width': 4}, 'thickness': 0.75, 'value': curr_total}
-                        }
-                    ))
-                    fig_gauge.update_layout(height=350)
-                    st.plotly_chart(fig_gauge, use_container_width=True, config={'displayModeBar': True}) # 카메라 아이콘 지원
-
-                    # 3. 조직별 참여 상세 (목표 대비 실적)
-                    st.subheader("📊 조직별 참여 상세 분석")
-                    
-                    # 시트 데이터에서 '총괄/본부/단' 열 기준 집계
-                    if '총괄/본부/단' in df.columns:
-                        actual_counts = df['총괄/본부/단'].value_counts().to_dict()
-                    else:
-                        actual_counts = {}
-                    
-                    stats_list = []
-                    for unit, target in target_dict.items():
-                        actual = actual_counts.get(unit, 0)
-                        stats_list.append({
-                            "조직": unit,
-                            "참여완료": actual,
-                            "미참여": max(0, target - actual),
-                            "참여율(%)": round((actual/target)*100, 1)
-                        })
-                    
-                    stats_df = pd.DataFrame(stats_list)
-
-                    # 화려한 누적 막대 차트 (Plotly Express) - 들여쓰기 교정 완료
-                    # 
-                    fig_bar = px.bar(
-                        stats_df, x="조직", y=["참여완료", "미참여"],
-                        title="본부별 목표 대비 참여 인원 현황",
-                        color_discrete_map={"참여완료": "#2ECC71", "미참여": "#E74C3C"},
-                        text_auto=True
-                    )
-                    st.plotly_chart(fig_bar, use_container_width=True, config={'displayModeBar': True})
-
-                    # 조직별 참여율 라인 차트
-                    # 
-                    fig_line = px.line(
-                        stats_df, x="조직", y="참여율(%)",
-                        title="조직별 참여율 (%)",
-                        markers=True, text="참여율(%)"
-                    )
-                    fig_line.update_traces(line_color='#F1C40F', line_width=4, textposition="top center")
-                    st.plotly_chart(fig_line, use_container_width=True, config={'displayModeBar': True})
-
-                    st.info("💡 각 그래프 우측 상단의 카메라 아이콘을 클릭하면 보고용 이미지로 저장할 수 있습니다.")
-
-                    with st.expander("📝 상세 참여 데이터 명단 보기"):
-                        st.dataframe(df, use_container_width=True)
-                        st.download_button("📥 데이터 다운로드(CSV)", df.to_csv(index=False).encode('utf-8-sig'), "audit_result.csv")
-                else:
-                    st.info("데이터가 아직 없습니다. 첫 참여자가 발생하면 대시보드가 활성화됩니다.")
-            except Exception as e:
-                st.error(f"조회 오류: {e}. 시트 헤더가 [저장시간, 사번, 성명, 총괄/본부/단, 부서, 답변, 비고] 순서인지 확인해주세요.")
+                    st.metric("총 참여 인원", f"{len(df)}명")
+                    st.dataframe(df, use_container_width=True)
+                    st.download_button("📥 엑셀 다운로드", df.to_csv(index=False).encode('utf-8-sig'), "result.csv")
+                else: st.info("데이터가 없습니다.")
+            except Exception as e: st.error(f"조회 실패: {e}")
