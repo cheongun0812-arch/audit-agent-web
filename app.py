@@ -348,4 +348,19 @@ with tab_admin:
                         "조직": unit,
                         "참여완료": actual,
                         "미참여": max(0, target - actual),
-                        "참여율(%)": round((actual/
+                        "참여율(%)": round((actual/target)*100, 1)
+                    })
+                
+                status_df = pd.DataFrame(status_list)
+                
+                # 가로 막대 차트 시각화
+                st.bar_chart(status_df.set_index("조직")[["참여완료", "미참여"]])
+                
+                # 3. 상세 데이터 테이블
+                with st.expander("📝 상세 참여자 명단 확인"):
+                    st.dataframe(df, use_container_width=True)
+                    st.download_button("📥 데이터 다운로드(CSV)", df.to_csv(index=False).encode('utf-8-sig'), "audit_report.csv")
+            else:
+                st.info("현재 수집된 데이터가 없습니다.")
+        except Exception as e:
+            st.error(f"데이터를 불러오는 중 오류가 발생했습니다: {e}")
