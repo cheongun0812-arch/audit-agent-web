@@ -225,26 +225,19 @@ def save_audit_result(emp_id, name, unit, dept, answer, sheet_name):
 
 # [AI 모델 가져오기]
 def get_model():
-    """사용자 계정에서 사용 가능한 최적의 모델을 자동으로 탐색하여 연결합니다"""
+    """사용자 계정에서 사용 가능한 최적의 모델을 자동 탐색합니다."""
     if 'api_key' in st.session_state:
         genai.configure(api_key=st.session_state['api_key'])
-    
     try:
-        # 1. 지원되는 모델 목록을 모두 가져옵니다.
-        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        
-        # 2. 1.5-pro 모델을 우선 탐색하고, 없으면 1.5-flash를 선택합니다.
-        for m in available_models:
+        # 1. 지원되는 모델 목록 추출
+        models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        # 2. Pro -> Flash 순서로 자동 매칭
+        for m in models:
             if '1.5-pro' in m: return genai.GenerativeModel(m)
-        for m in available_models:
+        for m in models:
             if '1.5-flash' in m: return genai.GenerativeModel(m)
-            
-        # 3. 위 모델들이 모두 없다면 사용 가능한 첫 번째 모델을 반환합니다.
-        if available_models: return genai.GenerativeModel(available_models[0])
-    except Exception:
-        pass
-        
-    # 최후의 수단으로 기본 모델을 설정합니다.
+        if models: return genai.GenerativeModel(models[0])
+    except: pass
     return genai.GenerativeModel('gemini-1.5-flash')
 
 # [파일 읽기]
@@ -483,17 +476,14 @@ with tab_admin:
                         
                         stats_df = pd.DataFrame(stats)
                         
-                        # 1. 막대 그래프 (텍스트 상시 노출, 눈깔/카메라 아이콘 상시 노출)
-# 
+# 막대 그래프 (텍스트 상시 노출, 카메라 아이콘 활성화)
 fig_bar = px.bar(
     stats_df, x="조직", y=["참여완료", "미참여"],
-    title="조직별 목표 대비 실적 (순서 고정)",
     color_discrete_map={"참여완료": "#2ECC71", "미참여": "#E74C3C"},
-    text_auto=True, # 막대 내부에 인원수 즉시 표시
-    category_orders={"조직": ordered_units} # 경영총괄 -> 감사실 순서 고정
+    text_auto=True, # 수치 즉시 노출
+    category_orders={"조직": ordered_units}
 )
-# 마우스 오버 효과 제거
-fig_bar.update_traces(hoverinfo='none', hovertemplate=None, textfont_size=12)
+fig_bar.update_traces(hoverinfo='none', hovertemplate=None)
 fig_bar.update_layout(hovermode=False)
 st.plotly_chart(fig_bar, use_container_width=True, config={'displayModeBar': True, 'modeBarButtonsToAdd': ['toImage']})
 
@@ -516,5 +506,6 @@ st.plotly_chart(fig_line, use_container_width=True, config={'displayModeBar': Tr
                         st.info("데이터가 없습니다.")
                 except Exception as e: st.error(f"데이터 조회 실패: {e}")
             else: st.error("구글 시트 연결 실패")
+
 
 
