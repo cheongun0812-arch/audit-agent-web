@@ -454,66 +454,60 @@ with tab_summary:
                     except Exception as e: st.error(f"오류: {e}")
 
 # --- [Tab 5: 관리자 대시보드] ---
+# --- [Tab Admin] 관리자 대시보드 (문법 오류 및 그래프 수정본) ---
 with tab_admin:
     st.markdown("### 🔒 관리자 전용 대시보드")
-    # [수정] 패스워드 "ktmos0402!"로 통일 및 공백 제거
-    admin_pw = st.text_input("관리자 비밀번호", type="password", key="admin_dash_pw")
+    admin_pw = st.text_input("비밀번호", type="password", key="admin_pwd_f_final")
     
     if admin_pw.strip() == "ktmos0402!":
-        st.success("접속 성공")
-        
+        # 인력 현황 및 조직 순서 정의
         target_dict = {"경영총괄": 45, "사업총괄": 37, "강북본부": 222, "강남본부": 174, "서부본부": 290, "강원본부": 104, "품질지원단": 138, "감사실": 3}
         ordered_units = list(target_dict.keys())
-        
-        if st.button("🔄 데이터 최신화", use_container_width=True):
-            client = init_google_sheet_connection()
-            if client:
-                try:
-                    ss = client.open("Audit_Result_2026")
-                    ws = ss.worksheet("1월_설명절_캠페인")
-                    df = pd.DataFrame(ws.get_all_records())
-                    
-                    if not df.empty:
-                        counts = df['총괄/본부/단'].value_counts().to_dict()
-                        stats = []
-                        for u in ordered_units:
-                            t = target_dict.get(u, 0)
-                            act = counts.get(u, 0)
-                            stats.append({"조직": u, "참여완료": act, "미참여": max(0, t - act), "참여율": round((act/t)*100, 1) if t>0 else 0})
-                        
-                        stats_df = pd.DataFrame(stats)
-                        
-# 1. 막대 그래프 (텍스트 상시 노출, 눈깔/카메라 아이콘 고정, 마우스 효과 제거)
-fig_bar = px.bar(
-    stats_df, x="조직", y=["참여완료", "미참여"],
-    title="조직별 목표 대비 실적 (순서 고정)",
-    color_discrete_map={"참여완료": "#2ECC71", "미참여": "#E74C3C"},
-    text_auto=True, 
-    category_orders={"조직": ordered_units}  # 요청하신 조직 순서 고정
-)
-# 마우스 오버 효과 제거 및 텍스트 상시 노출 설정
-fig_bar.update_traces(hoverinfo='none', hovertemplate=None, textfont_size=12)
-fig_bar.update_layout(hovermode=False)
-st.plotly_chart(fig_bar, use_container_width=True, config={'displayModeBar': True, 'modeBarButtonsToAdd': ['toImage']})
 
-# 2. 라인 그래프 (참여율 텍스트 상시 노출)
-fig_line = px.line(
-    stats_df, x="조직", y="참여율", 
-    markers=True, text="참여율",
-    category_orders={"조직": ordered_units}
-)
-# 마우스 오버 제거 및 수치 고정
-fig_line.update_traces(hoverinfo='none', hovertemplate=None, line_color='#F1C40F', line_width=4, textposition="top center")
-fig_line.update_layout(hovermode=False)
-st.plotly_chart(fig_line, use_container_width=True, config={'displayModeBar': True, 'modeBarButtonsToAdd': ['toImage']})
-                        
-                        # 3. 데이터 및 다운로드
-                        st.dataframe(df)
-                        st.download_button("📥 엑셀 다운로드", df.to_csv(index=False).encode('utf-8-sig'), "audit_result.csv")
-                    else:
-                        st.info("데이터가 없습니다.")
-                except Exception as e: st.error(f"데이터 조회 실패: {e}")
-            else: st.error("구글 시트 연결 실패")
+        if st.button("📊 데이터 분석 업데이트", key="btn_refresh_dashboard"):
+            try:
+                client = init_google_sheet_connection()
+                ss = client.open("Audit_Result_2026")
+                ws = ss.worksheet("1월_설명절_캠페인")
+                df = pd.DataFrame(ws.get_all_records())
+                
+                if not df.empty:
+                    counts = df['총괄/본부/단'].value_counts().to_dict()
+                    stats = []
+                    for u in ordered_units:
+                        t = target_dict[u]
+                        act = counts.get(u, 0)
+                        stats.append({"조직": u, "참여완료": act, "미참여": max(0, t - act), "참여율": round((act/t)*100, 1)})
+                    stats_df = pd.DataFrame(stats)
+
+                    # 1. 막대 그래프 (텍스트 상시 노출, 눈깔/카메라 아이콘 고정, 마우스 효과 제거)
+                    fig_bar = px.bar(
+                        stats_df, x="조직", y=["참여완료", "미참여"],
+                        title="조직별 목표 대비 실적 (순서 고정)",
+                        color_discrete_map={"참여완료": "#2ECC71", "미참여": "#E74C3C"},
+                        text_auto=True, 
+                        category_orders={"조직": ordered_units}
+                    )
+                    fig_bar.update_traces(hoverinfo='none', hovertemplate=None, textfont_size=12)
+                    fig_bar.update_layout(hovermode=False)
+                    st.plotly_chart(fig_bar, use_container_width=True, config={'displayModeBar': True, 'modeBarButtonsToAdd': ['toImage']})
+
+                    # 2. 라인 그래프 (참여율 텍스트 상시 노출)
+                    fig_line = px.line(
+                        stats_df, x="조직", y="참여율", 
+                        markers=True, text="참여율",
+                        category_orders={"조직": ordered_units}
+                    )
+                    fig_line.update_traces(hoverinfo='none', hovertemplate=None, line_color='#F1C40F', line_width=4, textposition="top center")
+                    fig_line.update_layout(hovermode=False)
+                    st.plotly_chart(fig_line, use_container_width=True, config={'displayModeBar': True, 'modeBarButtonsToAdd': ['toImage']})
+                else:
+                    st.info("데이터가 아직 없습니다.")
+            
+            except Exception as e:
+                # [중요] SyntaxError의 원인이었던 누락된 except 블록을 추가했습니다.
+                st.error(f"데이터를 불러오는 중 오류가 발생했습니다: {e}")
+
 
 
 
