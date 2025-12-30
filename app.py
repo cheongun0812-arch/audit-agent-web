@@ -483,7 +483,7 @@ with tab_admin:
                         
                         stats_df = pd.DataFrame(stats)
                         
-                        # 1. 막대 그래프 (텍스트 상시 노출, 눈깔/카메라 아이콘 고정, 마우스 효과 제거)
+# 1. 막대 그래프 (텍스트 상시 노출, 눈깔/카메라 아이콘 고정, 마우스 효과 제거)
 fig_bar = px.bar(
     stats_df, x="조직", y=["참여완료", "미참여"],
     title="조직별 목표 대비 실적 (순서 고정)",
@@ -514,6 +514,7 @@ st.plotly_chart(fig_line, use_container_width=True, config={'displayModeBar': Tr
                         st.info("데이터가 없습니다.")
                 except Exception as e: st.error(f"데이터 조회 실패: {e}")
             else: st.error("구글 시트 연결 실패")
+
 
 
 
