@@ -31,68 +31,91 @@ except ImportError:
     yt_dlp = None
 
 # ==========================================
-# 1. 페이지 설정
+# 1. 페이지 설정 (사이드바 강제 확장)
 # ==========================================
 st.set_page_config(
     page_title="AUDIT AI Agent",
     page_icon="🛡️",
-    layout="centered"
+    layout="centered",
+    initial_sidebar_state="expanded" # [핵심] 시작 시 사이드바 열림 고정
 )
 
 # ==========================================
-# 2. 🎨 디자인 테마 (V47 안전성 유지 + 크리스마스 효과)
+# 2. 🎨 디자인 테마 (보안 + 가독성 + 사이드바 고정)
 # ==========================================
 st.markdown("""
     <style>
-    .stApp { background-color: #F4F6F9; }
-    [data-testid="stSidebar"] { background-color: #2C3E50; }
+    /* 기본 배경 및 폰트 */
+    .stApp { background-color: #F4F6F9 !important; }
+    * { font-family: 'Pretendard', sans-serif !important; }
+
+    /* 사이드바 스타일 */
+    [data-testid="stSidebar"] { background-color: #2C3E50 !important; display: block !important; }
     [data-testid="stSidebar"] * { color: #FFFFFF !important; }
-    
-    .stTextInput input, .stTextArea textarea {
+
+    /* 입력창 스타일 */
+    input.stTextInput, textarea.stTextArea {
         background-color: #FFFFFF !important;
         color: #000000 !important;
         -webkit-text-fill-color: #000000 !important;
         border: 1px solid #BDC3C7 !important;
     }
     
+    /* 버튼 스타일 */
     .stButton > button {
         background: linear-gradient(to right, #2980B9, #2C3E50) !important;
         color: #FFFFFF !important;
         border: none !important;
         font-weight: bold !important;
+        border-radius: 5px !important;
     }
 
-    /* 상단 메뉴 버튼 (책갈피) */
+    /* 탭 메뉴 폰트 확대 (20px + Bold) */
+    button[data-baseweb="tab"] div p {
+        font-size: 20px !important;
+        font-weight: 800 !important;
+        color: #444444 !important;
+    }
+    button[data-baseweb="tab"][aria-selected="true"] div p {
+        color: #2980B9 !important;
+    }
+
+    /* 상단 메뉴 버튼(햄버거) 위치 고정 및 텍스트 숨김 */
     [data-testid="stSidebarCollapsedControl"] {
+        display: block !important;
+        visibility: visible !important;
         color: transparent !important;
         background-color: #FFFFFF !important;
         border-radius: 0 10px 10px 0;
         border: 1px solid #ddd;
-        width: 40px; height: 40px;
-        z-index: 99999;
+        width: 40px !important;
+        height: 40px !important;
+        z-index: 9999999 !important;
+        position: fixed; top: 15px; left: 0;
     }
     [data-testid="stSidebarCollapsedControl"]::after {
         content: "☰";
-        color: #333;
-        font-size: 24px;
-        font-weight: bold;
-        position: absolute;
-        top: 5px; left: 10px;
+        visibility: visible !important;
+        color: #2C3E50 !important;
+        font-size: 24px !important;
+        font-weight: bold !important;
+        position: absolute; top: 5px; left: 10px;
     }
-    
-    [data-testid="stChatMessage"] { background-color: #FFFFFF; border: 1px solid #eee; }
-    [data-testid="stChatMessage"][data-testid="user"] { background-color: #E3F2FD; }
 
-    /* 🎄 크리스마스 로그아웃 버튼 스타일 */
-    .logout-btn {
-        border: 2px solid #FF5252 !important;
-        background: transparent !important;
-        color: #FF5252 !important;
-        border-radius: 20px !important;
-    }
-    .logout-btn:hover {
-        background-color: #FF5252 !important;
-        color: white !important;
+    /* [보안] 개인정보 노출 요소 숨김 (헤더는 살리고 내용만 제거) */
+    header[data-testid="stHeader"] { visibility: visible !important; background: transparent !important; }
+    .stDeployButton { display: none !important; } /* Manage App 숨김 */
+    [data-testid="stToolbar"] { display: none !important; } /* 우측 툴바 숨김 */
+    [data-testid="stDecoration"] { display: none !important; } /* 상단 장식 숨김 */
+    footer { display: none !important; } /* 하단 푸터 숨김 */
+    #MainMenu { display: none !important; } /* 햄버거 메뉴 숨김 */
+    
+    /* 크리스마스 애니메이션 */
+    .snow-bg {
+        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+        background: rgba(0, 0, 0, 0.9); z-index: 999999;
+        display: flex; flex-direction: column; justify-content: center; align-items: center;
+        text-align: center; color: white !important; pointer-events: none;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -132,43 +155,45 @@ def perform_logout():
 # ==========================================
 # 4. 사이드바 (로그인/로그아웃)
 # ==========================================
-wwith st.sidebar:
-    st.title("🏛️ Control Center")
+with st.sidebar:
+    st.markdown("### 🏛️ Control Center")
     st.markdown("---")
     
-    # 세션에 키가 없으면 -> 로그인 폼 표시
+    # 1. 자동 로그인 복구 (URL 파라미터 확인)
+    if 'api_key' not in st.session_state:
+        try:
+            qp = st.query_params
+            if 'k' in qp:
+                k_val = qp['k'] if isinstance(qp['k'], str) else qp['k'][0]
+                restored_key = base64.b64decode(k_val).decode('utf-8')
+                genai.configure(api_key=restored_key)
+                list(genai.list_models())
+                st.session_state['api_key'] = restored_key
+                st.toast("🔄 세션이 복구되었습니다.", icon="✨")
+                st.rerun()
+        except: pass
+
+    # 2. 로그인 폼 (비로그인 시)
     if 'api_key' not in st.session_state:
         with st.form(key='login_form'):
-            st.markdown("🔑 **Access Key**")
-            api_key_input = st.text_input("키 입력", type="password", placeholder="API 키를 입력하세요", label_visibility="collapsed")
-            submit_button = st.form_submit_button(label="시스템 접속 (Login)")
+            st.markdown("<h4 style='color:white;'>🔐 Access Key</h4>", unsafe_allow_html=True)
+            st.text_input("Key", type="password", placeholder="API 키 입력", label_visibility="collapsed", key="login_input_key")
+            # [중요] on_click으로 콜백 연결
+            st.form_submit_button(label="시스템 접속 (Login)", on_click=try_login)
         
-        if submit_button:
-            if api_key_input:
-                clean_key = api_key_input.strip()
-                try:
-                    genai.configure(api_key=clean_key)
-                    st.session_state['api_key'] = clean_key
-                    st.success("✅ 접속 완료")
-                    st.rerun() # 새로고침
-                except:
-                    st.error("❌ 키 오류")
-            else:
-                st.warning("⚠️ 키 입력 필요")
+        if 'login_error' in st.session_state and st.session_state['login_error']:
+            st.error(st.session_state['login_error'])
 
-    # 세션에 키가 있으면 -> 로그아웃 버튼 표시
+    # 3. 로그아웃 버튼 (로그인 시)
     else:
-        st.success("🟢 시스템 정상 가동")
+        st.success("🟢 정상 가동 중")
         st.markdown("<br>", unsafe_allow_html=True)
-        
-        # 🎄 따뜻한 작별 버튼
         if st.button("🎄 고마워! 또 봐! (Logout)", type="primary", use_container_width=True):
-            # 1. 애니메이션 트리거 설정
-            st.session_state['logout_anim'] = True
+            perform_logout()
             st.rerun()
 
     st.markdown("---")
-    st.caption("Audit AI Solution © 2025\nEngine: Gemini 1.5 Pro")
+    st.markdown("<div style='color:white; text-align:center; font-size:12px; opacity:0.8;'>ktMOS북부 Audit AI Solution © 2026<br>Engine: Gemini 1.5 Pro</div>", unsafe_allow_html=True)
 
 # ==========================================
 # 5. 로그아웃 애니메이션
@@ -481,5 +506,3 @@ with tab_admin:
                         st.info("데이터가 없습니다.")
                 except Exception as e: st.error(f"데이터 조회 실패: {e}")
             else: st.error("구글 시트 연결 실패")
-
-
