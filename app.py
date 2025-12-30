@@ -31,68 +31,91 @@ except ImportError:
     yt_dlp = None
 
 # ==========================================
-# 1. 페이지 설정
+# 1. 페이지 설정 (사이드바 강제 확장)
 # ==========================================
 st.set_page_config(
     page_title="AUDIT AI Agent",
     page_icon="🛡️",
-    layout="centered"
+    layout="centered",
+    initial_sidebar_state="expanded" # [핵심] 시작 시 사이드바 열림 고정
 )
 
 # ==========================================
-# 2. 🎨 디자인 테마 (검증된 V71 코드 100% 유지)
+# 2. 🎨 디자인 테마 (보안 + 가독성 + 사이드바 고정)
 # ==========================================
 st.markdown("""
     <style>
-    .stApp { background-color: #F4F6F9; }
-    [data-testid="stSidebar"] { background-color: #2C3E50; }
+    /* 기본 배경 및 폰트 */
+    .stApp { background-color: #F4F6F9 !important; }
+    * { font-family: 'Pretendard', sans-serif !important; }
+
+    /* 사이드바 스타일 */
+    [data-testid="stSidebar"] { background-color: #2C3E50 !important; display: block !important; }
     [data-testid="stSidebar"] * { color: #FFFFFF !important; }
-    
-    .stTextInput input, .stTextArea textarea {
+
+    /* 입력창 스타일 */
+    input.stTextInput, textarea.stTextArea {
         background-color: #FFFFFF !important;
         color: #000000 !important;
         -webkit-text-fill-color: #000000 !important;
         border: 1px solid #BDC3C7 !important;
     }
     
+    /* 버튼 스타일 */
     .stButton > button {
         background: linear-gradient(to right, #2980B9, #2C3E50) !important;
         color: #FFFFFF !important;
         border: none !important;
         font-weight: bold !important;
+        border-radius: 5px !important;
     }
 
-    /* 상단 메뉴 버튼 (책갈피) */
+    /* 탭 메뉴 폰트 확대 (20px + Bold) */
+    button[data-baseweb="tab"] div p {
+        font-size: 20px !important;
+        font-weight: 800 !important;
+        color: #444444 !important;
+    }
+    button[data-baseweb="tab"][aria-selected="true"] div p {
+        color: #2980B9 !important;
+    }
+
+    /* 상단 메뉴 버튼(햄버거) 위치 고정 및 텍스트 숨김 */
     [data-testid="stSidebarCollapsedControl"] {
+        display: block !important;
+        visibility: visible !important;
         color: transparent !important;
         background-color: #FFFFFF !important;
         border-radius: 0 10px 10px 0;
         border: 1px solid #ddd;
-        width: 40px; height: 40px;
-        z-index: 99999;
+        width: 40px !important;
+        height: 40px !important;
+        z-index: 9999999 !important;
+        position: fixed; top: 15px; left: 0;
     }
     [data-testid="stSidebarCollapsedControl"]::after {
         content: "☰";
-        color: #333;
-        font-size: 24px;
-        font-weight: bold;
-        position: absolute;
-        top: 5px; left: 10px;
+        visibility: visible !important;
+        color: #2C3E50 !important;
+        font-size: 24px !important;
+        font-weight: bold !important;
+        position: absolute; top: 5px; left: 10px;
     }
-    
-    [data-testid="stChatMessage"] { background-color: #FFFFFF; border: 1px solid #eee; }
-    [data-testid="stChatMessage"][data-testid="user"] { background-color: #E3F2FD; }
 
-    /* 🎄 크리스마스 로그아웃 버튼 스타일 */
-    .logout-btn {
-        border: 2px solid #FF5252 !important;
-        background: transparent !important;
-        color: #FF5252 !important;
-        border-radius: 20px !important;
-    }
-    .logout-btn:hover {
-        background-color: #FF5252 !important;
-        color: white !important;
+    /* [보안] 개인정보 노출 요소 숨김 (헤더는 살리고 내용만 제거) */
+    header[data-testid="stHeader"] { visibility: visible !important; background: transparent !important; }
+    .stDeployButton { display: none !important; } /* Manage App 숨김 */
+    [data-testid="stToolbar"] { display: none !important; } /* 우측 툴바 숨김 */
+    [data-testid="stDecoration"] { display: none !important; } /* 상단 장식 숨김 */
+    footer { display: none !important; } /* 하단 푸터 숨김 */
+    #MainMenu { display: none !important; } /* 햄버거 메뉴 숨김 */
+    
+    /* 크리스마스 애니메이션 */
+    .snow-bg {
+        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+        background: rgba(0, 0, 0, 0.9); z-index: 999999;
+        display: flex; flex-direction: column; justify-content: center; align-items: center;
+        text-align: center; color: white !important; pointer-events: none;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -225,20 +248,9 @@ def save_audit_result(emp_id, name, unit, dept, answer, sheet_name):
 
 # [AI 모델 가져오기]
 def get_model():
-    """사용자 계정에서 사용 가능한 최적의 모델을 자동 탐색합니다."""
     if 'api_key' in st.session_state:
         genai.configure(api_key=st.session_state['api_key'])
-    try:
-        # 1. 지원되는 모델 목록 추출
-        models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        # 2. Pro -> Flash 순서로 자동 매칭
-        for m in models:
-            if '1.5-pro' in m: return genai.GenerativeModel(m)
-        for m in models:
-            if '1.5-flash' in m: return genai.GenerativeModel(m)
-        if models: return genai.GenerativeModel(models[0])
-    except: pass
-    return genai.GenerativeModel('gemini-1.5-flash')
+    return genai.GenerativeModel('gemini-1.5-pro-latest')
 
 # [파일 읽기]
 def read_file(uploaded_file):
@@ -476,28 +488,16 @@ with tab_admin:
                         
                         stats_df = pd.DataFrame(stats)
                         
-# 막대 그래프 (텍스트 상시 노출, 카메라 아이콘 활성화)
-fig_bar = px.bar(
-    stats_df, x="조직", y=["참여완료", "미참여"],
-    color_discrete_map={"참여완료": "#2ECC71", "미참여": "#E74C3C"},
-    text_auto=True, # 수치 즉시 노출
-    category_orders={"조직": ordered_units}
-)
-fig_bar.update_traces(hoverinfo='none', hovertemplate=None)
-fig_bar.update_layout(hovermode=False)
-st.plotly_chart(fig_bar, use_container_width=True, config={'displayModeBar': True, 'modeBarButtonsToAdd': ['toImage']})
-
-# 2. 참여율 라인 그래프 (텍스트 상시 노출)
-# 
-fig_line = px.line(
-    stats_df, x="조직", y="참여율", 
-    markers=True, text="참여율",
-    category_orders={"조직": ordered_units}
-)
-# 마우스 오버 제거 및 수치 고정
-fig_line.update_traces(hoverinfo='none', hovertemplate=None, line_color='#F1C40F', line_width=4, textposition="top center")
-fig_line.update_layout(hovermode=False)
-st.plotly_chart(fig_line, use_container_width=True, config={'displayModeBar': True, 'modeBarButtonsToAdd': ['toImage']})
+                        # 1. 막대 그래프 (참여/미참여)
+                        fig_bar = px.bar(stats_df, x="조직", y=["참여완료", "미참여"],
+                                         color_discrete_map={"참여완료": "#2ECC71", "미참여": "#E74C3C"},
+                                         text_auto=True, title="조직별 참여 현황")
+                        st.plotly_chart(fig_bar, use_container_width=True)
+                        
+                        # 2. 라인 그래프 (참여율)
+                        fig_line = px.line(stats_df, x="조직", y="참여율", markers=True, text="참여율", title="조직별 참여율(%)")
+                        fig_line.update_traces(line_color='#F1C40F', line_width=4, textposition="top center")
+                        st.plotly_chart(fig_line, use_container_width=True)
                         
                         # 3. 데이터 및 다운로드
                         st.dataframe(df)
@@ -506,6 +506,3 @@ st.plotly_chart(fig_line, use_container_width=True, config={'displayModeBar': Tr
                         st.info("데이터가 없습니다.")
                 except Exception as e: st.error(f"데이터 조회 실패: {e}")
             else: st.error("구글 시트 연결 실패")
-
-
-
