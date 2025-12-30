@@ -31,26 +31,26 @@ except ImportError:
     yt_dlp = None
 
 # ==========================================
-# 1. 페이지 설정 (사이드바 강제 확장)
+# 1. 페이지 설정 (사이드바 기본 열림)
 # ==========================================
 st.set_page_config(
     page_title="AUDIT AI Agent",
     page_icon="🛡️",
     layout="centered",
-    initial_sidebar_state="expanded" # [핵심] 시작 시 사이드바 열림 고정
+    initial_sidebar_state="expanded" # [핵심] 시작 시 사이드바 열림
 )
 
 # ==========================================
-# 2. 🎨 디자인 테마 (보안 + 가독성 + 사이드바 고정)
+# 2. 🎨 디자인 테마 (버튼 위치 오류 수정)
 # ==========================================
 st.markdown("""
     <style>
-    /* 기본 배경 및 폰트 */
+    /* 기본 배경 */
     .stApp { background-color: #F4F6F9 !important; }
     * { font-family: 'Pretendard', sans-serif !important; }
 
-    /* 사이드바 스타일 */
-    [data-testid="stSidebar"] { background-color: #2C3E50 !important; display: block !important; }
+    /* 사이드바 스타일 (강제 display 제거 -> 자연스럽게 동작) */
+    [data-testid="stSidebar"] { background-color: #2C3E50 !important; }
     [data-testid="stSidebar"] * { color: #FFFFFF !important; }
 
     /* 입력창 스타일 */
@@ -80,35 +80,39 @@ st.markdown("""
         color: #2980B9 !important;
     }
 
-    /* 상단 메뉴 버튼(햄버거) 위치 고정 및 텍스트 숨김 */
+    /* 🚨 [수정] 상단 메뉴 버튼 (위치 고정 해제 -> 제자리 유지) */
     [data-testid="stSidebarCollapsedControl"] {
-        display: block !important;
-        visibility: visible !important;
-        color: transparent !important;
+        color: transparent !important; /* 기존 텍스트 숨김 */
         background-color: #FFFFFF !important;
         border-radius: 0 10px 10px 0;
         border: 1px solid #ddd;
         width: 40px !important;
         height: 40px !important;
-        z-index: 9999999 !important;
-        position: fixed; top: 15px; left: 0;
+        z-index: 100000 !important;
     }
+    
+    /* ☰ 아이콘 덮어쓰기 */
     [data-testid="stSidebarCollapsedControl"]::after {
         content: "☰";
-        visibility: visible !important;
         color: #2C3E50 !important;
         font-size: 24px !important;
         font-weight: bold !important;
-        position: absolute; top: 5px; left: 10px;
+        position: absolute;
+        top: 5px; left: 10px;
     }
 
-    /* [보안] 개인정보 노출 요소 숨김 (헤더는 살리고 내용만 제거) */
-    header[data-testid="stHeader"] { visibility: visible !important; background: transparent !important; }
-    .stDeployButton { display: none !important; } /* Manage App 숨김 */
-    [data-testid="stToolbar"] { display: none !important; } /* 우측 툴바 숨김 */
-    [data-testid="stDecoration"] { display: none !important; } /* 상단 장식 숨김 */
-    footer { display: none !important; } /* 하단 푸터 숨김 */
-    #MainMenu { display: none !important; } /* 햄버거 메뉴 숨김 */
+    /* [보안] 헤더 배경 투명화 (버튼은 보이게 둠) */
+    header[data-testid="stHeader"] {
+        background: transparent !important;
+        visibility: visible !important;
+    }
+
+    /* [보안] 개인정보 요소 핀셋 숨김 */
+    .stDeployButton { display: none !important; } /* Manage App */
+    [data-testid="stToolbar"] { display: none !important; } /* 우측 메뉴 */
+    [data-testid="stDecoration"] { display: none !important; } /* 상단 장식 */
+    footer { display: none !important; } /* 하단 푸터 */
+    #MainMenu { display: none !important; } /* 햄버거 메뉴 */
     
     /* 크리스마스 애니메이션 */
     .snow-bg {
@@ -121,7 +125,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 3. 로그인 및 세션 관리 (콜백 방식 - 즉시 로그인)
+# 3. 로그인 및 세션 관리 (콜백 방식)
 # ==========================================
 def try_login():
     """버튼 클릭 시 즉시 실행되어 로그인을 처리하는 콜백 함수"""
@@ -246,11 +250,22 @@ def save_audit_result(emp_id, name, unit, dept, answer, sheet_name):
         return True, "성공"
     except Exception as e: return False, str(e)
 
-# [AI 모델 가져오기]
+# [AI 모델 가져오기 - 404 방지 패치]
 def get_model():
     if 'api_key' in st.session_state:
         genai.configure(api_key=st.session_state['api_key'])
-    return genai.GenerativeModel('gemini-1.5-pro-latest')
+    
+    # 1. 우선적으로 사용 가능한 최신 모델 탐색
+    try:
+        models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        for m in models:
+            if 'gemini-1.5-pro' in m and 'latest' not in m: return genai.GenerativeModel(m)
+        for m in models:
+            if 'gemini-1.5-flash' in m: return genai.GenerativeModel(m)
+    except: pass
+
+    # 2. 리스트 조회 실패 시 표준 이름으로 강제 연결
+    return genai.GenerativeModel('gemini-1.5-pro')
 
 # [파일 읽기]
 def read_file(uploaded_file):
@@ -301,208 +316,3 @@ def download_and_upload_youtube_audio(url):
     except: return None
 
 # [유튜브 자막]
-def get_youtube_transcript(url):
-    try:
-        video_id = url.split("v=")[-1].split("&")[0]
-        transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['ko', 'en'])
-        return " ".join([t['text'] for t in transcript])
-    except: return None
-
-# [웹 크롤링]
-def get_web_content(url):
-    try:
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(url, headers=headers)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        for script in soup(["script", "style"]): script.decompose()
-        return soup.get_text()[:10000]
-    except: return None
-
-# ==========================================
-# 7. 메인 화면 및 탭 구성
-# ==========================================
-st.markdown("<h1 style='text-align: center; color: #2C3E50;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
-st.markdown("<div style='text-align: center; color: #555; margin-bottom: 20px;'>Professional Legal & Audit Assistant System</div>", unsafe_allow_html=True)
-
-# 탭 생성 (5개)
-tab_audit, tab_doc, tab_chat, tab_summary, tab_admin = st.tabs([
-    "✅ 1월 자율점검", "📄 문서 정밀 검토", "💬 AI 에이전트", "📰 스마트 요약", "🔒 관리자"
-])
-
-# --- [Tab 1: 자율점검] ---
-with tab_audit:
-    current_sheet_name = "1월_설명절_캠페인"
-    st.markdown("### 🎍 1월: 설 명절 '청탁금지법' 자율점검")
-    st.info("📢 설 명절, 마음만 주고 받으세요! (금품/선물 수수 금지)")
-    
-    with st.form("audit_submit_form", clear_on_submit=True):
-        c1, c2, c3, c4 = st.columns(4)
-        emp_id = c1.text_input("사번", placeholder="예: 12345")
-        name = c2.text_input("성명")
-        ordered_units = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
-        unit = c3.selectbox("총괄 / 본부 / 단", ordered_units)
-        dept = c4.text_input("상세 부서명")
-        
-        st.markdown("**Q. 위 내용을 확인하였으며, 이를 철저히 준수할 것을 서약합니다.**")
-        agree_check = st.checkbox("네, 확인하였으며 서약합니다.")
-        
-        if st.form_submit_button("점검 완료 및 제출", use_container_width=True):
-            if not emp_id or not name: st.warning("⚠️ 사번과 성명을 입력해주세요.")
-            elif not agree_check: st.error("❌ 서약에 체크해주세요.")
-            else:
-                with st.spinner("제출 중..."):
-                    success, msg = save_audit_result(emp_id, name, unit, dept, "서약함(PASS)", current_sheet_name)
-                    if success:
-                        st.success(f"✅ {name}님, 제출 완료되었습니다!")
-                        st.balloons()
-                    else: st.error(f"❌ 실패: {msg}")
-
-# --- [Tab 2: 문서 정밀 검토] ---
-with tab_doc:
-    st.markdown("### 📂 문서 및 규정 검토")
-    if 'api_key' not in st.session_state:
-        st.warning("🔒 로그인 후 이용 가능합니다.")
-    else:
-        option = st.selectbox("작업 유형", ["법률 리스크 정밀 검토", "감사 보고서 검증", "오타 수정 및 교정", "기안문 작성"])
-        
-        # 감사 보고서 검증 시 2차 인증
-        is_authenticated = True
-        if option == "감사 보고서 검증":
-            if 'audit_verified' not in st.session_state:
-                is_authenticated = False
-                st.warning("🔒 감사실 전용 메뉴입니다. 인증이 필요합니다.")
-                with st.form("doc_auth_form"):
-                    pass_input = st.text_input("인증키 입력", type="password")
-                    if st.form_submit_button("확인"):
-                        # 공백 제거 후 비교 (ktmos0402!)
-                        if pass_input.strip() == "ktmos0402!":
-                            st.session_state['audit_verified'] = True
-                            st.rerun()
-                        else: st.error("❌ 인증키 불일치")
-
-        if is_authenticated:
-            uploaded_file = st.file_uploader("파일 업로드 (PDF, Word, TXT)", type=['txt', 'pdf', 'docx'])
-            if st.button("🚀 분석 시작", use_container_width=True):
-                if uploaded_file:
-                    content = read_file(uploaded_file)
-                    if content:
-                        with st.spinner("🧠 AI가 분석 중입니다..."):
-                            try:
-                                prompt = f"[역할] 전문 감사인\n[작업] {option}\n[내용] {content}"
-                                res = get_model().generate_content(prompt)
-                                st.success("분석 완료")
-                                st.markdown(res.text)
-                            except Exception as e: st.error(f"오류: {e}")
-
-# --- [Tab 3: AI 에이전트] ---
-with tab_chat:
-    st.markdown("### 💬 AI 법률/감사 챗봇")
-    if 'api_key' not in st.session_state:
-        st.warning("🔒 로그인 후 이용 가능합니다.")
-    else:
-        if "messages" not in st.session_state: st.session_state.messages = []
-        
-        with st.form(key='chat_input_form', clear_on_submit=True):
-            user_input = st.text_input("질문 입력")
-            send_btn = st.form_submit_button("전송 📤", use_container_width=True)
-        
-        if send_btn and user_input:
-            st.session_state.messages.append({"role": "user", "content": user_input})
-            with st.spinner("답변 생성 중..."):
-                try:
-                    res = get_model().generate_content(user_input)
-                    st.session_state.messages.append({"role": "assistant", "content": res.text})
-                except Exception as e: st.error(f"오류: {e}")
-        
-        for msg in reversed(st.session_state.messages):
-            with st.chat_message(msg['role']): st.write(msg['content'])
-
-# --- [Tab 4: 스마트 요약] ---
-with tab_summary:
-    st.markdown("### 📰 스마트 요약")
-    if 'api_key' not in st.session_state:
-        st.warning("🔒 로그인 후 이용 가능합니다.")
-    else:
-        st_type = st.radio("입력 방식", ["URL (유튜브/웹)", "미디어 파일", "텍스트"])
-        final_input = None
-        is_multimodal = False
-
-        if "URL" in st_type:
-            url = st.text_input("URL 입력")
-            if url and "youtu" in url:
-                with st.spinner("자막 추출 중..."):
-                    final_input = get_youtube_transcript(url)
-                    if not final_input:
-                        final_input = download_and_upload_youtube_audio(url)
-                        is_multimodal = True
-            elif url:
-                with st.spinner("웹페이지 분석 중..."):
-                    final_input = get_web_content(url)
-        
-        elif "미디어" in st_type:
-            mf = st.file_uploader("파일 업로드", type=['mp3','wav','mp4'])
-            if mf:
-                final_input = process_media_file(mf)
-                is_multimodal = True
-        
-        else:
-            final_input = st.text_area("텍스트 입력", height=200)
-
-        if st.button("⚡ 요약 실행", use_container_width=True):
-            if final_input:
-                with st.spinner("요약 중..."):
-                    try:
-                        p = "다음 내용을 핵심 요약, 상세 내용, 인사이트로 정리해줘."
-                        if is_multimodal: res = get_model().generate_content([p, final_input])
-                        else: res = get_model().generate_content(f"{p}\n\n{final_input[:30000]}")
-                        st.markdown(res.text)
-                    except Exception as e: st.error(f"오류: {e}")
-
-# --- [Tab 5: 관리자 대시보드] ---
-with tab_admin:
-    st.markdown("### 🔒 관리자 전용 대시보드")
-    # [수정] 패스워드 "ktmos0402!"로 통일 및 공백 제거
-    admin_pw = st.text_input("관리자 비밀번호", type="password", key="admin_dash_pw")
-    
-    if admin_pw.strip() == "ktmos0402!":
-        st.success("접속 성공")
-        
-        target_dict = {"경영총괄": 45, "사업총괄": 37, "강북본부": 222, "강남본부": 174, "서부본부": 290, "강원본부": 104, "품질지원단": 138, "감사실": 3}
-        ordered_units = list(target_dict.keys())
-        
-        if st.button("🔄 데이터 최신화", use_container_width=True):
-            client = init_google_sheet_connection()
-            if client:
-                try:
-                    ss = client.open("Audit_Result_2026")
-                    ws = ss.worksheet("1월_설명절_캠페인")
-                    df = pd.DataFrame(ws.get_all_records())
-                    
-                    if not df.empty:
-                        counts = df['총괄/본부/단'].value_counts().to_dict()
-                        stats = []
-                        for u in ordered_units:
-                            t = target_dict.get(u, 0)
-                            act = counts.get(u, 0)
-                            stats.append({"조직": u, "참여완료": act, "미참여": max(0, t - act), "참여율": round((act/t)*100, 1) if t>0 else 0})
-                        
-                        stats_df = pd.DataFrame(stats)
-                        
-                        # 1. 막대 그래프 (참여/미참여)
-                        fig_bar = px.bar(stats_df, x="조직", y=["참여완료", "미참여"],
-                                         color_discrete_map={"참여완료": "#2ECC71", "미참여": "#E74C3C"},
-                                         text_auto=True, title="조직별 참여 현황")
-                        st.plotly_chart(fig_bar, use_container_width=True)
-                        
-                        # 2. 라인 그래프 (참여율)
-                        fig_line = px.line(stats_df, x="조직", y="참여율", markers=True, text="참여율", title="조직별 참여율(%)")
-                        fig_line.update_traces(line_color='#F1C40F', line_width=4, textposition="top center")
-                        st.plotly_chart(fig_line, use_container_width=True)
-                        
-                        # 3. 데이터 및 다운로드
-                        st.dataframe(df)
-                        st.download_button("📥 엑셀 다운로드", df.to_csv(index=False).encode('utf-8-sig'), "audit_result.csv")
-                    else:
-                        st.info("데이터가 없습니다.")
-                except Exception as e: st.error(f"데이터 조회 실패: {e}")
-            else: st.error("구글 시트 연결 실패")
