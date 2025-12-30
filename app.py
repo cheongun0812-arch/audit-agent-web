@@ -41,81 +41,59 @@ st.set_page_config(
 )
 
 # ==========================================
-# 2. 🎨 디자인 테마 (보안 + 가독성 + 사이드바 고정)
+# 2. 🎨 디자인 테마 (검증된 V71 코드 100% 유지)
 # ==========================================
 st.markdown("""
     <style>
-    /* 기본 배경 및 폰트 */
-    .stApp { background-color: #F4F6F9 !important; }
-    * { font-family: 'Pretendard', sans-serif !important; }
-
-    /* 사이드바 스타일 */
-    [data-testid="stSidebar"] { background-color: #2C3E50 !important; display: block !important; }
+    .stApp { background-color: #F4F6F9; }
+    [data-testid="stSidebar"] { background-color: #2C3E50; }
     [data-testid="stSidebar"] * { color: #FFFFFF !important; }
-
-    /* 입력창 스타일 */
-    input.stTextInput, textarea.stTextArea {
+    
+    .stTextInput input, .stTextArea textarea {
         background-color: #FFFFFF !important;
         color: #000000 !important;
         -webkit-text-fill-color: #000000 !important;
         border: 1px solid #BDC3C7 !important;
     }
     
-    /* 버튼 스타일 */
     .stButton > button {
         background: linear-gradient(to right, #2980B9, #2C3E50) !important;
         color: #FFFFFF !important;
         border: none !important;
         font-weight: bold !important;
-        border-radius: 5px !important;
     }
 
-    /* 탭 메뉴 폰트 확대 (20px + Bold) */
-    button[data-baseweb="tab"] div p {
-        font-size: 20px !important;
-        font-weight: 800 !important;
-        color: #444444 !important;
-    }
-    button[data-baseweb="tab"][aria-selected="true"] div p {
-        color: #2980B9 !important;
-    }
-
-    /* 상단 메뉴 버튼(햄버거) 위치 고정 및 텍스트 숨김 */
+    /* 상단 메뉴 버튼 (책갈피) */
     [data-testid="stSidebarCollapsedControl"] {
-        display: block !important;
-        visibility: visible !important;
         color: transparent !important;
         background-color: #FFFFFF !important;
         border-radius: 0 10px 10px 0;
         border: 1px solid #ddd;
-        width: 40px !important;
-        height: 40px !important;
-        z-index: 9999999 !important;
-        position: fixed; top: 15px; left: 0;
+        width: 40px; height: 40px;
+        z-index: 99999;
     }
     [data-testid="stSidebarCollapsedControl"]::after {
         content: "☰";
-        visibility: visible !important;
-        color: #2C3E50 !important;
-        font-size: 24px !important;
-        font-weight: bold !important;
-        position: absolute; top: 5px; left: 10px;
+        color: #333;
+        font-size: 24px;
+        font-weight: bold;
+        position: absolute;
+        top: 5px; left: 10px;
     }
-
-    /* [보안] 개인정보 노출 요소 숨김 (헤더는 살리고 내용만 제거) */
-    header[data-testid="stHeader"] { visibility: visible !important; background: transparent !important; }
-    .stDeployButton { display: none !important; } /* Manage App 숨김 */
-    [data-testid="stToolbar"] { display: none !important; } /* 우측 툴바 숨김 */
-    [data-testid="stDecoration"] { display: none !important; } /* 상단 장식 숨김 */
-    footer { display: none !important; } /* 하단 푸터 숨김 */
-    #MainMenu { display: none !important; } /* 햄버거 메뉴 숨김 */
     
-    /* 크리스마스 애니메이션 */
-    .snow-bg {
-        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-        background: rgba(0, 0, 0, 0.9); z-index: 999999;
-        display: flex; flex-direction: column; justify-content: center; align-items: center;
-        text-align: center; color: white !important; pointer-events: none;
+    [data-testid="stChatMessage"] { background-color: #FFFFFF; border: 1px solid #eee; }
+    [data-testid="stChatMessage"][data-testid="user"] { background-color: #E3F2FD; }
+
+    /* 🎄 크리스마스 로그아웃 버튼 스타일 */
+    .logout-btn {
+        border: 2px solid #FF5252 !important;
+        background: transparent !important;
+        color: #FF5252 !important;
+        border-radius: 20px !important;
+    }
+    .logout-btn:hover {
+        background-color: #FF5252 !important;
+        color: white !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -506,3 +484,4 @@ with tab_admin:
                         st.info("데이터가 없습니다.")
                 except Exception as e: st.error(f"데이터 조회 실패: {e}")
             else: st.error("구글 시트 연결 실패")
+
