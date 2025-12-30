@@ -329,7 +329,12 @@ def get_model():
     api_key = st.session_state.get("api_key")
     if api_key:
         genai.configure(api_key=api_key)
-    return genai.GenerativeModel("gemini-1.5-pro-latest")
+    # ✅ Gemini 1.5 계열은 2025-09-29부로 shutdown(종료)되어 404가 납니다.
+    #   모델은 Google 공식 Models 문서에 있는 최신 코드로 바꿔주세요.
+    #   - 품질 우선: gemini-2.5-pro
+    #   - 속도/비용 우선: gemini-2.5-flash-lite
+    model_name = st.session_state.get("model_name") or os.getenv("GEMINI_MODEL", "gemini-2.5-pro")
+    return genai.GenerativeModel(model_name)
 
 def read_file(uploaded_file):
     """TXT/PDF/DOCX 텍스트 추출"""
