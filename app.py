@@ -17,43 +17,44 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 
-# [필수] 구글 시트 라이브러리 체크
+# =========================================================
+# 🚨 [중요] 페이지 설정을 가장 먼저 실행 (백지 현상 방지)
+# =========================================================
+st.set_page_config(
+    page_title="AUDIT AI Agent",
+    page_icon="🛡️",
+    layout="centered",
+    initial_sidebar_state="expanded" # 사이드바 기본 열림
+)
+
+# =========================================================
+# 📦 라이브러리 체크 (페이지 설정 이후에 실행해야 안전함)
+# =========================================================
 try:
     import gspread
     from oauth2client.service_account import ServiceAccountCredentials
 except ImportError:
-    st.error("❌ 구글 시트 라이브러리가 없습니다. requirements.txt를 확인하세요.")
+    st.error("❌ 'gspread' 또는 'oauth2client' 라이브러리가 없습니다. requirements.txt를 확인하세요.")
 
-# [필수] yt_dlp 라이브러리 체크
 try:
     import yt_dlp
 except ImportError:
     yt_dlp = None
 
-# ==========================================
-# 1. 페이지 설정 (사이드바 기본 열림)
-# ==========================================
-st.set_page_config(
-    page_title="AUDIT AI Agent",
-    page_icon="🛡️",
-    layout="centered",
-    initial_sidebar_state="expanded" # [핵심] 시작 시 사이드바 열림
-)
-
-# ==========================================
-# 2. 🎨 디자인 테마 (버튼 위치 오류 수정)
-# ==========================================
+# =========================================================
+# 🎨 디자인 테마 (사이드바 고정 + 보안 + 가독성)
+# =========================================================
 st.markdown("""
     <style>
-    /* 기본 배경 */
+    /* 1. 기본 배경 및 폰트 */
     .stApp { background-color: #F4F6F9 !important; }
     * { font-family: 'Pretendard', sans-serif !important; }
 
-    /* 사이드바 스타일 (강제 display 제거 -> 자연스럽게 동작) */
+    /* 2. 사이드바 디자인 (자연스럽게 표시) */
     [data-testid="stSidebar"] { background-color: #2C3E50 !important; }
     [data-testid="stSidebar"] * { color: #FFFFFF !important; }
 
-    /* 입력창 스타일 */
+    /* 3. 입력창 스타일 */
     input.stTextInput, textarea.stTextArea {
         background-color: #FFFFFF !important;
         color: #000000 !important;
@@ -61,7 +62,7 @@ st.markdown("""
         border: 1px solid #BDC3C7 !important;
     }
     
-    /* 버튼 스타일 */
+    /* 4. 버튼 스타일 */
     .stButton > button {
         background: linear-gradient(to right, #2980B9, #2C3E50) !important;
         color: #FFFFFF !important;
@@ -70,7 +71,7 @@ st.markdown("""
         border-radius: 5px !important;
     }
 
-    /* 탭 메뉴 폰트 확대 (20px + Bold) */
+    /* 5. 탭 메뉴 폰트 확대 (20px + Bold) */
     button[data-baseweb="tab"] div p {
         font-size: 20px !important;
         font-weight: 800 !important;
@@ -80,9 +81,9 @@ st.markdown("""
         color: #2980B9 !important;
     }
 
-    /* 🚨 [수정] 상단 메뉴 버튼 (위치 고정 해제 -> 제자리 유지) */
+    /* 6. 상단 메뉴 버튼(☰) 위치 고정 및 텍스트 숨김 */
     [data-testid="stSidebarCollapsedControl"] {
-        color: transparent !important; /* 기존 텍스트 숨김 */
+        color: transparent !important;
         background-color: #FFFFFF !important;
         border-radius: 0 10px 10px 0;
         border: 1px solid #ddd;
@@ -90,31 +91,23 @@ st.markdown("""
         height: 40px !important;
         z-index: 100000 !important;
     }
-    
-    /* ☰ 아이콘 덮어쓰기 */
     [data-testid="stSidebarCollapsedControl"]::after {
         content: "☰";
         color: #2C3E50 !important;
         font-size: 24px !important;
         font-weight: bold !important;
-        position: absolute;
-        top: 5px; left: 10px;
+        position: absolute; top: 5px; left: 10px;
     }
 
-    /* [보안] 헤더 배경 투명화 (버튼은 보이게 둠) */
-    header[data-testid="stHeader"] {
-        background: transparent !important;
-        visibility: visible !important;
-    }
-
-    /* [보안] 개인정보 요소 핀셋 숨김 */
-    .stDeployButton { display: none !important; } /* Manage App */
-    [data-testid="stToolbar"] { display: none !important; } /* 우측 메뉴 */
-    [data-testid="stDecoration"] { display: none !important; } /* 상단 장식 */
-    footer { display: none !important; } /* 하단 푸터 */
-    #MainMenu { display: none !important; } /* 햄버거 메뉴 */
+    /* 7. [보안] 개인정보 요소 핀셋 숨김 (헤더는 살림) */
+    header[data-testid="stHeader"] { visibility: visible !important; background: transparent !important; }
+    .stDeployButton { display: none !important; } 
+    [data-testid="stToolbar"] { display: none !important; } 
+    [data-testid="stDecoration"] { display: none !important; } 
+    footer { display: none !important; } 
+    #MainMenu { display: none !important; } 
     
-    /* 크리스마스 애니메이션 */
+    /* 8. 크리스마스 애니메이션 */
     .snow-bg {
         position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
         background: rgba(0, 0, 0, 0.9); z-index: 999999;
@@ -125,13 +118,13 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 3. 로그인 및 세션 관리 (콜백 방식)
+# 3. 로그인 로직 (즉시 실행 콜백)
 # ==========================================
 def try_login():
     """버튼 클릭 시 즉시 실행되어 로그인을 처리하는 콜백 함수"""
     if 'login_input_key' in st.session_state:
         raw_key = st.session_state['login_input_key']
-        clean_key = "".join(raw_key.split()) # 모든 공백 제거
+        clean_key = "".join(raw_key.split()) # 공백 제거
         
         if not clean_key:
             st.session_state['login_error'] = "⚠️ 키를 입력해주세요."
@@ -144,7 +137,7 @@ def try_login():
             st.session_state['api_key'] = clean_key
             st.session_state['login_error'] = None 
             
-            # URL에 암호화하여 저장 (새로고침 방지)
+            # URL에 암호화 저장 (새로고침 방지)
             encoded_key = base64.b64encode(clean_key.encode()).decode()
             try: st.query_params['k'] = encoded_key
             except: st.experimental_set_query_params(k=encoded_key)
@@ -153,7 +146,6 @@ def try_login():
             st.session_state['login_error'] = f"❌ 인증 실패: {e}"
 
 def perform_logout():
-    """로그아웃 처리"""
     st.session_state['logout_anim'] = True
 
 # ==========================================
@@ -163,7 +155,7 @@ with st.sidebar:
     st.markdown("### 🏛️ Control Center")
     st.markdown("---")
     
-    # 1. 자동 로그인 복구 (URL 파라미터 확인)
+    # 1. 자동 로그인 복구
     if 'api_key' not in st.session_state:
         try:
             qp = st.query_params
@@ -177,18 +169,17 @@ with st.sidebar:
                 st.rerun()
         except: pass
 
-    # 2. 로그인 폼 (비로그인 시)
+    # 2. 로그인 폼
     if 'api_key' not in st.session_state:
         with st.form(key='login_form'):
             st.markdown("<h4 style='color:white;'>🔐 Access Key</h4>", unsafe_allow_html=True)
             st.text_input("Key", type="password", placeholder="API 키 입력", label_visibility="collapsed", key="login_input_key")
-            # [중요] on_click으로 콜백 연결
             st.form_submit_button(label="시스템 접속 (Login)", on_click=try_login)
         
         if 'login_error' in st.session_state and st.session_state['login_error']:
             st.error(st.session_state['login_error'])
 
-    # 3. 로그아웃 버튼 (로그인 시)
+    # 3. 로그아웃 버튼
     else:
         st.success("🟢 정상 가동 중")
         st.markdown("<br>", unsafe_allow_html=True)
@@ -225,7 +216,6 @@ if 'logout_anim' in st.session_state and st.session_state['logout_anim']:
 def init_google_sheet_connection():
     try:
         scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-        # secrets.toml 파일이 있어야 함
         creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
         return gspread.authorize(creds)
     except Exception as e: return None
@@ -241,7 +231,6 @@ def save_audit_result(emp_id, name, unit, dept, answer, sheet_name):
             sheet = spreadsheet.add_worksheet(title=sheet_name, rows=2000, cols=10)
             sheet.append_row(["저장시간", "사번", "성명", "총괄/본부/단", "부서", "답변", "비고"])
         
-        # 중복 방지 (사번 기준)
         if str(emp_id) in sheet.col_values(2): return False, "이미 참여하셨습니다."
         
         korea_tz = pytz.timezone("Asia/Seoul")
@@ -250,21 +239,19 @@ def save_audit_result(emp_id, name, unit, dept, answer, sheet_name):
         return True, "성공"
     except Exception as e: return False, str(e)
 
-# [AI 모델 가져오기 - 404 방지 패치]
+# [AI 모델 가져오기 - 안정화 패치]
 def get_model():
     if 'api_key' in st.session_state:
         genai.configure(api_key=st.session_state['api_key'])
-    
-    # 1. 우선적으로 사용 가능한 최신 모델 탐색
     try:
+        # 사용 가능한 모델 중 1.5 Pro 우선 선택
         models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         for m in models:
             if 'gemini-1.5-pro' in m and 'latest' not in m: return genai.GenerativeModel(m)
         for m in models:
             if 'gemini-1.5-flash' in m: return genai.GenerativeModel(m)
     except: pass
-
-    # 2. 리스트 조회 실패 시 표준 이름으로 강제 연결
+    # 기본값
     return genai.GenerativeModel('gemini-1.5-pro')
 
 # [파일 읽기]
@@ -339,7 +326,7 @@ def get_web_content(url):
 st.markdown("<h1 style='text-align: center; color: #2C3E50;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
 st.markdown("<div style='text-align: center; color: #555; margin-bottom: 20px;'>Professional Legal & Audit Assistant System</div>", unsafe_allow_html=True)
 
-# 탭 생성 (5개)
+# 탭 생성
 tab_audit, tab_doc, tab_chat, tab_summary, tab_admin = st.tabs([
     "✅ 1월 자율점검", "📄 문서 정밀 검토", "💬 AI 에이전트", "📰 스마트 요약", "🔒 관리자"
 ])
@@ -380,7 +367,6 @@ with tab_doc:
     else:
         option = st.selectbox("작업 유형", ["법률 리스크 정밀 검토", "감사 보고서 검증", "오타 수정 및 교정", "기안문 작성"])
         
-        # 감사 보고서 검증 시 2차 인증
         is_authenticated = True
         if option == "감사 보고서 검증":
             if 'audit_verified' not in st.session_state:
@@ -389,7 +375,6 @@ with tab_doc:
                 with st.form("doc_auth_form"):
                     pass_input = st.text_input("인증키 입력", type="password")
                     if st.form_submit_button("확인"):
-                        # 공백 제거 후 비교 (ktmos0402!)
                         if pass_input.strip() == "ktmos0402!":
                             st.session_state['audit_verified'] = True
                             st.rerun()
@@ -476,7 +461,6 @@ with tab_summary:
 # --- [Tab 5: 관리자 대시보드] ---
 with tab_admin:
     st.markdown("### 🔒 관리자 전용 대시보드")
-    # [수정] 패스워드 "ktmos0402!"로 통일 및 공백 제거
     admin_pw = st.text_input("관리자 비밀번호", type="password", key="admin_dash_pw")
     
     if admin_pw.strip() == "ktmos0402!":
