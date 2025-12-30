@@ -17,113 +17,122 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 
-# =========================================================
-# 🚨 [필수] 페이지 설정을 코드 맨 처음에 실행 (백지화 방지)
-# =========================================================
-st.set_page_config(
-    page_title="AUDIT AI Agent",
-    page_icon="🛡️",
-    layout="centered",
-    initial_sidebar_state="expanded" 
-)
-
-# =========================================================
-# 📦 라이브러리 체크 (페이지 설정 이후 실행)
-# =========================================================
+# [필수] 구글 시트 라이브러리 체크
 try:
     import gspread
     from oauth2client.service_account import ServiceAccountCredentials
 except ImportError:
-    st.error("❌ 'gspread' 라이브러리가 없습니다. requirements.txt를 확인하세요.")
+    st.error("❌ 구글 시트 라이브러리가 없습니다. requirements.txt를 확인하세요.")
 
+# [필수] yt_dlp 라이브러리 체크
 try:
     import yt_dlp
 except ImportError:
     yt_dlp = None
 
-# =========================================================
-# 🎨 디자인 테마 (사이드바 고정 + 가독성)
-# =========================================================
+# ==========================================
+# 1. 페이지 설정
+# ==========================================
+st.set_page_config(
+    page_title="AUDIT AI Agent",
+    page_icon="🛡️",
+    layout="centered"
+)
+
+# ==========================================
+# 2. 🎨 디자인 테마 (검증된 V71 코드 100% 유지)
+# ==========================================
 st.markdown("""
     <style>
-    /* 1. 기본 배경 및 폰트 */
-    .stApp { background-color: #F4F6F9 !important; }
-    * { font-family: 'Pretendard', sans-serif !important; }
-
-    /* 2. 사이드바 스타일 */
-    [data-testid="stSidebar"] { background-color: #2C3E50 !important; }
+    .stApp { background-color: #F4F6F9; }
+    [data-testid="stSidebar"] { background-color: #2C3E50; }
     [data-testid="stSidebar"] * { color: #FFFFFF !important; }
-
-    /* 3. 입력창 스타일 */
-    input.stTextInput, textarea.stTextArea {
+    
+    .stTextInput input, .stTextArea textarea {
         background-color: #FFFFFF !important;
         color: #000000 !important;
         -webkit-text-fill-color: #000000 !important;
         border: 1px solid #BDC3C7 !important;
     }
     
-    /* 4. 버튼 스타일 */
     .stButton > button {
         background: linear-gradient(to right, #2980B9, #2C3E50) !important;
         color: #FFFFFF !important;
         border: none !important;
         font-weight: bold !important;
-        border-radius: 5px !important;
     }
 
-    /* 5. 탭 메뉴 폰트 확대 (20px + Bold) */
-    button[data-baseweb="tab"] div p {
-        font-size: 20px !important;
-        font-weight: 800 !important;
-        color: #444444 !important;
+
+    /* ✅ (로그인) Form submit button도 동일 스타일 적용 */
+    div[data-testid="stFormSubmitButton"] > button {
+        background: linear-gradient(to right, #2980B9, #2C3E50) !important;
+        color: #FFFFFF !important;
+        border: none !important;
+        font-weight: bold !important;
     }
-    button[data-baseweb="tab"][aria-selected="true"] div p {
-        color: #2980B9 !important;
+    div[data-testid="stFormSubmitButton"] > button * {
+        color: #FFFFFF !important;
     }
 
-    /* 6. 상단 메뉴 버튼(☰) 위치 고정 및 텍스트 숨김 */
+    /* ✅ (로그인) 비밀번호 보기(눈) 아이콘이 '하얀 박스'로 보이지 않게 색상/배경 조정 */
+    [data-testid="stSidebar"] div[data-testid="stTextInput"] button {
+        background: transparent !important;
+        border: none !important;
+        color: #2C3E50 !important;   /* 흰 입력창 위에서 잘 보이게 */
+        box-shadow: none !important;
+    }
+    [data-testid="stSidebar"] div[data-testid="stTextInput"] button:hover {
+        background: rgba(44, 62, 80, 0.12) !important;
+        border-radius: 8px !important;
+    }
+    [data-testid="stSidebar"] div[data-testid="stTextInput"] button svg {
+        fill: currentColor !important;
+        stroke: currentColor !important;
+    }
+
+    /* 상단 메뉴 버튼 (책갈피) */
     [data-testid="stSidebarCollapsedControl"] {
         color: transparent !important;
         background-color: #FFFFFF !important;
         border-radius: 0 10px 10px 0;
         border: 1px solid #ddd;
-        width: 40px !important;
-        height: 40px !important;
-        z-index: 100000 !important;
+        width: 40px; height: 40px;
+        z-index: 99999;
     }
     [data-testid="stSidebarCollapsedControl"]::after {
         content: "☰";
-        color: #2C3E50 !important;
-        font-size: 24px !important;
-        font-weight: bold !important;
-        position: absolute; top: 5px; left: 10px;
+        color: #333;
+        font-size: 24px;
+        font-weight: bold;
+        position: absolute;
+        top: 5px; left: 10px;
     }
-
-    /* 7. [보안] 개인정보 요소 숨김 */
-    header[data-testid="stHeader"] { visibility: visible !important; background: transparent !important; }
-    .stDeployButton { display: none !important; } 
-    [data-testid="stToolbar"] { display: none !important; } 
-    [data-testid="stDecoration"] { display: none !important; } 
-    footer { display: none !important; } 
-    #MainMenu { display: none !important; } 
     
-    /* 8. 크리스마스 애니메이션 */
-    .snow-bg {
-        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-        background: rgba(0, 0, 0, 0.9); z-index: 999999;
-        display: flex; flex-direction: column; justify-content: center; align-items: center;
-        text-align: center; color: white !important; pointer-events: none;
+    [data-testid="stChatMessage"] { background-color: #FFFFFF; border: 1px solid #eee; }
+    [data-testid="stChatMessage"][data-testid="user"] { background-color: #E3F2FD; }
+
+    /* 🎄 크리스마스 로그아웃 버튼 스타일 */
+    .logout-btn {
+        border: 2px solid #FF5252 !important;
+        background: transparent !important;
+        color: #FF5252 !important;
+        border-radius: 20px !important;
+    }
+    .logout-btn:hover {
+        background-color: #FF5252 !important;
+        color: white !important;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# =========================================================
-# 3. 로그인 로직
-# =========================================================
+# ==========================================
+# 3. 로그인 및 세션 관리 (콜백 방식 - 즉시 로그인)
+# ==========================================
 def try_login():
+    """버튼 클릭 시 즉시 실행되어 로그인을 처리하는 콜백 함수"""
     if 'login_input_key' in st.session_state:
         raw_key = st.session_state['login_input_key']
-        clean_key = "".join(raw_key.split()) # 공백 제거
+        clean_key = "".join(raw_key.split()) # 모든 공백 제거
         
         if not clean_key:
             st.session_state['login_error'] = "⚠️ 키를 입력해주세요."
@@ -136,6 +145,7 @@ def try_login():
             st.session_state['api_key'] = clean_key
             st.session_state['login_error'] = None 
             
+            # URL에 암호화하여 저장 (새로고침 방지)
             encoded_key = base64.b64encode(clean_key.encode()).decode()
             try: st.query_params['k'] = encoded_key
             except: st.experimental_set_query_params(k=encoded_key)
@@ -144,16 +154,17 @@ def try_login():
             st.session_state['login_error'] = f"❌ 인증 실패: {e}"
 
 def perform_logout():
+    """로그아웃 처리"""
     st.session_state['logout_anim'] = True
 
-# =========================================================
-# 4. 사이드바 구성
-# =========================================================
+# ==========================================
+# 4. 사이드바 (로그인/로그아웃)
+# ==========================================
 with st.sidebar:
     st.markdown("### 🏛️ Control Center")
     st.markdown("---")
     
-    # 자동 로그인 복구
+    # 1. 자동 로그인 복구 (URL 파라미터 확인)
     if 'api_key' not in st.session_state:
         try:
             qp = st.query_params
@@ -167,17 +178,18 @@ with st.sidebar:
                 st.rerun()
         except: pass
 
-    # 로그인 폼
+    # 2. 로그인 폼 (비로그인 시)
     if 'api_key' not in st.session_state:
         with st.form(key='login_form'):
             st.markdown("<h4 style='color:white;'>🔐 Access Key</h4>", unsafe_allow_html=True)
-            st.text_input("Key", type="password", placeholder="API 키 입력", label_visibility="collapsed", key="login_input_key")
+            st.text_input("Key", type="password", placeholder="API 키를 입력해 주세요", label_visibility="collapsed", key="login_input_key")
+            # [중요] on_click으로 콜백 연결
             st.form_submit_button(label="시스템 접속 (Login)", on_click=try_login)
         
         if 'login_error' in st.session_state and st.session_state['login_error']:
             st.error(st.session_state['login_error'])
 
-    # 로그아웃 버튼
+    # 3. 로그아웃 버튼 (로그인 시)
     else:
         st.success("🟢 정상 가동 중")
         st.markdown("<br>", unsafe_allow_html=True)
@@ -188,9 +200,9 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("<div style='color:white; text-align:center; font-size:12px; opacity:0.8;'>ktMOS북부 Audit AI Solution © 2026<br>Engine: Gemini 1.5 Pro</div>", unsafe_allow_html=True)
 
-# =========================================================
+# ==========================================
 # 5. 로그아웃 애니메이션
-# =========================================================
+# ==========================================
 if 'logout_anim' in st.session_state and st.session_state['logout_anim']:
     st.markdown("""
 <div class="snow-bg">
@@ -205,15 +217,16 @@ if 'logout_anim' in st.session_state and st.session_state['logout_anim']:
     st.session_state.clear()
     st.rerun()
 
-# =========================================================
-# 6. 핵심 기능 함수 (모델 자동 선택 패치)
-# =========================================================
+# ==========================================
+# 6. 핵심 기능 함수 (구글시트, AI, 파일처리)
+# ==========================================
 
 # [구글 시트 연결]
 @st.cache_resource
 def init_google_sheet_connection():
     try:
         scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        # secrets.toml 파일이 있어야 함
         creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
         return gspread.authorize(creds)
     except Exception as e: return None
@@ -229,6 +242,7 @@ def save_audit_result(emp_id, name, unit, dept, answer, sheet_name):
             sheet = spreadsheet.add_worksheet(title=sheet_name, rows=2000, cols=10)
             sheet.append_row(["저장시간", "사번", "성명", "총괄/본부/단", "부서", "답변", "비고"])
         
+        # 중복 방지 (사번 기준)
         if str(emp_id) in sheet.col_values(2): return False, "이미 참여하셨습니다."
         
         korea_tz = pytz.timezone("Asia/Seoul")
@@ -237,25 +251,11 @@ def save_audit_result(emp_id, name, unit, dept, answer, sheet_name):
         return True, "성공"
     except Exception as e: return False, str(e)
 
-# [🚨핵심 수정] AI 모델 호출 함수 (자동 복구 로직)
+# [AI 모델 가져오기]
 def get_model():
     if 'api_key' in st.session_state:
         genai.configure(api_key=st.session_state['api_key'])
-    
-    # 가장 안정적인 모델 우선 순위
-    target_model = 'gemini-1.5-flash' 
-    
-    try:
-        # 혹시 Pro가 되면 Pro로 연결 시도
-        models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        for m in models:
-            if 'gemini-1.5-pro' in m:
-                return genai.GenerativeModel('gemini-1.5-pro')
-    except:
-        pass # 에러 나면 그냥 Flash 씀
-
-    # 기본값은 무조건 Flash (404 방지)
-    return genai.GenerativeModel(target_model)
+    return genai.GenerativeModel('gemini-1.5-pro-latest')
 
 # [파일 읽기]
 def read_file(uploaded_file):
@@ -323,9 +323,9 @@ def get_web_content(url):
         return soup.get_text()[:10000]
     except: return None
 
-# =========================================================
+# ==========================================
 # 7. 메인 화면 및 탭 구성
-# =========================================================
+# ==========================================
 st.markdown("<h1 style='text-align: center; color: #2C3E50;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
 st.markdown("<div style='text-align: center; color: #555; margin-bottom: 20px;'>Professional Legal & Audit Assistant System</div>", unsafe_allow_html=True)
 
@@ -379,6 +379,7 @@ with tab_doc:
                 with st.form("doc_auth_form"):
                     pass_input = st.text_input("인증키 입력", type="password")
                     if st.form_submit_button("확인"):
+                        # 공백 제거 후 비교 (ktmos0402!)
                         if pass_input.strip() == "ktmos0402!":
                             st.session_state['audit_verified'] = True
                             st.rerun()
@@ -465,6 +466,7 @@ with tab_summary:
 # --- [Tab 5: 관리자 대시보드] ---
 with tab_admin:
     st.markdown("### 🔒 관리자 전용 대시보드")
+    # [수정] 패스워드 "ktmos0402!"로 통일 및 공백 제거
     admin_pw = st.text_input("관리자 비밀번호", type="password", key="admin_dash_pw")
     
     if admin_pw.strip() == "ktmos0402!":
@@ -491,18 +493,18 @@ with tab_admin:
                         
                         stats_df = pd.DataFrame(stats)
                         
-                        # 1. 막대 그래프
+                        # 1. 막대 그래프 (참여/미참여)
                         fig_bar = px.bar(stats_df, x="조직", y=["참여완료", "미참여"],
                                          color_discrete_map={"참여완료": "#2ECC71", "미참여": "#E74C3C"},
                                          text_auto=True, title="조직별 참여 현황")
                         st.plotly_chart(fig_bar, use_container_width=True)
                         
-                        # 2. 라인 그래프
+                        # 2. 라인 그래프 (참여율)
                         fig_line = px.line(stats_df, x="조직", y="참여율", markers=True, text="참여율", title="조직별 참여율(%)")
                         fig_line.update_traces(line_color='#F1C40F', line_width=4, textposition="top center")
                         st.plotly_chart(fig_line, use_container_width=True)
                         
-                        # 3. 데이터
+                        # 3. 데이터 및 다운로드
                         st.dataframe(df)
                         st.download_button("📥 엑셀 다운로드", df.to_csv(index=False).encode('utf-8-sig'), "audit_result.csv")
                     else:
