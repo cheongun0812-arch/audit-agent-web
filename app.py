@@ -31,13 +31,12 @@ except ImportError:
     yt_dlp = None
 
 # ==========================================
-# 1. 페이지 설정 (사이드바 강제 확장)
+# 1. 페이지 설정
 # ==========================================
 st.set_page_config(
     page_title="AUDIT AI Agent",
     page_icon="🛡️",
-    layout="centered",
-    initial_sidebar_state="expanded" # [핵심] 시작 시 사이드바 열림 고정
+    layout="centered"
 )
 
 # ==========================================
@@ -484,4 +483,5 @@ with tab_admin:
                         st.info("데이터가 없습니다.")
                 except Exception as e: st.error(f"데이터 조회 실패: {e}")
             else: st.error("구글 시트 연결 실패")
+
 
