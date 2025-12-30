@@ -132,45 +132,43 @@ def perform_logout():
 # ==========================================
 # 4. 사이드바 (로그인/로그아웃)
 # ==========================================
-with st.sidebar:
-    st.markdown("### 🏛️ Control Center")
+wwith st.sidebar:
+    st.title("🏛️ Control Center")
     st.markdown("---")
     
-    # 1. 자동 로그인 복구 (URL 파라미터 확인)
-    if 'api_key' not in st.session_state:
-        try:
-            qp = st.query_params
-            if 'k' in qp:
-                k_val = qp['k'] if isinstance(qp['k'], str) else qp['k'][0]
-                restored_key = base64.b64decode(k_val).decode('utf-8')
-                genai.configure(api_key=restored_key)
-                list(genai.list_models())
-                st.session_state['api_key'] = restored_key
-                st.toast("🔄 세션이 복구되었습니다.", icon="✨")
-                st.rerun()
-        except: pass
-
-    # 2. 로그인 폼 (비로그인 시)
+    # 세션에 키가 없으면 -> 로그인 폼 표시
     if 'api_key' not in st.session_state:
         with st.form(key='login_form'):
-            st.markdown("<h4 style='color:white;'>🔐 Access Key</h4>", unsafe_allow_html=True)
-            st.text_input("Key", type="password", placeholder="API 키 입력", label_visibility="collapsed", key="login_input_key")
-            # [중요] on_click으로 콜백 연결
-            st.form_submit_button(label="시스템 접속 (Login)", on_click=try_login)
+            st.markdown("🔑 **Access Key**")
+            api_key_input = st.text_input("키 입력", type="password", placeholder="API 키를 입력하세요", label_visibility="collapsed")
+            submit_button = st.form_submit_button(label="시스템 접속 (Login)")
         
-        if 'login_error' in st.session_state and st.session_state['login_error']:
-            st.error(st.session_state['login_error'])
+        if submit_button:
+            if api_key_input:
+                clean_key = api_key_input.strip()
+                try:
+                    genai.configure(api_key=clean_key)
+                    st.session_state['api_key'] = clean_key
+                    st.success("✅ 접속 완료")
+                    st.rerun() # 새로고침
+                except:
+                    st.error("❌ 키 오류")
+            else:
+                st.warning("⚠️ 키 입력 필요")
 
-    # 3. 로그아웃 버튼 (로그인 시)
+    # 세션에 키가 있으면 -> 로그아웃 버튼 표시
     else:
-        st.success("🟢 정상 가동 중")
+        st.success("🟢 시스템 정상 가동")
         st.markdown("<br>", unsafe_allow_html=True)
+        
+        # 🎄 따뜻한 작별 버튼
         if st.button("🎄 고마워! 또 봐! (Logout)", type="primary", use_container_width=True):
-            perform_logout()
+            # 1. 애니메이션 트리거 설정
+            st.session_state['logout_anim'] = True
             st.rerun()
 
     st.markdown("---")
-    st.markdown("<div style='color:white; text-align:center; font-size:12px; opacity:0.8;'>ktMOS북부 Audit AI Solution © 2026<br>Engine: Gemini 1.5 Pro</div>", unsafe_allow_html=True)
+    st.caption("Audit AI Solution © 2025\nEngine: Gemini 1.5 Pro")
 
 # ==========================================
 # 5. 로그아웃 애니메이션
@@ -483,4 +481,5 @@ with tab_admin:
                         st.info("데이터가 없습니다.")
                 except Exception as e: st.error(f"데이터 조회 실패: {e}")
             else: st.error("구글 시트 연결 실패")
+
 
