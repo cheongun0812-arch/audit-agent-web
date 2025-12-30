@@ -225,9 +225,27 @@ def save_audit_result(emp_id, name, unit, dept, answer, sheet_name):
 
 # [AI 모델 가져오기]
 def get_model():
+    """사용자 계정에서 사용 가능한 최적의 모델을 자동으로 탐색하여 연결합니다"""
     if 'api_key' in st.session_state:
         genai.configure(api_key=st.session_state['api_key'])
-    return genai.GenerativeModel('gemini-1.5-pro-latest')
+    
+    try:
+        # 1. 지원되는 모델 목록을 모두 가져옵니다.
+        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        
+        # 2. 1.5-pro 모델을 우선 탐색하고, 없으면 1.5-flash를 선택합니다.
+        for m in available_models:
+            if '1.5-pro' in m: return genai.GenerativeModel(m)
+        for m in available_models:
+            if '1.5-flash' in m: return genai.GenerativeModel(m)
+            
+        # 3. 위 모델들이 모두 없다면 사용 가능한 첫 번째 모델을 반환합니다.
+        if available_models: return genai.GenerativeModel(available_models[0])
+    except Exception:
+        pass
+        
+    # 최후의 수단으로 가장 기본 모델인 gemini-1.5-flash를 설정합니다.
+    return genai.GenerativeModel('gemini-1.5-flash')
 
 # [파일 읽기]
 def read_file(uploaded_file):
@@ -483,3 +501,4 @@ with tab_admin:
                         st.info("데이터가 없습니다.")
                 except Exception as e: st.error(f"데이터 조회 실패: {e}")
             else: st.error("구글 시트 연결 실패")
+
