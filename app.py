@@ -74,21 +74,24 @@ st.markdown("""
         color: #FFFFFF !important;
     }
 
-    /* ✅ (로그인) 비밀번호 보기(눈) 아이콘이 '하얀 박스'로 보이지 않게 색상/배경 조정 */
-    [data-testid="stSidebar"] div[data-testid="stTextInput"] button {
-        background: transparent !important;
-        border: none !important;
-        color: #2C3E50 !important;   /* 흰 입력창 위에서 잘 보이게 */
-        box-shadow: none !important;
-    }
-    [data-testid="stSidebar"] div[data-testid="stTextInput"] button:hover {
-        background: rgba(44, 62, 80, 0.12) !important;
-        border-radius: 8px !important;
-    }
-    [data-testid="stSidebar"] div[data-testid="stTextInput"] button svg {
-        fill: currentColor !important;
-        stroke: currentColor !important;
-    }
+    /* ✅ 비밀번호 보기(눈) 아이콘을 진하게(검정) 표시 */
+div[data-testid="stTextInput"] button {
+  color: #000 !important;          /* 아이콘 컬러(텍스트 컬러 기반) */
+  opacity: 1 !important;           /* 흐릿함 제거 */
+}
+
+div[data-testid="stTextInput"] button:hover {
+  color: #000 !important;
+  opacity: 1 !important;
+}
+
+/* Streamlit/브라우저에 따라 SVG로 렌더링되는 경우까지 커버 */
+div[data-testid="stTextInput"] button svg,
+div[data-testid="stTextInput"] button svg path {
+  fill: #000 !important;
+  stroke: #000 !important;
+  opacity: 1 !important;
+}
 
     /* 상단 메뉴 버튼 (책갈피) */
     [data-testid="stSidebarCollapsedControl"] {
