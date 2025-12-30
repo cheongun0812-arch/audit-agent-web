@@ -1,102 +1,112 @@
-# ==========================================
-# AUDIT AI AGENT - STABLE VERSION (Rimlet OK)
-# ==========================================
+# =====================================================
+# AUDIT AI AGENT - FULL INTEGRATED STABLE VERSION
+# =====================================================
 
 import streamlit as st
-import os
-import time
-import glob
-import tempfile
-import base64
+import google.generativeai as genai
+import pandas as pd
 import datetime
 import pytz
-import google.generativeai as genai
-from docx import Document
-import PyPDF2
-from youtube_transcript_api import YouTubeTranscriptApi
-import requests
-from bs4 import BeautifulSoup
-import pandas as pd
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 import plotly.express as px
 
-# ==========================================
-# 1. 페이지 설정 (⚠ 반드시 최상단)
-# ==========================================
+# =====================================================
+# 1. PAGE CONFIG (⚠️ 반드시 최상단)
+# =====================================================
 st.set_page_config(
     page_title="AUDIT AI Agent",
     page_icon="🛡️",
     layout="centered"
 )
 
-# ==========================================
-# 2. 안전한 CSS (사이드바 토글 문제 해결)
-# ==========================================
+# =====================================================
+# 2. SAFE CSS (Rimlet OK)
+# =====================================================
 st.markdown("""
 <style>
-.stApp {
-    background-color: #F4F6F9;
-}
+.stApp { background-color: #F4F6F9; }
 
-/* Sidebar */
-[data-testid="stSidebar"] {
-    background-color: #2C3E50;
-}
-[data-testid="stSidebar"] * {
-    color: #FFFFFF !important;
-}
+[data-testid="stSidebar"] { background-color: #2C3E50; }
+[data-testid="stSidebar"] * { color: white !important; }
 
-/* Inputs */
-.stTextInput input, .stTextArea textarea {
-    background-color: #FFFFFF !important;
-    color: #000000 !important;
-    border: 1px solid #BDC3C7 !important;
-}
-
-/* Buttons */
 .stButton > button {
-    background: linear-gradient(to right, #2980B9, #2C3E50) !important;
-    color: white !important;
+    background: linear-gradient(to right, #2980B9, #2C3E50);
+    color: white;
     font-weight: bold;
     border: none;
 }
 
-/* ⚠️ 사이드바 토글 관련 CSS 제거
-   (Rimlet 흰 화면 원인) */
+.stTextInput input {
+    background-color: white;
+    color: black;
+}
 </style>
 """, unsafe_allow_html=True)
 
-# ==========================================
-# 3. 로그인 함수
-# ==========================================
+# =====================================================
+# 3. LOGIN
+# =====================================================
 def try_login():
-    api_key = st.session_state.get("login_key", "").strip()
-    if not api_key:
-        st.session_state.login_error = "API 키를 입력해주세요."
+    key = st.session_state.get("login_key", "").strip()
+    if not key:
+        st.session_state.login_error = "API 키를 입력하세요."
         return
     try:
-        genai.configure(api_key=api_key)
+        genai.configure(api_key=key)
         list(genai.list_models())
-        st.session_state.api_key = api_key
+        st.session_state.api_key = key
         st.session_state.login_error = None
     except Exception as e:
-        st.session_state.login_error = f"로그인 실패: {e}"
+        st.session_state.login_error = str(e)
 
-# ==========================================
-# 4. 사이드바
-# ==========================================
+# =====================================================
+# 4. GOOGLE SHEET
+# =====================================================
+@st.cache_resource
+def init_gsheet():
+    scope = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(
+        st.secrets["gcp_service_account"], scope
+    )
+    return gspread.authorize(creds)
+
+def save_result(emp_id, name, unit, dept, sheet_name):
+    client = init_gsheet()
+    ss = client.open("Audit_Result_2026")
+
+    try:
+        ws = ss.worksheet(sheet_name)
+    except:
+        ws = ss.add_worksheet(title=sheet_name, rows=2000, cols=10)
+        ws.append_row(["저장시간", "사번", "성명", "본부", "부서", "결과"])
+
+    if emp_id in ws.col_values(2):
+        return False, "이미 참여하셨습니다."
+
+    tz = pytz.timezone("Asia/Seoul")
+    now = datetime.datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
+    ws.append_row([now, emp_id, name, unit, dept, "서약완료"])
+    return True, "저장 완료"
+
+# =====================================================
+# 5. SIDEBAR
+# =====================================================
 with st.sidebar:
     st.markdown("## 🏛️ Control Center")
     st.divider()
 
     if "api_key" not in st.session_state:
-        with st.form("login_form"):
-            st.text_input("Google Gemini API Key", type="password", key="login_key")
+        with st.form("login"):
+            st.text_input("Gemini API Key", type="password", key="login_key")
             st.form_submit_button("Login", on_click=try_login)
-
         if st.session_state.get("login_error"):
             st.error(st.session_state.login_error)
     else:
-        st.success("🟢 로그인 성공")
+        st.success("🟢 로그인됨")
         if st.button("Logout"):
             st.session_state.clear()
             st.rerun()
@@ -104,107 +114,110 @@ with st.sidebar:
     st.divider()
     st.caption("Audit AI Agent © 2026")
 
-# ==========================================
-# 5. 메인 헤더
-# ==========================================
-st.markdown(
-    "<h1 style='text-align:center; color:#2C3E50;'>🛡️ AUDIT AI AGENT</h1>",
-    unsafe_allow_html=True
-)
-st.markdown(
-    "<p style='text-align:center; color:#555;'>Professional Legal & Audit Assistant</p>",
-    unsafe_allow_html=True
-)
+# =====================================================
+# 6. HEADER
+# =====================================================
+st.markdown("<h1 style='text-align:center;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align:center;'>Legal & Audit Assistant</p>", unsafe_allow_html=True)
 
-# ==========================================
-# 6. 탭 구성
-# ==========================================
-tab1, tab2, tab3, tab4 = st.tabs([
+# =====================================================
+# 7. TABS
+# =====================================================
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "✅ 자율점검",
-    "📄 문서 검토",
-    "💬 AI 챗봇",
-    "📰 요약"
+    "💬 AI 챗",
+    "📰 요약",
+    "📊 관리자 대시보드",
+    "ℹ️ 시스템"
 ])
 
-# ==========================================
-# Tab 1: 자율점검
-# ==========================================
+# =====================================================
+# TAB 1 - AUDIT
+# =====================================================
 with tab1:
-    st.subheader("자율점검 테스트 화면")
-    st.info("화면 및 메뉴 정상 출력 확인용")
-    st.checkbox("정상적으로 체크됩니다")
+    st.subheader("설 명절 청탁금지법 자율점검")
 
-# ==========================================
-# Tab 2: 문서 검토
-# ==========================================
-with tab2:
-    st.subheader("문서 검토")
-    if "api_key" not in st.session_state:
-        st.warning("로그인 후 이용 가능합니다.")
-    else:
-        uploaded_file = st.file_uploader(
-            "파일 업로드 (PDF, DOCX, TXT)",
-            type=["pdf", "docx", "txt"]
-        )
-        if uploaded_file and st.button("분석 시작"):
-            text = ""
-            if uploaded_file.name.endswith(".txt"):
-                text = uploaded_file.read().decode("utf-8")
-            elif uploaded_file.name.endswith(".pdf"):
-                reader = PyPDF2.PdfReader(uploaded_file)
-                for p in reader.pages:
-                    text += p.extract_text()
-            elif uploaded_file.name.endswith(".docx"):
-                doc = Document(uploaded_file)
-                text = "\n".join(p.text for p in doc.paragraphs)
+    with st.form("audit"):
+        c1, c2 = st.columns(2)
+        emp_id = c1.text_input("사번")
+        name = c2.text_input("성명")
+        unit = st.selectbox("본부", [
+            "경영총괄", "사업총괄", "강북본부", "강남본부",
+            "서부본부", "강원본부", "품질지원단", "감사실"
+        ])
+        dept = st.text_input("부서명")
+        agree = st.checkbox("청탁금지법을 준수하겠습니다.")
 
-            with st.spinner("AI 분석 중..."):
-                model = genai.GenerativeModel("gemini-1.5-pro-latest")
-                result = model.generate_content(text[:30000])
-                st.success("분석 완료")
-                st.write(result.text)
-
-# ==========================================
-# Tab 3: AI 챗봇
-# ==========================================
-with tab3:
-    st.subheader("AI 법률 / 감사 챗봇")
-
-    if "api_key" not in st.session_state:
-        st.warning("로그인이 필요합니다.")
-    else:
-        if "chat" not in st.session_state:
-            st.session_state.chat = []
-
-        user_input = st.text_input("질문을 입력하세요")
-
-        if user_input:
-            st.session_state.chat.append(("user", user_input))
-            model = genai.GenerativeModel("gemini-1.5-pro-latest")
-            reply = model.generate_content(user_input).text
-            st.session_state.chat.append(("ai", reply))
-
-        for role, msg in st.session_state.chat[::-1]:
-            if role == "user":
-                st.markdown(f"**🙋 사용자:** {msg}")
+        if st.form_submit_button("제출"):
+            if not (emp_id and name and agree):
+                st.warning("모든 항목을 입력하세요.")
             else:
-                st.markdown(f"**🤖 AI:** {msg}")
-
-# ==========================================
-# Tab 4: 요약
-# ==========================================
-with tab4:
-    st.subheader("스마트 요약")
-
-    if "api_key" not in st.session_state:
-        st.warning("로그인이 필요합니다.")
-    else:
-        text = st.text_area("요약할 텍스트 입력", height=200)
-        if st.button("요약 실행") and text:
-            with st.spinner("요약 중..."):
-                model = genai.GenerativeModel("gemini-1.5-pro-latest")
-                summary = model.generate_content(
-                    f"다음 내용을 핵심 요약과 인사이트로 정리해줘:\n\n{text}"
+                ok, msg = save_result(
+                    emp_id, name, unit, dept, "1월_설명절_캠페인"
                 )
-                st.success("요약 완료")
-                st.write(summary.text)
+                if ok:
+                    st.success("제출 완료")
+                    st.balloons()
+                else:
+                    st.error(msg)
+
+# =====================================================
+# TAB 2 - CHAT
+# =====================================================
+with tab2:
+    if "api_key" not in st.session_state:
+        st.warning("로그인 필요")
+    else:
+        q = st.text_input("질문 입력")
+        if q:
+            model = genai.GenerativeModel("gemini-1.5-pro-latest")
+            st.write(model.generate_content(q).text)
+
+# =====================================================
+# TAB 3 - SUMMARY
+# =====================================================
+with tab3:
+    if "api_key" not in st.session_state:
+        st.warning("로그인 필요")
+    else:
+        text = st.text_area("요약할 텍스트")
+        if st.button("요약"):
+            model = genai.GenerativeModel("gemini-1.5-pro-latest")
+            st.write(
+                model.generate_content(
+                    f"다음 내용을 요약하고 인사이트를 제시해줘:\n{text}"
+                ).text
+            )
+
+# =====================================================
+# TAB 4 - ADMIN DASHBOARD
+# =====================================================
+with tab4:
+    pw = st.text_input("관리자 비밀번호", type="password")
+
+    if pw.strip() == "ktmos0402!":
+        client = init_gsheet()
+        ws = client.open("Audit_Result_2026").worksheet("1월_설명절_캠페인")
+        df = pd.DataFrame(ws.get_all_records())
+
+        if not df.empty:
+            cnt = df["본부"].value_counts().reset_index()
+            cnt.columns = ["본부", "참여인원"]
+
+            fig = px.bar(cnt, x="본부", y="참여인원", text_auto=True)
+            st.plotly_chart(fig, use_container_width=True)
+
+            st.dataframe(df)
+            st.download_button(
+                "엑셀 다운로드",
+                df.to_csv(index=False).encode("utf-8-sig"),
+                "audit_result.csv"
+            )
+        else:
+            st.info("데이터 없음")
+
+# =====================================================
+# TAB 5
+# =====================================================
+with tab5:
+    st.info("시스템 정상 동작 중")
