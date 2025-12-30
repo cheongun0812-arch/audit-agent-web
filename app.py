@@ -244,7 +244,7 @@ def get_model():
     except Exception:
         pass
         
-    # 최후의 수단으로 가장 기본 모델인 gemini-1.5-flash를 설정합니다.
+    # 최후의 수단으로 기본 모델을 설정합니다.
     return genai.GenerativeModel('gemini-1.5-flash')
 
 # [파일 읽기]
@@ -483,16 +483,31 @@ with tab_admin:
                         
                         stats_df = pd.DataFrame(stats)
                         
-                        # 1. 막대 그래프 (참여/미참여)
-                        fig_bar = px.bar(stats_df, x="조직", y=["참여완료", "미참여"],
-                                         color_discrete_map={"참여완료": "#2ECC71", "미참여": "#E74C3C"},
-                                         text_auto=True, title="조직별 참여 현황")
-                        st.plotly_chart(fig_bar, use_container_width=True)
-                        
-                        # 2. 라인 그래프 (참여율)
-                        fig_line = px.line(stats_df, x="조직", y="참여율", markers=True, text="참여율", title="조직별 참여율(%)")
-                        fig_line.update_traces(line_color='#F1C40F', line_width=4, textposition="top center")
-                        st.plotly_chart(fig_line, use_container_width=True)
+                        # 1. 막대 그래프 (텍스트 상시 노출, 눈깔/카메라 아이콘 상시 노출)
+# 
+fig_bar = px.bar(
+    stats_df, x="조직", y=["참여완료", "미참여"],
+    title="조직별 목표 대비 실적 (순서 고정)",
+    color_discrete_map={"참여완료": "#2ECC71", "미참여": "#E74C3C"},
+    text_auto=True, # 막대 내부에 인원수 즉시 표시
+    category_orders={"조직": ordered_units} # 경영총괄 -> 감사실 순서 고정
+)
+# 마우스 오버 효과 제거
+fig_bar.update_traces(hoverinfo='none', hovertemplate=None, textfont_size=12)
+fig_bar.update_layout(hovermode=False)
+st.plotly_chart(fig_bar, use_container_width=True, config={'displayModeBar': True, 'modeBarButtonsToAdd': ['toImage']})
+
+# 2. 참여율 라인 그래프 (텍스트 상시 노출)
+# 
+fig_line = px.line(
+    stats_df, x="조직", y="참여율", 
+    markers=True, text="참여율",
+    category_orders={"조직": ordered_units}
+)
+# 마우스 오버 제거 및 수치 고정
+fig_line.update_traces(hoverinfo='none', hovertemplate=None, line_color='#F1C40F', line_width=4, textposition="top center")
+fig_line.update_layout(hovermode=False)
+st.plotly_chart(fig_line, use_container_width=True, config={'displayModeBar': True, 'modeBarButtonsToAdd': ['toImage']})
                         
                         # 3. 데이터 및 다운로드
                         st.dataframe(df)
@@ -501,4 +516,5 @@ with tab_admin:
                         st.info("데이터가 없습니다.")
                 except Exception as e: st.error(f"데이터 조회 실패: {e}")
             else: st.error("구글 시트 연결 실패")
+
 
