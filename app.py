@@ -36,7 +36,8 @@ except ImportError:
 st.set_page_config(
     page_title="AUDIT AI Agent",
     page_icon="🛡️",
-    layout="centered"
+    layout="centered",
+    initial_sidebar_state="collapsed"
 )
 
 # ==========================================
@@ -74,24 +75,21 @@ st.markdown("""
         color: #FFFFFF !important;
     }
 
-    /* ✅ 비밀번호 보기(눈) 아이콘을 진하게(검정) 표시 */
-div[data-testid="stTextInput"] button {
-  color: #000 !important;          /* 아이콘 컬러(텍스트 컬러 기반) */
-  opacity: 1 !important;           /* 흐릿함 제거 */
-}
-
-div[data-testid="stTextInput"] button:hover {
-  color: #000 !important;
-  opacity: 1 !important;
-}
-
-/* Streamlit/브라우저에 따라 SVG로 렌더링되는 경우까지 커버 */
-div[data-testid="stTextInput"] button svg,
-div[data-testid="stTextInput"] button svg path {
-  fill: #000 !important;
-  stroke: #000 !important;
-  opacity: 1 !important;
-}
+    /* ✅ (로그인) 비밀번호 보기(눈) 아이콘이 '하얀 박스'로 보이지 않게 색상/배경 조정 */
+    [data-testid="stSidebar"] div[data-testid="stTextInput"] button {
+        background: transparent !important;
+        border: none !important;
+        color: #2C3E50 !important;   /* 흰 입력창 위에서 잘 보이게 */
+        box-shadow: none !important;
+    }
+    [data-testid="stSidebar"] div[data-testid="stTextInput"] button:hover {
+        background: rgba(44, 62, 80, 0.12) !important;
+        border-radius: 8px !important;
+    }
+    [data-testid="stSidebar"] div[data-testid="stTextInput"] button svg {
+        fill: currentColor !important;
+        stroke: currentColor !important;
+    }
 
     /* 상단 메뉴 버튼 (책갈피) */
     [data-testid="stSidebarCollapsedControl"] {
@@ -127,48 +125,63 @@ div[data-testid="stTextInput"] button svg path {
     }
     
 
-    /* ✅ (로그인) Streamlit/BaseWeb 버전에 따라 '눈' 토글 버튼이 다른 DOM으로 렌더링됨.
-       아래 셀렉터를 추가로 커버해서 아이콘이 흰 박스처럼 보이지 않게 처리 */
-    [data-testid="stSidebar"] div[data-testid="stTextInput"] [data-baseweb="input"] button,
-    [data-testid="stSidebar"] div[data-testid="stTextInput"] [data-baseweb="base-input"] button,
-    [data-testid="stSidebar"] div[data-testid="stTextInput"] [data-baseweb="input"] [role="button"] {
-        background: transparent !important;
-        border: none !important;
-        box-shadow: none !important;
-        color: #2C3E50 !important;   /* 흰 입력창 위에서 잘 보이게 */
-        opacity: 1 !important;
-        filter: none !important;
-    }
-    [data-testid="stSidebar"] div[data-testid="stTextInput"] [data-baseweb="input"] button:hover,
-    [data-testid="stSidebar"] div[data-testid="stTextInput"] [data-baseweb="base-input"] button:hover,
-    [data-testid="stSidebar"] div[data-testid="stTextInput"] [data-baseweb="input"] [role="button"]:hover {
-        background: rgba(44, 62, 80, 0.12) !important;
-        border-radius: 8px !important;
-    }
-    [data-testid="stSidebar"] div[data-testid="stTextInput"] [data-baseweb="input"] button svg,
-    [data-testid="stSidebar"] div[data-testid="stTextInput"] [data-baseweb="base-input"] button svg,
-    [data-testid="stSidebar"] div[data-testid="stTextInput"] button svg {
-        fill: currentColor !important;
-        stroke: currentColor !important;
-        color: #2C3E50 !important;
+    /* ==========================
+       📱 Mobile / Responsive Tweaks
+       - Stack columns on small screens
+       - Reduce padding & font sizes
+       - Make sidebar usable on mobile
+       ========================== */
+    @media (max-width: 768px) {
+        /* Main content padding */
+        [data-testid="stAppViewContainer"] .main .block-container {
+            padding-left: 1rem !important;
+            padding-right: 1rem !important;
+            padding-top: 1.25rem !important;
+            max-width: 100% !important;
+        }
+
+        /* Stack Streamlit columns */
+        div[data-testid="stHorizontalBlock"] {
+            flex-wrap: wrap !important;
+            gap: 0.75rem !important;
+        }
+        div[data-testid="stHorizontalBlock"] > div {
+            flex: 1 1 100% !important;
+            width: 100% !important;
+            min-width: 0 !important;
+        }
+
+        /* Slightly smaller typography */
+        h1 { font-size: 1.65rem !important; }
+        h2 { font-size: 1.35rem !important; }
+        h3 { font-size: 1.15rem !important; }
+        .stMarkdown, .stTextInput, .stSelectbox, .stRadio, .stCheckbox {
+            font-size: 0.98rem !important;
+        }
+
+        /* Buttons: full width & comfortable tap target */
+        .stButton > button {
+            width: 100% !important;
+            min-height: 44px !important;
+            font-size: 1rem !important;
+        }
+
+        /* Sidebar width when opened on mobile */
+        [data-testid="stSidebar"] {
+            width: 82vw !important;
+            min-width: 82vw !important;
+            max-width: 82vw !important;
+        }
     }
 
-    /* ✅ (로그인) 사이드바 form submit 버튼이 비활성/기본 스타일로 떨어져도 텍스트가 항상 보이도록 강제 */
-    [data-testid="stSidebar"] div[data-testid="stFormSubmitButton"] > button,
-    [data-testid="stSidebar"] div[data-testid="stFormSubmitButton"] > button:disabled,
-    [data-testid="stSidebar"] div[data-testid="stFormSubmitButton"] > button[disabled] {
-        background: linear-gradient(to right, #2980B9, #2C3E50) !important;
-        color: #FFFFFF !important;
-        -webkit-text-fill-color: #FFFFFF !important;
-        opacity: 1 !important;
-        filter: none !important;
+    /* Extra-small devices */
+    @media (max-width: 420px) {
+        [data-testid="stAppViewContainer"] .main .block-container {
+            padding-left: 0.75rem !important;
+            padding-right: 0.75rem !important;
+        }
+        h1 { font-size: 1.5rem !important; }
     }
-    [data-testid="stSidebar"] div[data-testid="stFormSubmitButton"] > button * {
-        color: #FFFFFF !important;
-        -webkit-text-fill-color: #FFFFFF !important;
-        opacity: 1 !important;
-    }
-
 </style>
 """, unsafe_allow_html=True)
 
