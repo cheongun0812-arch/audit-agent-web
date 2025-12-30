@@ -1,12 +1,13 @@
 streamlit
 google-generativeai
-docx2txt
+python-docx
 PyPDF2
-youtube-transcript_api
+youtube-transcript-api
 requests
 beautifulsoup4
-pandas
 gspread
 oauth2client
+pandas
 plotly
+pytz
 yt-dlp
