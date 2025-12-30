@@ -225,9 +225,20 @@ def save_audit_result(emp_id, name, unit, dept, answer, sheet_name):
 
 # [AI 모델 가져오기]
 def get_model():
+    """사용자 계정에서 사용 가능한 최적의 모델을 자동 탐색합니다."""
     if 'api_key' in st.session_state:
         genai.configure(api_key=st.session_state['api_key'])
-    return genai.GenerativeModel('gemini-1.5-pro-latest')
+    try:
+        # 1. 지원되는 모델 목록 추출
+        models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        # 2. Pro -> Flash 순서로 자동 매칭
+        for m in models:
+            if '1.5-pro' in m: return genai.GenerativeModel(m)
+        for m in models:
+            if '1.5-flash' in m: return genai.GenerativeModel(m)
+        if models: return genai.GenerativeModel(models[0])
+    except: pass
+    return genai.GenerativeModel('gemini-1.5-flash')
 
 # [파일 읽기]
 def read_file(uploaded_file):
@@ -465,16 +476,28 @@ with tab_admin:
                         
                         stats_df = pd.DataFrame(stats)
                         
-                        # 1. 막대 그래프 (참여/미참여)
-                        fig_bar = px.bar(stats_df, x="조직", y=["참여완료", "미참여"],
-                                         color_discrete_map={"참여완료": "#2ECC71", "미참여": "#E74C3C"},
-                                         text_auto=True, title="조직별 참여 현황")
-                        st.plotly_chart(fig_bar, use_container_width=True)
-                        
-                        # 2. 라인 그래프 (참여율)
-                        fig_line = px.line(stats_df, x="조직", y="참여율", markers=True, text="참여율", title="조직별 참여율(%)")
-                        fig_line.update_traces(line_color='#F1C40F', line_width=4, textposition="top center")
-                        st.plotly_chart(fig_line, use_container_width=True)
+# 막대 그래프 (텍스트 상시 노출, 카메라 아이콘 활성화)
+fig_bar = px.bar(
+    stats_df, x="조직", y=["참여완료", "미참여"],
+    color_discrete_map={"참여완료": "#2ECC71", "미참여": "#E74C3C"},
+    text_auto=True, # 수치 즉시 노출
+    category_orders={"조직": ordered_units}
+)
+fig_bar.update_traces(hoverinfo='none', hovertemplate=None)
+fig_bar.update_layout(hovermode=False)
+st.plotly_chart(fig_bar, use_container_width=True, config={'displayModeBar': True, 'modeBarButtonsToAdd': ['toImage']})
+
+# 2. 참여율 라인 그래프 (텍스트 상시 노출)
+# 
+fig_line = px.line(
+    stats_df, x="조직", y="참여율", 
+    markers=True, text="참여율",
+    category_orders={"조직": ordered_units}
+)
+# 마우스 오버 제거 및 수치 고정
+fig_line.update_traces(hoverinfo='none', hovertemplate=None, line_color='#F1C40F', line_width=4, textposition="top center")
+fig_line.update_layout(hovermode=False)
+st.plotly_chart(fig_line, use_container_width=True, config={'displayModeBar': True, 'modeBarButtonsToAdd': ['toImage']})
                         
                         # 3. 데이터 및 다운로드
                         st.dataframe(df)
@@ -483,3 +506,6 @@ with tab_admin:
                         st.info("데이터가 없습니다.")
                 except Exception as e: st.error(f"데이터 조회 실패: {e}")
             else: st.error("구글 시트 연결 실패")
+
+
+
