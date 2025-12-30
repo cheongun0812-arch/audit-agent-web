@@ -14,18 +14,17 @@ import base64
 import datetime
 import pytz 
 import pandas as pd
-import plotly.graph_objects as go
-import plotly.express as px
 
-# ✅ Plotly: 확대/축소 후 '원점 복원(Reset axes)'이 항상 가능하도록 기본 설정
+# Plotly: 확대/축소 후 "원점 복원" 가능하도록 모드바 항상 표시
 PLOTLY_CONFIG = {
-    "displayModeBar": True,      # 모바일에서도 모드바가 보여야 Reset 가능
+    "displayModeBar": True,
     "displaylogo": False,
     "responsive": True,
-    "scrollZoom": False,         # 의도치 않은 스크롤 확대 방지
-    "doubleClick": "reset",     # 더블클릭(더블탭) 시 원점 복원
+    "scrollZoom": False,          # 스크롤로 의도치 않은 확대 방지
+    "doubleClick": "reset",       # 더블클릭/더블탭 시 원점 복원
 }
-
+import plotly.graph_objects as go
+import plotly.express as px
 
 # [필수] 구글 시트 라이브러리 체크
 try:
@@ -46,8 +45,7 @@ except ImportError:
 st.set_page_config(
     page_title="AUDIT AI Agent",
     page_icon="🛡️",
-    layout="centered"
-,
+    layout="centered",
     initial_sidebar_state="collapsed"
 )
 
@@ -72,6 +70,34 @@ st.markdown("""
         color: #FFFFFF !important;
         border: none !important;
         font-weight: bold !important;
+    }
+
+
+    /* ✅ (로그인) Form submit button도 동일 스타일 적용 */
+    div[data-testid="stFormSubmitButton"] > button {
+        background: linear-gradient(to right, #2980B9, #2C3E50) !important;
+        color: #FFFFFF !important;
+        border: none !important;
+        font-weight: bold !important;
+    }
+    div[data-testid="stFormSubmitButton"] > button * {
+        color: #FFFFFF !important;
+    }
+
+    /* ✅ (로그인) 비밀번호 보기(눈) 아이콘이 '하얀 박스'로 보이지 않게 색상/배경 조정 */
+    [data-testid="stSidebar"] div[data-testid="stTextInput"] button {
+        background: transparent !important;
+        border: none !important;
+        color: #2C3E50 !important;   /* 흰 입력창 위에서 잘 보이게 */
+        box-shadow: none !important;
+    }
+    [data-testid="stSidebar"] div[data-testid="stTextInput"] button:hover {
+        background: rgba(44, 62, 80, 0.12) !important;
+        border-radius: 8px !important;
+    }
+    [data-testid="stSidebar"] div[data-testid="stTextInput"] button svg {
+        fill: currentColor !important;
+        stroke: currentColor !important;
     }
 
     /* 상단 메뉴 버튼 (책갈피) */
@@ -107,51 +133,94 @@ st.markdown("""
         color: white !important;
     }
     
-    /* ✅ (로그인/관리자) 패스워드 보기(눈) 아이콘: 어떤 화면/버전에서도 '검정색'으로 선명하게 */
-    div[data-testid="stTextInput"] button {
-        background: transparent !important;
-        border: none !important;
-        box-shadow: none !important;
-        opacity: 1 !important;
-        color: #000000 !important;
-    }
-    div[data-testid="stTextInput"] button:hover {
-        background: rgba(0,0,0,0.06) !important;
-        border-radius: 8px !important;
-    }
-    div[data-testid="stTextInput"] button svg,
-    div[data-testid="stTextInput"] button svg path {
-        fill: #000000 !important;
-        stroke: #000000 !important;
-        opacity: 1 !important;
-    }
 
-    /* ✅ Plotly 모드바(확대/축소/원점복원)가 보이지 않는 문제 방지 */
-    .js-plotly-plot .modebar { 
-        opacity: 1 !important; 
-    }
-    .js-plotly-plot .modebar-btn path {
-        fill: #2C3E50 !important;
-    }
-
-    /* ✅ 모바일 최적화: 컬럼 자동 스택 + 여백/터치영역 확보 */
+    /* ==========================
+       📱 Mobile / Responsive Tweaks
+       - Stack columns on small screens
+       - Reduce padding & font sizes
+       - Make sidebar usable on mobile
+       ========================== */
     @media (max-width: 768px) {
-        /* 본문 패딩 */
-        .block-container { padding-left: 1rem !important; padding-right: 1rem !important; }
+        /* Main content padding */
+        [data-testid="stAppViewContainer"] .main .block-container {
+            padding-left: 1rem !important;
+            padding-right: 1rem !important;
+            padding-top: 1.25rem !important;
+            max-width: 100% !important;
+        }
 
-        /* Streamlit columns: 가로 2~4열 → 세로 스택 */
-        [data-testid="stHorizontalBlock"] { flex-wrap: wrap !important; gap: 0.75rem !important; }
-        [data-testid="column"] { width: 100% !important; flex: 1 1 100% !important; }
+        /* Stack Streamlit columns */
+        div[data-testid="stHorizontalBlock"] {
+            flex-wrap: wrap !important;
+            gap: 0.75rem !important;
+        }
+        div[data-testid="stHorizontalBlock"] > div {
+            flex: 1 1 100% !important;
+            width: 100% !important;
+            min-width: 0 !important;
+        }
 
-        /* 버튼/입력 터치영역 */
-        .stButton > button,
-        div[data-testid="stFormSubmitButton"] > button {
+        /* Slightly smaller typography */
+        h1 { font-size: 1.65rem !important; }
+        h2 { font-size: 1.35rem !important; }
+        h3 { font-size: 1.15rem !important; }
+        .stMarkdown, .stTextInput, .stSelectbox, .stRadio, .stCheckbox {
+            font-size: 0.98rem !important;
+        }
+
+        /* Buttons: full width & comfortable tap target */
+        .stButton > button {
+            width: 100% !important;
             min-height: 44px !important;
             font-size: 1rem !important;
         }
 
-        /* 사이드바 폭(열렸을 때) */
-        [data-testid="stSidebar"] { min-width: 280px !important; }
+        /* Sidebar width when opened on mobile */
+        [data-testid="stSidebar"] {
+            width: 82vw !important;
+            min-width: 82vw !important;
+            max-width: 82vw !important;
+        }
+    }
+
+    /* Extra-small devices */
+    @media (max-width: 420px) {
+        [data-testid="stAppViewContainer"] .main .block-container {
+            padding-left: 0.75rem !important;
+            padding-right: 0.75rem !important;
+        }
+        h1 { font-size: 1.5rem !important; }
+    }
+
+    /* ✅ 비밀번호 보기(눈) 아이콘이 흐릿/안보이는 문제 보정 */
+    div[data-testid="stTextInput"] button,
+    div[data-testid="stTextInput"] button * {
+        opacity: 1 !important;
+    }
+    /* Streamlit 버전별 aria-label 커버 */
+    button[aria-label="Show password text"],
+    button[aria-label="Hide password text"] {
+        color: #000 !important;
+        opacity: 1 !important;
+        filter: none !important;
+    }
+    button[aria-label="Show password text"] svg,
+    button[aria-label="Hide password text"] svg,
+    button[aria-label="Show password text"] svg path,
+    button[aria-label="Hide password text"] svg path {
+        fill: #000 !important;
+        stroke: #000 !important;
+        opacity: 1 !important;
+    }
+
+    /* ✅ Plotly 모드바(Reset 등) 아이콘이 흐릿/안보이는 문제 보정 */
+    .modebar-btn svg, .modebar-btn path {
+        fill: #000 !important;
+        stroke: #000 !important;
+        opacity: 1 !important;
+    }
+    .modebar {
+        opacity: 1 !important;
     }
 
 </style>
@@ -214,7 +283,7 @@ with st.sidebar:
     if 'api_key' not in st.session_state:
         with st.form(key='login_form'):
             st.markdown("<h4 style='color:white;'>🔐 Access Key</h4>", unsafe_allow_html=True)
-            st.text_input("Key", type="password", placeholder="API 키 입력", label_visibility="collapsed", key="login_input_key")
+            st.text_input("Key", type="password", placeholder="API 키를 입력해 주세요", label_visibility="collapsed", key="login_input_key")
             # [중요] on_click으로 콜백 연결
             st.form_submit_button(label="시스템 접속 (Login)", on_click=try_login)
         
@@ -529,12 +598,11 @@ with tab_admin:
                         fig_bar = px.bar(stats_df, x="조직", y=["참여완료", "미참여"],
                                          color_discrete_map={"참여완료": "#2ECC71", "미참여": "#E74C3C"},
                                          text_auto=True, title="조직별 참여 현황")
-                         fig_bar.update_layout(dragmode=False, autosize=True, margin=dict(l=20, r=20, t=60, b=20))
-                        st.plotly_chart(fig_bar, use_container_width=True, config=PLOTLY_CONFIG)
+                        st.plotly_chart(fig_bar, use_container_width=True)
                         
                         # 2. 라인 그래프 (참여율)
                         fig_line = px.line(stats_df, x="조직", y="참여율", markers=True, text="참여율", title="조직별 참여율(%)")
-                         fig_line.update_layout(dragmode=False, autosize=True, margin=dict(l=20, r=20, t=60, b=20))
+                        fig_line.update_layout(dragmode=False, autosize=True, margin=dict(l=20, r=20, t=60, b=20))
                         fig_line.update_traces(line_color='#F1C40F', line_width=4, textposition="top center")
                         st.plotly_chart(fig_line, use_container_width=True, config=PLOTLY_CONFIG)
                         
