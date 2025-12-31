@@ -622,7 +622,7 @@ with tab_admin:
                         fig_line = px.line(stats_df, x="조직", y="참여율", markers=True, text="참여율", title="조직별 참여율(%)")
                         fig_line.update_layout(dragmode=False, autosize=True, margin=dict(l=20, r=20, t=60, b=20))
                         fig_line.update_traces(line_color='#F1C40F', line_width=4, textposition="top center")
-                        st.plotly_chart(fig_line, use_container_width=True, config=PLOTLY_CONFIG)
+                        st.plotly_chart(fig_line, use_container_width=True)
                         
                         # 3. 데이터 및 다운로드
                         st.dataframe(df)
