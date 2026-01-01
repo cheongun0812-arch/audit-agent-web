@@ -223,32 +223,6 @@ st.markdown("""
         opacity: 1 !important;
     }
 
-/* ✅ 여기에 새로운 체크박스 강조 스타일을 추가합니다 */
-    .stCheckbox {
-        background-color: #ffffff !important;
-        padding: 10px 15px !important;
-        border-radius: 8px !important;
-        border: 1px solid #E0E0E0 !important;
-        margin-bottom: 8px !important;
-        transition: all 0.3s ease;
-        display: flex;
-        align-items: center;
-    }
-    .stCheckbox:hover {
-        border-color: #2980B9 !important;
-        background-color: #F8FBFF !important;
-        transform: translateX(5px); /* 살짝 우측으로 이동하는 효과 */
-    }
-    .stSuccess {
-        font-weight: bold !important;
-        border: 2px solid #2ECC71 !important;
-        background-color: #F0FFF4 !important;
-    }
-    
-    /* 모바일 대응을 위한 추가 조정 */
-    @media (max-width: 768px) {
-        .stCheckbox { padding: 8px 10px !important; font-size: 0.9rem !important; }
-    }
     </style>
 """, unsafe_allow_html=True)
 
