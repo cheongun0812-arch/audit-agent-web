@@ -245,6 +245,43 @@ st.markdown("""
     .modebar {
         opacity: 1 !important;
     }
+/* --- Streamlit Cloud UI(하단 Manage app / 상단 툴바) 강제 숨김 --- */
+
+/* 1) 하단 우측 Manage app 배지 (Cloud) */
+a[title="Manage app"],
+a[href*="manage-app"],
+a[href*="streamlit.io/cloud"],
+div[data-testid="stAppToolbar"] a,
+div[data-testid="stAppToolbar"] button {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+/* 2) 상단 툴바/메뉴(Deploy, GitHub, Fork 등) */
+header,
+div[data-testid="stToolbar"],
+div[data-testid="stHeader"],
+div[data-testid="stAppToolbar"],
+div[data-testid="stDecoration"],
+div[data-testid="stStatusWidget"] {
+  display: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+}
+
+/* 3) 하단 footer 전체 */
+footer,
+div[data-testid="stFooter"] {
+  display: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+}
+
+/* 4) 위 요소들 숨기면서 생기는 여백 제거 */
+main .block-container {
+  padding-top: 1.5rem !important;
+  padding-bottom: 1.5rem !important;
+}
 
 </style>
 """, unsafe_allow_html=True)
