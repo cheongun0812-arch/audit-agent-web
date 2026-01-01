@@ -332,25 +332,42 @@ def init_google_sheet_connection():
         return gspread.authorize(creds)
     except Exception as e: return None
 
-# [자율점검 저장]
-def save_audit_result(emp_id, name, unit, dept, answer, sheet_name):
+# [자율점검 저장] - 2026 윤리경영 실천서약용 수정 버전
+def save_audit_result(emp_id, name, unit, dept, answers, sheet_name="2026_윤리경영_서약"):
+    """
+    answers: 서약 항목별 체크 여부 리스트 또는 딕셔너리
+    예: ["확인", "확인", "확인", ...] 또는 "모든 항목 서약 완료"
+    """
     client = init_google_sheet_connection()
-    if not client: return False, "구글 시트 연결 실패 (Secrets 확인)"
+    if not client: 
+        return False, "구글 시트 연결 실패 (Secrets 확인)"
+    
     try:
         spreadsheet = client.open("Audit_Result_2026")
-        try: sheet = spreadsheet.worksheet(sheet_name)
+        try: 
+            sheet = spreadsheet.worksheet(sheet_name)
         except:
+            # 시트가 없을 경우 헤더 구성 (서약 내용이 많으므로 '답변' 항목 강조)
             sheet = spreadsheet.add_worksheet(title=sheet_name, rows=2000, cols=10)
-            sheet.append_row(["저장시간", "사번", "성명", "총괄/본부/단", "부서", "답변", "비고"])
+            sheet.append_row(["저장시간", "사번", "성명", "총괄/본부/단", "부서", "서약상태", "비고"])
         
-        # 중복 방지 (사번 기준)
-        if str(emp_id) in sheet.col_values(2): return False, "이미 참여하셨습니다."
+        # 중복 참여 방지 (사번 기준)
+        if str(emp_id) in sheet.col_values(2): 
+            return False, "이미 본 서약에 참여하셨습니다."
         
+        # 시간대 설정 및 현재 시간
         korea_tz = pytz.timezone("Asia/Seoul")
         now = datetime.datetime.now(korea_tz).strftime("%Y-%m-%d %H:%M:%S")
-        sheet.append_row([now, emp_id, name, unit, dept, answer, "완료"])
-        return True, "성공"
-    except Exception as e: return False, str(e)
+        
+        # 가독성을 위해 answer 요약 처리 (모든 체크박스 선택 시 '전 항목 서약 완료'로 저장 가능)
+        summary_answer = "전 항목 서약 완료" if all(answers) else "미완료 항목 포함"
+        
+        # 시트 데이터 추가
+        sheet.append_row([now, emp_id, name, unit, dept, summary_answer, "2026-01 자율점검 완료"])
+        return True, "성공적으로 서약되었습니다."
+        
+    except Exception as e: 
+        return False, f"오류 발생: {str(e)}"
 
 # [AI 모델 가져오기]
 def get_model():
