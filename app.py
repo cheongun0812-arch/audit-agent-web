@@ -524,6 +524,56 @@ with tab_audit:
                     else:
                         st.error(f"❌ 제출 실패: {msg}")
 
+
+    # ※ 윤리경영원칙 실천지침 주요내용 (가이드)
+    st.markdown("---")
+    with st.expander("※ 윤리경영원칙 실천지침 주요내용", expanded=True):
+        st.markdown(
+            """
+            <div style='background-color:#FFFDE7; padding: 18px; border-radius: 10px; border-left: 5px solid #FBC02D; margin-bottom: 12px;'>
+                <div style='font-weight: 800; color:#6D4C41; font-size: 1.05rem; margin-bottom: 6px;'>📌 윤리경영 위반 주요 유형</div>
+                <div style='color:#444; font-size: 0.95rem; line-height: 1.55;'>
+                    아래 항목은 <b>윤리경영원칙 실천지침</b>의 주요 위반 유형을 정리한 내용입니다.
+                    업무 수행 시 유사 사례가 발생하지 않도록 참고해 주세요.
+                </div>
+            </div>
+
+            <div style='overflow-x:auto;'>
+                <table style='width:100%; border-collapse: collapse; background:#FFFFFF; border:1px solid #E0E0E0; border-radius: 10px; overflow:hidden;'>
+                    <thead>
+                        <tr style='background:#FFF8E1;'>
+                            <th style='text-align:left; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037; width:28%;'>구분</th>
+                            <th style='text-align:left; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037;'>윤리경영 위반사항</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>고객과의 관계</td>
+                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>고객으로부터 금품 등 이익 수수, 고객만족 저해, 고객정보 유출</td>
+                        </tr>
+                        <tr>
+                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>임직원과 회사의 관계</td>
+                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>공금 유용 및 횡령, 회사재산의 사적 사용, 기업정보 유출, 경영왜곡</td>
+                        </tr>
+                        <tr>
+                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>임직원 상호간의 관계</td>
+                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>직장 내 괴롭힘, 성희롱, 조직질서 문란행위</td>
+                        </tr>
+                        <tr>
+                            <td style='padding:12px; font-weight:700; color:#2C3E50;'>이해관계자와의 관계</td>
+                            <td style='padding:12px; color:#333;'>이해관계자로부터 금품 등 이익 수수, 이해관계자에게 부당한 요구</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div style='margin-top:10px; color:#666; font-size:0.88rem;'>
+                ※ 위 내용은 안내 목적이며, 세부 기준은 사내 <b>윤리경영원칙 실천지침</b>을 따릅니다.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
 # --- [Tab 2: 문서 정밀 검토] ---
 with tab_doc:
     st.markdown("### 📂 문서 및 규정 검토")
