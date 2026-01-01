@@ -213,6 +213,29 @@ st.markdown("""
         opacity: 1 !important;
     }
 
+    /* (추가) Streamlit 버전/브라우저별 라벨 차이까지 커버 */
+    button[aria-label*="password"],
+    button[title*="password"],
+    button[aria-label*="비밀번호"],
+    button[title*="비밀번호"] {
+        color: #000 !important;
+        opacity: 1 !important;
+        filter: none !important;
+    }
+    button[aria-label*="password"] svg,
+    button[title*="password"] svg,
+    button[aria-label*="비밀번호"] svg,
+    button[title*="비밀번호"] svg,
+    button[aria-label*="password"] svg path,
+    button[title*="password"] svg path,
+    button[aria-label*="비밀번호"] svg path,
+    button[title*="비밀번호"] svg path {
+        fill: #000 !important;
+        stroke: #000 !important;
+        opacity: 1 !important;
+    }
+
+
     /* ✅ Plotly 모드바(Reset 등) 아이콘이 흐릿/안보이는 문제 보정 */
     .modebar-btn svg, .modebar-btn path {
         fill: #000 !important;
@@ -333,6 +356,91 @@ def init_google_sheet_connection():
     except Exception as e: return None
 
 # [자율점검 저장]
+
+# ==========================================
+# 5-1. 📌 월별 캠페인(자율점검) 테마 관리
+#   - 매월 말일 자정(=월이 바뀌는 순간) 자동으로 새 캠페인 키로 전환
+#   - 관리자 모드/참여 집계는 '현재 캠페인 시트'에 자동 연동
+#   - 캠페인 제목/시트명은 Google Sheet의 'Campaign_Config'에서 관리
+# ==========================================
+def _korea_now():
+    try:
+        kst = pytz.timezone('Asia/Seoul')
+        return datetime.datetime.now(kst)
+    except Exception:
+        return datetime.datetime.now()
+
+def _campaign_key(dt: datetime.datetime) -> str:
+    return f"{dt.year}-{dt.month:02d}"
+
+def _ensure_campaign_config_sheet(spreadsheet):
+    """'Campaign_Config' 시트가 없으면 생성하고 헤더를 만든다."""
+    try:
+        ws = spreadsheet.worksheet('Campaign_Config')
+        return ws
+    except Exception:
+        ws = spreadsheet.add_worksheet(title='Campaign_Config', rows=200, cols=10)
+        ws.append_row(['campaign_key', 'title', 'sheet_name', 'start_date'])
+        return ws
+
+def _default_campaign_title(dt: datetime.datetime) -> str:
+    return f"{dt.month}월 자율점검"
+
+def _default_campaign_sheet_name(dt: datetime.datetime, spreadsheet=None) -> str:
+    """기본 시트명 규칙. 2026년 1월은 기존 윤리경영 서약 시트를 우선 사용."""
+    # 기존 운영 중인 2026년 1월 윤리경영 서약 시트가 있으면 그대로 사용
+    if spreadsheet is not None and dt.year == 2026 and dt.month == 1:
+        try:
+            spreadsheet.worksheet('2026_윤리경영_실천서약')
+            return '2026_윤리경영_실천서약'
+        except Exception:
+            pass
+    return f"{dt.year}_{dt.month:02d}_자율점검"
+
+def get_current_campaign_info(spreadsheet, now_dt: datetime.datetime | None = None) -> dict:
+    """현재 월에 해당하는 캠페인 정보를 반환. 없으면 기본값으로 생성."""
+    now_dt = now_dt or _korea_now()
+    key = _campaign_key(now_dt)
+    cfg_ws = _ensure_campaign_config_sheet(spreadsheet)
+    records = cfg_ws.get_all_records()
+    for r in records:
+        if str(r.get('campaign_key', '')).strip() == key:
+            title = str(r.get('title') or '').strip() or _default_campaign_title(now_dt)
+            sheet_name = str(r.get('sheet_name') or '').strip() or _default_campaign_sheet_name(now_dt, spreadsheet)
+            start_date = str(r.get('start_date') or '').strip()
+            return {'key': key, 'title': title, 'sheet_name': sheet_name, 'start_date': start_date}
+
+    # 없으면 기본값으로 1행 추가
+    title = _default_campaign_title(now_dt)
+    sheet_name = _default_campaign_sheet_name(now_dt, spreadsheet)
+    start_date = now_dt.strftime('%Y.%m.%d')
+    cfg_ws.append_row([key, title, sheet_name, start_date])
+    return {'key': key, 'title': title, 'sheet_name': sheet_name, 'start_date': start_date}
+
+def set_current_campaign_info(spreadsheet, title: str | None = None, sheet_name: str | None = None, now_dt: datetime.datetime | None = None) -> dict:
+    """현재 월 캠페인 정보를 업데이트(관리자 런칭)."""
+    now_dt = now_dt or _korea_now()
+    key = _campaign_key(now_dt)
+    cfg_ws = _ensure_campaign_config_sheet(spreadsheet)
+    all_rows = cfg_ws.get_all_values()
+    # 헤더 포함 행 기준으로 위치 찾기
+    row_idx = None
+    for i in range(2, len(all_rows) + 1):
+        if len(all_rows[i-1]) >= 1 and str(all_rows[i-1][0]).strip() == key:
+            row_idx = i
+            break
+    if row_idx is None:
+        # 없으면 새로 생성
+        cur = get_current_campaign_info(spreadsheet, now_dt)
+        row_idx = len(all_rows) + 1
+    # 업데이트 값 결정
+    cur = get_current_campaign_info(spreadsheet, now_dt)
+    new_title = (title or cur['title']).strip()
+    new_sheet = (sheet_name or cur['sheet_name']).strip()
+    new_start = cur.get('start_date') or now_dt.strftime('%Y.%m.%d')
+    cfg_ws.update(f"B{row_idx}:D{row_idx}", [[new_title, new_sheet, new_start]])
+    return {'key': key, 'title': new_title, 'sheet_name': new_sheet, 'start_date': new_start}
+
 def save_audit_result(emp_id, name, unit, dept, answer, sheet_name):
     client = init_google_sheet_connection()
     if not client: return False, "구글 시트 연결 실패 (Secrets 확인)"
@@ -448,18 +556,41 @@ def get_web_content(url):
 st.markdown("<h1 style='text-align: center; color: #2C3E50;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
 st.markdown("<div style='text-align: center; color: #555; margin-bottom: 20px;'>Professional Legal & Audit Assistant System</div>", unsafe_allow_html=True)
 
+# ✅ 현재(한국시간) 캠페인(테마) 정보
+_now_kst = _korea_now()
+CURRENT_YEAR = _now_kst.year
+CURRENT_MONTH = _now_kst.month
+
+# 기본값(구글시트 연결 실패 시에도 앱이 동작하도록)
+campaign_info = {
+    'key': f"{CURRENT_YEAR}-{CURRENT_MONTH:02d}",
+    'title': f"{CURRENT_MONTH}월 자율점검",
+    'sheet_name': f"{CURRENT_YEAR}_{CURRENT_MONTH:02d}_자율점검",
+    'start_date': _now_kst.strftime('%Y.%m.%d'),
+}
+
+try:
+    _client_for_campaign = init_google_sheet_connection()
+    if _client_for_campaign:
+        _ss_for_campaign = _client_for_campaign.open('Audit_Result_2026')
+        campaign_info = get_current_campaign_info(_ss_for_campaign, _now_kst)
+except Exception:
+    pass
+
+
 # 탭 생성 (5개)
 tab_audit, tab_doc, tab_chat, tab_summary, tab_admin = st.tabs([
-    "✅ 1월 자율점검", "📄 문서 정밀 검토", "💬 AI 에이전트", "📰 스마트 요약", "🔒 관리자"
+    f"✅ {CURRENT_MONTH}월 자율점검", "📄 문서 정밀 검토", "💬 AI 에이전트", "📰 스마트 요약", "🔒 관리자"
 ])
 
 # --- [Tab 1: 자율점검 - 2026 윤리경영 실천서약] ---
 with tab_audit:
-    current_sheet_name = "2026_윤리경영_실천서약"  # 시트명 변경
+    # ✅ 캠페인(월별) 시트 자동 연동
+    current_sheet_name = campaign_info.get("sheet_name", "2026_윤리경영_실천서약")  # 현재 캠페인 시트
 
-    st.markdown("""
+    st.markdown(f"""
         <div style='background-color: #E3F2FD; padding: 20px; border-radius: 10px; border-left: 5px solid #2196F3; margin-bottom: 20px;'>
-            <h3 style='margin-top:0; color: #1565C0;'>📜 2026 윤리경영원칙 실천지침 실천서약</h3>
+            <h3 style='margin-top:0; color: #1565C0;'>📜 {campaign_info.get('title','2026 윤리경영원칙 실천지침 실천서약')}</h3>
             <p style='font-size: 0.95rem; color: #444;'>
                 나는 <b>kt MOS북부</b>의 지속적인 발전을 위하여 회사 윤리경영원칙실천지침에 명시된 
                 <b>「임직원의 책임과 의무」</b> 및 <b>「관리자의 책임과 의무」</b>를 성실히 이행할 것을 서약합니다.
@@ -523,56 +654,6 @@ with tab_audit:
                         st.balloons()
                     else:
                         st.error(f"❌ 제출 실패: {msg}")
-
-
-    # ※ 윤리경영원칙 실천지침 주요내용 (가이드)
-    st.markdown("---")
-    with st.expander("※ 윤리경영원칙 실천지침 주요내용", expanded=True):
-        st.markdown(
-            """
-            <div style='background-color:#FFFDE7; padding: 18px; border-radius: 10px; border-left: 5px solid #FBC02D; margin-bottom: 12px;'>
-                <div style='font-weight: 800; color:#6D4C41; font-size: 1.05rem; margin-bottom: 6px;'>📌 윤리경영 위반 주요 유형</div>
-                <div style='color:#444; font-size: 0.95rem; line-height: 1.55;'>
-                    아래 항목은 <b>윤리경영원칙 실천지침</b>의 주요 위반 유형을 정리한 내용입니다.
-                    업무 수행 시 유사 사례가 발생하지 않도록 참고해 주세요.
-                </div>
-            </div>
-
-            <div style='overflow-x:auto;'>
-                <table style='width:100%; border-collapse: collapse; background:#FFFFFF; border:1px solid #E0E0E0; border-radius: 10px; overflow:hidden;'>
-                    <thead>
-                        <tr style='background:#FFF8E1;'>
-                            <th style='text-align:left; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037; width:28%;'>구분</th>
-                            <th style='text-align:left; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037;'>윤리경영 위반사항</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>고객과의 관계</td>
-                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>고객으로부터 금품 등 이익 수수, 고객만족 저해, 고객정보 유출</td>
-                        </tr>
-                        <tr>
-                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>임직원과 회사의 관계</td>
-                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>공금 유용 및 횡령, 회사재산의 사적 사용, 기업정보 유출, 경영왜곡</td>
-                        </tr>
-                        <tr>
-                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>임직원 상호간의 관계</td>
-                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>직장 내 괴롭힘, 성희롱, 조직질서 문란행위</td>
-                        </tr>
-                        <tr>
-                            <td style='padding:12px; font-weight:700; color:#2C3E50;'>이해관계자와의 관계</td>
-                            <td style='padding:12px; color:#333;'>이해관계자로부터 금품 등 이익 수수, 이해관계자에게 부당한 요구</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <div style='margin-top:10px; color:#666; font-size:0.88rem;'>
-                ※ 위 내용은 안내 목적이며, 세부 기준은 사내 <b>윤리경영원칙 실천지침</b>을 따릅니다.
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
 
 # --- [Tab 2: 문서 정밀 검토] ---
 with tab_doc:
@@ -680,47 +761,151 @@ with tab_admin:
     st.markdown("### 🔒 관리자 전용 대시보드")
     # [수정] 패스워드 "ktmos0402!"로 통일 및 공백 제거
     admin_pw = st.text_input("관리자 비밀번호", type="password", key="admin_dash_pw")
-    
+
     if admin_pw.strip() == "ktmos0402!":
         st.success("접속 성공")
-        
-        target_dict = {"경영총괄": 45, "사업총괄": 37, "강북본부": 222, "강남본부": 174, "서부본부": 290, "강원본부": 104, "품질지원단": 138, "감사실": 3}
-        ordered_units = list(target_dict.keys())
-        
-        if st.button("🔄 데이터 최신화", use_container_width=True):
-            client = init_google_sheet_connection()
-            if client:
-                try:
-                    ss = client.open("Audit_Result_2026")
-                    ws = ss.worksheet("2026_윤리경영_실천서약")
-                    df = pd.DataFrame(ws.get_all_records())
-                    
-                    if not df.empty:
-                        counts = df['총괄/본부/단'].value_counts().to_dict()
-                        stats = []
-                        for u in ordered_units:
-                            t = target_dict.get(u, 0)
-                            act = counts.get(u, 0)
-                            stats.append({"조직": u, "참여완료": act, "미참여": max(0, t - act), "참여율": round((act/t)*100, 1) if t>0 else 0})
-                        
-                        stats_df = pd.DataFrame(stats)
-                        
-                        # 1. 막대 그래프 (참여/미참여)
-                        fig_bar = px.bar(stats_df, x="조직", y=["참여완료", "미참여"],
-                                         color_discrete_map={"참여완료": "#2ECC71", "미참여": "#E74C3C"},
-                                         text_auto=True, title="조직별 참여 현황")
-                        st.plotly_chart(fig_bar, use_container_width=True)
-                        
-                        # 2. 라인 그래프 (참여율)
-                        fig_line = px.line(stats_df, x="조직", y="참여율", markers=True, text="참여율", title="조직별 참여율(%)")
-                        fig_line.update_layout(dragmode=False, autosize=True, margin=dict(l=20, r=20, t=60, b=20))
-                        fig_line.update_traces(line_color='#F1C40F', line_width=4, textposition="top center")
-                        st.plotly_chart(fig_line, use_container_width=True)
-                        
-                        # 3. 데이터 및 다운로드
-                        st.dataframe(df)
-                        st.download_button("📥 엑셀 다운로드", df.to_csv(index=False).encode('utf-8-sig'), "audit_result.csv")
+
+        client = init_google_sheet_connection()
+        if not client:
+            st.error("구글 시트 연결 실패: st.secrets / gspread 설정을 확인하세요.")
+        else:
+            try:
+                ss = client.open("Audit_Result_2026")
+            except Exception as e:
+                st.error(f"스프레드시트 오픈 실패: {e}")
+                ss = None
+
+            if ss:
+                # ✅ 현재 월 테마(캠페인) 자동 연동
+                camp = get_current_campaign_info(ss, _now_kst)
+
+                # (선택) 관리자: 이번 달 테마 런칭/변경
+                with st.expander("⚙️ 이번 달 테마 런칭/변경 (관리자)", expanded=False):
+                    new_title = st.text_input("테마 제목", value=camp.get("title", ""), key="camp_title_input")
+                    new_sheet = st.text_input("연동 시트명", value=camp.get("sheet_name", ""), key="camp_sheet_input")
+                    cA, cB = st.columns([1, 1])
+                    if cA.button("🚀 테마 적용", use_container_width=True):
+                        camp = set_current_campaign_info(ss, title=new_title, sheet_name=new_sheet, now_dt=_now_kst)
+                        # 캐시 초기화(테마 변경 즉시 반영)
+                        st.session_state.pop("admin_df", None)
+                        st.session_state.pop("admin_stats_df", None)
+                        st.session_state["admin_cache_key"] = camp["key"]
+                        st.toast("✅ 테마가 적용되었습니다.", icon="🚀")
+                        st.rerun()
+                    cB.caption("※ 매월 말일 자정(=월 변경 시점) 자동으로 새 캠페인으로 전환됩니다.")
+
+                st.caption(f"현재 테마: **{camp['title']}**  |  연동 시트: `{camp['sheet_name']}`  |  캠페인 키: `{camp['key']}`")
+
+                # ✅ 조직별 목표 인원(필요 시 여기만 조정)
+                target_dict = {"경영총괄": 45, "사업총괄": 37, "강북본부": 222, "강남본부": 174, "서부본부": 290, "강원본부": 104, "품질지원단": 138, "감사실": 3}
+                ordered_units = list(target_dict.keys())
+
+                # 새 캠페인(월 변경) 또는 버튼 클릭 시 자동 재집계
+                refresh_clicked = st.button("🔄 데이터 최신화", use_container_width=True)
+                need_reload = (refresh_clicked
+                              or st.session_state.get("admin_cache_key") != camp["key"]
+                              or "admin_df" not in st.session_state
+                              or "admin_stats_df" not in st.session_state)
+
+                if need_reload:
+                    try:
+                        ws = ss.worksheet(camp["sheet_name"])
+                        df = pd.DataFrame(ws.get_all_records())
+                    except Exception:
+                        df = pd.DataFrame()
+
+                    # 참여 집계(시트 컬럼명은 save_audit_result 헤더 기준)
+                    if (not df.empty) and ("총괄/본부/단" in df.columns):
+                        counts = df["총괄/본부/단"].astype(str).value_counts().to_dict()
                     else:
-                        st.info("데이터가 없습니다.")
-                except Exception as e: st.error(f"데이터 조회 실패: {e}")
-            else: st.error("구글 시트 연결 실패")
+                        counts = {}
+
+                    stats_rows = []
+                    for unit in ordered_units:
+                        participated = int(counts.get(unit, 0))
+                        target = int(target_dict.get(unit, 0))
+                        not_part = max(target - participated, 0)
+                        rate = round((participated / target) * 100, 2) if target > 0 else 0.0
+                        stats_rows.append({"조직": unit, "참여완료": participated, "미참여": not_part, "참여율": rate})
+                    stats_df = pd.DataFrame(stats_rows)
+
+                    st.session_state["admin_df"] = df
+                    st.session_state["admin_stats_df"] = stats_df
+                    st.session_state["admin_cache_key"] = camp["key"]
+                    st.session_state["admin_last_update"] = _korea_now().strftime("%Y-%m-%d %H:%M:%S")
+
+                df = st.session_state.get("admin_df", pd.DataFrame())
+                stats_df = st.session_state.get("admin_stats_df", pd.DataFrame())
+                last_update = st.session_state.get("admin_last_update")
+
+                # =========================
+                # ✅ 요약 전광판 + 신호등
+                # =========================
+                total_target = int(sum(target_dict.values()))
+                total_participated = int(stats_df["참여완료"].sum()) if (stats_df is not None and not stats_df.empty) else 0
+                total_rate = (total_participated / total_target * 100) if total_target > 0 else 0.0
+                date_kor = _korea_now().strftime("%Y.%m.%d")
+
+                # 신호등 규칙: 50% 미만=빨강, 80% 미만=주황, 80% 이상=파랑(99.5% 이상도 포함)
+                if total_rate < 50:
+                    lamp_color = "#E74C3C"
+                    lamp_label = "RED"
+                    lamp_msg = "위험"
+                elif total_rate < 80:
+                    lamp_color = "#F39C12"
+                    lamp_label = "ORANGE"
+                    lamp_msg = "주의"
+                else:
+                    lamp_color = "#2980B9"
+                    lamp_label = "BLUE"
+                    lamp_msg = "양호"
+
+                display_title = camp.get("title", "")
+                if "서약" not in display_title:
+                    display_title = display_title + " 서약서"
+
+                st.markdown(f"""
+                <div style='background:#FFFFFF; border:1px solid #E6EAF0; padding:18px 18px; border-radius:14px; margin-top:10px; margin-bottom:14px;'>
+                  <div style='display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;'>
+                    <div style='font-size:1.35rem; font-weight:800; color:#2C3E50;'>📊 {display_title} 참여현황</div>
+                    <div style='display:flex; align-items:center; gap:8px;'>
+                      <span style='display:inline-block; width:14px; height:14px; border-radius:50%; background:{lamp_color};'></span>
+                      <span style='font-weight:800; color:{lamp_color};'>{lamp_msg}</span>
+                    </div>
+                  </div>
+                  <div style='margin-top:10px; font-size:1.05rem; font-weight:700; color:#34495E;'>
+                    {date_kor}일 현재&nbsp;&nbsp;|&nbsp;&nbsp;
+                    총 대상자 <b>{total_target:,}명</b> · 참여 인원 <b>{total_participated:,}명</b> · 참여율 <b>{total_rate:.2f}%</b>
+                  </div>
+                  <div style='margin-top:6px; font-size:0.85rem; color:#7F8C8D;'>마지막 업데이트: {last_update or "—"} &nbsp;|&nbsp; 신호등: <b style='color:{lamp_color};'>{lamp_label}</b></div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                # =========================
+                # ✅ 그래프/데이터
+                # =========================
+                if df is None or df.empty:
+                    st.info("데이터가 없습니다.")
+                else:
+                    # 1) 막대 그래프(참여완료/미참여)
+                    melt_df = stats_df.melt(id_vars="조직", value_vars=["참여완료", "미참여"], var_name="구분", value_name="인원")
+                    fig_bar = px.bar(melt_df, x="조직", y="인원", color="구분", barmode="stack", text="인원", title="조직별 참여 현황")
+                    fig_bar.update_layout(dragmode="pan", autosize=True, margin=dict(l=20, r=20, t=60, b=20))
+                    fig_bar.update_traces(textposition="outside", cliponaxis=False)
+                    st.plotly_chart(fig_bar, use_container_width=True, config=PLOTLY_CONFIG)
+
+                    # 2) 라인 그래프(참여율)
+                    fig_line = px.line(stats_df, x="조직", y="참여율", markers=True, text="참여율", title="조직별 참여율(%)")
+                    fig_line.update_layout(dragmode="pan", autosize=True, margin=dict(l=20, r=20, t=60, b=20))
+                    fig_line.update_traces(textposition="top center")
+                    st.plotly_chart(fig_line, use_container_width=True, config=PLOTLY_CONFIG)
+
+                    # 3) 데이터 및 다운로드
+                    st.dataframe(df, use_container_width=True)
+                    st.download_button(
+                        label="📥 엑셀 다운로드",
+                        data=df.to_csv(index=False).encode('utf-8-sig'),
+                        file_name=f"audit_result_{camp['key']}.csv",
+                        mime="text/csv",
+                        use_container_width=True,
+                    )
