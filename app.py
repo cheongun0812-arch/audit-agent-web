@@ -332,70 +332,25 @@ def init_google_sheet_connection():
         return gspread.authorize(creds)
     except Exception as e: return None
 
-# --- [Tab 1: 자율점검 - 2026 윤리경영 실천서약] ---
-with tab_audit:
-    current_sheet_name = "2026_윤리경영_실천서약" # 시트명 변경
-    
-    st.markdown("""
-        <div style='background-color: #E3F2FD; padding: 20px; border-radius: 10px; border-left: 5px solid #2196F3; margin-bottom: 20px;'>
-            <h3 style='margin-top:0; color: #1565C0;'>📜 2026 윤리경영원칙 실천지침 실천서약</h3>
-            <p style='font-size: 0.95rem; color: #444;'>
-                나는 <b>kt MOS북부</b>의 지속적인 발전을 위하여 회사 윤리경영원칙실천지침에 명시된 
-                <b>「임직원의 책임과 의무」</b> 및 <b>「관리자의 책임과 의무」</b>를 성실히 이행할 것을 서약합니다.
-            </p>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    with st.form("audit_ethics_form", clear_on_submit=False):
-        # 기본 정보 입력
-        c1, c2, c3, c4 = st.columns(4)
-        emp_id = c1.text_input("사번", placeholder="예: 12345")
-        name = c2.text_input("성명")
-        ordered_units = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
-        unit = c3.selectbox("총괄 / 본부 / 단", ordered_units)
-        dept = c4.text_input("상세 부서명")
+# [자율점검 저장]
+def save_audit_result(emp_id, name, unit, dept, answer, sheet_name):
+    client = init_google_sheet_connection()
+    if not client: return False, "구글 시트 연결 실패 (Secrets 확인)"
+    try:
+        spreadsheet = client.open("Audit_Result_2026")
+        try: sheet = spreadsheet.worksheet(sheet_name)
+        except:
+            sheet = spreadsheet.add_worksheet(title=sheet_name, rows=2000, cols=10)
+            sheet.append_row(["저장시간", "사번", "성명", "총괄/본부/단", "부서", "답변", "비고"])
         
-        st.markdown("---")
+        # 중복 방지 (사번 기준)
+        if str(emp_id) in sheet.col_values(2): return False, "이미 참여하셨습니다."
         
-        # 1. 임직원의 책임과 의무 (개별 체크박스)
-        st.markdown("#### ■ 임직원의 책임과 의무")
-        e1 = st.checkbox("하나, 나는 회사 윤리경영원칙과 윤리경영원칙 실천지침에 따라 판단하고 행동한다.")
-        e2 = st.checkbox("하나, 나는 윤리경영원칙 실천지침을 몰랐다는 이유로 면책을 주장하지 않는다.")
-        e3 = st.checkbox("하나, 나는 직무수행 과정에서 윤리적 갈등 상황에 직면한 경우 감사부서의 해석에 따른다.")
-        e4 = st.checkbox("하나, 나는 가족, 친·인척, 지인 등을 이용하여 회사 윤리경영원칙 실천지침을 위반하지 않는다.")
-        
-        st.markdown("<br>", unsafe_allow_html=True)
-        
-        # 2. 관리자의 책임과 의무 (개별 체크박스)
-        st.markdown("#### ■ 관리자의 책임과 의무")
-        m1 = st.checkbox("하나, 나는 소속 구성원 및 업무상 이해관계자들이 지침을 준수할 수 있도록 지원하고 관리한다.")
-        m2 = st.checkbox("하나, 나는 공정하고 깨끗한 의사결정을 통해 지침 준수를 솔선수범한다.")
-        m3 = st.checkbox("하나, 나는 부서 내 위반 사안 발생 시 관리자로서의 책임을 다한다.")
-        
-        st.markdown("---")
-        
-        # 제출 버튼
-        submit_btn = st.form_submit_button("실천 서약 제출", use_container_width=True)
-        
-        if submit_btn:
-            # 모든 항목 체크 여부 확인
-            all_checked = all([e1, e2, e3, e4, m1, m2, m3])
-            
-            if not emp_id or not name:
-                st.warning("⚠️ 사번과 성명을 입력해주세요.")
-            elif not all_checked:
-                st.error("❌ 모든 서약 항목을 읽고 체크해주셔야 제출이 가능합니다.")
-            else:
-                with st.spinner("서약서 저장 중..."):
-                    # 상세 답변 내용 구성
-                    answer_summary = "임직원/관리자 의무 전 항목 숙지 및 서약 완료"
-                    success, msg = save_audit_result(emp_id, name, unit, dept, answer_summary, current_sheet_name)
-                    
-                    if success:
-                        st.success(f"✅ {name}님, 2026년 윤리경영 실천 서약이 완료되었습니다!")
-                        st.balloons()
-                    else:
-                        st.error(f"❌ 실패: {msg}")
+        korea_tz = pytz.timezone("Asia/Seoul")
+        now = datetime.datetime.now(korea_tz).strftime("%Y-%m-%d %H:%M:%S")
+        sheet.append_row([now, emp_id, name, unit, dept, answer, "완료"])
+        return True, "성공"
+    except Exception as e: return False, str(e)
 
 # [AI 모델 가져오기]
 def get_model():
@@ -498,33 +453,76 @@ tab_audit, tab_doc, tab_chat, tab_summary, tab_admin = st.tabs([
     "✅ 1월 자율점검", "📄 문서 정밀 검토", "💬 AI 에이전트", "📰 스마트 요약", "🔒 관리자"
 ])
 
-# --- [Tab 1: 자율점검] ---
+# --- [Tab 1: 자율점검 - 2026 윤리경영 실천서약] ---
 with tab_audit:
-    current_sheet_name = "1월_설명절_캠페인"
-    st.markdown("### 🎍 1월: 설 명절 '청탁금지법' 자율점검")
-    st.info("📢 설 명절, 마음만 주고 받으세요! (금품/선물 수수 금지)")
-    
-    with st.form("audit_submit_form", clear_on_submit=True):
+    current_sheet_name = "2026_윤리경영_실천서약"  # 시트명 변경
+
+    st.markdown("""
+        <div style='background-color: #E3F2FD; padding: 20px; border-radius: 10px; border-left: 5px solid #2196F3; margin-bottom: 20px;'>
+            <h3 style='margin-top:0; color: #1565C0;'>📜 2026 윤리경영원칙 실천지침 실천서약</h3>
+            <p style='font-size: 0.95rem; color: #444;'>
+                나는 <b>kt MOS북부</b>의 지속적인 발전을 위하여 회사 윤리경영원칙실천지침에 명시된 
+                <b>「임직원의 책임과 의무」</b> 및 <b>「관리자의 책임과 의무」</b>를 성실히 이행할 것을 서약합니다.
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
+
+    with st.form("audit_ethics_form", clear_on_submit=False):
+        # 기본 정보 입력
         c1, c2, c3, c4 = st.columns(4)
         emp_id = c1.text_input("사번", placeholder="예: 12345")
         name = c2.text_input("성명")
         ordered_units = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
         unit = c3.selectbox("총괄 / 본부 / 단", ordered_units)
         dept = c4.text_input("상세 부서명")
-        
-        st.markdown("**Q. 위 내용을 확인하였으며, 이를 철저히 준수할 것을 서약합니다.**")
-        agree_check = st.checkbox("네, 확인하였으며 서약합니다.")
-        
-        if st.form_submit_button("점검 완료 및 제출", use_container_width=True):
-            if not emp_id or not name: st.warning("⚠️ 사번과 성명을 입력해주세요.")
-            elif not agree_check: st.error("❌ 서약에 체크해주세요.")
+
+        st.markdown("---")
+
+        # 1. 임직원의 책임과 의무 (개별 체크박스)
+        st.markdown("#### ■ 임직원의 책임과 의무")
+        e1 = st.checkbox("하나, 나는 회사 윤리경영원칙과 윤리경영원칙 실천지침에 따라 판단하고 행동한다.")
+        e2 = st.checkbox("하나, 나는 윤리경영원칙 실천지침을 몰랐다는 이유로 면책을 주장하지 않는다.")
+        e3 = st.checkbox("하나, 나는 직무수행 과정에서 윤리적 갈등 상황에 직면한 경우 감사부서의 해석에 따른다.")
+        e4 = st.checkbox("하나, 나는 가족, 친·인척, 지인 등을 이용하여 회사 윤리경영원칙 실천지침을 위반하지 않는다.")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # 2. 관리자의 책임과 의무 (개별 체크박스)
+        st.markdown("#### ■ 관리자의 책임과 의무")
+        m1 = st.checkbox("하나, 나는 소속 구성원 및 업무상 이해관계자들이 지침을 준수할 수 있도록 지원하고 관리한다.")
+        m2 = st.checkbox("하나, 나는 공정하고 깨끗한 의사결정을 통해 지침 준수를 솔선수범한다.")
+        m3 = st.checkbox("하나, 나는 부서 내 위반 사안 발생 시 관리자로서의 책임을 다한다.")
+
+        st.markdown("---")
+
+        submit = st.form_submit_button("서약 제출", use_container_width=True)
+
+        if submit:
+            # 필수값 체크
+            if not emp_id or not name:
+                st.warning("⚠️ 사번과 성명을 입력해주세요.")
             else:
-                with st.spinner("제출 중..."):
-                    success, msg = save_audit_result(emp_id, name, unit, dept, "서약함(PASS)", current_sheet_name)
+                # 모든 서약 항목 체크 여부 확인
+                unchecked = []
+                if not e1: unchecked.append("임직원 의무 1")
+                if not e2: unchecked.append("임직원 의무 2")
+                if not e3: unchecked.append("임직원 의무 3")
+                if not e4: unchecked.append("임직원 의무 4")
+                if not m1: unchecked.append("관리자 의무 1")
+                if not m2: unchecked.append("관리자 의무 2")
+                if not m3: unchecked.append("관리자 의무 3")
+
+                if unchecked:
+                    st.error("❌ 서약 항목이 모두 체크되어야 제출할 수 있습니다. (미체크: " + ", ".join(unchecked) + ")")
+                else:
+                    answer = "윤리경영 서약서 제출 완료 (임직원 의무 4/4, 관리자 의무 3/3)"
+                    with st.spinner("제출 중..."):
+                        success, msg = save_audit_result(emp_id, name, unit, dept, answer, current_sheet_name)
                     if success:
-                        st.success(f"✅ {name}님, 제출 완료되었습니다!")
+                        st.success(f"✅ {name}님, 윤리경영 서약서 제출이 완료되었습니다!")
                         st.balloons()
-                    else: st.error(f"❌ 실패: {msg}")
+                    else:
+                        st.error(f"❌ 제출 실패: {msg}")
 
 # --- [Tab 2: 문서 정밀 검토] ---
 with tab_doc:
@@ -644,7 +642,7 @@ with tab_admin:
             if client:
                 try:
                     ss = client.open("Audit_Result_2026")
-                    ws = ss.worksheet("1월_설명절_캠페인")
+                    ws = ss.worksheet("2026_윤리경영_실천서약")
                     df = pd.DataFrame(ws.get_all_records())
                     
                     if not df.empty:
