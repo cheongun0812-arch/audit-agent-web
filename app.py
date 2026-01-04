@@ -101,17 +101,18 @@ st.markdown("""
     }
 
     /* 상단 메뉴 버튼 (책갈피) */
-    [data-testid="stSidebarCollapsedControl"] {
-        position: fixed !important;
-        top: 12px !important;
-        left: 12px !important;
-        color: transparent !important;
-        background-color: #FFFFFF !important;
-        border-radius: 0 10px 10px 0;
-        border: 1px solid #ddd;
-        width: 40px; height: 40px;
-        z-index: 99999;
-    }
+     [data-testid="stSidebarCollapsedControl"] {
++    position: fixed !important;
++    top: 12px !important;
++    left: 12px !important;
+     color: transparent !important;
+     background-color: #FFFFFF !important;
+     border-radius: 0 10px 10px 0;
+     border: 1px solid #ddd;
+     width: 40px; height: 40px;
+     z-index: 99999;
+ }
+
     [data-testid="stSidebarCollapsedControl"]::after {
         content: "☰";
         color: #333;
@@ -260,9 +261,7 @@ div[data-testid="stAppToolbar"] button {
   visibility: hidden !important;
 }
 
-/* 2) 상단 툴바/메뉴(Deploy, GitHub, Fork 등) */
-/* 상단 헤더를 통째로 숨기면 ☰(사이드바 토글)도 같이 사라질 수 있어요.
-   → header/stHeader는 숨기지 않고, 툴바/장식만 최소화합니다. */
+/* header/stHeader는 숨기지 말기: 사이드바 토글(☰)이 같이 사라질 수 있음 */
 div[data-testid="stToolbar"],
 div[data-testid="stAppToolbar"],
 div[data-testid="stDecoration"],
