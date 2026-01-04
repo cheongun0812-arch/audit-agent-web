@@ -46,7 +46,7 @@ st.set_page_config(
     page_title="AUDIT AI Agent",
     page_icon="🛡️",
     layout="centered",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
 # ==========================================
@@ -102,6 +102,9 @@ st.markdown("""
 
     /* 상단 메뉴 버튼 (책갈피) */
     [data-testid="stSidebarCollapsedControl"] {
+        position: fixed !important;
+        top: 12px !important;
+        left: 12px !important;
         color: transparent !important;
         background-color: #FFFFFF !important;
         border-radius: 0 10px 10px 0;
@@ -258,13 +261,12 @@ div[data-testid="stAppToolbar"] button {
 }
 
 /* 2) 상단 툴바/메뉴(Deploy, GitHub, Fork 등) */
-header,
+/* 상단 헤더를 통째로 숨기면 ☰(사이드바 토글)도 같이 사라질 수 있어요.
+   → header/stHeader는 숨기지 않고, 툴바/장식만 최소화합니다. */
 div[data-testid="stToolbar"],
-div[data-testid="stHeader"],
 div[data-testid="stAppToolbar"],
 div[data-testid="stDecoration"],
 div[data-testid="stStatusWidget"] {
-  display: none !important;
   visibility: hidden !important;
   height: 0 !important;
 }
