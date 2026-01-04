@@ -277,27 +277,20 @@ with st.sidebar:
 # 7. 로그아웃 애니메이션
 # ==========================================
 if st.session_state.get("logout_anim"):
-    now_m = _korea_now().month if "_korea_now" in globals() else datetime.datetime.now().month
-    if now_m == 12:
-        st.markdown("""
-<div style="background:#2C3E50; padding:40px; border-radius:16px; text-align:center;">
-  <div style="font-size: 80px; margin-bottom: 20px;">🎅🎄</div>
-  <h1 style="color: white !important;">Merry Christmas!</h1>
-  <h3 style="color: #ddd !important;">오늘도 수고 많으셨습니다.<br>따뜻한 연말 보내세요! ❤️</h3>
-</div>
-""", unsafe_allow_html=True)
-    else:
-        st.markdown("""
-<div style="background:#2C3E50; padding:40px; border-radius:16px; text-align:center;">
-  <div style="font-size: 72px; margin-bottom: 18px;">✅</div>
-  <h2 style="color: white !important; margin:0;">안전하게 로그아웃되었습니다</h2>
-  <div style="color:#D6DEE8; margin-top:10px; font-size:1.02rem; line-height:1.5;">
-    이용해주셔서 감사합니다.<br/>필요하실 때 다시 접속해 주세요.
+    st.markdown("""
+<div style="background:#0B1B2B; padding:44px 26px; border-radius:18px; text-align:center; border:1px solid rgba(255,255,255,0.12);">
+  <div style="font-size: 78px; margin-bottom: 12px; line-height:1.1;">🎆✨</div>
+  <div style="font-size: 22px; font-weight: 900; color: #FFFFFF; margin-bottom: 8px;">새해 복 많이 받으세요!</div>
+  <div style="font-size: 15px; color: rgba(255,255,255,0.85); line-height: 1.55;">
+    올해도 건강과 행운이 가득하시길 바랍니다.<br>
+    안전하게 로그아웃되었습니다.
+  </div>
+  <div style="margin-top:18px; font-size: 12px; color: rgba(255,255,255,0.65);">
+    ktMOS북부 Audit AI Solution © 2026
   </div>
 </div>
 """, unsafe_allow_html=True)
-
-    time.sleep(1.6)
+    time.sleep(2.0)
     _clear_query_params()
     st.session_state.clear()
     st.rerun()
