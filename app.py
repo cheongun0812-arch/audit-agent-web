@@ -49,7 +49,7 @@ st.set_page_config(
     page_title="AUDIT AI Agent",
     page_icon="🛡️",
     layout="wide",                 # ✅ 사이드바가 더 안정적으로 표시되도록 wide 권장
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
 # ==========================================
@@ -74,7 +74,7 @@ st.markdown("""
     background: transparent !important;
     border: none !important;
     box-shadow: none !important;
-    color: #2C3E50 !important; /* 아이콘/버튼 색 */
+    color: #000000 !important; /* 아이콘/버튼 색 */
     opacity: 1 !important;
 }
 [data-testid="stSidebar"] div[data-testid="stTextInput"] button:hover {
@@ -95,8 +95,87 @@ st.markdown("""
     font-weight: bold !important;
 }
 
+
+
+/* ✅ 비밀번호 보기(눈)/지우기(X) 아이콘이 항상 '검정색'으로 보이도록 강제 */
+button[aria-label="Show password text"],
+button[aria-label="Hide password text"],
+div[data-testid="stTextInput"] button {
+  color: #000000 !important;
+  opacity: 1 !important;
+  filter: none !important;
+}
+button[aria-label="Show password text"] svg,
+button[aria-label="Hide password text"] svg,
+div[data-testid="stTextInput"] button svg,
+div[data-testid="stTextInput"] button svg path {
+  fill: #000000 !important;
+  stroke: #000000 !important;
+  opacity: 1 !important;
+}
+
+/* ✅ form_submit_button / 버튼이 비활성화(disabled)되어도 텍스트가 안 사라지게 */
+div[data-testid="stFormSubmitButton"] > button,
+.stButton > button {
+  font-weight: 800 !important;
+}
+div[data-testid="stFormSubmitButton"] > button:disabled,
+.stButton > button:disabled {
+  opacity: 1 !important;
+  color: #2C3E50 !important;
+  background: #E6ECF2 !important;
+  border: 1px solid #CBD6E2 !important;
+}
+div[data-testid="stFormSubmitButton"] > button:disabled * ,
+.stButton > button:disabled * {
+  opacity: 1 !important;
+  color: #2C3E50 !important;
+}
 </style>
 """, unsafe_allow_html=True)
+# ✅ PC에서는 사이드바 기본 펼침, 모바일에서는 기본 접힘 (Streamlit 기본 동작 유지)
+st.markdown("""
+<script>
+(function() {
+  const KEY = "__sidebar_autopen_done__";
+  const isDesktop = () => (window.innerWidth || 0) >= 900;
+  let tries = 0;
+  const maxTries = 25;
+
+  function clickToggleIfNeeded() {
+    try {
+      if (!isDesktop()) return;
+      if (window.sessionStorage.getItem(KEY) === "1") return;
+
+      // Streamlit 버전에 따라 요소 형태가 다를 수 있어 여러 셀렉터 시도
+      const doc = window.parent?.document || document;
+      const candidates = [
+        '[data-testid="stSidebarCollapsedControl"] button',
+        '[data-testid="stSidebarCollapsedControl"]',
+        'button[title="Open sidebar"]',
+        'button[aria-label="Open sidebar"]'
+      ];
+
+      for (const sel of candidates) {
+        const el = doc.querySelector(sel);
+        if (el) {
+          el.click();
+          window.sessionStorage.setItem(KEY, "1");
+          return;
+        }
+      }
+    } catch (e) {}
+  }
+
+  const timer = setInterval(() => {
+    tries += 1;
+    clickToggleIfNeeded();
+    if (tries >= maxTries) clearInterval(timer);
+  }, 250);
+})();
+</script>
+""", unsafe_allow_html=True)
+
 
 # ==========================================
 # 3. 로그인 및 세션 관리
@@ -182,7 +261,7 @@ with st.sidebar:
     else:
         st.success("🟢 정상 가동 중")
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("🎄 고마워! 또 봐! (Logout)", type="primary", use_container_width=True):
+        if st.button("로그아웃 (Logout)", type="primary", use_container_width=True):
             perform_logout()
             st.rerun()
 
@@ -198,14 +277,27 @@ with st.sidebar:
 # 7. 로그아웃 애니메이션
 # ==========================================
 if st.session_state.get("logout_anim"):
-    st.markdown("""
-<div class="snow-bg" style="background:#2C3E50; padding:40px; border-radius:16px; text-align:center;">
+    now_m = _korea_now().month if "_korea_now" in globals() else datetime.datetime.now().month
+    if now_m == 12:
+        st.markdown("""
+<div style="background:#2C3E50; padding:40px; border-radius:16px; text-align:center;">
   <div style="font-size: 80px; margin-bottom: 20px;">🎅🎄</div>
   <h1 style="color: white !important;">Merry Christmas!</h1>
   <h3 style="color: #ddd !important;">오늘도 수고 많으셨습니다.<br>따뜻한 연말 보내세요! ❤️</h3>
 </div>
 """, unsafe_allow_html=True)
-    time.sleep(2.2)
+    else:
+        st.markdown("""
+<div style="background:#2C3E50; padding:40px; border-radius:16px; text-align:center;">
+  <div style="font-size: 72px; margin-bottom: 18px;">✅</div>
+  <h2 style="color: white !important; margin:0;">안전하게 로그아웃되었습니다</h2>
+  <div style="color:#D6DEE8; margin-top:10px; font-size:1.02rem; line-height:1.5;">
+    이용해주셔서 감사합니다.<br/>필요하실 때 다시 접속해 주세요.
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+    time.sleep(1.6)
     _clear_query_params()
     st.session_state.clear()
     st.rerun()
