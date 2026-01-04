@@ -333,7 +333,7 @@ if st.session_state.get("logout_anim"):
   </div>
 </div>
 """, unsafe_allow_html=True)
-    time.sleep(2.0)
+    time.sleep(3.0)
     _clear_query_params()
     st.session_state.clear()
     st.rerun()
