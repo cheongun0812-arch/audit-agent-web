@@ -49,7 +49,7 @@ st.set_page_config(
     page_title="AUDIT AI Agent",
     page_icon="🛡️",
     layout="wide",                 # ✅ 사이드바가 더 안정적으로 표시되도록 wide 권장
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
 # ==========================================
@@ -75,155 +75,6 @@ st.markdown("""
     font-weight: bold !important;
 }
 
-/* ✅ (로그인) Form submit button도 동일 스타일 적용 */
-div[data-testid="stFormSubmitButton"] > button {
-    background: linear-gradient(to right, #2980B9, #2C3E50) !important;
-    color: #FFFFFF !important;
-    border: none !important;
-    font-weight: bold !important;
-}
-div[data-testid="stFormSubmitButton"] > button * {
-    color: #FFFFFF !important;
-}
-
-/* ✅ (로그인) 비밀번호 보기(눈) 아이콘 스타일 */
-[data-testid="stSidebar"] div[data-testid="stTextInput"] button {
-    background: transparent !important;
-    border: none !important;
-    color: #2C3E50 !important;   /* 흰 입력창 위에서 잘 보이게 */
-    box-shadow: none !important;
-}
-[data-testid="stSidebar"] div[data-testid="stTextInput"] button:hover {
-    background: rgba(44, 62, 80, 0.12) !important;
-    border-radius: 8px !important;
-}
-[data-testid="stSidebar"] div[data-testid="stTextInput"] button svg {
-    fill: currentColor !important;
-    stroke: currentColor !important;
-}
-
-/* ✅ 사이드바(로그인 창) 강제 표시: Streamlit이 접어놓아도 화면 밖으로 밀리지 않게 */
-section[data-testid="stSidebar"] {
-    display: block !important;
-    visibility: visible !important;
-    transform: translateX(0) !important;
-    min-width: 320px !important;
-    width: 320px !important;
-    max-width: 320px !important;
-}
-
-/* ✅ 사이드바 토글(☰) 강제 표시 + 화면 고정 */
-[data-testid="stSidebarCollapsedControl"]{
-    display: block !important;
-    visibility: visible !important;
-    position: fixed !important;
-    top: 12px !important;
-    left: 12px !important;
-    color: transparent !important;
-    background-color: #FFFFFF !important;
-    border-radius: 0 10px 10px 0;
-    border: 1px solid #ddd;
-    width: 40px; height: 40px;
-    z-index: 99999;
-}
-[data-testid="stSidebarCollapsedControl"]::after {
-    content: "☰";
-    color: #333;
-    font-size: 24px;
-    font-weight: bold;
-    position: absolute;
-    top: 5px; left: 10px;
-}
-
-[data-testid="stChatMessage"] { background-color: #FFFFFF; border: 1px solid #eee; }
-[data-testid="stChatMessage"][data-testid="user"] { background-color: #E3F2FD; }
-
-/* 🎄 크리스마스 로그아웃 버튼 스타일 */
-.logout-btn {
-    border: 2px solid #FF5252 !important;
-    background: transparent !important;
-    color: #FF5252 !important;
-    border-radius: 20px !important;
-}
-.logout-btn:hover {
-    background-color: #FF5252 !important;
-    color: white !important;
-}
-
-/* ✅ 상단 헤더를 display:none으로 숨기지 않기(토글까지 날아감 방지)
-   툴바/장식만 최소화 */
-div[data-testid="stToolbar"],
-div[data-testid="stAppToolbar"],
-div[data-testid="stDecoration"],
-div[data-testid="stStatusWidget"] {
-    visibility: hidden !important;
-    height: 0 !important;
-}
-
-/* 하단 footer 숨김 */
-footer,
-div[data-testid="stFooter"] {
-    display: none !important;
-    visibility: hidden !important;
-    height: 0 !important;
-}
-
-/* ✅ 모바일 대응 */
-@media (max-width: 768px) {
-    section[data-testid="stSidebar"]{
-        width: 82vw !important;
-        min-width: 82vw !important;
-        max-width: 82vw !important;
-    }
-    [data-testid="stAppViewContainer"] .main .block-container {
-        padding-left: 1rem !important;
-        padding-right: 1rem !important;
-        padding-top: 1.25rem !important;
-        max-width: 100% !important;
-    }
-    div[data-testid="stHorizontalBlock"] {
-        flex-wrap: wrap !important;
-        gap: 0.75rem !important;
-    }
-    div[data-testid="stHorizontalBlock"] > div {
-        flex: 1 1 100% !important;
-        width: 100% !important;
-        min-width: 0 !important;
-    }
-    .stButton > button {
-        width: 100% !important;
-        min-height: 44px !important;
-        font-size: 1rem !important;
-    }
-}
-
-/* ✅ 비밀번호 보기(눈) 아이콘 강제 보정 */
-div[data-testid="stTextInput"] button,
-div[data-testid="stTextInput"] button * {
-    opacity: 1 !important;
-}
-button[aria-label="Show password text"],
-button[aria-label="Hide password text"] {
-    color: #000 !important;
-    opacity: 1 !important;
-    filter: none !important;
-}
-button[aria-label="Show password text"] svg,
-button[aria-label="Hide password text"] svg,
-button[aria-label="Show password text"] svg path,
-button[aria-label="Hide password text"] svg path {
-    fill: #000 !important;
-    stroke: #000 !important;
-    opacity: 1 !important;
-}
-
-/* ✅ Plotly 모드바 아이콘 보정 */
-.modebar-btn svg, .modebar-btn path {
-    fill: #000 !important;
-    stroke: #000 !important;
-    opacity: 1 !important;
-}
-.modebar { opacity: 1 !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -321,31 +172,13 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
+
 # ==========================================
-# 6. 사이드바가 안 보이는 환경 대비: 메인 화면 로그인 폴백(중요)
+# 6. 로그인 필요 (사이드바에서 로그인)
 # ==========================================
 if "api_key" not in st.session_state:
-    st.markdown(
-        """
-        <div style="background:#FFFFFF;border:1px solid #E6EAF0;border-radius:14px;padding:16px 18px;margin:10px auto;max-width:720px;">
-          <div style="font-weight:900;font-size:1.15rem;color:#2C3E50;">🔐 로그인</div>
-          <div style="color:#607D8B;margin-top:6px;font-size:0.92rem;">
-            (문제 해결용) 만약 왼쪽 사이드바가 브라우저/임베드 환경에서 보이지 않는 경우, 아래에서 바로 로그인할 수 있습니다.
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    with st.form("main_login_form"):
-        st.text_input("API Key", type="password", key="main_login_input_key", placeholder="API 키 입력")
-        st.form_submit_button(
-            "로그인",
-            on_click=try_login_from_session_key,
-            args=("main_login_input_key",),
-            use_container_width=True,
-        )
-    if st.session_state.get("login_error"):
-        st.error(st.session_state["login_error"])
+    st.info("왼쪽 사이드바(☰)에서 Access Key로 로그인 후 이용할 수 있습니다.")
+    st.stop()
 
 # ==========================================
 # 7. 로그아웃 애니메이션
@@ -568,6 +401,7 @@ def get_web_content(url):
 # ==========================================
 st.markdown("<h1 style='text-align: center; color: #2C3E50;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
 st.markdown("<div style='text-align: center; color: #555; margin-bottom: 20px;'>Professional Legal & Audit Assistant System</div>", unsafe_allow_html=True)
+
 
 _now_kst = _korea_now()
 CURRENT_YEAR = _now_kst.year
