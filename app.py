@@ -49,7 +49,7 @@ st.set_page_config(
     page_title="AUDIT AI Agent",
     page_icon="🛡️",
     layout="wide",                 # ✅ 사이드바가 더 안정적으로 표시되도록 wide 권장
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
 # ==========================================
@@ -66,6 +66,26 @@ st.markdown("""
     color: #000000 !important;
     -webkit-text-fill-color: #000000 !important;
     border: 1px solid #BDC3C7 !important;
+}
+
+
+/* ✅ 비밀번호 보기(눈) 아이콘이 흰 입력창에서 항상 보이도록 */
+[data-testid="stSidebar"] div[data-testid="stTextInput"] button {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    color: #2C3E50 !important; /* 아이콘/버튼 색 */
+    opacity: 1 !important;
+}
+[data-testid="stSidebar"] div[data-testid="stTextInput"] button:hover {
+    background: rgba(44, 62, 80, 0.12) !important;
+    border-radius: 8px !important;
+}
+[data-testid="stSidebar"] div[data-testid="stTextInput"] button svg,
+[data-testid="stSidebar"] div[data-testid="stTextInput"] button svg path {
+    fill: currentColor !important;
+    stroke: currentColor !important;
+    opacity: 1 !important;
 }
 
 .stButton > button {
@@ -173,12 +193,6 @@ with st.sidebar:
     )
 
 
-# ==========================================
-# 6. 로그인 필요 (사이드바에서 로그인)
-# ==========================================
-if "api_key" not in st.session_state:
-    st.info("왼쪽 사이드바(☰)에서 Access Key로 로그인 후 이용할 수 있습니다.")
-    st.stop()
 
 # ==========================================
 # 7. 로그아웃 애니메이션
