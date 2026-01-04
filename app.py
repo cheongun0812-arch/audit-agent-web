@@ -61,6 +61,38 @@ st.markdown("""
 [data-testid="stSidebar"] { background-color: #2C3E50; }
 [data-testid="stSidebar"] * { color: #FFFFFF !important; }
 
+/* ✅ 사이드바 텍스트 입력의 아이콘(눈/지우기 등)을 항상 검정색으로 */
+[data-testid="stSidebar"] div[data-testid="stTextInput"] button,
+[data-testid="stSidebar"] div[data-testid="stTextInput"] button:hover,
+[data-testid="stSidebar"] div[data-testid="stTextInput"] button:focus,
+[data-testid="stSidebar"] div[data-testid="stTextInput"] button:active {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    color: #000000 !important;
+    opacity: 1 !important;
+}
+
+[data-testid="stSidebar"] div[data-testid="stTextInput"] button svg,
+[data-testid="stSidebar"] div[data-testid="stTextInput"] button svg *,
+[data-testid="stSidebar"] div[data-testid="stTextInput"] button svg path {
+    fill: #000000 !important;
+    stroke: #000000 !important;
+    opacity: 1 !important;
+}
+
+/* aria-label이 환경/언어에 따라 달라도 적용되도록, 패스워드 토글 버튼도 강제 */
+div[data-testid="stTextInput"] button[aria-label],
+div[data-testid="stTextInput"] button[aria-label] svg,
+div[data-testid="stTextInput"] button[aria-label] svg * {
+    fill: #000000 !important;
+    stroke: #000000 !important;
+    color: #000000 !important;
+    opacity: 1 !important;
+}
+
+
+
 .stTextInput input, .stTextArea textarea {
     background-color: #FFFFFF !important;
     color: #000000 !important;
@@ -68,15 +100,38 @@ st.markdown("""
     border: 1px solid #BDC3C7 !important;
 }
 
-
-/* ✅ 비밀번호 보기(눈) 아이콘이 흰 입력창에서 항상 보이도록 */
-[data-testid="stSidebar"] div[data-testid="stTextInput"] button {
-    background: transparent !important;
+/* ✅ 버튼 스타일 (일반 버튼 + 폼 제출 버튼) */
+.stButton > button,
+div[data-testid="stFormSubmitButton"] > button {
+    background: linear-gradient(to right, #2980B9, #2C3E50) !important;
+    color: #FFFFFF !important;
     border: none !important;
-    box-shadow: none !important;
-    color: #000000 !important; /* 아이콘/버튼 색 */
+    border-radius: 10px !important;
+    padding: 0.6rem 1rem !important;
+    font-weight: 800 !important;
+    width: 100% !important;
     opacity: 1 !important;
 }
+
+/* ✅ disabled여도 텍스트가 흐려지지 않도록 */
+.stButton > button:disabled,
+div[data-testid="stFormSubmitButton"] > button:disabled {
+    background: linear-gradient(to right, #2980B9, #2C3E50) !important;
+    color: #FFFFFF !important;
+    opacity: 1 !important;
+    filter: none !important;
+}
+
+/* ✅ 버튼 내부 텍스트/아이콘도 상시 선명 */
+.stButton > button *,
+div[data-testid="stFormSubmitButton"] > button * {
+    color: #FFFFFF !important;
+    opacity: 1 !important;
+}
+
+
+
+
 [data-testid="stSidebar"] div[data-testid="stTextInput"] button:hover {
     background: rgba(44, 62, 80, 0.12) !important;
     border-radius: 8px !important;
@@ -97,14 +152,6 @@ st.markdown("""
 
 
 
-/* ✅ 비밀번호 보기(눈)/지우기(X) 아이콘이 항상 '검정색'으로 보이도록 강제 */
-button[aria-label="Show password text"],
-button[aria-label="Hide password text"],
-div[data-testid="stTextInput"] button {
-  color: #000000 !important;
-  opacity: 1 !important;
-  filter: none !important;
-}
 button[aria-label="Show password text"] svg,
 button[aria-label="Hide password text"] svg,
 div[data-testid="stTextInput"] button svg,
@@ -115,10 +162,6 @@ div[data-testid="stTextInput"] button svg path {
 }
 
 /* ✅ form_submit_button / 버튼이 비활성화(disabled)되어도 텍스트가 안 사라지게 */
-div[data-testid="stFormSubmitButton"] > button,
-.stButton > button {
-  font-weight: 800 !important;
-}
 div[data-testid="stFormSubmitButton"] > button:disabled,
 .stButton > button:disabled {
   opacity: 1 !important;
