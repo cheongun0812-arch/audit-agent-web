@@ -575,7 +575,7 @@ with tab_audit:
     st.markdown(f"""
         <div style='background-color: #E3F2FD; padding: 20px; border-radius: 10px; border-left: 5px solid #2196F3; margin-bottom: 20px;'>
             <h3 style='margin-top:0; color: #1565C0;'>📜 {campaign_info.get('title','2026 윤리경영원칙 실천지침 실천서약')}</h3>
-            <p style='font-size: 2.00rem; color: #444;'>
+            <p style='font-size: 1.50rem; color: #444;'>
                 나는 <b>kt MOS북부</b>의 지속적인 발전을 위하여 회사 윤리경영원칙실천지침에 명시된 
                 <b>「임직원의 책임과 의무」</b> 및 <b>「관리자의 책임과 의무」</b>를 성실히 이행할 것을 서약합니다.
             </p>
