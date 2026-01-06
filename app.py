@@ -977,23 +977,25 @@ show_all = st.toggle("전체 보기 (한 달 전체)", value=False)
 if show_all:
     render_qt_table_html(df)
 else:
+    # ✅ 주간 표시: '월 선택 범위(START~END)'와 무관하게 항상 7일(월~일) 표를 보여줍니다.
+    # - 데이터가 없으면 빈 값으로 표시
+    # - 다른 달/미래 주도 이동 가능
     anchor = st.session_state.get("picked_day", today_kst())
     wk_start = week_start_monday(anchor)
     wk_end = wk_start + timedelta(days=6)
 
-    wk_start_in = clamp_date(wk_start, START, END)
-    wk_end_in = clamp_date(wk_end, START, END)
+    def _shift_week(delta_days: int):
+        a = st.session_state.get("picked_day", today_kst())
+        # 월 범위로 clamp 하지 않음(주간 표는 항상 이동 가능)
+        st.session_state["picked_day"] = a + timedelta(days=delta_days)
 
     nav1, nav2, _ = st.columns([1, 1, 2])
     with nav1:
-        if st.button("⬅️ 이전 주", use_container_width=True):
-            st.session_state["picked_day"] = clamp_date(anchor - timedelta(days=7), START, END)
-            st.rerun()
+        st.button("⬅️ 이전 주", use_container_width=True, on_click=_shift_week, args=(-7,))
     with nav2:
-        if st.button("다음 주 ➡️", use_container_width=True):
-            st.session_state["picked_day"] = clamp_date(anchor + timedelta(days=7), START, END)
-            st.rerun()
+        st.button("다음 주 ➡️", use_container_width=True, on_click=_shift_week, args=(+7,))
 
-    st.caption(f"표시 기간: {wk_start_in.isoformat()} ~ {wk_end_in.isoformat()} (월~일)")
-    df_week = df[(df["날짜"] >= wk_start_in.isoformat()) & (df["날짜"] <= wk_end_in.isoformat())].copy()
+    st.caption(f"표시 기간: {wk_start.isoformat()} ~ {wk_end.isoformat()} (월~일)")
+    # 주간 표는 해당 7일만 로드(없는 날짜는 빈 행 생성)
+    df_week = storage.load_month(uid, wk_start, wk_end)
     render_qt_table_html(df_week)
