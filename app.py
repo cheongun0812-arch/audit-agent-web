@@ -9,6 +9,9 @@ from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 from io import BytesIO
 
+APP_BUILD = "weeklyfree_v2_2026-01-06"
+
+
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
@@ -761,6 +764,7 @@ def admin_dashboard():
 # 앱 시작
 # -------------------------
 st.set_page_config(page_title=APP_TITLE, layout="wide")
+st.sidebar.caption(f"build: {APP_BUILD}")
 
 # --- Responsive UI (PC/Mobile) ---
 st.markdown(
