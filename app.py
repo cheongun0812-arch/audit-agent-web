@@ -1,1005 +1,920 @@
-# coding: utf-8
-import os
-import secrets
-import json
-import re
-from datetime import date, datetime, timedelta
-from typing import Optional, Tuple
-from urllib.parse import urlencode
-from zoneinfo import ZoneInfo
-from io import BytesIO
-
-APP_BUILD = "weeklyfree_v2_2026-01-06"
-
-
-import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
+import os
+import google.generativeai as genai
+from docx import Document
+import PyPDF2
+from youtube_transcript_api import YouTubeTranscriptApi
+import requests
+from bs4 import BeautifulSoup
+import time
+import glob
+import tempfile
+import hashlib
+import base64
+import datetime
+import pytz
+import pandas as pd
 
-# -------------------------
-# 구글 시트 라이브러리
-# -------------------------
+import plotly.graph_objects as go
+import plotly.express as px
+
+# Plotly: 확대/축소 후 "원점 복원" 가능하도록 모드바 항상 표시
+PLOTLY_CONFIG = {
+    "displayModeBar": True,
+    "displaylogo": False,
+    "responsive": True,
+    "scrollZoom": False,          # 스크롤로 의도치 않은 확대 방지
+    "doubleClick": "reset",       # 더블클릭/더블탭 시 원점 복원
+}
+
+# [필수] 구글 시트 라이브러리 체크
 try:
     import gspread
-    from google.oauth2.service_account import Credentials
-    GSHEETS_AVAILABLE = True
-except Exception:
-    GSHEETS_AVAILABLE = False
+    from oauth2client.service_account import ServiceAccountCredentials
+except ImportError:
+    gspread = None
+    ServiceAccountCredentials = None
+    st.error("❌ 구글 시트 라이브러리가 없습니다. requirements.txt를 확인하세요.")
 
-# -------------------------
-# 기본 설정
-# -------------------------
-APP_TITLE = "1월 주만나 큐티 체크 리스트"
-VERSE_TEXT = "주를 경외하게 하는 주의 말씀을 주의 종에게 세우소서 [시편 119:38절]"
-SUPPORTED_MONTHS = [(2026, 1, "2026년 1월"), (2026, 2, "2026년 2월"), (2026, 3, "2026년 3월")]
+# [필수] yt_dlp 라이브러리 체크
+try:
+    import yt_dlp
+except ImportError:
+    yt_dlp = None
 
-SHEET_RECORDS = "qti_records"  # 일별 기록
-SHEET_USERS = "qti_users"      # uid별 성도 정보(직분/이름)
+# ==========================================
+# 1. 페이지 설정
+# ==========================================
+st.set_page_config(
+    page_title="AUDIT AI Agent",
+    page_icon="🛡️",
+    layout="wide",                 # ✅ 사이드바가 더 안정적으로 표시되도록 wide 권장
+    initial_sidebar_state="collapsed"
+)
 
-MEMBER_ROLES = ["평신도", "서리집사", "안수집사", "권사", "장로", "강도사", "목사", "기타"]
+# ==========================================
+# 2. 🎨 디자인 테마 (사이드바/토글 강제 표시 포함)
+# ==========================================
+st.markdown("""
+<style>
+.stApp { background-color: #F4F6F9; }
+[data-testid="stSidebar"] { background-color: #2C3E50; }
+[data-testid="stSidebar"] * { color: #FFFFFF !important; }
 
-KST = ZoneInfo("Asia/Seoul")
-ADMIN_KEY_FALLBACK = "yeiun1234"  # secrets에 없을 때만 fallback
+/* ✅ 사이드바 텍스트 입력의 아이콘(눈/지우기 등)을 항상 검정색으로 */
+[data-testid="stSidebar"] div[data-testid="stTextInput"] button,
+[data-testid="stSidebar"] div[data-testid="stTextInput"] button:hover,
+[data-testid="stSidebar"] div[data-testid="stTextInput"] button:focus,
+[data-testid="stSidebar"] div[data-testid="stTextInput"] button:active {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    color: #000000 !important;
+    opacity: 1 !important;
+}
 
-_HHMM = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
+[data-testid="stSidebar"] div[data-testid="stTextInput"] button svg,
+[data-testid="stSidebar"] div[data-testid="stTextInput"] button svg *,
+[data-testid="stSidebar"] div[data-testid="stTextInput"] button svg path {
+    fill: #000000 !important;
+    stroke: #000000 !important;
+    opacity: 1 !important;
+}
 
-
-# -------------------------
-# 유틸
-# -------------------------
-def now_kst() -> datetime:
-    return datetime.now(tz=KST)
-
-
-def today_kst() -> date:
-    return now_kst().date()
-
-
-def now_hhmm_kst() -> str:
-    return now_kst().strftime("%H:%M")
-
-
-def normalize_hhmm(s: str) -> str:
-    s = (s or "").strip()
-    return s if _HHMM.match(s) else ""
-
-
-def clamp_50(s: str) -> str:
-    return (s or "").strip()[:50]
-
-
-def clamp_20(s: str) -> str:
-    return (s or "").strip()[:20]
-
-
-def normalize_role(s: str) -> str:
-    s = (s or "").strip()
-    return s if s in MEMBER_ROLES else (MEMBER_ROLES[-1] if s else "")
-
-
-def month_range(year: int, month: int) -> Tuple[date, date]:
-    start = date(year, month, 1)
-    end = (date(year, month + 1, 1) if month < 12 else date(year + 1, 1, 1)) - timedelta(days=1)
-    return start, end
-
-
-def daterange(d1: date, d2: date):
-    curr = d1
-    while curr <= d2:
-        yield curr
-        curr += timedelta(days=1)
+/* aria-label이 환경/언어에 따라 달라도 적용되도록, 패스워드 토글 버튼도 강제 */
+div[data-testid="stTextInput"] button[aria-label],
+div[data-testid="stTextInput"] button[aria-label] svg,
+div[data-testid="stTextInput"] button[aria-label] svg * {
+    fill: #000000 !important;
+    stroke: #000000 !important;
+    color: #000000 !important;
+    opacity: 1 !important;
+}
 
 
-def week_start_monday(d: date) -> date:
-    return d - timedelta(days=d.weekday())  # 월=0
+
+.stTextInput input, .stTextArea textarea {
+    background-color: #FFFFFF !important;
+    color: #000000 !important;
+    -webkit-text-fill-color: #000000 !important;
+    border: 1px solid #BDC3C7 !important;
+}
+
+/* ✅ 버튼 스타일 (일반 버튼 + 폼 제출 버튼) */
+.stButton > button,
+div[data-testid="stFormSubmitButton"] > button {
+    background: linear-gradient(to right, #2980B9, #2C3E50) !important;
+    color: #FFFFFF !important;
+    border: none !important;
+    border-radius: 10px !important;
+    padding: 0.6rem 1rem !important;
+    font-weight: 800 !important;
+    width: 100% !important;
+    opacity: 1 !important;
+}
+
+/* ✅ disabled여도 텍스트가 흐려지지 않도록 */
+.stButton > button:disabled,
+div[data-testid="stFormSubmitButton"] > button:disabled {
+    background: linear-gradient(to right, #2980B9, #2C3E50) !important;
+    color: #FFFFFF !important;
+    opacity: 1 !important;
+    filter: none !important;
+}
+
+/* ✅ 버튼 내부 텍스트/아이콘도 상시 선명 */
+.stButton > button *,
+div[data-testid="stFormSubmitButton"] > button * {
+    color: #FFFFFF !important;
+    opacity: 1 !important;
+}
 
 
-def clamp_date(d: date, start: date, end: date) -> date:
-    return max(start, min(end, d))
 
 
-# -------------------------
-# 공유 URL (하드코딩 제거)
-# -------------------------
-def build_share_url(uid: str) -> str:
-    base = None
+[data-testid="stSidebar"] div[data-testid="stTextInput"] button:hover {
+    background: rgba(44, 62, 80, 0.12) !important;
+    border-radius: 8px !important;
+}
+[data-testid="stSidebar"] div[data-testid="stTextInput"] button svg,
+[data-testid="stSidebar"] div[data-testid="stTextInput"] button svg path {
+    fill: currentColor !important;
+    stroke: currentColor !important;
+    opacity: 1 !important;
+}
+
+.stButton > button {
+    background: linear-gradient(to right, #2980B9, #2C3E50) !important;
+    color: #FFFFFF !important;
+    border: none !important;
+    font-weight: bold !important;
+}
+
+
+
+button[aria-label="Show password text"] svg,
+button[aria-label="Hide password text"] svg,
+div[data-testid="stTextInput"] button svg,
+div[data-testid="stTextInput"] button svg path {
+  fill: #000000 !important;
+  stroke: #000000 !important;
+  opacity: 1 !important;
+}
+
+/* ✅ form_submit_button / 버튼이 비활성화(disabled)되어도 텍스트가 안 사라지게 */
+div[data-testid="stFormSubmitButton"] > button:disabled,
+.stButton > button:disabled {
+  opacity: 1 !important;
+  color: #2C3E50 !important;
+  background: #E6ECF2 !important;
+  border: 1px solid #CBD6E2 !important;
+}
+div[data-testid="stFormSubmitButton"] > button:disabled * ,
+.stButton > button:disabled * {
+  opacity: 1 !important;
+  color: #2C3E50 !important;
+}
+</style>
+""", unsafe_allow_html=True)
+# ✅ PC에서는 사이드바 기본 펼침, 모바일에서는 기본 접힘 (Streamlit 기본 동작 유지)
+st.markdown("""
+<script>
+(function() {
+  const KEY = "__sidebar_autopen_done__";
+  const isDesktop = () => (window.innerWidth || 0) >= 900;
+  let tries = 0;
+  const maxTries = 25;
+
+  function clickToggleIfNeeded() {
+    try {
+      if (!isDesktop()) return;
+      if (window.sessionStorage.getItem(KEY) === "1") return;
+
+      // Streamlit 버전에 따라 요소 형태가 다를 수 있어 여러 셀렉터 시도
+      const doc = window.parent?.document || document;
+      const candidates = [
+        '[data-testid="stSidebarCollapsedControl"] button',
+        '[data-testid="stSidebarCollapsedControl"]',
+        'button[title="Open sidebar"]',
+        'button[aria-label="Open sidebar"]'
+      ];
+
+      for (const sel of candidates) {
+        const el = doc.querySelector(sel);
+        if (el) {
+          el.click();
+          window.sessionStorage.setItem(KEY, "1");
+          return;
+        }
+      }
+    } catch (e) {}
+  }
+
+  const timer = setInterval(() => {
+    tries += 1;
+    clickToggleIfNeeded();
+    if (tries >= maxTries) clearInterval(timer);
+  }, 250);
+})();
+</script>
+""", unsafe_allow_html=True)
+
+
+# ==========================================
+# 3. 로그인 및 세션 관리
+# ==========================================
+def _set_query_param_key(clean_key: str) -> None:
+    encoded_key = base64.b64encode(clean_key.encode()).decode()
     try:
-        base = st.context.url
+        st.query_params["k"] = encoded_key
     except Exception:
-        base = None
+        st.experimental_set_query_params(k=encoded_key)
 
-    if not base:
-        base = st.secrets.get("PUBLIC_APP_URL")
+def _clear_query_params() -> None:
+    try:
+        st.query_params.clear()
+    except Exception:
+        st.experimental_set_query_params()
 
-    if not base:
-        base = "https://<YOUR-APP>.streamlit.app"
+def _validate_and_store_key(clean_key: str) -> None:
+    """키 검증 후 세션에 저장. 실패 시 예외 발생."""
+    genai.configure(api_key=clean_key)
+    # 유효성 검사: 모델 목록 호출
+    list(genai.list_models())
+    st.session_state["api_key"] = clean_key
+    st.session_state["login_error"] = None
+    _set_query_param_key(clean_key)
 
-    return f"{base}?{urlencode({'uid': uid})}"
+def try_login_from_session_key(key_name: str) -> None:
+    """지정된 session_state 키에서 값을 읽어 로그인 처리."""
+    raw_key = st.session_state.get(key_name, "")
+    clean_key = "".join(str(raw_key).split())  # 모든 공백 제거
+    if not clean_key:
+        st.session_state["login_error"] = "⚠️ 키를 입력해주세요."
+        return
+    try:
+        _validate_and_store_key(clean_key)
+    except Exception as e:
+        st.session_state["login_error"] = f"❌ 인증 실패: {e}"
 
+def perform_logout():
+    st.session_state["logout_anim"] = True
 
-# -------------------------
-# 주소 패널 자동 숨김 + 토글
-# -------------------------
-def inject_share_panel_js():
-    components.html(
-        """
-        <script>
-          (function() {
-            const doc = window.parent.document;
-            const panel = doc.getElementById('sharePanel');
-            const btn = doc.getElementById('shareToggleBtn');
-            if (!panel || !btn) return;
+# ==========================================
+# 4. 자동 로그인 복구 (URL 파라미터)
+# ==========================================
+if "api_key" not in st.session_state:
+    try:
+        qp = st.query_params
+        if "k" in qp:
+            k_val = qp["k"] if isinstance(qp["k"], str) else qp["k"][0]
+            restored_key = base64.b64decode(k_val).decode("utf-8")
+            _validate_and_store_key(restored_key)
+            st.toast("🔄 세션이 복구되었습니다.", icon="✨")
+            st.rerun()
+    except Exception:
+        pass
 
-            const setIcon = () => {
-              const collapsed = panel.classList.contains('collapsed');
-              btn.textContent = collapsed ? '▾' : '▴';
-              btn.setAttribute('aria-label', collapsed ? '펼치기' : '숨기기');
-              btn.setAttribute('title', collapsed ? '펼치기' : '숨기기');
-            };
+# ==========================================
+# 5. 사이드바 (로그인/로그아웃)
+# ==========================================
+with st.sidebar:
+    st.markdown("### 🏛️ Control Center")
+    st.markdown("---")
 
-            if (!window.__sharePanelBound) {
-              window.__sharePanelBound = true;
-              btn.addEventListener('click', () => {
-                panel.classList.toggle('collapsed');
-                setIcon();
-              });
-            }
+    if "api_key" not in st.session_state:
+        with st.form(key="login_form"):
+            st.markdown("<h4 style='color:white;'>🔐 Access Key</h4>", unsafe_allow_html=True)
+            st.text_input(
+                "Key",
+                type="password",
+                placeholder="API 키를 입력해 주세요",
+                label_visibility="collapsed",
+                key="login_input_key",
+            )
+            st.form_submit_button(
+                label="시스템 접속 (Login)",
+                on_click=try_login_from_session_key,
+                args=("login_input_key",),
+                use_container_width=True,
+            )
 
-            setIcon();
+        if st.session_state.get("login_error"):
+            st.error(st.session_state["login_error"])
+    else:
+        st.success("🟢 정상 가동 중")
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("로그아웃 (Logout)", type="primary", use_container_width=True):
+            perform_logout()
+            st.rerun()
 
-            if (window.__shareAutoHideTimer) clearTimeout(window.__shareAutoHideTimer);
-            window.__shareAutoHideTimer = setTimeout(() => {
-              panel.classList.add('collapsed');
-              setIcon();
-            }, 5000);
-          })();
-        </script>
-        """,
-        height=0,
-    )
-
-
-def apply_css():
+    st.markdown("---")
     st.markdown(
-        """
-        <style>
-          html, body, [class*="css"]  { font-size: 18px !important; }
-          .stButton>button { height: 54px; font-size: 18px; border-radius: 14px; }
-          textarea, input { font-size: 18px !important; }
-
-          /* share panel */
-          #sharePanel {
-            border-radius: 16px;
-            border: 1px solid rgba(0,0,0,0.06);
-            box-shadow: 0 8px 22px rgba(0,0,0,0.06);
-            background: linear-gradient(135deg, #f7fbff 0%, #fff7fb 55%, #f6fff8 100%);
-            overflow: hidden;
-            margin-top: 6px;
-            margin-bottom: 8px;
-          }
-          #shareHeader {
-            display:flex;
-            align-items:center;
-            justify-content:space-between;
-            padding: 10px 12px;
-            font-weight: 900;
-          }
-          #shareTitle { font-size: 18px; }
-          #shareToggleBtn {
-            appearance:none;
-            border: 1px solid rgba(0,0,0,0.10);
-            background: rgba(255,255,255,0.75);
-            border-radius: 12px;
-            width: 42px;
-            height: 36px;
-            cursor: pointer;
-            display:flex;
-            align-items:center;
-            justify-content:center;
-            box-shadow: 0 6px 16px rgba(0,0,0,0.07);
-            font-size: 18px;
-            font-weight: 900;
-          }
-          #shareToggleBtn:active { transform: scale(0.98); }
-          #shareContent {
-            padding: 0 12px 12px 12px;
-            overflow: hidden;
-            transition: max-height 520ms ease, opacity 520ms ease, transform 520ms ease;
-            max-height: 520px;
-            opacity: 1;
-            transform: translateY(0px);
-          }
-          #sharePanel.collapsed #shareContent {
-            max-height: 0px;
-            opacity: 0;
-            transform: translateY(-6px);
-            padding-bottom: 0px;
-          }
-
-          /* table alignment */
-          .qti-table-wrap { overflow-x: auto; }
-          table.qti-table {
-            width: 100%;
-            border-collapse: separate;
-            border-spacing: 0;
-            border-radius: 16px;
-            overflow: hidden;
-            box-shadow: 0 8px 22px rgba(0,0,0,0.07);
-            border: 1px solid rgba(0,0,0,0.06);
-          }
-          table.qti-table thead th {
-            text-align: center !important;
-            font-weight: 900;
-            background: linear-gradient(135deg, #f7fbff 0%, #fff7fb 100%);
-            padding: 10px 10px;
-            border-bottom: 1px solid rgba(0,0,0,0.06);
-            white-space: nowrap;
-          }
-          table.qti-table tbody td {
-            text-align: center !important;
-            padding: 10px 10px;
-            border-bottom: 1px solid rgba(0,0,0,0.06);
-            background: #ffffff;
-            white-space: nowrap;
-            vertical-align: top;
-          }
-          /* 나의 묵상 기도만 왼쪽 정렬 */
-          table.qti-table tbody td:nth-child(5) {
-            text-align: left !important;
-            white-space: normal;
-            line-height: 1.35;
-          }
-          table.qti-table th:nth-child(1), table.qti-table td:nth-child(1) { width: 120px; }
-          table.qti-table th:nth-child(2), table.qti-table td:nth-child(2) { width: 90px; }
-          table.qti-table th:nth-child(3), table.qti-table td:nth-child(3) { width: 90px; }
-          table.qti-table th:nth-child(4), table.qti-table td:nth-child(4) { width: 70px; }
-          table.qti-table th:nth-child(5), table.qti-table td:nth-child(5) { width: auto; }
-          table.qti-table tbody tr:last-child td { border-bottom: none; }
-        </style>
-        """,
+        "<div style='color:white; text-align:center; font-size:12px; opacity:0.8;'>ktMOS북부 Audit AI Solution © 2026<br>Engine: Gemini 1.5 Pro</div>",
         unsafe_allow_html=True,
     )
 
 
-def render_qt_table_html(df: pd.DataFrame):
-    if df is None or df.empty:
-        st.info("표시할 기록이 없습니다.")
-        return
-    dfx = df.copy()
-    if "완료" in dfx.columns:
-        dfx["완료"] = dfx["완료"].apply(lambda x: "✅" if bool(x) else "")
-    cols = [c for c in ["날짜", "QT 시작", "QT 종료", "완료", "나의 묵상 기도"] if c in dfx.columns]
-    dfx = dfx[cols]
-    html = dfx.to_html(index=False, escape=True, classes="qti-table")
-    st.markdown(f"<div class='qti-table-wrap'>{html}</div>", unsafe_allow_html=True)
 
+# ==========================================
+# 7. 로그아웃 애니메이션
+# ==========================================
+if st.session_state.get("logout_anim"):
+    st.markdown("""
+<div style="background:#0B1B2B; padding:44px 26px; border-radius:18px; text-align:center; border:1px solid rgba(255,255,255,0.12);">
+  <div style="font-size: 78px; margin-bottom: 12px; line-height:1.1;">🎆✨</div>
+  <div style="font-size: 22px; font-weight: 900; color: #FFFFFF; margin-bottom: 8px;">새해 복 많이 받으세요!</div>
+  <div style="font-size: 15px; color: rgba(255,255,255,0.85); line-height: 1.55;">
+    올해도 건강과 행운이 가득하시길 바랍니다.<br>
+    안전하게 로그아웃되었습니다.
+  </div>
+  <div style="margin-top:18px; font-size: 12px; color: rgba(255,255,255,0.65);">
+    ktMOS북부 Audit AI Solution © 2026
+  </div>
+</div>
+""", unsafe_allow_html=True)
+    time.sleep(3.0)
+    _clear_query_params()
+    st.session_state.clear()
+    st.rerun()
 
-# -------------------------
-# 구글 시트 저장소
-# -------------------------
-class GoogleSheetsStorage:
-    RECORDS_REQUIRED = [
-        "uid", "member_role", "member_name", "day",
-        "start_time", "end_time", "completed",
-        "signature", "prayer_note", "updated_at"
-    ]
-    USERS_REQUIRED = ["uid", "member_role", "member_name", "updated_at"]
+# ==========================================
+# 8. 핵심 기능 함수 (구글시트, AI, 파일처리)
+# ==========================================
 
-    def __init__(self, spreadsheet_id: str, worksheet_records: str, sa_json: dict):
-        scopes = [
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive",
-        ]
-        creds = Credentials.from_service_account_info(sa_json, scopes=scopes)
-        self.gc = gspread.authorize(creds)
-        self.sh = self.gc.open_by_key(spreadsheet_id)
-
-        # worksheets
-        try:
-            self.ws = self.sh.worksheet(worksheet_records)
-        except Exception:
-            self.ws = self.sh.add_worksheet(title=worksheet_records, rows=2000, cols=20)
-
-        try:
-            self.ws_users = self.sh.worksheet("users")
-        except Exception:
-            self.ws_users = self.sh.add_worksheet(title="users", rows=2000, cols=10)
-
-        # schema/index cache (process-wide via st.cache_resource)
-        self._schema_verified = False
-        self._records_header: list[str] = []
-        self._users_header: list[str] = []
-        self.col_idx: dict[str, int] = {}  # 1-indexed col index for records
-        self.users_col_idx: dict[str, int] = {}  # 1-indexed col index for users
-
-        self._row_index: dict[tuple[str, str], int] = {}  # (uid, day) -> row_idx
-        self._index_built_at: float = 0.0
-
-        # Verify schema once at creation (with retry/backoff)
-        self._ensure_schema()
-
-    # -------------------------
-    # Low-level: retry wrapper
-    # -------------------------
-    def _call_with_retries(self, fn, *args, **kwargs):
-        """Retry transient gspread API errors (429/5xx) with exponential backoff."""
-        import time
-        last_err = None
-        for attempt in range(3):
-            try:
-                return fn(*args, **kwargs)
-            except gspread.exceptions.APIError as e:
-                last_err = e
-                # Best-effort: retry on rate limit / transient backend issues
-                msg = str(e)
-                retryable = any(code in msg for code in ("429", "500", "502", "503", "504"))
-                if not retryable or attempt == 2:
-                    raise
-                time.sleep(1.0 * (2 ** attempt))
-            except Exception as e:
-                # Non-API errors: don't spin unless clearly transient
-                last_err = e
-                raise
-        if last_err:
-            raise last_err
-
-    # -------------------------
-    # Schema: verify once
-    # -------------------------
-    def _ensure_schema(self):
-        if self._schema_verified:
-            return
-
-        # records header
-        hdr = self._call_with_retries(self.ws.row_values, 1) or []
-        hdr = [str(x).strip() for x in hdr if str(x).strip()]
-
-        if not hdr:
-            hdr = list(self.RECORDS_REQUIRED)
-            # Ensure enough columns
-            try:
-                if self.ws.col_count < len(hdr):
-                    self._call_with_retries(self.ws.add_cols, len(hdr) - self.ws.col_count)
-            except Exception:
-                pass
-            self._call_with_retries(self.ws.update, "A1", [hdr])
-        else:
-            missing = [c for c in self.RECORDS_REQUIRED if c not in hdr]
-            if missing:
-                new_hdr = hdr + missing
-                try:
-                    if self.ws.col_count < len(new_hdr):
-                        self._call_with_retries(self.ws.add_cols, len(new_hdr) - self.ws.col_count)
-                except Exception:
-                    pass
-                self._call_with_retries(self.ws.update, "A1", [new_hdr])
-                hdr = new_hdr
-
-        self._records_header = hdr
-        self._refresh_col_index()
-
-        # users header
-        uhdr = self._call_with_retries(self.ws_users.row_values, 1) or []
-        uhdr = [str(x).strip() for x in uhdr if str(x).strip()]
-
-        if not uhdr:
-            uhdr = list(self.USERS_REQUIRED)
-            try:
-                if self.ws_users.col_count < len(uhdr):
-                    self._call_with_retries(self.ws_users.add_cols, len(uhdr) - self.ws_users.col_count)
-            except Exception:
-                pass
-            self._call_with_retries(self.ws_users.update, "A1", [uhdr])
-        else:
-            umissing = [c for c in self.USERS_REQUIRED if c not in uhdr]
-            if umissing:
-                new_uhdr = uhdr + umissing
-                try:
-                    if self.ws_users.col_count < len(new_uhdr):
-                        self._call_with_retries(self.ws_users.add_cols, len(new_uhdr) - self.ws_users.col_count)
-                except Exception:
-                    pass
-                self._call_with_retries(self.ws_users.update, "A1", [new_uhdr])
-                uhdr = new_uhdr
-
-        self._users_header = uhdr
-        self._refresh_users_col_index()
-
-        self._schema_verified = True
-
-    def _refresh_col_index(self):
-        self.col_idx = {name: i + 1 for i, name in enumerate(self._records_header)}
-
-    def _refresh_users_col_index(self):
-        self.users_col_idx = {name: i + 1 for i, name in enumerate(self._users_header)}
-
-    # -------------------------
-    # Data helpers
-    # -------------------------
-    def _empty_df(self, start: date, end: date) -> pd.DataFrame:
-        return pd.DataFrame(
-            [{"날짜": d.isoformat(), "QT 시작": "", "QT 종료": "", "완료": False, "나의 묵상 기도": ""} for d in daterange(start, end)]
-        )
-
-    def fetch_all_records_df(self) -> pd.DataFrame:
-        """(관리/분석용) 전체 로드. 호출 횟수는 최소화해서 사용하세요."""
-        self._ensure_schema()
-        rows = self._call_with_retries(self.ws.get_all_records)
-        df_all = pd.DataFrame(rows)
-        if df_all.empty:
-            return pd.DataFrame(columns=self.RECORDS_REQUIRED)
-        for c in self.RECORDS_REQUIRED:
-            if c not in df_all.columns:
-                df_all[c] = ""
-        return df_all[self.RECORDS_REQUIRED]
-
-    # -------------------------
-    # Profile (users sheet)
-    # -------------------------
-    def get_profile(self, uid: str) -> Tuple[str, str]:
-        self._ensure_schema()
-        try:
-            rows = self._call_with_retries(self.ws_users.get_all_records)
-            dfu = pd.DataFrame(rows)
-            if dfu.empty:
-                return "", ""
-            hit = dfu[dfu["uid"].astype(str) == str(uid)]
-            if hit.empty:
-                return "", ""
-            if "updated_at" in hit.columns:
-                hit = hit.sort_values("updated_at")
-            r = hit.iloc[-1]
-            return normalize_role(r.get("member_role", "")), clamp_20(r.get("member_name", ""))
-        except Exception:
-            return "", ""
-
-    def upsert_profile(self, uid: str, member_role: str, member_name: str):
-        """프로필 저장은 자주 호출되지 않으므로 단순/안전하게 처리."""
-        self._ensure_schema()
-        now_iso = datetime.now(ZoneInfo("Asia/Seoul")).isoformat(timespec="seconds")
-        role = normalize_role(member_role)
-        name = clamp_20(member_name)
-
-        # 최소 호출: uid 컬럼만 읽어서 기존 행 찾기 (1회)
-        uid_col = self.users_col_idx.get("uid", 1)
-        max_col = uid_col
-        end_letter = _col_to_letter(max_col)
-        values = self._call_with_retries(self.ws_users.get, f"A2:{end_letter}")
-        row_idx = None
-        for i, row in enumerate(values, start=2):
-            v_uid = row[uid_col - 1] if len(row) >= uid_col else ""
-            if str(v_uid) == str(uid):
-                row_idx = i
-                break
-
-        if row_idx is None:
-            new_row = []
-            for h in self._users_header:
-                if h == "uid":
-                    new_row.append(str(uid))
-                elif h == "member_role":
-                    new_row.append(role)
-                elif h == "member_name":
-                    new_row.append(name)
-                elif h == "updated_at":
-                    new_row.append(now_iso)
-                else:
-                    new_row.append("")
-            self._call_with_retries(self.ws_users.append_row, new_row, value_input_option="USER_ENTERED")
-        else:
-            cells = []
-            def q(colname, val):
-                c = self.users_col_idx.get(colname)
-                if c:
-                    cells.append(gspread.Cell(row_idx, c, str(val)))
-            q("member_role", role)
-            q("member_name", name)
-            q("updated_at", now_iso)
-            if cells:
-                self._call_with_retries(self.ws_users.update_cells, cells, value_input_option="USER_ENTERED")
-
-    # -------------------------
-    # Index build: (uid, day) -> row_idx
-    # -------------------------
-    def _build_row_index(self, force: bool = False):
-        import time
-        if (not force) and self._row_index and (time.time() - self._index_built_at) < 60:
-            return
-
-        self._ensure_schema()
-        uid_col = self.col_idx.get("uid", 1)
-        day_col = self.col_idx.get("day", 4)
-        max_col = max(uid_col, day_col)
-        end_letter = _col_to_letter(max_col)
-
-        # 1회 호출로 필요한 범위만 읽기
-        values = self._call_with_retries(self.ws.get, f"A2:{end_letter}")
-
-        idx = {}
-        for r_i, row in enumerate(values, start=2):
-            v_uid = row[uid_col - 1] if len(row) >= uid_col else ""
-            v_day = row[day_col - 1] if len(row) >= day_col else ""
-            if v_uid and v_day:
-                idx[(str(v_uid), str(v_day))] = r_i
-
-        self._row_index = idx
-        self._index_built_at = time.time()
-
-    # -------------------------
-    # Month load (UI)
-    # -------------------------
-    def load_month(self, uid: str, start: date, end: date) -> pd.DataFrame:
-        try:
-            df_all = self.fetch_all_records_df()
-            if df_all.empty:
-                return self._empty_df(start, end)
-
-            user_data = df_all[
-                (df_all["uid"].astype(str) == str(uid))
-                & (df_all["day"] >= start.isoformat())
-                & (df_all["day"] <= end.isoformat())
-            ].copy()
-
-            if user_data.empty:
-                return self._empty_df(start, end)
-
-            # Normalize
-            user_data["day"] = user_data["day"].astype(str)
-
-            # Build view
-            out = []
-            mp = {row["day"]: row for _, row in user_data.iterrows()}
-            for d in daterange(start, end):
-                ds = d.isoformat()
-                r = mp.get(ds, {})
-                out.append(
-                    {
-                        "날짜": ds,
-                        "QT 시작": normalize_hhmm(r.get("start_time", "")),
-                        "QT 종료": normalize_hhmm(r.get("end_time", "")),
-                        "완료": str(r.get("completed", "")).lower() in ("true", "1", "yes", "y", "완료"),
-                        "나의 묵상 기도": (r.get("prayer_note", "") or ""),
-                    }
-                )
-            return pd.DataFrame(out)
-        except Exception:
-            return self._empty_df(start, end)
-
-    # -------------------------
-    # Upsert record: minimal calls
-    # -------------------------
-    def upsert_one(self, uid: str, day: str, **kwargs):
-        self._ensure_schema()
-
-        # Build (or reuse) index without reading entire sheet every time
-        self._build_row_index()
-
-        key = (str(uid), str(day))
-        row_idx = self._row_index.get(key)
-
-        now_iso = datetime.now(ZoneInfo("Asia/Seoul")).isoformat(timespec="seconds")
-
-        def norm_value(k, v):
-            if k in ("start_time", "end_time"):
-                return normalize_hhmm(str(v))
-            if k == "completed":
-                return "TRUE" if bool(v) else "FALSE"
-            if k == "member_role":
-                return normalize_role(str(v))
-            if k == "member_name":
-                return clamp_20(str(v))
-            if k == "prayer_note":
-                return str(v)[:5000]
-            return str(v)
-
-        if row_idx is None:
-            # append 1회 호출
-            row = []
-            for h in self._records_header:
-                if h == "uid":
-                    row.append(str(uid))
-                elif h == "day":
-                    row.append(str(day))
-                elif h == "updated_at":
-                    row.append(now_iso)
-                elif h in kwargs:
-                    row.append(norm_value(h, kwargs[h]))
-                else:
-                    row.append("")
-            self._call_with_retries(self.ws.append_row, row, value_input_option="USER_ENTERED")
-            # index is now stale; rebuild later
-            self._row_index = {}
-            self._index_built_at = 0.0
-            return
-
-        # update_cells 1회 호출
-        cells = []
-        def queue_cell(col_name: str, val):
-            c = self.col_idx.get(col_name)
-            if c:
-                cells.append(gspread.Cell(row_idx, c, str(val)))
-
-        # always keep these consistent
-        queue_cell("uid", str(uid))
-        queue_cell("day", str(day))
-        queue_cell("updated_at", now_iso)
-
-        for k, v in kwargs.items():
-            if k in self.col_idx:
-                queue_cell(k, norm_value(k, v))
-
-        if cells:
-            self._call_with_retries(self.ws.update_cells, cells, value_input_option="USER_ENTERED")
-
-# local helper (kept near class; no other code touched)
-def _col_to_letter(n: int) -> str:
-    s = ""
-    while n:
-        n, r = divmod(n - 1, 26)
-        s = chr(65 + r) + s
-    return s
 @st.cache_resource
-def get_storage() -> Optional[GoogleSheetsStorage]:
-    if not GSHEETS_AVAILABLE:
+def init_google_sheet_connection():
+    if gspread is None or ServiceAccountCredentials is None:
         return None
-    s_id = st.secrets.get("GSHEETS_SPREADSHEET_ID")
-    sa_json = st.secrets.get("GSHEETS_SERVICE_ACCOUNT_JSON")
-    if s_id and sa_json:
-        sa_obj = json.loads(sa_json) if isinstance(sa_json, str) else sa_json
-        return GoogleSheetsStorage(s_id, SHEET_RECORDS, sa_obj)
-    return None
+    try:
+        scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
+        return gspread.authorize(creds)
+    except Exception:
+        return None
+
+def _korea_now():
+    try:
+        kst = pytz.timezone("Asia/Seoul")
+        return datetime.datetime.now(kst)
+    except Exception:
+        return datetime.datetime.now()
+
+def _campaign_key(dt: datetime.datetime) -> str:
+    return f"{dt.year}-{dt.month:02d}"
+
+def _ensure_campaign_config_sheet(spreadsheet):
+    try:
+        ws = spreadsheet.worksheet("Campaign_Config")
+        return ws
+    except Exception:
+        ws = spreadsheet.add_worksheet(title="Campaign_Config", rows=200, cols=10)
+        ws.append_row(["campaign_key", "title", "sheet_name", "start_date"])
+        return ws
+
+def _default_campaign_title(dt: datetime.datetime) -> str:
+    return f"{dt.month}월 자율점검"
+
+def _default_campaign_sheet_name(dt: datetime.datetime, spreadsheet=None) -> str:
+    if spreadsheet is not None and dt.year == 2026 and dt.month == 1:
+        try:
+            spreadsheet.worksheet("2026_윤리경영_실천서약")
+            return "2026_윤리경영_실천서약"
+        except Exception:
+            pass
+    return f"{dt.year}_{dt.month:02d}_자율점검"
+
+def get_current_campaign_info(spreadsheet, now_dt: datetime.datetime | None = None) -> dict:
+    now_dt = now_dt or _korea_now()
+    key = _campaign_key(now_dt)
+    cfg_ws = _ensure_campaign_config_sheet(spreadsheet)
+    records = cfg_ws.get_all_records()
+    for r in records:
+        if str(r.get("campaign_key", "")).strip() == key:
+            title = str(r.get("title") or "").strip() or _default_campaign_title(now_dt)
+            sheet_name = str(r.get("sheet_name") or "").strip() or _default_campaign_sheet_name(now_dt, spreadsheet)
+            start_date = str(r.get("start_date") or "").strip()
+            return {"key": key, "title": title, "sheet_name": sheet_name, "start_date": start_date}
+
+    title = _default_campaign_title(now_dt)
+    sheet_name = _default_campaign_sheet_name(now_dt, spreadsheet)
+    start_date = now_dt.strftime("%Y.%m.%d")
+    cfg_ws.append_row([key, title, sheet_name, start_date])
+    return {"key": key, "title": title, "sheet_name": sheet_name, "start_date": start_date}
+
+def set_current_campaign_info(spreadsheet, title: str | None = None, sheet_name: str | None = None, now_dt: datetime.datetime | None = None) -> dict:
+    now_dt = now_dt or _korea_now()
+    key = _campaign_key(now_dt)
+    cfg_ws = _ensure_campaign_config_sheet(spreadsheet)
+    all_rows = cfg_ws.get_all_values()
+    row_idx = None
+    for i in range(2, len(all_rows) + 1):
+        if len(all_rows[i-1]) >= 1 and str(all_rows[i-1][0]).strip() == key:
+            row_idx = i
+            break
+    if row_idx is None:
+        _ = get_current_campaign_info(spreadsheet, now_dt)
+        row_idx = len(all_rows) + 1
+
+    cur = get_current_campaign_info(spreadsheet, now_dt)
+    new_title = (title or cur["title"]).strip()
+    new_sheet = (sheet_name or cur["sheet_name"]).strip()
+    new_start = cur.get("start_date") or now_dt.strftime("%Y.%m.%d")
+    cfg_ws.update(f"B{row_idx}:D{row_idx}", [[new_title, new_sheet, new_start]])
+    return {"key": key, "title": new_title, "sheet_name": new_sheet, "start_date": new_start}
+
+def save_audit_result(emp_id, name, unit, dept, answer, sheet_name):
+    client = init_google_sheet_connection()
+    if not client:
+        return False, "구글 시트 연결 실패 (Secrets 확인)"
+    try:
+        spreadsheet = client.open("Audit_Result_2026")
+        try:
+            sheet = spreadsheet.worksheet(sheet_name)
+        except Exception:
+            sheet = spreadsheet.add_worksheet(title=sheet_name, rows=2000, cols=10)
+            sheet.append_row(["저장시간", "사번", "성명", "총괄/본부/단", "부서", "답변", "비고"])
+
+        if str(emp_id) in sheet.col_values(2):
+            return False, "이미 참여하셨습니다."
+
+        korea_tz = pytz.timezone("Asia/Seoul")
+        now = datetime.datetime.now(korea_tz).strftime("%Y-%m-%d %H:%M:%S")
+        sheet.append_row([now, emp_id, name, unit, dept, answer, "완료"])
+        return True, "성공"
+    except Exception as e:
+        return False, str(e)
+
+def get_model():
+    if "api_key" in st.session_state:
+        genai.configure(api_key=st.session_state["api_key"])
+    try:
+        available_models = [m.name for m in genai.list_models() if "generateContent" in m.supported_generation_methods]
+        for m in available_models:
+            if "1.5-pro" in m:
+                return genai.GenerativeModel(m)
+        for m in available_models:
+            if "1.5-flash" in m:
+                return genai.GenerativeModel(m)
+        if available_models:
+            return genai.GenerativeModel(available_models[0])
+    except Exception:
+        pass
+    return genai.GenerativeModel("gemini-1.5-flash")
+
+def read_file(uploaded_file):
+    content = ""
+    try:
+        if uploaded_file.name.endswith(".txt"):
+            content = uploaded_file.getvalue().decode("utf-8")
+        elif uploaded_file.name.endswith(".pdf"):
+            reader = PyPDF2.PdfReader(uploaded_file)
+            for page in reader.pages:
+                content += (page.extract_text() or "") + "\n"
+        elif uploaded_file.name.endswith(".docx"):
+            doc = Document(uploaded_file)
+            content = "\n".join([para.text for para in doc.paragraphs])
+    except Exception:
+        return None
+    return content
+
+def process_media_file(uploaded_file):
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp_file:
+            tmp_file.write(uploaded_file.getvalue())
+            tmp_path = tmp_file.name
+
+        st.toast("🤖 AI에게 분석 자료를 전달하고 있습니다...", icon="📂")
+        myfile = genai.upload_file(tmp_path)
+        with st.spinner("🎧 AI가 데이터를 분석하고 있습니다..."):
+            while myfile.state.name == "PROCESSING":
+                time.sleep(2)
+                myfile = genai.get_file(myfile.name)
+
+        os.remove(tmp_path)
+        if myfile.state.name == "FAILED":
+            return None
+        return myfile
+    except Exception:
+        return None
+
+def download_and_upload_youtube_audio(url):
+    if yt_dlp is None:
+        return None
+    try:
+        ydl_opts = {"format": "bestaudio/best", "outtmpl": "temp_audio.%(ext)s", "quiet": True}
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
+        audio_files = glob.glob("temp_audio.*")
+        if not audio_files:
+            return None
+        audio_path = audio_files[0]
+        myfile = genai.upload_file(audio_path)
+        with st.spinner("🎧 유튜브 분석 중..."):
+            while myfile.state.name == "PROCESSING":
+                time.sleep(2)
+                myfile = genai.get_file(myfile.name)
+        os.remove(audio_path)
+        return myfile
+    except Exception:
+        return None
+
+def get_youtube_transcript(url):
+    try:
+        video_id = url.split("v=")[-1].split("&")[0]
+        transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=["ko", "en"])
+        return " ".join([t["text"] for t in transcript])
+    except Exception:
+        return None
+
+def get_web_content(url):
+    try:
+        headers = {"User-Agent": "Mozilla/5.0"}
+        response = requests.get(url, headers=headers, timeout=15)
+        soup = BeautifulSoup(response.text, "html.parser")
+        for script in soup(["script", "style"]):
+            script.decompose()
+        return soup.get_text()[:10000]
+    except Exception:
+        return None
+
+# ==========================================
+# 9. 메인 화면 및 탭 구성
+# ==========================================
+st.markdown("<h1 style='text-align: center; color: #2C3E50;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
+st.markdown("<div style='text-align: center; color: #555; margin-bottom: 20px;'>Professional Legal & Audit Assistant System</div>", unsafe_allow_html=True)
 
 
-@st.cache_data(ttl=60)
-def cached_all_records_df() -> pd.DataFrame:
-    s = get_storage()
-    if not s:
-        return pd.DataFrame()
-    return s.fetch_all_records_df()
+_now_kst = _korea_now()
+CURRENT_YEAR = _now_kst.year
+CURRENT_MONTH = _now_kst.month
 
-
-def require_admin_login() -> bool:
-    admin_pw = st.secrets.get("ADMIN_KEY") or st.secrets.get("ADMIN_PASSWORD") or ADMIN_KEY_FALLBACK
-
-    if "is_admin" not in st.session_state:
-        st.session_state["is_admin"] = False
-    if st.session_state["is_admin"]:
-        return True
-
-    st.subheader("🔐 관리자 로그인")
-    pw = st.text_input("관리자 비밀번호", type="password", placeholder="관리자 비밀번호 입력")
-    if st.button("로그인", use_container_width=True):
-        if pw == admin_pw:
-            st.session_state["is_admin"] = True
-            st.success("관리자 로그인 완료")
-            st.rerun()
-        else:
-            st.error("비밀번호가 올바르지 않습니다.")
-    return False
-
-
-def compute_participation(df_all: pd.DataFrame, start: date, end: date) -> Tuple[int, int, float]:
-    """
-    반환: (참여 uid 수, 전체 uid 수, 참여율)
-    기준: 기간 내 completed=1이 1회라도 있으면 '참여'
-    """
-    if df_all is None or df_all.empty:
-        return 0, 0, 0.0
-
-    total_uids = set(df_all["uid"].astype(str).unique().tolist())
-    total = len([u for u in total_uids if u])
-
-    dfx = df_all.copy()
-    dfx = dfx[(dfx["day"] >= start.isoformat()) & (dfx["day"] <= end.isoformat())]
-    dfx = dfx[dfx["completed"].astype(str) == "1"]
-    active = len(set(dfx["uid"].astype(str).unique().tolist()))
-    rate = (active / total) if total else 0.0
-    return active, total, rate
-
-
-def admin_dashboard():
-    st.header("📊 관리자 대시보드")
-
-    df_all = cached_all_records_df()
-    if df_all.empty:
-        st.info("기록이 아직 없습니다.")
-        return
-
-    c1, c2 = st.columns([1, 1])
-    with c1:
-        anchor = st.date_input("기준일(주간 통계)", value=today_kst())
-    with c2:
-        month_label = st.selectbox("월(요약/다운로드)", [m[2] for m in SUPPORTED_MONTHS])
-
-    y, m = [(yy, mm) for (yy, mm, lbl) in SUPPORTED_MONTHS if lbl == month_label][0]
-    m_start, m_end = month_range(y, m)
-
-    wk_start = week_start_monday(anchor)
-    wk_end = wk_start + timedelta(days=6)
-
-    a_wk, t_all, r_wk = compute_participation(df_all, wk_start, wk_end)
-    a_m, _, r_m = compute_participation(df_all, m_start, m_end)
-
-    st.markdown("### ✅ 참여 현황")
-    k1, k2, k3 = st.columns(3)
-    k1.metric("이번 주 참여", f"{a_wk}명", f"{r_wk:.0%}")
-    k2.metric("이번 달 참여", f"{a_m}명", f"{r_m:.0%}")
-    k3.metric("전체 UID 수", f"{t_all}명")
-
-    # 최신 프로필(기록 기준 최신값)
-    latest = df_all.copy()
-    latest["_t"] = pd.to_datetime(latest["updated_at"], errors="coerce")
-    latest = latest.sort_values(["uid", "_t"])
-    prof = latest.groupby("uid", as_index=False).tail(1)[["uid", "member_role", "member_name"]].copy()
-    prof["member_role"] = prof["member_role"].fillna("").astype(str)
-    prof["member_name"] = prof["member_name"].fillna("").astype(str)
-
-    # 월 기준 참여일수
-    dmonth = df_all[(df_all["day"] >= m_start.isoformat()) & (df_all["day"] <= m_end.isoformat())].copy()
-    dmonth["completed_bool"] = dmonth["completed"].astype(str) == "1"
-    cnts = dmonth[dmonth["completed_bool"]].groupby("uid", as_index=False)["day"].nunique().rename(columns={"day": "완료일수"})
-    merged = prof.merge(cnts, on="uid", how="left")
-    merged["완료일수"] = merged["완료일수"].fillna(0).astype(int)
-
-    st.markdown("### 👥 성도 참여(월 기준)")
-    st.dataframe(
-        merged.sort_values(["완료일수", "member_name"], ascending=[False, True]),
-        use_container_width=True,
-        hide_index=True,
-    )
-
-    st.markdown("### ⬇️ 데이터 다운로드")
-    csv = dmonth.to_csv(index=False).encode("utf-8-sig")
-    st.download_button(
-        "월 데이터 CSV 다운로드",
-        data=csv,
-        file_name=f"qti_records_{m_start.strftime('%Y%m')}.csv",
-        mime="text/csv",
-        use_container_width=True,
-    )
-    st.caption("※ 이름이 비어있는 UID는 성도님이 성도 정보를 아직 저장하지 않은 경우입니다.")
-
-
-# -------------------------
-# 앱 시작
-# -------------------------
-st.set_page_config(page_title=APP_TITLE, layout="wide")
-st.sidebar.caption(f"build: {APP_BUILD}")
-
-# --- Responsive UI (PC/Mobile) ---
-st.markdown(
-    """
-<style>
-/* Base (desktop/tablet) */
-html, body, [class*="css"] { font-size: 16px; }
-h1 { font-size: 1.6rem; line-height: 1.2; }
-h2 { font-size: 1.25rem; line-height: 1.25; }
-h3 { font-size: 1.10rem; line-height: 1.25; }
-
-.stButton button {
-  font-size: 0.95rem;
-  padding: 0.45rem 0.75rem;
+campaign_info = {
+    "key": f"{CURRENT_YEAR}-{CURRENT_MONTH:02d}",
+    "title": f"{CURRENT_MONTH}월 자율점검",
+    "sheet_name": f"{CURRENT_YEAR}_{CURRENT_MONTH:02d}_자율점검",
+    "start_date": _now_kst.strftime("%Y.%m.%d"),
 }
 
-label, .stMarkdown, .stText, .stCaption, .stRadio, .stSelectbox, .stTextInput, .stDateInput {
-  font-size: 0.95rem;
-}
+try:
+    _client_for_campaign = init_google_sheet_connection()
+    if _client_for_campaign:
+        _ss_for_campaign = _client_for_campaign.open("Audit_Result_2026")
+        campaign_info = get_current_campaign_info(_ss_for_campaign, _now_kst)
+except Exception:
+    pass
 
-.block-container { padding-top: 1.0rem; padding-bottom: 2.0rem; }
+tab_audit, tab_doc, tab_chat, tab_summary, tab_admin = st.tabs([
+    f"✅ {CURRENT_MONTH}월 자율점검", "📄 문서 정밀 검토", "💬 AI 에이전트", "📰 스마트 요약", "🔒 관리자"
+])
 
-/* Mobile */
-@media (max-width: 640px) {
-  html, body, [class*="css"] { font-size: 13px; }
+# --- [Tab 1: 자율점검] ---
+with tab_audit:
+    current_sheet_name = campaign_info.get("sheet_name", "2026_윤리경영_실천서약")
 
-  h1 { font-size: 1.25rem; }
-  h2 { font-size: 1.10rem; }
-  h3 { font-size: 1.00rem; }
-
-  .stButton button {
-    font-size: 0.85rem;
-    padding: 0.35rem 0.6rem;
-    border-radius: 10px;
-  }
-
-  label, .stMarkdown, .stText, .stCaption { font-size: 0.88rem; }
-
-  .block-container { padding-left: 0.8rem; padding-right: 0.8rem; }
-
-  div[data-baseweb="select"] > div { min-height: 36px; }
-  input, textarea { font-size: 0.90rem !important; }
-
-  .stDataFrame { overflow-x: auto; }
-}
-
-/* Very small phones */
-@media (max-width: 380px) {
-  html, body, [class*="css"] { font-size: 12.5px; }
-  .stButton button { font-size: 0.82rem; padding: 0.32rem 0.55rem; }
-}
-</style>
-    """,
-    unsafe_allow_html=True
-)
-apply_css()
-
-storage = get_storage()
-if not storage:
-    st.error("구글 시트 설정(Secrets) 또는 gspread 라이브러리를 확인해주세요.")
-    st.stop()
-
-st.title(f"✨ {APP_TITLE}")
-st.caption(VERSE_TEXT)
-
-mode = st.radio("모드 선택", ["성도님(기록하기)", "관리자(대시보드)"], horizontal=True)
-
-# 관리자
-if mode == "관리자(대시보드)":
-    if require_admin_login():
-        admin_dashboard()
-    st.stop()
-
-# -------------------------
-# 성도님 모드
-# -------------------------
-# UID 관리
-if "uid" not in st.query_params:
-    st.info("### 🙏 큐티 체크리스트 시작하기\n성도님 전용 기록지를 만들기 위해 아래 버튼을 눌러주세요.")
-    if st.button("🚀 나의 큐티 링크 만들기 (처음 1회)", use_container_width=True):
-        new_uid = secrets.token_urlsafe(8)
-        st.query_params["uid"] = new_uid
-        st.rerun()
-    st.stop()
-
-uid = st.query_params["uid"]
-
-# 성도 프로필 자동 불러오기(최초 1회)
-if "profile_loaded" not in st.session_state:
-    role0, name0 = storage.get_profile(uid)
-    st.session_state["member_role"] = role0 or MEMBER_ROLES[0]
-    st.session_state["member_name"] = name0 or ""
-    st.session_state["profile_loaded"] = True
-
-# 성도 정보 입력(상단)
-st.markdown("---")
-with st.container(border=True):
-    st.subheader("🙋 성도 정보(1회 입력)")
-    st.caption("한 번 입력하면 다음 접속 때 자동으로 불러오고, 이후 모든 기록에 uid/이름/직분이 함께 저장됩니다.")
-
-    col_r, col_n, col_s = st.columns([1.2, 1.8, 1.0])
-    with col_r:
-        cur_role = st.session_state.get("member_role", MEMBER_ROLES[0])
-        idx = MEMBER_ROLES.index(cur_role) if cur_role in MEMBER_ROLES else 0
-        st.selectbox("직분", MEMBER_ROLES, index=idx, key="member_role")
-    with col_n:
-        st.text_input("성도 이름", key="member_name", placeholder="예) 홍 길 동")
-    with col_s:
-        st.write("")
-        st.write("")
-        if st.button("💾 성도 정보 저장", use_container_width=True):
-            role_clean = normalize_role(st.session_state.get("member_role", ""))
-            name_clean = clamp_20(st.session_state.get("member_name", ""))
-            if not name_clean:
-                st.warning("이름을 입력해 주세요.")
-            else:
-                storage.upsert_profile(uid, role_clean, name_clean)
-                st.success("저장되었습니다! 다음 접속부터 자동으로 불러옵니다.")
-                st.rerun()
-
-    st.info(f"현재 저장 값: {normalize_role(st.session_state.get('member_role','')) or '-'} / {clamp_20(st.session_state.get('member_name','')) or '-'}")
-
-
-# 월 선택
-month_label = st.selectbox("📆 월 선택", [m[2] for m in SUPPORTED_MONTHS])
-year, month = [(y, m) for (y, m, lbl) in SUPPORTED_MONTHS if lbl == month_label][0]
-START, END = month_range(year, month)
-
-
-# 월 데이터
-df = storage.load_month(uid, START, END)
-
-# 진행률
-done_cnt = int(df["완료"].sum()) if not df.empty else 0
-total_cnt = len(df) if len(df) > 0 else 1
-progress = done_cnt / total_cnt
-st.metric("이번 달 달성", f"{done_cnt}일", f"{progress:.1%}")
-st.progress(progress)
-
-# 공유 링크 패널(자동 숨김 + 우측 아이콘 토글)
-share_url = build_share_url(uid)
-st.markdown(
-    """
-    <div id="sharePanel">
-      <div id="shareHeader">
-        <div id="shareTitle">📌 내 기록지 주소 저장하기</div>
-        <button id="shareToggleBtn" type="button">▴</button>
-      </div>
-      <div id="shareContent">
-        <div style="font-weight:800; margin-bottom:8px;">
-          이 주소를 꼭 복사해서 카톡 ‘나에게 보내기’에 저장하거나 즐겨찾기 하세요!
+    st.markdown(f"""
+        <div style='background-color: #E3F2FD; padding: 20px; border-radius: 10px; border-left: 5px solid #2196F3; margin-bottom: 20px;'>
+            <h3 style='margin-top:0; color: #1565C0;'>📜 {campaign_info.get('title','2026 윤리경영원칙 실천지침 실천서약')}</h3>
+            <p style='font-size: 1.50rem; color: #444;'>
+                나는 <b>kt MOS북부</b>의 지속적인 발전을 위하여 회사 윤리경영원칙실천지침에 명시된 
+                <b>「임직원의 책임과 의무」</b> 및 <b>「관리자의 책임과 의무」</b>를 성실히 이행할 것을 서약합니다.
+            </p>
         </div>
-    """,
-    unsafe_allow_html=True,
-)
-st.code(share_url)
-if "<YOUR-APP>" in share_url:
-    st.warning("PUBLIC_APP_URL이 설정되지 않아 임시 주소가 보입니다. Secrets에 실제 앱 주소를 넣어주세요.")
-st.markdown("</div></div>", unsafe_allow_html=True)
-inject_share_panel_js()
+    """, unsafe_allow_html=True)
 
-st.markdown("---")
+    with st.form("audit_ethics_form", clear_on_submit=False):
+        c1, c2, c3, c4 = st.columns(4)
+        emp_id = c1.text_input("사번", placeholder="예: 12345")
+        name = c2.text_input("성명")
+        ordered_units = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
+        unit = c3.selectbox("총괄 / 본부 / 단", ordered_units)
+        dept = c4.text_input("상세 부서명")
 
-# 오늘 기록
-with st.container(border=True):
-    st.subheader("✍️ 오늘의 큐티 기록")
+        st.markdown("---")
 
-    if "picked_day" not in st.session_state:
-        st.session_state["picked_day"] = today_kst()
-    picked_day = st.date_input("날짜 선택", value=st.session_state["picked_day"], key="picked_day")
-    day_str = picked_day.isoformat()
+        st.markdown("#### ■ 임직원의 책임과 의무")
+        e1 = st.checkbox("하나, 나는 회사 윤리경영원칙과 윤리경영원칙 실천지침에 따라 판단하고 행동한다.")
+        e2 = st.checkbox("하나, 나는 윤리경영원칙 실천지침을 몰랐다는 이유로 면책을 주장하지 않는다.")
+        e3 = st.checkbox("하나, 나는 직무수행 과정에서 윤리적 갈등 상황에 직면한 경우 감사부서의 해석에 따른다.")
+        e4 = st.checkbox("하나, 나는 가족, 친·인척, 지인 등을 이용하여 회사 윤리경영원칙 실천지침을 위반하지 않는다.")
 
-    role_to_save = normalize_role(st.session_state.get("member_role", MEMBER_ROLES[0]))
-    name_to_save = clamp_20(st.session_state.get("member_name", ""))
+        st.markdown("<br>", unsafe_allow_html=True)
 
-    c1, c2, c3 = st.columns(3)
-    if c1.button("▶ 시작(현재시간)", use_container_width=True):
-        storage.upsert_one(uid, day_str, start_time=now_hhmm_kst(), member_role=role_to_save, member_name=name_to_save)
-        st.rerun()
-    if c2.button("■ 종료(현재시간)", use_container_width=True):
-        storage.upsert_one(uid, day_str, end_time=now_hhmm_kst(), member_role=role_to_save, member_name=name_to_save)
-        st.rerun()
+        st.markdown("#### ■ 관리자의 책임과 의무")
+        m1 = st.checkbox("하나, 나는 소속 구성원 및 업무상 이해관계자들이 지침을 준수할 수 있도록 지원하고 관리한다.")
+        m2 = st.checkbox("하나, 나는 공정하고 깨끗한 의사결정을 통해 지침 준수를 솔선수범한다.")
+        m3 = st.checkbox("하나, 나는 부서 내 위반 사안 발생 시 관리자로서의 책임을 다한다.")
 
-    is_done = df[df["날짜"] == day_str]["완료"].values[0] if not df[df["날짜"] == day_str].empty else False
-    if c3.button("✅ " + ("취소" if is_done else "완료"), use_container_width=True):
-        storage.upsert_one(uid, day_str, completed=not is_done, member_role=role_to_save, member_name=name_to_save)
-        st.rerun()
+        st.markdown("---")
 
-    st.markdown("### 🕊️ 나의 묵상 기도 (50자 이내)")
-    memo = st.text_area(
-        "경건의 시간 하나님님께서 주신 감동으로 한 줄 묵상 기도를 적어 보세요.",
-        height=90,
-        max_chars=50,
-        placeholder="예) 주님, 오늘 말씀을 붙잡고 순종할 힘을 주세요.",
-    )
-    if st.button("기록 저장하기", use_container_width=True, type="primary"):
-        storage.upsert_one(
-            uid, day_str,
-            signature="",
-            prayer_note=clamp_50(memo),
-            member_role=role_to_save,
-            member_name=name_to_save
+        submit = st.form_submit_button("서약 제출", use_container_width=True)
+
+        if submit:
+            if not emp_id or not name:
+                st.warning("⚠️ 사번과 성명을 입력해주세요.")
+            else:
+                unchecked = []
+                if not e1: unchecked.append("임직원 의무 1")
+                if not e2: unchecked.append("임직원 의무 2")
+                if not e3: unchecked.append("임직원 의무 3")
+                if not e4: unchecked.append("임직원 의무 4")
+                if not m1: unchecked.append("관리자 의무 1")
+                if not m2: unchecked.append("관리자 의무 2")
+                if not m3: unchecked.append("관리자 의무 3")
+
+                if unchecked:
+                    st.error("❌ 서약 항목이 모두 체크되어야 제출할 수 있습니다. (미체크: " + ", ".join(unchecked) + ")")
+                else:
+                    answer = "윤리경영 서약서 제출 완료 (임직원 의무 4/4, 관리자 의무 3/3)"
+                    with st.spinner("제출 중..."):
+                        success, msg = save_audit_result(emp_id, name, unit, dept, answer, current_sheet_name)
+                    if success:
+                        st.success(f"✅ {name}님, 윤리경영 서약서 제출이 완료되었습니다!")
+                        st.balloons()
+                    else:
+                        st.error(f"❌ 제출 실패: {msg}")
+
+    st.markdown("---")
+    with st.expander("※ 윤리경영원칙 실천지침 주요내용", expanded=True):
+        st.markdown(
+            """
+            <div style='background-color:#FFFDE7; padding: 18px; border-radius: 10px; border-left: 5px solid #FBC02D; margin-bottom: 12px;'>
+                <div style='font-weight: 800; color:#6D4C41; font-size: 1.05rem; margin-bottom: 6px;'>📌 윤리경영 위반 주요 유형</div>
+                <div style='color:#444; font-size: 0.95rem; line-height: 1.55;'>
+                    아래 항목은 <b>윤리경영원칙 실천지침</b>의 주요 위반 유형을 정리한 내용입니다.
+                    업무 수행 시 유사 사례가 발생하지 않도록 참고해 주세요.
+                </div>
+            </div>
+
+            <div style='overflow-x:auto;'>
+                <table style='width:100%; border-collapse: collapse; background:#FFFFFF; border:1px solid #E0E0E0; border-radius: 10px; overflow:hidden;'>
+                    <thead>
+                        <tr style='background:#FFF8E1;'>
+                            <th style='text-align:left; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037; width:28%;'>구분</th>
+                            <th style='text-align:left; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037;'>윤리경영 위반사항</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>고객과의 관계</td>
+                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>고객으로부터 금품 등 이익 수수, 고객만족 저해, 고객정보 유출</td>
+                        </tr>
+                        <tr>
+                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>임직원과 회사의 관계</td>
+                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>공금 유용 및 횡령, 회사재산의 사적 사용, 기업정보 유출, 경영왜곡</td>
+                        </tr>
+                        <tr>
+                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>임직원 상호간의 관계</td>
+                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>직장 내 괴롭힘, 성희롱, 조직질서 문란행위</td>
+                        </tr>
+                        <tr>
+                            <td style='padding:12px; font-weight:700; color:#2C3E50;'>이해관계자와의 관계</td>
+                            <td style='padding:12px; color:#333;'>이해관계자로부터 금품 등 이익 수수, 이해관계자에게 부당한 요구</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div style='margin-top:10px; color:#666; font-size:0.88rem;'>
+                ※ 위 내용은 안내 목적이며, 세부 기준은 사내 <b>윤리경영원칙 실천지침</b>을 따릅니다.
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
-        st.success("저장되었습니다!")
-        st.rerun()
 
+# --- [Tab 2: 문서 정밀 검토] ---
+with tab_doc:
+    st.markdown("### 📂 문서 및 규정 검토")
+    if "api_key" not in st.session_state:
+        st.warning("🔒 로그인 후 이용 가능합니다.")
+    else:
+        option = st.selectbox("작업 유형", ["법률 리스크 정밀 검토", "감사 보고서 검증", "오타 수정 및 교정", "기안문 작성"])
 
+        is_authenticated = True
+        if option == "감사 보고서 검증":
+            if "audit_verified" not in st.session_state:
+                is_authenticated = False
+                st.warning("🔒 감사실 전용 메뉴입니다. 인증이 필요합니다.")
+                with st.form("doc_auth_form"):
+                    pass_input = st.text_input("인증키 입력", type="password")
+                    if st.form_submit_button("확인"):
+                        if pass_input.strip() == "ktmos0402!":
+                            st.session_state["audit_verified"] = True
+                            st.rerun()
+                        else:
+                            st.error("❌ 인증키 불일치")
 
-# 기록 확인(기본: 주간, 전체 보기 토글)
-st.markdown("---")
-st.subheader("📋 기록 확인 (주간)")
-show_all = st.toggle("전체 보기 (한 달 전체)", value=False)
+        if is_authenticated:
+            uploaded_file = st.file_uploader("파일 업로드 (PDF, Word, TXT)", type=["txt", "pdf", "docx"])
+            if st.button("🚀 분석 시작", use_container_width=True):
+                if uploaded_file:
+                    content = read_file(uploaded_file)
+                    if content:
+                        with st.spinner("🧠 AI가 분석 중입니다..."):
+                            try:
+                                prompt = f"[역할] 전문 감사인\n[작업] {option}\n[내용] {content}"
+                                res = get_model().generate_content(prompt)
+                                st.success("분석 완료")
+                                st.markdown(res.text)
+                            except Exception as e:
+                                st.error(f"오류: {e}")
 
-if show_all:
-    render_qt_table_html(df)
-else:
-    # ✅ 주간 표시: '월 선택 범위(START~END)'와 무관하게 항상 7일(월~일) 표를 보여줍니다.
-    # - 데이터가 없으면 빈 값으로 표시
-    # - 다른 달/미래 주도 이동 가능
-    anchor = st.session_state.get("picked_day", today_kst())
-    wk_start = week_start_monday(anchor)
-    wk_end = wk_start + timedelta(days=6)
+# --- [Tab 3: AI 에이전트] ---
+with tab_chat:
+    st.markdown("### 💬 AI 법률/감사 챗봇")
+    if "api_key" not in st.session_state:
+        st.warning("🔒 로그인 후 이용 가능합니다.")
+    else:
+        if "messages" not in st.session_state:
+            st.session_state.messages = []
 
-    def _shift_week(delta_days: int):
-        a = st.session_state.get("picked_day", today_kst())
-        # 월 범위로 clamp 하지 않음(주간 표는 항상 이동 가능)
-        st.session_state["picked_day"] = a + timedelta(days=delta_days)
+        with st.form(key="chat_input_form", clear_on_submit=True):
+            user_input = st.text_input("질문 입력")
+            send_btn = st.form_submit_button("전송 📤", use_container_width=True)
 
-    nav1, nav2, _ = st.columns([1, 1, 2])
-    with nav1:
-        st.button("⬅️ 이전 주", use_container_width=True, on_click=_shift_week, args=(-7,))
-    with nav2:
-        st.button("다음 주 ➡️", use_container_width=True, on_click=_shift_week, args=(+7,))
+        if send_btn and user_input:
+            st.session_state.messages.append({"role": "user", "content": user_input})
+            with st.spinner("답변 생성 중..."):
+                try:
+                    res = get_model().generate_content(user_input)
+                    st.session_state.messages.append({"role": "assistant", "content": res.text})
+                except Exception as e:
+                    st.error(f"오류: {e}")
 
-    st.caption(f"표시 기간: {wk_start.isoformat()} ~ {wk_end.isoformat()} (월~일)")
-    # 주간 표는 해당 7일만 로드(없는 날짜는 빈 행 생성)
-    df_week = storage.load_month(uid, wk_start, wk_end)
-    render_qt_table_html(df_week)
+        for msg in reversed(st.session_state.messages):
+            with st.chat_message(msg["role"]):
+                st.write(msg["content"])
+
+# --- [Tab 4: 스마트 요약] ---
+with tab_summary:
+    st.markdown("### 📰 스마트 요약")
+    if "api_key" not in st.session_state:
+        st.warning("🔒 로그인 후 이용 가능합니다.")
+    else:
+        st_type = st.radio("입력 방식", ["URL (유튜브/웹)", "미디어 파일", "텍스트"])
+        final_input = None
+        is_multimodal = False
+
+        if "URL" in st_type:
+            url = st.text_input("URL 입력")
+            if url and "youtu" in url:
+                with st.spinner("자막 추출 중..."):
+                    final_input = get_youtube_transcript(url)
+                    if not final_input:
+                        final_input = download_and_upload_youtube_audio(url)
+                        is_multimodal = True
+            elif url:
+                with st.spinner("웹페이지 분석 중..."):
+                    final_input = get_web_content(url)
+
+        elif "미디어" in st_type:
+            mf = st.file_uploader("파일 업로드", type=["mp3", "wav", "mp4"])
+            if mf:
+                final_input = process_media_file(mf)
+                is_multimodal = True
+        else:
+            final_input = st.text_area("텍스트 입력", height=200)
+
+        if st.button("⚡ 요약 실행", use_container_width=True):
+            if final_input:
+                with st.spinner("요약 중..."):
+                    try:
+                        p = "다음 내용을 핵심 요약, 상세 내용, 인사이트로 정리해줘."
+                        if is_multimodal:
+                            res = get_model().generate_content([p, final_input])
+                        else:
+                            res = get_model().generate_content(f"{p}\n\n{str(final_input)[:30000]}")
+                        st.markdown(res.text)
+                    except Exception as e:
+                        st.error(f"오류: {e}")
+
+# --- [Tab 5: 관리자 대시보드] ---
+with tab_admin:
+    st.markdown("### 🔒 관리자 전용 대시보드")
+    admin_pw = st.text_input("관리자 비밀번호", type="password", key="admin_dash_pw")
+
+    if admin_pw.strip() == "ktmos0402!":
+        st.success("접속 성공")
+
+        client = init_google_sheet_connection()
+        if not client:
+            st.error("구글 시트 연결 실패: st.secrets / gspread 설정을 확인하세요.")
+        else:
+            try:
+                ss = client.open("Audit_Result_2026")
+            except Exception as e:
+                st.error(f"스프레드시트 오픈 실패: {e}")
+                ss = None
+
+            if ss:
+                camp = get_current_campaign_info(ss, _now_kst)
+
+                with st.expander("⚙️ 이번 달 테마 런칭/변경 (관리자)", expanded=False):
+                    new_title = st.text_input("테마 제목", value=camp.get("title", ""), key="camp_title_input")
+                    new_sheet = st.text_input("연동 시트명", value=camp.get("sheet_name", ""), key="camp_sheet_input")
+                    cA, cB = st.columns([1, 1])
+                    if cA.button("🚀 테마 적용", use_container_width=True):
+                        camp = set_current_campaign_info(ss, title=new_title, sheet_name=new_sheet, now_dt=_now_kst)
+                        st.session_state.pop("admin_df", None)
+                        st.session_state.pop("admin_stats_df", None)
+                        st.session_state["admin_cache_key"] = camp["key"]
+                        st.toast("✅ 테마가 적용되었습니다.", icon="🚀")
+                        st.rerun()
+                    cB.caption("※ 매월 말일 자정(=월 변경 시점) 자동으로 새 캠페인으로 전환됩니다.")
+
+                st.caption(f"현재 테마: **{camp['title']}**  |  연동 시트: `{camp['sheet_name']}`  |  캠페인 키: `{camp['key']}`")
+
+                target_dict = {"경영총괄": 45, "사업총괄": 37, "강북본부": 222, "강남본부": 174, "서부본부": 290, "강원본부": 104, "품질지원단": 138, "감사실": 3}
+                ordered_units = list(target_dict.keys())
+
+                refresh_clicked = st.button("🔄 데이터 최신화", use_container_width=True)
+                need_reload = (refresh_clicked
+                              or st.session_state.get("admin_cache_key") != camp["key"]
+                              or "admin_df" not in st.session_state
+                              or "admin_stats_df" not in st.session_state)
+
+                if need_reload:
+                    try:
+                        ws = ss.worksheet(camp["sheet_name"])
+                        df = pd.DataFrame(ws.get_all_records())
+                    except Exception:
+                        df = pd.DataFrame()
+
+                    if (not df.empty) and ("총괄/본부/단" in df.columns):
+                        counts = df["총괄/본부/단"].astype(str).value_counts().to_dict()
+                    else:
+                        counts = {}
+
+                    stats_rows = []
+                    for unit_name in ordered_units:
+                        participated = int(counts.get(unit_name, 0))
+                        target = int(target_dict.get(unit_name, 0))
+                        not_part = max(target - participated, 0)
+                        rate = round((participated / target) * 100, 2) if target > 0 else 0.0
+                        stats_rows.append({"조직": unit_name, "참여완료": participated, "미참여": not_part, "참여율": rate})
+                    stats_df = pd.DataFrame(stats_rows)
+
+                    st.session_state["admin_df"] = df
+                    st.session_state["admin_stats_df"] = stats_df
+                    st.session_state["admin_cache_key"] = camp["key"]
+                    st.session_state["admin_last_update"] = _korea_now().strftime("%Y-%m-%d %H:%M:%S")
+
+                df = st.session_state.get("admin_df", pd.DataFrame())
+                stats_df = st.session_state.get("admin_stats_df", pd.DataFrame())
+                last_update = st.session_state.get("admin_last_update")
+
+                total_target = int(sum(target_dict.values()))
+                total_participated = int(stats_df["참여완료"].sum()) if (stats_df is not None and not stats_df.empty) else 0
+                total_rate = (total_participated / total_target * 100) if total_target > 0 else 0.0
+                date_kor = _korea_now().strftime("%Y.%m.%d")
+
+                if total_rate < 50:
+                    lamp_color = "#E74C3C"; lamp_label = "RED"; lamp_msg = "위험"
+                elif total_rate < 80:
+                    lamp_color = "#F39C12"; lamp_label = "ORANGE"; lamp_msg = "주의"
+                else:
+                    lamp_color = "#2980B9"; lamp_label = "BLUE"; lamp_msg = "양호"
+
+                display_title = camp.get("title", "")
+                if "서약" not in display_title:
+                    display_title = display_title + " 서약서"
+
+                st.markdown(f"""
+                <div style='background:#FFFFFF; border:1px solid #E6EAF0; padding:18px 18px; border-radius:14px; margin-top:10px; margin-bottom:14px;'>
+                  <div style='display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;'>
+                    <div style='font-size:1.35rem; font-weight:800; color:#2C3E50;'>📊 {display_title} 참여현황</div>
+                    <div style='display:flex; align-items:center; gap:8px;'>
+                      <span style='display:inline-block; width:14px; height:14px; border-radius:50%; background:{lamp_color};'></span>
+                      <span style='font-weight:800; color:{lamp_color};'>{lamp_msg}</span>
+                    </div>
+                  </div>
+                  <div style='margin-top:10px; font-size:1.05rem; font-weight:700; color:#34495E;'>
+                    {date_kor}일 현재&nbsp;&nbsp;|&nbsp;&nbsp;
+                    총 대상자 <b>{total_target:,}명</b> · 참여 인원 <b>{total_participated:,}명</b> · 참여율 <b>{total_rate:.2f}%</b>
+                  </div>
+                  <div style='margin-top:6px; font-size:0.85rem; color:#7F8C8D;'>마지막 업데이트: {last_update or "—"} &nbsp;|&nbsp; 신호등: <b style='color:{lamp_color};'>{lamp_label}</b></div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                if df is None or df.empty:
+                    st.info("데이터가 없습니다.")
+                else:
+                    melt_df = stats_df.melt(id_vars="조직", value_vars=["참여완료", "미참여"], var_name="구분", value_name="인원")
+                    fig_bar = px.bar(melt_df, x="조직", y="인원", color="구분", barmode="stack", text="인원", title="조직별 참여 현황")
+                    fig_bar.update_layout(dragmode="pan", autosize=True, margin=dict(l=20, r=20, t=60, b=20))
+                    fig_bar.update_traces(textposition="outside", cliponaxis=False)
+                    st.plotly_chart(fig_bar, use_container_width=True, config=PLOTLY_CONFIG)
+
+                    fig_line = px.line(stats_df, x="조직", y="참여율", markers=True, text="참여율", title="조직별 참여율(%)")
+                    fig_line.update_layout(dragmode="pan", autosize=True, margin=dict(l=20, r=20, t=60, b=20))
+                    fig_line.update_traces(textposition="top center")
+                    st.plotly_chart(fig_line, use_container_width=True, config=PLOTLY_CONFIG)
+
+                    st.dataframe(df, use_container_width=True)
+                    st.download_button(
+                        label="📥 엑셀 다운로드",
+                        data=df.to_csv(index=False).encode("utf-8-sig"),
+                        file_name=f"audit_result_{camp['key']}.csv",
+                        mime="text/csv",
+                        use_container_width=True,
+                    )
