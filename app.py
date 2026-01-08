@@ -12,7 +12,6 @@ import tempfile
 import hashlib
 import base64
 import datetime
-import html
 import pytz
 import pandas as pd
 
@@ -542,57 +541,6 @@ def get_web_content(url):
     except Exception:
         return None
 
-
-
-# ==========================================
-# 8-1. [신규] 윤리 원문 읽기 게이트 (안정판: 시간 기반 + 서버단 차단)
-#   - Streamlit 버전 차이로 components.html(key=...) 오류가 발생할 수 있어
-#     외부 컴포넌트 없이 동작하는 방식으로 구현합니다.
-# ==========================================
-def load_ethics_full_text_md(path: str = "ethics_full_text.md") -> str:
-    """원문(마크다운) 파일을 읽어옵니다. 파일이 없으면 안내 문구 반환."""
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return f.read().strip()
-    except Exception:
-        return ""
-
-def render_scrollable_text(md_text: str, height: int = 320) -> None:
-    """원문 텍스트를 스크롤 박스로 표시(HTML/CSS)"""
-    if not md_text:
-        st.warning("⚠️ 원문 파일(ethics_full_text.md)을 찾지 못했습니다. 배포 폴더에 파일을 추가해 주세요.")
-        return
-    # HTML 안전 처리(기본 줄바꿈만)
-    safe = html.escape(md_text).replace("\n", "<br>")
-    st.markdown(
-        f"""<div style="height:{height}px; overflow-y:auto; background:#FFFFFF;
-                 border:1px solid #D7DEE8; border-radius:12px; padding:14px; line-height:1.6;">
-                 {safe}
-               </div>""",
-        unsafe_allow_html=True,
-    )
-
-def ethics_read_gate(min_seconds: int = 96, box_height: int = 320) -> tuple[bool, float]:
-    """윤리 원문 읽기 게이트.
-    - min_seconds: 최소 읽기(체류) 시간(초). (예: 120초의 80% = 96초)
-    반환: (gate_ok, progress_rate)
-    """
-    if "ethics_read_start_ts" not in st.session_state:
-        st.session_state["ethics_read_start_ts"] = time.time()
-
-    elapsed = max(0.0, time.time() - float(st.session_state["ethics_read_start_ts"]))
-    rate = min(elapsed / float(min_seconds), 1.0)
-
-    md_text = load_ethics_full_text_md("ethics_full_text.md")
-    st.markdown("#### 👀 원문 읽기 확인")
-    st.caption(f"아래 원문을 읽고, **최소 {min_seconds}초** 이상 경과해야 제출할 수 있습니다. (읽기 진행률 80% 기준 안정판)")
-    render_scrollable_text(md_text, height=box_height)
-    st.progress(rate)
-    st.write(f"읽기 진행률: **{int(rate*100)}%**  |  경과 시간: **{int(elapsed)}초**")
-
-    gate_ok = elapsed >= float(min_seconds)
-    return gate_ok, rate
-
 # ==========================================
 # 9. 메인 화면 및 탭 구성
 # ==========================================
@@ -638,14 +586,6 @@ with tab_audit:
         </div>
     """, unsafe_allow_html=True)
 
-
-    # ✅ [신규] 원문 읽기 게이트 (80% 기준 안정판)
-    #  - Streamlit Cloud/버전 차이로 JS 컴포넌트 사용 시 오류가 발생할 수 있어,
-    #    시간 기반(서버단 차단) 방식으로 안정적으로 운영합니다.
-    MIN_READ_SECONDS = 96  # 예: 120초의 80% (원하면 120/180 등으로 조정 가능)
-    gate_ok, _gate_rate = ethics_read_gate(min_seconds=MIN_READ_SECONDS, box_height=320)
-
-    st.markdown("---")
     # 2) 실천지침 주요내용(※ 박스) — 책임/의무 체크박스 위로 이동
     with st.expander("※ 윤리경영원칙 실천지침 주요내용", expanded=True):
             st.markdown(
@@ -725,16 +665,6 @@ with tab_audit:
         submit = st.form_submit_button("서약 제출", use_container_width=True)
 
         if submit:
-
-            # ✅ [필수] 원문 읽기 게이트 통과 여부 확인 (서버단 차단)
-            if not gate_ok:
-                st.error("❌ 원문 읽기 진행률이 부족합니다. 원문을 읽고 잠시 후 다시 제출해 주세요.")
-                st.stop()
-
-            confirm_read = st.checkbox("✅ 원문을 충분히 읽고 이해했습니다.", value=False, key="confirm_read_ck")
-            if not confirm_read:
-                st.error("❌ '원문을 충분히 읽고 이해했습니다' 체크 후 제출할 수 있습니다.")
-                st.stop()
             if not emp_id or not name:
                 st.warning("⚠️ 사번과 성명을 입력해주세요.")
             else:
