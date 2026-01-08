@@ -572,19 +572,134 @@ tab_audit, tab_doc, tab_chat, tab_summary, tab_admin = st.tabs([
 ])
 
 # --- [Tab 1: 자율점검] ---
+# --- [Tab 1: 자율점검 (음성 서약 + 쉐도우 타이핑)] ---
 with tab_audit:
-    current_sheet_name = campaign_info.get("sheet_name", "2026_윤리경영_실천서약")
+    from streamlit_mic_recorder import mic_recorder
+    import json
 
-    # 1) 제목 + 요약(서약 문구)
+    # 1. 서약 문구 및 상태 정의
+    OATH_TEXT = "나는 kt MOS북부의 윤리경영 지침을 숙지하였으며 이를 성실히 이행할 것을 서약합니다"
+    
+    if "is_verified" not in st.session_state:
+        st.session_state["is_verified"] = False
+    if "verification_mode" not in st.session_state:
+        st.session_state["verification_mode"] = "voice" # 기본값: 음성
+
+    # 상단 안내 디자인
     st.markdown(f"""
         <div style='background-color: #E3F2FD; padding: 20px; border-radius: 10px; border-left: 5px solid #2196F3; margin-bottom: 20px;'>
-            <h3 style='margin-top:0; color: #1565C0;'>📜 {campaign_info.get('title','1월 윤리경영원칙 실천지침 실천서약')}</h3>
-            <p style='font-size: 1.50rem; color: #444;'>
-                나는 <b>kt MOS북부</b>의 지속적인 발전을 위하여 회사 윤리경영원칙실천지침에 명시된 
-                <b>「임직원의 책임과 의무」</b> 및 <b>「관리자의 책임과 의무」</b>를 성실히 이행할 것을 서약합니다.
+            <h3 style='margin-top:0; color: #1565C0;'>📜 {campaign_info.get('title','1월 윤리경영 실천서약')}</h3>
+            <p style='font-size: 1.15rem; color: #444; font-weight: bold;'>
+                본인 인증을 위해 아래 문구를 목소리로 읽거나 타이핑해 주세요.
             </p>
         </div>
     """, unsafe_allow_html=True)
+
+    # --- 실증 단계: 인증 처리 ---
+    if not st.session_state["is_verified"]:
+        if st.session_state["verification_mode"] == "voice":
+            st.markdown(f"### 🎤 1단계: 목소리 서약")
+            st.info(f"📢 **안내:** 주변을 조용히 하신 후, 아래 문구를 정확히 읽어주세요.\n\n**\"{OATH_TEXT}\"**")
+            
+            # 음성 녹음 컴포넌트 호출
+            audio_data = mic_recorder(
+                start_prompt="🎤 서약 시작 (마이크 클릭)",
+                stop_prompt="🛑 읽기 완료 (분석 요청)",
+                key='oath_mic_recorder'
+            )
+
+            if audio_data:
+                with st.spinner("🎙️ AI가 진심 어린 목소리를 분석 중입니다..."):
+                    try:
+                        # Gemini 모델 호출 로직
+                        model = get_model()
+                        prompt = f"""
+                        역할: kt MOS북부 윤리경영 음성 검증관
+                        작업: 사용자가 읽은 음성이 다음 [제시문]과 내용 면에서 80% 이상 일치하는지 확인하십시오.
+                        [제시문]: "{OATH_TEXT}"
+                        
+                        주의: 주변 소음이나 사투리는 감안하되, 핵심 키워드(kt MOS북부, 윤리경영, 서약)가 반드시 포함되어야 합니다.
+                        결과는 반드시 다음 JSON 형식으로만 출력하십시오: {{"match_rate": 숫자, "reason": "설명"}}
+                        """
+                        # 멀티모달 분석 요청
+                        response = model.generate_content([
+                            prompt,
+                            {"mime_type": "audio/wav", "data": audio_data['bytes']}
+                        ])
+                        
+                        # 결과 파싱
+                        res_text = response.text.replace("```json", "").replace("```", "").strip()
+                        res_json = json.loads(res_text)
+                        
+                        if res_json.get("match_rate", 0) >= 80:
+                            st.success(f"✅ 인증 성공! (일치율: {res_json['match_rate']}%)")
+                            st.session_state["is_verified"] = True
+                            st.rerun()
+                        else:
+                            st.error(f"❌ 음성 일치율이 낮습니다({res_json.get('match_rate')}%). 정확한 인식을 위해 타이핑 모드로 전환합니다.")
+                            st.session_state["verification_mode"] = "typing"
+                            st.rerun()
+                            
+                    except Exception as e:
+                        st.warning("환경 문제로 음성 인식이 어렵습니다. 타이핑 서약으로 전환합니다.")
+                        st.session_state["verification_mode"] = "typing"
+                        st.rerun()
+
+        else: # 쉐도우 타이핑 모드
+            st.markdown(f"### ⌨️ 1단계: 쉐도우 타이핑 서약")
+            st.warning(f"아래 문구를 오타 없이 그대로 입력해 주세요.\n\n**문구:** `{OATH_TEXT}`")
+            user_typing = st.text_input("서약 문구 입력", placeholder="위 문구를 보고 똑같이 써주세요.", key="shadow_input")
+            
+            if user_typing:
+                # 공백 제거 비교로 오타 최소화
+                if OATH_TEXT.replace(" ", "") in user_typing.replace(" ", ""):
+                    st.success("✅ 문구 확인 완료!")
+                    st.session_state["is_verified"] = True
+                    st.rerun()
+                elif len(user_typing) > 5:
+                    st.error("문구가 정확하지 않습니다. 다시 한번 확인해 주세요.")
+
+    # --- 2단계: 최종 인적사항 입력 및 제출 (인증 성공 시에만 노출) ---
+    if st.session_state["is_verified"]:
+        st.balloons()
+        st.markdown("---")
+        st.markdown("### ✍️ 2단계: 인적사항 입력 및 최종 제출")
+        
+        with st.form("audit_final_form", clear_on_submit=False):
+            c1, c2 = st.columns(2)
+            emp_id = c1.text_input("사번", placeholder="예: 12345")
+            name = c2.text_input("성명")
+            
+            c3, c4 = st.columns(2)
+            ordered_units = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
+            unit = c3.selectbox("총괄 / 본부 / 단", ordered_units)
+            dept = c4.text_input("상세 부서명")
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            submit = st.form_submit_button("🛡️ 윤리경영 서약서 최종 제출", use_container_width=True)
+
+            if submit:
+                if not emp_id or not name:
+                    st.warning("⚠️ 사번과 성명을 모두 입력해 주세요.")
+                else:
+                    # 구글 시트 저장 로직 호출
+                    current_sheet_name = campaign_info.get("sheet_name", "2026_윤리경영_실천서약")
+                    final_answer = f"음성/타이핑 인증 완료 서약 (문구: {OATH_TEXT})"
+                    
+                    with st.spinner("서약서를 안전하게 보관 중입니다..."):
+                        success, msg = save_audit_result(emp_id, name, unit, dept, final_answer, current_sheet_name)
+                    
+                    if success:
+                        st.success(f"축하합니다! {name}님, 2026년 윤리경영 서약이 정상 완료되었습니다.")
+                        # 상태 초기화 (다음 사람을 위해)
+                        st.session_state["is_verified"] = False
+                        st.session_state["verification_mode"] = "voice"
+                    else:
+                        st.error(f"제출 실패: {msg}")
+
+    # 가이드 확장판
+    with st.expander("※ 윤리경영원칙 실천지침 주요내용 보기", expanded=False):
+        st.write("중요 위반 유형: 금품 수수, 공금 횡령, 직장 내 괴롭힘 등...")
 
     # 2) 실천지침 주요내용(※ 박스) — 책임/의무 체크박스 위로 이동
     with st.expander("※ 윤리경영원칙 실천지침 주요내용", expanded=True):
