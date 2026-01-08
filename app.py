@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import os
 import google.generativeai as genai
 from docx import Document
@@ -13,9 +12,9 @@ import tempfile
 import hashlib
 import base64
 import datetime
+import html
 import pytz
 import pandas as pd
-from pathlib import Path
 
 import plotly.graph_objects as go
 import plotly.express as px
@@ -343,42 +342,6 @@ if st.session_state.get("logout_anim"):
 # ==========================================
 # 8. 핵심 기능 함수 (구글시트, AI, 파일처리)
 # ==========================================
-# ==========================================
-# 8-A. 원문 읽기 게이지/제출 게이트 (안정판)
-# - Streamlit Cloud/버전 차이로 components.html(key=)가 TypeError를 일으키는 케이스가 있어
-#   "시간 기반 읽기 게이지(80%)"로 안정적으로 제출을 차단합니다.
-# - 필요 시 추후 커스텀 컴포넌트로 스크롤%를 실제로 연동할 수 있습니다.
-# ==========================================
-
-def _read_gate_state(campaign_key: str, required_seconds: int = 90, threshold: float = 0.8):
-    """
-    읽기 게이지(시간 기반) 상태 반환.
-    - required_seconds: 100%에 도달하는 기준 시간(초)
-    - threshold: 제출 허용 비율(기본 0.8=80%)
-    """
-    # 캠페인 바뀌면 리셋
-    if st.session_state.get("_read_gate_campaign_key") != campaign_key:
-        st.session_state["_read_gate_campaign_key"] = campaign_key
-        st.session_state["_read_gate_start_ts"] = time.time()
-        st.session_state["_read_gate_confirmed"] = False
-
-    if "_read_gate_start_ts" not in st.session_state:
-        st.session_state["_read_gate_start_ts"] = time.time()
-
-    elapsed = max(0.0, time.time() - float(st.session_state["_read_gate_start_ts"]))
-    ratio = min(elapsed / max(required_seconds, 1), 1.0)
-    allow = (ratio >= threshold) and bool(st.session_state.get("_read_gate_confirmed"))
-
-    return {
-        "elapsed": elapsed,
-        "ratio": ratio,
-        "percent": round(ratio * 100, 1),
-        "threshold_percent": int(threshold * 100),
-        "allow": allow,
-        "required_seconds": required_seconds,
-    }
-
-
 
 @st.cache_resource
 def init_google_sheet_connection():
@@ -579,6 +542,57 @@ def get_web_content(url):
     except Exception:
         return None
 
+
+
+# ==========================================
+# 8-1. [신규] 윤리 원문 읽기 게이트 (안정판: 시간 기반 + 서버단 차단)
+#   - Streamlit 버전 차이로 components.html(key=...) 오류가 발생할 수 있어
+#     외부 컴포넌트 없이 동작하는 방식으로 구현합니다.
+# ==========================================
+def load_ethics_full_text_md(path: str = "ethics_full_text.md") -> str:
+    """원문(마크다운) 파일을 읽어옵니다. 파일이 없으면 안내 문구 반환."""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read().strip()
+    except Exception:
+        return ""
+
+def render_scrollable_text(md_text: str, height: int = 320) -> None:
+    """원문 텍스트를 스크롤 박스로 표시(HTML/CSS)"""
+    if not md_text:
+        st.warning("⚠️ 원문 파일(ethics_full_text.md)을 찾지 못했습니다. 배포 폴더에 파일을 추가해 주세요.")
+        return
+    # HTML 안전 처리(기본 줄바꿈만)
+    safe = html.escape(md_text).replace("\n", "<br>")
+    st.markdown(
+        f"""<div style="height:{height}px; overflow-y:auto; background:#FFFFFF;
+                 border:1px solid #D7DEE8; border-radius:12px; padding:14px; line-height:1.6;">
+                 {safe}
+               </div>""",
+        unsafe_allow_html=True,
+    )
+
+def ethics_read_gate(min_seconds: int = 96, box_height: int = 320) -> tuple[bool, float]:
+    """윤리 원문 읽기 게이트.
+    - min_seconds: 최소 읽기(체류) 시간(초). (예: 120초의 80% = 96초)
+    반환: (gate_ok, progress_rate)
+    """
+    if "ethics_read_start_ts" not in st.session_state:
+        st.session_state["ethics_read_start_ts"] = time.time()
+
+    elapsed = max(0.0, time.time() - float(st.session_state["ethics_read_start_ts"]))
+    rate = min(elapsed / float(min_seconds), 1.0)
+
+    md_text = load_ethics_full_text_md("ethics_full_text.md")
+    st.markdown("#### 👀 원문 읽기 확인")
+    st.caption(f"아래 원문을 읽고, **최소 {min_seconds}초** 이상 경과해야 제출할 수 있습니다. (읽기 진행률 80% 기준 안정판)")
+    render_scrollable_text(md_text, height=box_height)
+    st.progress(rate)
+    st.write(f"읽기 진행률: **{int(rate*100)}%**  |  경과 시간: **{int(elapsed)}초**")
+
+    gate_ok = elapsed >= float(min_seconds)
+    return gate_ok, rate
+
 # ==========================================
 # 9. 메인 화면 및 탭 구성
 # ==========================================
@@ -624,6 +638,14 @@ with tab_audit:
         </div>
     """, unsafe_allow_html=True)
 
+
+    # ✅ [신규] 원문 읽기 게이트 (80% 기준 안정판)
+    #  - Streamlit Cloud/버전 차이로 JS 컴포넌트 사용 시 오류가 발생할 수 있어,
+    #    시간 기반(서버단 차단) 방식으로 안정적으로 운영합니다.
+    MIN_READ_SECONDS = 96  # 예: 120초의 80% (원하면 120/180 등으로 조정 가능)
+    gate_ok, _gate_rate = ethics_read_gate(min_seconds=MIN_READ_SECONDS, box_height=320)
+
+    st.markdown("---")
     # 2) 실천지침 주요내용(※ 박스) — 책임/의무 체크박스 위로 이동
     with st.expander("※ 윤리경영원칙 실천지침 주요내용", expanded=True):
             st.markdown(
@@ -670,49 +692,6 @@ with tab_audit:
                 </div>
                 """,
                 unsafe_allow_html=True,
-    # ✅ 원문 읽기 확인(필수) — 80% 이상 도달 + 확인 체크 후 제출 허용
-    with st.expander("👀 원문 읽기 확인(필수)", expanded=True):
-        try:
-            # 원문 파일(없으면 화면의 기존 안내문/표를 그대로 사용)
-            full_text_path = os.path.join(os.path.dirname(__file__), "ethics_full_text.md")
-            if os.path.exists(full_text_path):
-                full_text = Path(full_text_path).read_text(encoding="utf-8")
-                st.markdown(full_text)
-            else:
-                st.warning("⚠️ ethics_full_text.md 파일이 없습니다. (배포 폴더에 함께 업로드해 주세요)")
-        except Exception as e:
-            st.warning(f"⚠️ 원문 표시 중 오류: {e}")
-
-        camp_key = campaign_info.get("key", "default")
-        gate = _read_gate_state(camp_key, required_seconds=90, threshold=0.8)
-
-        # 진행률이 임계치(80%) 미만이면 자동 새로고침으로 게이지 갱신
-        if gate["ratio"] < 0.8:
-            try:
-                st_autorefresh = getattr(st, "autorefresh", None)
-                if callable(st_autorefresh):
-                    st_autorefresh(interval=1000, key="__read_gate_refresh__")
-            except Exception:
-                pass
-
-        st.markdown("#### ✅ 읽기 진행률")
-        st.progress(gate["ratio"])
-        st.caption(f"읽기 진행률: **{gate['percent']}%**  |  기준: **{gate['threshold_percent']}% 이상**  |  경과: {int(gate['elapsed'])}초")
-
-        # 확인 체크(사용자 행위 1번 더 요구)
-        st.checkbox(
-            "원문을 충분히 읽고 이해했습니다.",
-            key="_read_gate_confirmed",
-            disabled=(gate["ratio"] < 0.8),  # 80% 미만이면 체크 불가
-        )
-
-        if gate["ratio"] < 0.8:
-            st.info("서약 제출을 위해서는 원문 읽기 진행률이 80% 이상이 되어야 합니다. (시간 기반)")
-        elif not st.session_state.get("_read_gate_confirmed"):
-            st.warning("진행률 80% 이상 달성. 위 확인 체크 후 제출할 수 있습니다.")
-        else:
-            st.success("읽기 확인 완료. 이제 서약을 제출할 수 있습니다.")
-
             )
 
 
@@ -746,16 +725,19 @@ with tab_audit:
         submit = st.form_submit_button("서약 제출", use_container_width=True)
 
         if submit:
+
+            # ✅ [필수] 원문 읽기 게이트 통과 여부 확인 (서버단 차단)
+            if not gate_ok:
+                st.error("❌ 원문 읽기 진행률이 부족합니다. 원문을 읽고 잠시 후 다시 제출해 주세요.")
+                st.stop()
+
+            confirm_read = st.checkbox("✅ 원문을 충분히 읽고 이해했습니다.", value=False, key="confirm_read_ck")
+            if not confirm_read:
+                st.error("❌ '원문을 충분히 읽고 이해했습니다' 체크 후 제출할 수 있습니다.")
+                st.stop()
             if not emp_id or not name:
                 st.warning("⚠️ 사번과 성명을 입력해주세요.")
             else:
-                # ✅ 읽기 게이트(80% + 확인) 통과 여부 체크
-                camp_key = campaign_info.get("key", "default")
-                gate = _read_gate_state(camp_key, required_seconds=90, threshold=0.8)
-                if not gate["allow"]:
-                    st.error("❌ 원문 읽기 진행률 80% 이상 달성 후 '원문을 충분히 읽고 이해했습니다'를 체크해야 제출할 수 있습니다.")
-                    st.stop()
-
                 unchecked = []
                 if not e1: unchecked.append("임직원 의무 1")
                 if not e2: unchecked.append("임직원 의무 2")
