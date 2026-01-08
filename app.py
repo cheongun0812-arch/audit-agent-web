@@ -648,13 +648,14 @@ with tab_audit:
                 st.session_state.audit_step = 2
                 st.rerun()
 
-    # --- STEP 2: 목소리 확약 인증 (Gemini AI 분석) ---
+    # --- STEP 2: 목소리 확약 인증 (최적화 버전) ---
     elif st.session_state.audit_step == 2:
         st.markdown("### 🎤 2단계: 목소리 확약 인증")
         OATH_TEXT = "나는 kt MOS북부의 윤리경영 지침을 숙지하였으며 이를 성실히 이행할 것을 서약합니다"
         
         st.warning(f"아래 문구를 마이크 버튼을 누르고 큰 소리로 읽어주세요:\n\n**\"{OATH_TEXT}\"**")
         
+        # 음성 녹음 컴포넌트
         audio_data = mic_recorder(
             start_prompt="🎤 서약 시작 (마이크 클릭)",
             stop_prompt="🛑 녹음 완료 (분석 시작)",
@@ -662,31 +663,65 @@ with tab_audit:
         )
 
         if audio_data:
-            with st.spinner("🎙️ AI가 서약 목소리의 진정성을 분석 중입니다..."):
+            # 녹음 데이터가 들어오면 즉시 분석 바 표시
+            with st.spinner("🎙️ AI가 서약 내용을 정밀 분석 중입니다... 잠시만 기다려 주세요."):
                 try:
-                    model = get_model() #
-                    # 음성 매핑율 및 일치율 분석 프롬프트
+                    # 1. 모델 설정 (속도가 빠른 Flash 모델 직접 지정하여 병목 제거)
+                    if "api_key" in st.session_state:
+                        genai.configure(api_key=st.session_state["api_key"])
+                    
+                    # JSON 응답을 강제하는 설정 추가
+                    generation_config = {
+                        "response_mime_type": "application/json",
+                    }
+                    model = genai.GenerativeModel("gemini-1.5-flash", generation_config=generation_config)
+
+                    # 2. 분석 프롬프트 구성 (일치율과 매핑율 요청)
                     prompt = f"""
-                    다음 음성 데이터가 제시문과 얼마나 일치하는지 분석하세요: "{OATH_TEXT}"
-                    반드시 JSON 형식으로만 응답: {{"match_rate": 숫자, "mapping_rate": 숫자}}
+                    다음 음성 데이터가 제시문과 내용 면에서 얼마나 일치하는지 분석하세요.
+                    [제시문]: "{OATH_TEXT}"
+                    
+                    반드시 다음 JSON 형식을 엄격히 지켜서 응답하세요:
+                    {{
+                        "match_rate": (0에서 100 사이의 숫자),
+                        "mapping_rate": (0에서 100 사이의 숫자),
+                        "is_valid": (true 또는 false)
+                    }}
                     """
-                    response = model.generate_content([prompt, {"mime_type": "audio/wav", "data": audio_data['bytes']}])
-                    res = json.loads(response.text.replace("```json", "").replace("```", "").strip())
                     
-                    # 분석 결과 시각화 (팝업)
-                    st.toast(f"📊 분석 결과 - 일치율: {res['match_rate']}%, 매핑율: {res['mapping_rate']}%", icon="📈")
+                    # 3. AI 분석 요청
+                    response = model.generate_content([
+                        prompt,
+                        {"mime_type": "audio/wav", "data": audio_data['bytes']}
+                    ])
                     
-                    if res['match_rate'] >= 80:
-                        st.success(f"🎊 인증 성공! 정상적으로 서약이 되었습니다. (매핑율: {res['mapping_rate']}%)")
-                        time.sleep(2)
+                    # 4. 결과 파싱 (JSON 모드이므로 바로 로드 가능)
+                    res = json.loads(response.text)
+                    
+                    # 분석 결과 시각화 (팝업 알림)
+                    match_rate = res.get("match_rate", 0)
+                    mapping_rate = res.get("mapping_rate", 0)
+                    
+                    st.toast(f"📊 분석 완료 - 일치율: {match_rate}%, 매핑율: {mapping_rate}%", icon="📈")
+                    
+                    # 5. 합격 판정 (80% 이상)
+                    if match_rate >= 80:
+                        st.success(f"🎊 인증 성공! 진정성 있는 서약이 확인되었습니다. (매핑율: {mapping_rate}%)")
+                        time.sleep(1.5) # 성공 메시지를 볼 시간 부여
                         st.session_state.audit_step = 3
                         st.rerun()
                     else:
-                        st.error(f"📢 안내: 주변을 조용히 하신 후 문구를 정확히 읽어주세요. (현재 일치율: {res['match_rate']}%)")
+                        st.error(f"📢 인식 결과가 낮습니다 (일치율: {match_rate}%).")
+                        st.info("주변 소음을 줄이고, 문구를 천천히 정확하게 다시 읽어주세요.")
                         if st.button("다시 시도하기 🔄"):
                             st.rerun()
+
                 except Exception as e:
-                    st.error(f"분석 중 오류가 발생했습니다: {e}")
+                    # 상세 에러 메시지 출력 (디버깅용)
+                    st.error(f"⚠️ 분석 중 오류가 발생했습니다.")
+                    with st.expander("상세 에러 보기"):
+                        st.write(str(e))
+                    st.info("잠시 후 다시 시도하거나, 마이크 권한을 확인해 주세요.")
 
     # --- STEP 3: 정보 입력 및 최종 제출 (풍선 엔딩) ---
     elif st.session_state.audit_step == 3:
