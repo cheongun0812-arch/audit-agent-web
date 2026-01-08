@@ -15,6 +15,7 @@ import base64
 import datetime
 import pytz
 import pandas as pd
+import html as html_lib
 
 import plotly.graph_objects as go
 import plotly.express as px
@@ -91,6 +92,38 @@ def scroll_read_progress_box(inner_html: str, height: int = 320, key: str = "rea
         return float(val) if val is not None else 0.0
     except Exception:
         return 0.0
+
+# ==========================================
+# 2-2. ✅ '윤리경영원칙 실천지침' 원문 로더
+# - 배포 시 원문을 코드에 직접 박아 넣지 않고, 텍스트 파일로 관리할 수 있도록 지원
+# - 기본 경로: ./ethics_full_text.md  (없으면 ./ethics_full_text.txt도 탐색)
+# ==========================================
+def load_ethics_full_text() -> str | None:
+    """윤리경영원칙 실천지침 '원문'을 로드합니다.
+    - 파일이 존재하면 내용을 반환
+    - 없으면 None 반환 (요약본으로 폴백)
+    """
+    candidates = [
+        os.path.join(os.getcwd(), "ethics_full_text.md"),
+        os.path.join(os.getcwd(), "ethics_full_text.txt"),
+    ]
+    for fp in candidates:
+        try:
+            if os.path.exists(fp):
+                with open(fp, "r", encoding="utf-8") as f:
+                    txt = f.read().strip()
+                return txt if txt else None
+        except Exception:
+            continue
+    return None
+
+def _text_to_safe_html(txt: str) -> str:
+    """원문 텍스트를 스크롤 박스(inner_html)에 안전하게 삽입하기 위해 HTML 이스케이프 처리"""
+    safe = html_lib.escape(txt)
+    # 줄바꿈 유지
+    safe = safe.replace("\n", "<br>")
+    return safe
+
 # [필수] 구글 시트 라이브러리 체크
 try:
     import gspread
@@ -654,31 +687,46 @@ with tab_audit:
     st.markdown("#### 👀 서약/지침 읽기 확인")
     st.caption("아래 내용을 스크롤하여 읽으면 진행률이 자동으로 측정됩니다. **80% 이상** 읽어야 '서약 제출'이 가능합니다.")
 
-    _read_html = """
-      <div style="font-weight:900; font-size:16px; margin-bottom:10px; color:#2C3E50;">
-        「윤리경영원칙 실천지침」 핵심 내용
-      </div>
-      <div style="font-size:14px; color:#333;">
-        <p style="margin-top:0;">
-          나는 <b>kt MOS북부</b>의 지속적인 발전을 위하여 회사 윤리경영원칙실천지침에 명시된
-          <b>「임직원의 책임과 의무」</b> 및 <b>「관리자의 책임과 의무」</b>를 성실히 이행할 것을 서약합니다.
-        </p>
-        <hr style="border:none; border-top:1px solid #E6EAF0; margin:12px 0;">
-        <div style='font-weight:800; margin-bottom:6px;'>📌 윤리경영 위반 주요 유형(요약)</div>
-        <ul style="margin-top:0; padding-left:18px;">
-          <li><b>고객과의 관계</b>: 금품 등 이익 수수, 고객만족 저해, 고객정보 유출</li>
-          <li><b>임직원과 회사의 관계</b>: 공금 유용/횡령, 회사재산 사적 사용, 기업정보 유출, 경영왜곡</li>
-          <li><b>임직원 상호간의 관계</b>: 직장 내 괴롭힘, 성희롱, 조직질서 문란행위</li>
-          <li><b>이해관계자와의 관계</b>: 금품 등 이익 수수, 부당한 요구</li>
-        </ul>
-        <div style="color:#666; font-size:12px; margin-top:10px;">
-          ※ 본 화면은 '읽기 확인'을 위한 요약본입니다. 세부 기준은 사내 원문 지침을 따릅니다.
-        </div>
-      </div>
-    """
+    
+    full_text = load_ethics_full_text()
+
+    if full_text:
+        _read_html = f"""
+          <div style="font-weight:900; font-size:16px; margin-bottom:10px; color:#2C3E50;">
+            「윤리경영원칙 실천지침」 원문
+          </div>
+          <div style="font-size:14px; color:#333;">
+            {_text_to_safe_html(full_text)}
+          </div>
+        """
+    else:
+        # ⚠️ 원문 파일이 없으면 요약본으로 폴백(배포 전 ethics_full_text.md에 원문을 넣어주세요)
+        _read_html = """
+          <div style="font-weight:900; font-size:16px; margin-bottom:10px; color:#2C3E50;">
+            「윤리경영원칙 실천지침」 핵심 내용(요약)
+          </div>
+          <div style="font-size:14px; color:#333;">
+            <p style="margin-top:0;">
+              나는 <b>kt MOS북부</b>의 지속적인 발전을 위하여 회사 윤리경영원칙실천지침에 명시된
+              <b>「임직원의 책임과 의무」</b> 및 <b>「관리자의 책임과 의무」</b>를 성실히 이행할 것을 서약합니다.
+            </p>
+            <hr style="border:none; border-top:1px solid #E6EAF0; margin:12px 0;">
+            <div style='font-weight:800; margin-bottom:6px;'>📌 윤리경영 위반 주요 유형(요약)</div>
+            <ul style="margin-top:0; padding-left:18px;">
+              <li><b>고객과의 관계</b>: 금품 등 이익 수수, 고객만족 저해, 고객정보 유출</li>
+              <li><b>임직원과 회사의 관계</b>: 공금 유용/횡령, 회사재산 사적 사용, 기업정보 유출, 경영왜곡</li>
+              <li><b>임직원 상호간의 관계</b>: 직장 내 괴롭힘, 성희롱, 조직질서 문란행위</li>
+              <li><b>이해관계자와의 관계</b>: 금품 등 이익 수수, 부당한 요구</li>
+            </ul>
+            <div style="color:#B00020; font-size:12px; margin-top:10px;">
+              ⚠️ 현재 서버에 <b>ethics_full_text.md</b>(원문 파일)이 없어 요약본이 표시됩니다. 배포 전에 원문 파일을 추가해 주세요.
+            </div>
+          </div>
+        """
 
     _rk = f"read_box_{campaign_info.get('key','default')}"
     read_rate = scroll_read_progress_box(_read_html, height=320, key=_rk)
+
     st.session_state["read_rate"] = float(read_rate or 0.0)
 
     cR1, cR2 = st.columns([3, 1])
