@@ -1,5 +1,11 @@
 import streamlit as st
 import streamlit.components.v1 as components
+
+def scroll_read_progress_box(html: str, height: int = 320, key: str | None = None):
+    # ❌ 기존: val = components.html(html, height=height + 12, key=key)
+    # ✅ 수정: key 인자 제거
+    val = components.html(html, height=height + 12)
+    return val
 import os
 import google.generativeai as genai
 from docx import Document
