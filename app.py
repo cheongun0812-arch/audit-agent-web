@@ -1,11 +1,5 @@
 import streamlit as st
 import streamlit.components.v1 as components
-
-def scroll_read_progress_box(html: str, height: int = 320, key: str | None = None):
-    # ❌ 기존: val = components.html(html, height=height + 12, key=key)
-    # ✅ 수정: key 인자 제거
-    val = components.html(html, height=height + 12)
-    return val
 import os
 import google.generativeai as genai
 from docx import Document
@@ -21,7 +15,7 @@ import base64
 import datetime
 import pytz
 import pandas as pd
-import html as html_lib
+from pathlib import Path
 
 import plotly.graph_objects as go
 import plotly.express as px
@@ -34,101 +28,6 @@ PLOTLY_CONFIG = {
     "scrollZoom": False,          # 스크롤로 의도치 않은 확대 방지
     "doubleClick": "reset",       # 더블클릭/더블탭 시 원점 복원
 }
-
-
-# ==========================================
-# 2-1. ✅ '읽기(스크롤) 진행률' 컴포넌트
-# - 스크롤 박스를 끝까지 읽었는지(진행률 %) 측정
-# - 80% 이상일 때만 '서약 제출'을 허용하는 용도
-# ==========================================
-def scroll_read_progress_box(inner_html: str, height: int = 320, key: str = "read_box") -> float:
-    """스크롤 읽기 진행률(0~100)을 반환합니다.
-    Streamlit components.html + postMessage 프로토콜을 이용해 JS -> Python 값 전달을 구현합니다.
-    """
-    # 안전: inner_html은 우리가 작성한 고정 HTML만 넣는 것을 권장(외부 입력 X)
-    html = f"""
-    <div id='sr_container' style="height:{height}px; overflow-y:auto; border:1px solid #CBD6E2;
-         background:#FFFFFF; border-radius:12px; padding:16px; line-height:1.6; font-size:15px;">
-      {inner_html}
-    </div>
-
-    <script>
-      const box = document.getElementById('sr_container');
-
-      function sendRate(rate) {{
-        // Streamlit Component 값 전달(공식 컴포넌트 메시지 프로토콜)
-        const data = {{
-          isStreamlitMessage: true,
-          type: "streamlit:setComponentValue",
-          value: rate
-        }};
-        window.parent.postMessage(data, "*");
-      }}
-
-      function setHeight() {{
-        const data = {{
-          isStreamlitMessage: true,
-          type: "streamlit:setFrameHeight",
-          height: {height + 10}
-        }};
-        window.parent.postMessage(data, "*");
-      }}
-
-      function calcAndSend() {{
-        const denom = (box.scrollHeight - box.clientHeight);
-        const rate = denom > 0 ? (box.scrollTop / denom) * 100 : 100;
-        sendRate(Math.max(0, Math.min(100, rate)));
-      }}
-
-      // 초기값 전달
-      setHeight();
-      sendRate(0);
-
-      box.addEventListener('scroll', () => {{
-        calcAndSend();
-      }});
-
-      // 혹시 렌더 지연이 있으면 한번 더 계산
-      setTimeout(calcAndSend, 250);
-      setTimeout(calcAndSend, 900);
-    </script>
-    """
-    val = components.html(html, height=height + 12, key=key)
-    try:
-        return float(val) if val is not None else 0.0
-    except Exception:
-        return 0.0
-
-# ==========================================
-# 2-2. ✅ '윤리경영원칙 실천지침' 원문 로더
-# - 배포 시 원문을 코드에 직접 박아 넣지 않고, 텍스트 파일로 관리할 수 있도록 지원
-# - 기본 경로: ./ethics_full_text.md  (없으면 ./ethics_full_text.txt도 탐색)
-# ==========================================
-def load_ethics_full_text() -> str | None:
-    """윤리경영원칙 실천지침 '원문'을 로드합니다.
-    - 파일이 존재하면 내용을 반환
-    - 없으면 None 반환 (요약본으로 폴백)
-    """
-    candidates = [
-        os.path.join(os.getcwd(), "ethics_full_text.md"),
-        os.path.join(os.getcwd(), "ethics_full_text.txt"),
-    ]
-    for fp in candidates:
-        try:
-            if os.path.exists(fp):
-                with open(fp, "r", encoding="utf-8") as f:
-                    txt = f.read().strip()
-                return txt if txt else None
-        except Exception:
-            continue
-    return None
-
-def _text_to_safe_html(txt: str) -> str:
-    """원문 텍스트를 스크롤 박스(inner_html)에 안전하게 삽입하기 위해 HTML 이스케이프 처리"""
-    safe = html_lib.escape(txt)
-    # 줄바꿈 유지
-    safe = safe.replace("\n", "<br>")
-    return safe
 
 # [필수] 구글 시트 라이브러리 체크
 try:
@@ -444,6 +343,42 @@ if st.session_state.get("logout_anim"):
 # ==========================================
 # 8. 핵심 기능 함수 (구글시트, AI, 파일처리)
 # ==========================================
+# ==========================================
+# 8-A. 원문 읽기 게이지/제출 게이트 (안정판)
+# - Streamlit Cloud/버전 차이로 components.html(key=)가 TypeError를 일으키는 케이스가 있어
+#   "시간 기반 읽기 게이지(80%)"로 안정적으로 제출을 차단합니다.
+# - 필요 시 추후 커스텀 컴포넌트로 스크롤%를 실제로 연동할 수 있습니다.
+# ==========================================
+
+def _read_gate_state(campaign_key: str, required_seconds: int = 90, threshold: float = 0.8):
+    """
+    읽기 게이지(시간 기반) 상태 반환.
+    - required_seconds: 100%에 도달하는 기준 시간(초)
+    - threshold: 제출 허용 비율(기본 0.8=80%)
+    """
+    # 캠페인 바뀌면 리셋
+    if st.session_state.get("_read_gate_campaign_key") != campaign_key:
+        st.session_state["_read_gate_campaign_key"] = campaign_key
+        st.session_state["_read_gate_start_ts"] = time.time()
+        st.session_state["_read_gate_confirmed"] = False
+
+    if "_read_gate_start_ts" not in st.session_state:
+        st.session_state["_read_gate_start_ts"] = time.time()
+
+    elapsed = max(0.0, time.time() - float(st.session_state["_read_gate_start_ts"]))
+    ratio = min(elapsed / max(required_seconds, 1), 1.0)
+    allow = (ratio >= threshold) and bool(st.session_state.get("_read_gate_confirmed"))
+
+    return {
+        "elapsed": elapsed,
+        "ratio": ratio,
+        "percent": round(ratio * 100, 1),
+        "threshold_percent": int(threshold * 100),
+        "allow": allow,
+        "required_seconds": required_seconds,
+    }
+
+
 
 @st.cache_resource
 def init_google_sheet_connection():
@@ -689,63 +624,6 @@ with tab_audit:
         </div>
     """, unsafe_allow_html=True)
 
-    # ✅ 1.5) '읽기 진행률' 확인 (80% 이상일 때 제출 가능)
-    st.markdown("#### 👀 서약/지침 읽기 확인")
-    st.caption("아래 내용을 스크롤하여 읽으면 진행률이 자동으로 측정됩니다. **80% 이상** 읽어야 '서약 제출'이 가능합니다.")
-
-    
-    full_text = load_ethics_full_text()
-
-    if full_text:
-        _read_html = f"""
-          <div style="font-weight:900; font-size:16px; margin-bottom:10px; color:#2C3E50;">
-            「윤리경영원칙 실천지침」 원문
-          </div>
-          <div style="font-size:14px; color:#333;">
-            {_text_to_safe_html(full_text)}
-          </div>
-        """
-    else:
-        # ⚠️ 원문 파일이 없으면 요약본으로 폴백(배포 전 ethics_full_text.md에 원문을 넣어주세요)
-        _read_html = """
-          <div style="font-weight:900; font-size:16px; margin-bottom:10px; color:#2C3E50;">
-            「윤리경영원칙 실천지침」 핵심 내용(요약)
-          </div>
-          <div style="font-size:14px; color:#333;">
-            <p style="margin-top:0;">
-              나는 <b>kt MOS북부</b>의 지속적인 발전을 위하여 회사 윤리경영원칙실천지침에 명시된
-              <b>「임직원의 책임과 의무」</b> 및 <b>「관리자의 책임과 의무」</b>를 성실히 이행할 것을 서약합니다.
-            </p>
-            <hr style="border:none; border-top:1px solid #E6EAF0; margin:12px 0;">
-            <div style='font-weight:800; margin-bottom:6px;'>📌 윤리경영 위반 주요 유형(요약)</div>
-            <ul style="margin-top:0; padding-left:18px;">
-              <li><b>고객과의 관계</b>: 금품 등 이익 수수, 고객만족 저해, 고객정보 유출</li>
-              <li><b>임직원과 회사의 관계</b>: 공금 유용/횡령, 회사재산 사적 사용, 기업정보 유출, 경영왜곡</li>
-              <li><b>임직원 상호간의 관계</b>: 직장 내 괴롭힘, 성희롱, 조직질서 문란행위</li>
-              <li><b>이해관계자와의 관계</b>: 금품 등 이익 수수, 부당한 요구</li>
-            </ul>
-            <div style="color:#B00020; font-size:12px; margin-top:10px;">
-              ⚠️ 현재 서버에 <b>ethics_full_text.md</b>(원문 파일)이 없어 요약본이 표시됩니다. 배포 전에 원문 파일을 추가해 주세요.
-            </div>
-          </div>
-        """
-
-    _rk = f"read_box_{campaign_info.get('key','default')}"
-    read_rate = scroll_read_progress_box(_read_html, height=320, key=_rk)
-
-    st.session_state["read_rate"] = float(read_rate or 0.0)
-
-    cR1, cR2 = st.columns([3, 1])
-    with cR1:
-        st.progress(min(max(st.session_state["read_rate"], 0.0), 100.0) / 100.0)
-    with cR2:
-        st.metric("읽기 진행률", f"{st.session_state['read_rate']:.0f}%")
-
-    if st.session_state["read_rate"] < 80:
-        st.info("📌 현재는 제출이 잠겨 있습니다. 아래 내용을 더 읽어 진행률을 80% 이상으로 올려주세요.")
-    else:
-        st.success("✅ 읽기 조건 충족! 이제 서약 제출이 가능합니다.")
-
     # 2) 실천지침 주요내용(※ 박스) — 책임/의무 체크박스 위로 이동
     with st.expander("※ 윤리경영원칙 실천지침 주요내용", expanded=True):
             st.markdown(
@@ -792,6 +670,49 @@ with tab_audit:
                 </div>
                 """,
                 unsafe_allow_html=True,
+    # ✅ 원문 읽기 확인(필수) — 80% 이상 도달 + 확인 체크 후 제출 허용
+    with st.expander("👀 원문 읽기 확인(필수)", expanded=True):
+        try:
+            # 원문 파일(없으면 화면의 기존 안내문/표를 그대로 사용)
+            full_text_path = os.path.join(os.path.dirname(__file__), "ethics_full_text.md")
+            if os.path.exists(full_text_path):
+                full_text = Path(full_text_path).read_text(encoding="utf-8")
+                st.markdown(full_text)
+            else:
+                st.warning("⚠️ ethics_full_text.md 파일이 없습니다. (배포 폴더에 함께 업로드해 주세요)")
+        except Exception as e:
+            st.warning(f"⚠️ 원문 표시 중 오류: {e}")
+
+        camp_key = campaign_info.get("key", "default")
+        gate = _read_gate_state(camp_key, required_seconds=90, threshold=0.8)
+
+        # 진행률이 임계치(80%) 미만이면 자동 새로고침으로 게이지 갱신
+        if gate["ratio"] < 0.8:
+            try:
+                st_autorefresh = getattr(st, "autorefresh", None)
+                if callable(st_autorefresh):
+                    st_autorefresh(interval=1000, key="__read_gate_refresh__")
+            except Exception:
+                pass
+
+        st.markdown("#### ✅ 읽기 진행률")
+        st.progress(gate["ratio"])
+        st.caption(f"읽기 진행률: **{gate['percent']}%**  |  기준: **{gate['threshold_percent']}% 이상**  |  경과: {int(gate['elapsed'])}초")
+
+        # 확인 체크(사용자 행위 1번 더 요구)
+        st.checkbox(
+            "원문을 충분히 읽고 이해했습니다.",
+            key="_read_gate_confirmed",
+            disabled=(gate["ratio"] < 0.8),  # 80% 미만이면 체크 불가
+        )
+
+        if gate["ratio"] < 0.8:
+            st.info("서약 제출을 위해서는 원문 읽기 진행률이 80% 이상이 되어야 합니다. (시간 기반)")
+        elif not st.session_state.get("_read_gate_confirmed"):
+            st.warning("진행률 80% 이상 달성. 위 확인 체크 후 제출할 수 있습니다.")
+        else:
+            st.success("읽기 확인 완료. 이제 서약을 제출할 수 있습니다.")
+
             )
 
 
@@ -821,22 +742,20 @@ with tab_audit:
         dept = c4.text_input("상세 부서명")
 
         st.markdown("---")
-        # ✅ 읽기 진행률(80% 이상) 충족 시에만 제출 가능
-        _can_submit_by_read = float(st.session_state.get("read_rate", 0.0)) >= 80.0
-        try:
-            submit = st.form_submit_button("서약 제출", use_container_width=True, disabled=(not _can_submit_by_read))
-        except TypeError:
-            # Streamlit 구버전 호환: disabled 인자가 없을 수 있어 서버단에서 추가 검증
-            submit = st.form_submit_button("서약 제출", use_container_width=True)
 
+        submit = st.form_submit_button("서약 제출", use_container_width=True)
 
         if submit:
-            if float(st.session_state.get("read_rate", 0.0)) < 80.0:
-                st.error("❌ 읽기 진행률이 80% 이상이어야 제출할 수 있습니다. (현재: %.0f%%)" % float(st.session_state.get("read_rate", 0.0)))
-                st.stop()
             if not emp_id or not name:
                 st.warning("⚠️ 사번과 성명을 입력해주세요.")
             else:
+                # ✅ 읽기 게이트(80% + 확인) 통과 여부 체크
+                camp_key = campaign_info.get("key", "default")
+                gate = _read_gate_state(camp_key, required_seconds=90, threshold=0.8)
+                if not gate["allow"]:
+                    st.error("❌ 원문 읽기 진행률 80% 이상 달성 후 '원문을 충분히 읽고 이해했습니다'를 체크해야 제출할 수 있습니다.")
+                    st.stop()
+
                 unchecked = []
                 if not e1: unchecked.append("임직원 의무 1")
                 if not e2: unchecked.append("임직원 의무 2")
