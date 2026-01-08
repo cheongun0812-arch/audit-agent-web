@@ -636,216 +636,184 @@ with tab_audit:
             )
 
 
-    # 3) 책임/의무 체크 → 4) 사번/성명 등 입력 → 5) 서약 제출(버튼)
     
-    # 3) 책임/의무 체크 (✅ 체크 시 7초 카운트다운 + 해당 줄 강조)
-    st.markdown("#### ■ 임직원의 책임과 의무")
+    # 3) 책임/의무 체크 (✅ 선택한 항목은 선명, 나머지는 블러 + 체크 시 7초 카운트다운)
+    st.markdown(
+        """
+        <style>
+        .pledge-box{
+            border: 1px solid rgba(0,0,0,0.08);
+            border-radius: 14px;
+            padding: 16px 16px 6px 16px;
+            background: rgba(250,250,250,0.9);
+        }
+        .pledge-section-title{
+            margin: 8px 0 6px 0;
+            font-weight: 800;
+        }
+        .pledge-row{
+            padding: 10px 10px;
+            border-radius: 12px;
+            margin: 6px 0;
+        }
+        .pledge-active{
+            background: white;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+            font-weight: 800;
+        }
+        .pledge-text{
+            line-height: 1.5;
+        }
+        .pledge-blur{
+            filter: blur(3px);
+            opacity: 0.35;
+        }
+        .pledge-done{
+            opacity: 0.9;
+        }
+        .pledge-countdown{
+            font-weight: 800;
+            white-space: nowrap;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
     PLEDGE_ITEMS = [
+        ("__title_e__", "임직원의 책임과 의무"),
         ("e1", "하나, 나는 회사 윤리경영원칙과 윤리경영원칙 실천지침에 따라 판단하고 행동한다."),
         ("e2", "하나, 나는 윤리경영원칙 실천지침을 몰랐다는 이유로 면책을 주장하지 않는다."),
         ("e3", "하나, 나는 직무수행 과정에서 윤리적 갈등 상황에 직면한 경우 감사부서의 해석에 따른다."),
         ("e4", "하나, 나는 가족, 친·인척, 지인 등을 이용하여 회사 윤리경영원칙 실천지침을 위반하지 않는다."),
-        ("__divider__", ""),
+        ("__title_m__", "관리자의 책임과 의무"),
         ("m1", "하나, 나는 소속 구성원 및 업무상 이해관계자들이 지침을 준수할 수 있도록 지원하고 관리한다."),
         ("m2", "하나, 나는 공정하고 깨끗한 의사결정을 통해 지침 준수를 솔선수범한다."),
         ("m3", "하나, 나는 부서 내 위반 사안 발생 시 관리자로서의 책임을 다한다."),
     ]
 
-    # 세션 초기화
-    st.session_state.setdefault("pledge_active_idx", None)     # 현재 강조되는 항목 index
-    st.session_state.setdefault("pledge_lock", False)          # 카운트다운 동안 체크 잠금
-    st.session_state.setdefault("pledge_last_trigger", None)   # 마지막으로 트리거된 idx
-    st.session_state.setdefault("pledge_countdown", 0)         # 남은 초
+    import time as _time
 
-    def _run_countdown(seconds: int = 7):
-        # 7초 동안 시각적 카운트다운 (잠금 유지)
+    # --- 세션 상태 초기화 ---
+    st.session_state.setdefault("pledge_lock", False)     # 카운트다운 동안 잠금
+    st.session_state.setdefault("pledge_end_ts", 0.0)     # 카운트다운 종료 시각(time.time())
+    st.session_state.setdefault("pledge_order", [])       # 실제 체크 대상 key 순서
+    st.session_state.setdefault("pledge_step", 0)         # 다음으로 체크해야 할 step
+
+    # 체크 대상 key 목록 구성 (타이틀 제외)
+    _order_keys = [k for (k, _t) in PLEDGE_ITEMS if not k.startswith("__title_")]
+    st.session_state["pledge_order"] = _order_keys
+
+    # 각 체크박스 키 초기화
+    for _k in _order_keys:
+        st.session_state.setdefault(_k, False)
+
+    def _next_unchecked_step() -> int:
+        for i, kk in enumerate(st.session_state["pledge_order"]):
+            if not st.session_state.get(kk, False):
+                return i
+        return len(st.session_state["pledge_order"])
+
+    def _start_countdown(seconds: int = 7):
         st.session_state["pledge_lock"] = True
-        placeholder = st.empty()
-        prog = st.progress(0)
+        st.session_state["pledge_end_ts"] = _time.time() + float(seconds)
 
-        for remain in range(seconds, 0, -1):
-            st.session_state["pledge_countdown"] = remain
-            # 모래시계 + 숫자 카운트
-            placeholder.markdown(
-                f"""
-                <div style='background:#FFFFFF; border:1px dashed #90A4AE; padding:14px 16px; border-radius:12px;'>
-                  <div style='display:flex; align-items:center; gap:10px;'>
-                    <div style='font-size:26px; line-height:1;'>⏳</div>
-                    <div style='font-weight:900; font-size:1.12rem; color:#2C3E50;'>
-                      인식 시간 확보 중… <span style='color:#1565C0;'>{remain}</span>초
-                    </div>
-                  </div>
-                  <div style='margin-top:8px; color:#607D8B; font-size:0.92rem;'>
-                    체크 후 <b>{seconds}초</b> 동안은 다음 항목으로 넘어갈 수 없습니다.
-                  </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-            prog.progress(int(((seconds - remain) / seconds) * 100))
-            time.sleep(1)
+    def _countdown_remaining() -> int:
+        if not st.session_state.get("pledge_lock"):
+            return 0
+        remain = int(st.session_state["pledge_end_ts"] - _time.time() + 0.999)
+        return max(remain, 0)
 
-        prog.progress(100)
-        placeholder.empty()
-        st.session_state["pledge_countdown"] = 0
+    # 잠금 해제 타이밍 처리
+    _remain = _countdown_remaining()
+    if st.session_state.get("pledge_lock") and _remain <= 0:
         st.session_state["pledge_lock"] = False
+        st.session_state["pledge_step"] = _next_unchecked_step()
 
-    def _on_pledge_change(idx: int, key: str):
-        # 체크가 'True'로 바뀌는 순간에만 동작
-        if st.session_state.get("pledge_lock"):
-            # 잠금 상태에서 변경이 들어오면 되돌림
-            st.session_state[key] = False
-            return
+    # 현재 진행 단계(활성 pledge) 갱신
+    if not st.session_state.get("pledge_lock"):
+        st.session_state["pledge_step"] = _next_unchecked_step()
 
-        if st.session_state.get(key) is True:
-            st.session_state["pledge_active_idx"] = idx
-            st.session_state["pledge_last_trigger"] = idx
-            _run_countdown(7)
+    _active_step = st.session_state.get("pledge_step", 0)
+    _active_key = None if _active_step >= len(_order_keys) else _order_keys[_active_step]
 
-    # UI 렌더링 (체크박스 + 강조 텍스트)
-    for idx, (k, txt) in enumerate(PLEDGE_ITEMS):
-        if k == "__divider__":
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.markdown("#### ■ 관리자의 책임과 의무")
+    # --- 박스 렌더링 시작 ---
+    st.markdown('<div class="pledge-box">', unsafe_allow_html=True)
+
+    for k, txt in PLEDGE_ITEMS:
+        if k.startswith("__title_"):
+            st.markdown(f'<div class="pledge-section-title">■ {txt}</div>', unsafe_allow_html=True)
             continue
 
-        st.session_state.setdefault(k, False)
+        _is_done = bool(st.session_state.get(k, False))
+        _is_active = (k == _active_key)
 
-        disabled_now = bool(st.session_state.get("pledge_lock", False))
-        is_active = (st.session_state.get("pledge_active_idx") == idx)
+        # 블러 규칙:
+        # - 활성(현재 차례) 항목은 선명 유지
+        # - 활성 외 미완료 항목은 블러
+        # - 완료 항목은 블러 없이 일반 표시
+        _should_blur = (not _is_active) and (not _is_done) and (_active_key is not None)
 
-        c_left, c_right = st.columns([1, 14], vertical_alignment="center")
-        with c_left:
-            st.checkbox(
-                " ",
-                key=k,
-                value=st.session_state.get(k, False),
-                disabled=disabled_now,
-                on_change=_on_pledge_change,
-                args=(idx, k),
+        # 체크박스 활성 규칙:
+        # - 현재 차례(active)만 체크 가능
+        # - 카운트다운(잠금) 중엔 모두 비활성
+        _disabled = True
+        if not st.session_state.get("pledge_lock"):
+            _disabled = (not _is_active) or _is_done
+
+        row_class = "pledge-row "
+        if _is_active:
+            row_class += "pledge-active"
+        elif _is_done:
+            row_class += "pledge-done"
+
+        text_class = "pledge-text "
+        if _should_blur:
+            text_class += "pledge-blur"
+        elif _is_done:
+            text_class += "pledge-done"
+
+        # 한 줄: [checkbox] [text] [countdown]
+        c1, c2, c3 = st.columns([1.2, 12, 2.2], vertical_alignment="center")
+
+        with c1:
+            _prev = bool(st.session_state.get(k, False))
+            st.checkbox(" ", key=k, disabled=_disabled)
+            _now_val = bool(st.session_state.get(k, False))
+
+            # 체크 시작 순간에만 카운트다운 시작
+            if (not _prev) and _now_val and _is_active and (not st.session_state.get("pledge_lock")):
+                _start_countdown(7)
+
+        with c2:
+            st.markdown(
+                f'<div class="{row_class}"><span class="{text_class}">{txt}</span></div>',
+                unsafe_allow_html=True,
             )
 
-        # 강조 스타일 (활성 항목만 볼드/크기/테두리)
-        if is_active and st.session_state.get(k):
-            style = "font-weight: 900; font-size: 1.08rem; color:#0D47A1;"
-            box = "background:#E3F2FD; border:2px solid #2196F3; padding:10px 12px; border-radius:12px;"
-        else:
-            style = "font-weight: 650; font-size: 0.98rem; color:#263238;"
-            box = "background:#FFFFFF; border:1px solid #E6EAF0; padding:10px 12px; border-radius:12px;"
-
-        with c_right:
-            st.markdown(f"""
-                <div style='{box}'>
-                    <div style='{style}'>{txt}</div>
-                </div>
-            """, unsafe_allow_html=True)
-
-    st.markdown("---")
-
-    # 4) 사번/성명 등 입력 → 5) 서약 제출(버튼)
-    with st.form("audit_submit_form", clear_on_submit=False):
-        c1, c2, c3, c4 = st.columns(4)
-        emp_id = c1.text_input("사번", placeholder="예: 12345")
-        name = c2.text_input("성명")
-        ordered_units = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
-        unit = c3.selectbox("총괄 / 본부 / 단", ordered_units)
-        dept = c4.text_input("상세 부서명")
-
-        st.markdown("---")
-        submit = st.form_submit_button("서약 제출", use_container_width=True)
-
-    if submit:
-        if st.session_state.get("pledge_lock"):
-            st.warning("⏳ 현재 인식 시간(7초 카운트다운) 진행 중입니다. 종료 후 제출해 주세요.")
-        elif not emp_id or not name:
-            st.warning("⚠️ 사번과 성명을 입력해주세요.")
-        else:
-            # 체크 여부 검증
-            unchecked = [label for label, _ in [
-                ("임직원 의무 1", "e1"),
-                ("임직원 의무 2", "e2"),
-                ("임직원 의무 3", "e3"),
-                ("임직원 의무 4", "e4"),
-                ("관리자 의무 1", "m1"),
-                ("관리자 의무 2", "m2"),
-                ("관리자 의무 3", "m3"),
-            ] if not st.session_state.get(_)]
-
-            if unchecked:
-                st.error("❌ 서약 항목이 모두 체크되어야 제출할 수 있습니다. (미체크: " + ", ".join(unchecked) + ")")
+        with c3:
+            if _is_active and st.session_state.get("pledge_lock"):
+                rem = _countdown_remaining()
+                st.markdown(
+                    f'<div class="pledge-countdown">⏳ {rem}</div>',
+                    unsafe_allow_html=True,
+                )
+                st.progress((7 - rem) / 7 if rem <= 7 else 0.0)
             else:
-                answer = "윤리경영 서약서 제출 완료 (임직원 의무 4/4, 관리자 의무 3/3)"
-                with st.spinner("제출 중..."):
-                    success, msg = save_audit_result(emp_id, name, unit, dept, answer, current_sheet_name)
+                st.markdown("&nbsp;", unsafe_allow_html=True)
 
-                if success:
-                    st.success(f"✅ {name}님, 윤리경영 서약서 제출이 완료되었습니다!")
-                    # 풍선 + 간단 폭죽(컨페티) 효과
-                    st.balloons()
-                    components.html("""
-                    <div style="text-align:center; padding:6px 0 2px 0; font-size:34px;">🎇🎆✨</div>
-                    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-                    <script>
-                      const duration = 1400;
-                      const end = Date.now() + duration;
-                      (function frame() {
-                        confetti({particleCount: 7, spread: 70, origin: { y: 0.65 }});
-                        if (Date.now() < end) requestAnimationFrame(frame);
-                      }());
-                    </script>
-                    """, height=110)
+    st.markdown("</div>", unsafe_allow_html=True)
 
-                    st.markdown(f"""
-                    <div style='background:#0B1B2B; padding:18px 16px; border-radius:14px; border:1px solid rgba(255,255,255,0.12);'>
-                      <div style='font-size:1.15rem; font-weight:900; color:#FFFFFF; margin-bottom:6px;'>
-                        {name}님은 우리 회사가 인정하는 준법인입니다.
-                      </div>
-                      <div style='font-size:1.02rem; font-weight:800; color:rgba(255,255,255,0.92);'>
-                        새해 복 많이 받으십시오.
-                      </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                else:
-                    st.error(f"❌ 제출 실패: {msg}")
+    # 카운트다운 진행 중이면 짧게 대기 후 자동 rerun (외부 패키지 없이 갱신)
+    if st.session_state.get("pledge_lock"):
+        _remain = _countdown_remaining()
+        if _remain > 0:
+            _time.sleep(0.2)
+            try:
+                st.rerun()
+            except Exception:
+                st.experimental_rerun()
 
-
-# --- [Tab 2: 문서 정밀 검토] ---
-with tab_doc:
-    st.markdown("### 📂 문서 및 규정 검토")
-    if "api_key" not in st.session_state:
-        st.warning("🔒 로그인 후 이용 가능합니다.")
-    else:
-        option = st.selectbox("작업 유형", ["법률 리스크 정밀 검토", "감사 보고서 검증", "오타 수정 및 교정", "기안문 작성"])
-
-        is_authenticated = True
-        if option == "감사 보고서 검증":
-            if "audit_verified" not in st.session_state:
-                is_authenticated = False
-                st.warning("🔒 감사실 전용 메뉴입니다. 인증이 필요합니다.")
-                with st.form("doc_auth_form"):
-                    pass_input = st.text_input("인증키 입력", type="password")
-                    if st.form_submit_button("확인"):
-                        if pass_input.strip() == "ktmos0402!":
-                            st.session_state["audit_verified"] = True
-                            st.rerun()
-                        else:
-                            st.error("❌ 인증키 불일치")
-
-        if is_authenticated:
-            uploaded_file = st.file_uploader("파일 업로드 (PDF, Word, TXT)", type=["txt", "pdf", "docx"])
-            if st.button("🚀 분석 시작", use_container_width=True):
-                if uploaded_file:
-                    content = read_file(uploaded_file)
-                    if content:
-                        with st.spinner("🧠 AI가 분석 중입니다..."):
-                            try:
-                                prompt = f"[역할] 전문 감사인\n[작업] {option}\n[내용] {content}"
-                                res = get_model().generate_content(prompt)
-                                st.success("분석 완료")
-                                st.markdown(res.text)
-                            except Exception as e:
-                                st.error(f"오류: {e}")
 
 # --- [Tab 3: AI 에이전트] ---
 with tab_chat:
