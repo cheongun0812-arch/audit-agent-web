@@ -648,7 +648,7 @@ with tab_audit:
                 st.session_state.audit_step = 2
                 st.rerun()
 
-    # # --- STEP 2: 목소리 확약 인증 (긴급 수정 및 디버깅 버전) ---
+    # --- STEP 2: 목소리 확약 인증 (안정성 강화 버전) ---
     elif st.session_state.audit_step == 2:
         st.markdown("### 🎤 2단계: 목소리 확약 인증")
         OATH_TEXT = "나는 kt MOS북부의 윤리경영 지침을 숙지하였으며 이를 성실히 이행할 것을 서약합니다"
@@ -662,62 +662,54 @@ with tab_audit:
         )
 
         if audio_data:
-            # 로딩 바가 돌기 시작함
-            with st.spinner("🎙️ AI 분석 엔진 가동 중... (약 5~10초 소요)"):
+            with st.spinner("🎙️ AI가 서약 내용을 분석하고 있습니다... 잠시만 기다려 주세요."):
                 try:
-                    # 1. API 설정 재확인
-                    if "api_key" in st.session_state:
-                        genai.configure(api_key=st.session_state["api_key"])
-                    
-                    # 2. 모델 직접 호출 (가장 안정적인 방식)
+                    # API 키가 세션에 있는지 확인
+                    if "api_key" not in st.session_state:
+                        st.error("🔑 API 인증이 활성화되지 않았습니다. 관리자에게 문의하세요.")
+                        st.stop()
+
+                    genai.configure(api_key=st.session_state["api_key"])
                     model = genai.GenerativeModel("gemini-1.5-flash")
 
-                    # 3. 프롬프트: JSON 형식을 더 단순하고 명확하게 요청
                     prompt = f"""
                     다음 음성 데이터를 분석하여 제시문과 일치하는지 확인하세요.
                     제시문: "{OATH_TEXT}"
-                    
-                    결과는 반드시 아래의 JSON 형식으로만 응답하세요. 다른 설명은 하지 마세요.
-                    {{"match_rate": 85, "mapping_rate": 90}}
+                    결과는 반드시 이 JSON 형식으로만 답하세요: {{"match_rate": 90, "mapping_rate": 95}}
                     """
                     
-                    # 4. AI 분석 요청
+                    # AI 호출 시 타임아웃 대비
                     response = model.generate_content([
                         prompt,
                         {"mime_type": "audio/wav", "data": audio_data['bytes']}
                     ])
                     
-                    # [디버깅] AI가 실제로 뭐라고 답했는지 로그에 남김
-                    raw_res = response.text.strip()
+                    # 응답 텍스트 정제 및 JSON 파싱
+                    raw_text = response.text.strip().replace("```json", "").replace("```", "")
+                    res = json.loads(raw_text)
                     
-                    # 5. 결과 파싱 (마크다운 기호 제거 로직 강화)
-                    clean_res = raw_res.replace("```json", "").replace("```", "").strip()
-                    res = json.loads(clean_res)
+                    m_rate = res.get("match_rate", 0)
+                    map_rate = res.get("mapping_rate", 0)
                     
-                    match_rate = res.get("match_rate", 0)
-                    mapping_rate = res.get("mapping_rate", 0)
+                    st.toast(f"📊 분석 완료: 일치율 {m_rate}%", icon="📈")
                     
-                    # 화면 우측 하단 팝업 알림
-                    st.toast(f"📊 분석 완료: 일치율 {match_rate}%", icon="📈")
-                    
-                    if match_rate >= 80:
-                        st.success(f"🎊 인증 성공! (매핑율: {mapping_rate}%)")
-                        st.session_state.audit_step = 3 # 다음 단계로 강제 이동
+                    if m_rate >= 80:
+                        st.success(f"🎊 인증 성공! (매핑율: {map_rate}%)")
+                        st.session_state.audit_step = 3 # 단계 강제 전환
                         time.sleep(1)
                         st.rerun()
                     else:
-                        st.error(f"📢 인식률 저하: {match_rate}%. 다시 녹음해 주세요.")
-                        if st.button("🔄 다시 시도"):
-                            st.rerun()
+                        st.error(f"📢 일치율이 낮습니다 ({m_rate}%). 다시 한번 정확히 읽어주세요.")
 
                 except Exception as e:
-                    # 🛑 여기서 멈추지 않고 에러 내용을 보여줌
-                    st.error("⚠️ AI 분석 중 오류가 발생했습니다.")
-                    st.info("에러 내용: " + str(e))
-                    if st.button("수동으로 다음 단계 이동 (테스트용)"):
+                    st.error("⚠️ 분석 엔진 응답 지연 또는 오류가 발생했습니다.")
+                    # 테스트 기간 동안은 오류 시에도 넘어갈 수 있는 '비상문' 제공
+                    if st.button("계속 진행하기 (인증 우회)"):
                         st.session_state.audit_step = 3
                         st.rerun()
-
+                    with st.expander("상세 에러 내역"):
+                        st.code(str(e))
+                        
     # --- STEP 3: 정보 입력 및 최종 제출 (풍선 엔딩) ---
     elif st.session_state.audit_step == 3:
         st.markdown("### ✍️ 3단계: 서약자 정보 입력")
