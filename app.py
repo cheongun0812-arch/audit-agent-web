@@ -626,7 +626,7 @@ with tab_audit:
             
             if is_active:
                 if checked and st.session_state.countdown == 0:
-                    st.session_state.countdown = 10
+                    st.session_state.countdown = 3
                     st.rerun()
 
                 if st.session_state.countdown > 0:
