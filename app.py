@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import os
 import google.generativeai as genai
 from docx import Document
@@ -27,6 +28,69 @@ PLOTLY_CONFIG = {
     "doubleClick": "reset",       # 더블클릭/더블탭 시 원점 복원
 }
 
+
+# ==========================================
+# 2-1. ✅ '읽기(스크롤) 진행률' 컴포넌트
+# - 스크롤 박스를 끝까지 읽었는지(진행률 %) 측정
+# - 80% 이상일 때만 '서약 제출'을 허용하는 용도
+# ==========================================
+def scroll_read_progress_box(inner_html: str, height: int = 320, key: str = "read_box") -> float:
+    """스크롤 읽기 진행률(0~100)을 반환합니다.
+    Streamlit components.html + postMessage 프로토콜을 이용해 JS -> Python 값 전달을 구현합니다.
+    """
+    # 안전: inner_html은 우리가 작성한 고정 HTML만 넣는 것을 권장(외부 입력 X)
+    html = f"""
+    <div id='sr_container' style="height:{height}px; overflow-y:auto; border:1px solid #CBD6E2;
+         background:#FFFFFF; border-radius:12px; padding:16px; line-height:1.6; font-size:15px;">
+      {inner_html}
+    </div>
+
+    <script>
+      const box = document.getElementById('sr_container');
+
+      function sendRate(rate) {{
+        // Streamlit Component 값 전달(공식 컴포넌트 메시지 프로토콜)
+        const data = {{
+          isStreamlitMessage: true,
+          type: "streamlit:setComponentValue",
+          value: rate
+        }};
+        window.parent.postMessage(data, "*");
+      }}
+
+      function setHeight() {{
+        const data = {{
+          isStreamlitMessage: true,
+          type: "streamlit:setFrameHeight",
+          height: {height + 10}
+        }};
+        window.parent.postMessage(data, "*");
+      }}
+
+      function calcAndSend() {{
+        const denom = (box.scrollHeight - box.clientHeight);
+        const rate = denom > 0 ? (box.scrollTop / denom) * 100 : 100;
+        sendRate(Math.max(0, Math.min(100, rate)));
+      }}
+
+      // 초기값 전달
+      setHeight();
+      sendRate(0);
+
+      box.addEventListener('scroll', () => {{
+        calcAndSend();
+      }});
+
+      // 혹시 렌더 지연이 있으면 한번 더 계산
+      setTimeout(calcAndSend, 250);
+      setTimeout(calcAndSend, 900);
+    </script>
+    """
+    val = components.html(html, height=height + 12, key=key)
+    try:
+        return float(val) if val is not None else 0.0
+    except Exception:
+        return 0.0
 # [필수] 구글 시트 라이브러리 체크
 try:
     import gspread
@@ -586,6 +650,48 @@ with tab_audit:
         </div>
     """, unsafe_allow_html=True)
 
+    # ✅ 1.5) '읽기 진행률' 확인 (80% 이상일 때 제출 가능)
+    st.markdown("#### 👀 서약/지침 읽기 확인")
+    st.caption("아래 내용을 스크롤하여 읽으면 진행률이 자동으로 측정됩니다. **80% 이상** 읽어야 '서약 제출'이 가능합니다.")
+
+    _read_html = """
+      <div style="font-weight:900; font-size:16px; margin-bottom:10px; color:#2C3E50;">
+        「윤리경영원칙 실천지침」 핵심 내용
+      </div>
+      <div style="font-size:14px; color:#333;">
+        <p style="margin-top:0;">
+          나는 <b>kt MOS북부</b>의 지속적인 발전을 위하여 회사 윤리경영원칙실천지침에 명시된
+          <b>「임직원의 책임과 의무」</b> 및 <b>「관리자의 책임과 의무」</b>를 성실히 이행할 것을 서약합니다.
+        </p>
+        <hr style="border:none; border-top:1px solid #E6EAF0; margin:12px 0;">
+        <div style='font-weight:800; margin-bottom:6px;'>📌 윤리경영 위반 주요 유형(요약)</div>
+        <ul style="margin-top:0; padding-left:18px;">
+          <li><b>고객과의 관계</b>: 금품 등 이익 수수, 고객만족 저해, 고객정보 유출</li>
+          <li><b>임직원과 회사의 관계</b>: 공금 유용/횡령, 회사재산 사적 사용, 기업정보 유출, 경영왜곡</li>
+          <li><b>임직원 상호간의 관계</b>: 직장 내 괴롭힘, 성희롱, 조직질서 문란행위</li>
+          <li><b>이해관계자와의 관계</b>: 금품 등 이익 수수, 부당한 요구</li>
+        </ul>
+        <div style="color:#666; font-size:12px; margin-top:10px;">
+          ※ 본 화면은 '읽기 확인'을 위한 요약본입니다. 세부 기준은 사내 원문 지침을 따릅니다.
+        </div>
+      </div>
+    """
+
+    _rk = f"read_box_{campaign_info.get('key','default')}"
+    read_rate = scroll_read_progress_box(_read_html, height=320, key=_rk)
+    st.session_state["read_rate"] = float(read_rate or 0.0)
+
+    cR1, cR2 = st.columns([3, 1])
+    with cR1:
+        st.progress(min(max(st.session_state["read_rate"], 0.0), 100.0) / 100.0)
+    with cR2:
+        st.metric("읽기 진행률", f"{st.session_state['read_rate']:.0f}%")
+
+    if st.session_state["read_rate"] < 80:
+        st.info("📌 현재는 제출이 잠겨 있습니다. 아래 내용을 더 읽어 진행률을 80% 이상으로 올려주세요.")
+    else:
+        st.success("✅ 읽기 조건 충족! 이제 서약 제출이 가능합니다.")
+
     # 2) 실천지침 주요내용(※ 박스) — 책임/의무 체크박스 위로 이동
     with st.expander("※ 윤리경영원칙 실천지침 주요내용", expanded=True):
             st.markdown(
@@ -661,10 +767,19 @@ with tab_audit:
         dept = c4.text_input("상세 부서명")
 
         st.markdown("---")
+        # ✅ 읽기 진행률(80% 이상) 충족 시에만 제출 가능
+        _can_submit_by_read = float(st.session_state.get("read_rate", 0.0)) >= 80.0
+        try:
+            submit = st.form_submit_button("서약 제출", use_container_width=True, disabled=(not _can_submit_by_read))
+        except TypeError:
+            # Streamlit 구버전 호환: disabled 인자가 없을 수 있어 서버단에서 추가 검증
+            submit = st.form_submit_button("서약 제출", use_container_width=True)
 
-        submit = st.form_submit_button("서약 제출", use_container_width=True)
 
         if submit:
+            if float(st.session_state.get("read_rate", 0.0)) < 80.0:
+                st.error("❌ 읽기 진행률이 80% 이상이어야 제출할 수 있습니다. (현재: %.0f%%)" % float(st.session_state.get("read_rate", 0.0)))
+                st.stop()
             if not emp_id or not name:
                 st.warning("⚠️ 사번과 성명을 입력해주세요.")
             else:
