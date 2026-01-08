@@ -571,178 +571,125 @@ tab_audit, tab_doc, tab_chat, tab_summary, tab_admin = st.tabs([
     f"✅ {CURRENT_MONTH}월 자율점검", "📄 문서 정밀 검토", "💬 AI 에이전트", "📰 스마트 요약", "🔒 관리자"
 ])
 
-# --- [Tab 1: 자율점검 (개편된 로직: 인지 -> 음성인증 -> 정보입력)] ---
+# --- [Tab 1: 자율점검] ---
 with tab_audit:
-    from streamlit_mic_recorder import mic_recorder
-    import time
-    import json
+    current_sheet_name = campaign_info.get("sheet_name", "2026_윤리경영_실천서약")
 
-    # 1. 상태 관리 변수 초기화 (프로세스 단계 제어용)
-    if "audit_step" not in st.session_state:
-        st.session_state.audit_step = 1  # 1: 인지 서약, 2: 음성 인증, 3: 정보 입력
-    if "current_check_idx" not in st.session_state:
-        st.session_state.current_check_idx = 0
-    if "countdown" not in st.session_state:
-        st.session_state.countdown = 0
+    # 1) 제목 + 요약(서약 문구)
+    st.markdown(f"""
+        <div style='background-color: #E3F2FD; padding: 20px; border-radius: 10px; border-left: 5px solid #2196F3; margin-bottom: 20px;'>
+            <h3 style='margin-top:0; color: #1565C0;'>📜 {campaign_info.get('title','1월 윤리경영원칙 실천지침 실천서약')}</h3>
+            <p style='font-size: 1.50rem; color: #444;'>
+                나는 <b>kt MOS북부</b>의 지속적인 발전을 위하여 회사 윤리경영원칙실천지침에 명시된 
+                <b>「임직원의 책임과 의무」</b> 및 <b>「관리자의 책임과 의무」</b>를 성실히 이행할 것을 서약합니다.
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
 
-    # 서약 항목 정의 (임직원 및 관리자 책임 통합)
-    items = [
-        "나는 회사 윤리경영원칙과 실천지침에 따라 판단하고 행동한다.",
-        "나는 실천지침을 몰랐다는 이유로 면책을 주장하지 않는다.",
-        "나는 직무수행 중 윤리적 갈등 시 감사부서의 해석에 따른다.",
-        "나는 지인 등을 이용하여 실천지침을 위반하지 않는다.",
-        "나는 구성원들이 지침을 준수하도록 지원하고 관리한다. (관리자)",
-        "나는 공정한 의사결정을 통해 지침 준수를 솔선수범한다. (관리자)",
-        "나는 부서 내 위반 사안 발생 시 관리자로서의 책임을 다한다. (관리자)"
-    ]
+    # 2) 실천지침 주요내용(※ 박스) — 책임/의무 체크박스 위로 이동
+    with st.expander("※ 윤리경영원칙 실천지침 주요내용", expanded=True):
+            st.markdown(
+                """
+                <div style='background-color:#FFFDE7; padding: 18px; border-radius: 10px; border-left: 5px solid #FBC02D; margin-bottom: 12px;'>
+                    <div style='font-weight: 800; color:#6D4C41; font-size: 1.05rem; margin-bottom: 6px;'>📌 윤리경영 위반 주요 유형</div>
+                    <div style='color:#444; font-size: 0.95rem; line-height: 1.55;'>
+                        아래 항목은 <b>윤리경영원칙 실천지침</b>의 주요 위반 유형을 정리한 내용입니다.
+                        업무 수행 시 유사 사례가 발생하지 않도록 참고해 주세요.
+                    </div>
+                </div>
 
-    st.markdown("<h2 style='text-align: center; color: #2C3E50;'>🛡️ 2026 윤리경영 실천 서약</h2>", unsafe_allow_html=True)
-    st.markdown("---")
+                <div style='overflow-x:auto;'>
+                    <table style='width:100%; border-collapse: collapse; background:#FFFFFF; border:1px solid #E0E0E0; border-radius: 10px; overflow:hidden;'>
+                        <thead>
+                            <tr style='background:#FFF8E1;'>
+                                <th style='text-align:left; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037; width:28%;'>구분</th>
+                                <th style='text-align:left; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037;'>윤리경영 위반사항</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td style='padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>고객과의 관계</td>
+                                <td style='padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>고객으로부터 금품 등 이익 수수, 고객만족 저해, 고객정보 유출</td>
+                            </tr>
+                            <tr>
+                                <td style='padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>임직원과 회사의 관계</td>
+                                <td style='padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>공금 유용 및 횡령, 회사재산의 사적 사용, 기업정보 유출, 경영왜곡</td>
+                            </tr>
+                            <tr>
+                                <td style='padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>임직원 상호간의 관계</td>
+                                <td style='padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>직장 내 괴롭힘, 성희롱, 조직질서 문란행위</td>
+                            </tr>
+                            <tr>
+                                <td style='padding:12px; font-weight:700; color:#2C3E50;'>이해관계자와의 관계</td>
+                                <td style='padding:12px; color:#333;'>이해관계자로부터 금품 등 이익 수수, 이해관계자에게 부당한 요구</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
 
-    # --- STEP 1: 단계별 강제 인지 서약 (카운트다운 및 색상 변경) ---
-    if st.session_state.audit_step == 1:
-        st.markdown("### 📋 1단계: 지침 내용 숙지 및 서약")
-        st.info("각 항목을 체크하면 10초간 강조 표시됩니다. 내용을 충분히 숙지해 주세요.")
+                <div style='margin-top:10px; color:#666; font-size:0.88rem;'>
+                    ※ 위 내용은 안내 목적이며, 세부 기준은 사내 <b>윤리경영원칙 실천지침</b>을 따릅니다.
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
-        for i, text in enumerate(items):
-            is_active = (st.session_state.current_check_idx == i)
-            is_done = (st.session_state.current_check_idx > i)
-            
-            # 행 스타일 설정: 활성화 시 청색 배경, 완료 시 녹색 경계선
-            row_style = f"""
-                background-color: {'#E3F2FD' if is_active else 'transparent'};
-                padding: 12px;
-                border-radius: 8px;
-                border-left: 6px solid {'#1E88E5' if is_active else '#4CAF50' if is_done else '#BDC3C7'};
-                margin-bottom: 8px;
-                transition: all 0.3s;
-            """
-            
-            st.markdown(f"<div style='{row_style}'>", unsafe_allow_html=True)
-            col1, col2 = st.columns([0.85, 0.15])
-            
-            # 활성화된 항목만 체크 가능
-            checked = col1.checkbox(f"**{i+1}. {text}**", key=f"step1_ch_{i}", disabled=(not is_active))
-            
-            if is_active:
-                if checked and st.session_state.countdown == 0:
-                    st.session_state.countdown = 3
-                    st.rerun()
 
-                if st.session_state.countdown > 0:
-                    col2.markdown(f"<h4 style='color: #1E88E5; margin:0; text-align:right;'>⏳ {st.session_state.countdown}s</h4>", unsafe_allow_html=True)
-                    time.sleep(1)
-                    st.session_state.countdown -= 1
-                    if st.session_state.countdown == 0:
-                        st.session_state.current_check_idx += 1
-                    st.rerun()
-            elif is_done:
-                col2.markdown("<div style='text-align:right;'><span style='color: #4CAF50; font-weight: bold;'>✅ 완료</span></div>", unsafe_allow_html=True)
-            
-            st.markdown("</div>", unsafe_allow_html=True)
+    # 3) 책임/의무 체크 → 4) 사번/성명 등 입력 → 5) 서약 제출(버튼)
+    with st.form("audit_ethics_form", clear_on_submit=False):
+        st.markdown("#### ■ 임직원의 책임과 의무")
+        e1 = st.checkbox("하나, 나는 회사 윤리경영원칙과 윤리경영원칙 실천지침에 따라 판단하고 행동한다.")
+        e2 = st.checkbox("하나, 나는 윤리경영원칙 실천지침을 몰랐다는 이유로 면책을 주장하지 않는다.")
+        e3 = st.checkbox("하나, 나는 직무수행 과정에서 윤리적 갈등 상황에 직면한 경우 감사부서의 해석에 따른다.")
+        e4 = st.checkbox("하나, 나는 가족, 친·인척, 지인 등을 이용하여 회사 윤리경영원칙 실천지침을 위반하지 않는다.")
 
-        # 모든 항목 체크 완료 시 다음 단계 버튼 노출
-        if st.session_state.current_check_idx >= len(items):
-            st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("내용을 모두 숙지하였습니다. 다음 단계로 (음성 인증) ➡️", use_container_width=True):
-                st.session_state.audit_step = 2
-                st.rerun()
+        st.markdown("<br>", unsafe_allow_html=True)
 
-    # --- STEP 2: 목소리 확약 인증 (안정성 강화 버전) ---
-    elif st.session_state.audit_step == 2:
-        st.markdown("### 🎤 2단계: 목소리 확약 인증")
-        OATH_TEXT = "나는 kt MOS북부의 윤리경영 지침을 숙지하였으며 이를 성실히 이행할 것을 서약합니다"
-        
-        st.warning(f"아래 문구를 마이크 버튼을 누르고 큰 소리로 읽어주세요:\n\n**\"{OATH_TEXT}\"**")
-        
-        audio_data = mic_recorder(
-            start_prompt="🎤 서약 시작 (마이크 클릭)",
-            stop_prompt="🛑 녹음 완료 (분석 시작)",
-            key='oath_audio_recorder'
-        )
+        st.markdown("#### ■ 관리자의 책임과 의무")
+        m1 = st.checkbox("하나, 나는 소속 구성원 및 업무상 이해관계자들이 지침을 준수할 수 있도록 지원하고 관리한다.")
+        m2 = st.checkbox("하나, 나는 공정하고 깨끗한 의사결정을 통해 지침 준수를 솔선수범한다.")
+        m3 = st.checkbox("하나, 나는 부서 내 위반 사안 발생 시 관리자로서의 책임을 다한다.")
 
-        if audio_data:
-            with st.spinner("🎙️ AI가 서약 내용을 분석하고 있습니다... 잠시만 기다려 주세요."):
-                try:
-                    # API 키가 세션에 있는지 확인
-                    if "api_key" not in st.session_state:
-                        st.error("🔑 API 인증이 활성화되지 않았습니다. 관리자에게 문의하세요.")
-                        st.stop()
+        st.markdown("---")
 
-                    genai.configure(api_key=st.session_state["api_key"])
-                    model = genai.GenerativeModel("gemini-1.5-flash")
+        # ✅ 요청사항: '사번/성명/총괄...' 입력 박스를 '서약 제출' 바로 위로 이동
+        c1, c2, c3, c4 = st.columns(4)
+        emp_id = c1.text_input("사번", placeholder="예: 12345")
+        name = c2.text_input("성명")
+        ordered_units = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
+        unit = c3.selectbox("총괄 / 본부 / 단", ordered_units)
+        dept = c4.text_input("상세 부서명")
 
-                    prompt = f"""
-                    다음 음성 데이터를 분석하여 제시문과 일치하는지 확인하세요.
-                    제시문: "{OATH_TEXT}"
-                    결과는 반드시 이 JSON 형식으로만 답하세요: {{"match_rate": 90, "mapping_rate": 95}}
-                    """
-                    
-                    # AI 호출 시 타임아웃 대비
-                    response = model.generate_content([
-                        prompt,
-                        {"mime_type": "audio/wav", "data": audio_data['bytes']}
-                    ])
-                    
-                    # 응답 텍스트 정제 및 JSON 파싱
-                    raw_text = response.text.strip().replace("```json", "").replace("```", "")
-                    res = json.loads(raw_text)
-                    
-                    m_rate = res.get("match_rate", 0)
-                    map_rate = res.get("mapping_rate", 0)
-                    
-                    st.toast(f"📊 분석 완료: 일치율 {m_rate}%", icon="📈")
-                    
-                    if m_rate >= 80:
-                        st.success(f"🎊 인증 성공! (매핑율: {map_rate}%)")
-                        st.session_state.audit_step = 3 # 단계 강제 전환
-                        time.sleep(1)
-                        st.rerun()
-                    else:
-                        st.error(f"📢 일치율이 낮습니다 ({m_rate}%). 다시 한번 정확히 읽어주세요.")
+        st.markdown("---")
 
-                except Exception as e:
-                    st.error("⚠️ 분석 엔진 응답 지연 또는 오류가 발생했습니다.")
-                    # 테스트 기간 동안은 오류 시에도 넘어갈 수 있는 '비상문' 제공
-                    if st.button("계속 진행하기 (인증 우회)"):
-                        st.session_state.audit_step = 3
-                        st.rerun()
-                    with st.expander("상세 에러 내역"):
-                        st.code(str(e))
-                        
-    # --- STEP 3: 정보 입력 및 최종 제출 (풍선 엔딩) ---
-    elif st.session_state.audit_step == 3:
-        st.markdown("### ✍️ 3단계: 서약자 정보 입력")
-        with st.form("audit_final_form_new"):
-            st.markdown("<div style='background: #F8F9FA; padding: 20px; border-radius: 10px;'>", unsafe_allow_html=True)
-            c1, c2 = st.columns(2)
-            emp_id = c1.text_input("사번", placeholder="예: 12345")
-            name = c2.text_input("성명")
-            
-            c3, c4 = st.columns(2)
-            ordered_units = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
-            unit = c3.selectbox("총괄 / 본부 / 단", ordered_units)
-            dept = c4.text_input("상세 부서명")
-            st.markdown("</div>", unsafe_allow_html=True)
-            
-            st.markdown("<br>", unsafe_allow_html=True)
-            if st.form_submit_button("🛡️ 윤리경영 서약서 최종 제출", use_container_width=True):
-                if not emp_id or not name:
-                    st.warning("⚠️ 사번과 성명을 모두 입력해 주세요.")
+        submit = st.form_submit_button("서약 제출", use_container_width=True)
+
+        if submit:
+            if not emp_id or not name:
+                st.warning("⚠️ 사번과 성명을 입력해주세요.")
+            else:
+                unchecked = []
+                if not e1: unchecked.append("임직원 의무 1")
+                if not e2: unchecked.append("임직원 의무 2")
+                if not e3: unchecked.append("임직원 의무 3")
+                if not e4: unchecked.append("임직원 의무 4")
+                if not m1: unchecked.append("관리자 의무 1")
+                if not m2: unchecked.append("관리자 의무 2")
+                if not m3: unchecked.append("관리자 의무 3")
+
+                if unchecked:
+                    st.error("❌ 서약 항목이 모두 체크되어야 제출할 수 있습니다. (미체크: " + ", ".join(unchecked) + ")")
                 else:
-                    current_sheet_name = campaign_info.get("sheet_name", "2026_윤리경영_실천서약") #
-                    success, msg = save_audit_result(emp_id, name, unit, dept, f"음성서약(문구:{OATH_TEXT})", current_sheet_name) #
+                    answer = "윤리경영 서약서 제출 완료 (임직원 의무 4/4, 관리자 의무 3/3)"
+                    with st.spinner("제출 중..."):
+                        success, msg = save_audit_result(emp_id, name, unit, dept, answer, current_sheet_name)
                     if success:
-                        st.balloons() # 풍선 애니메이션 효과
-                        st.success(f"✨ 정상적으로 서약이 완료되었습니다. {name}님, 감사합니다!")
-                        # 초기화 후 처음으로 이동
-                        st.session_state.audit_step = 1
-                        st.session_state.current_check_idx = 0
-                        time.sleep(3)
-                        st.rerun()
+                        st.success(f"✅ {name}님, 윤리경영 서약서 제출이 완료되었습니다!")
+                        st.balloons()
                     else:
-                        st.error(f"제출 실패: {msg}")
-                        
+                        st.error(f"❌ 제출 실패: {msg}")
+
+
 # --- [Tab 2: 문서 정밀 검토] ---
 with tab_doc:
     st.markdown("### 📂 문서 및 규정 검토")
