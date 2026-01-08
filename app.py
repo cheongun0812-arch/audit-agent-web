@@ -373,6 +373,9 @@ def _ensure_campaign_config_sheet(spreadsheet):
         return ws
 
 def _default_campaign_title(dt: datetime.datetime) -> str:
+    # ✅ 2026년 1월은 '윤리경영원칙 실천지침 실천서약'으로 고정(요청사항)
+    if dt.year == 2026 and dt.month == 1:
+        return "1월 윤리경영원칙 실천지침 실천서약"
     return f"{dt.month}월 자율점검"
 
 def _default_campaign_sheet_name(dt: datetime.datetime, spreadsheet=None) -> str:
@@ -572,9 +575,10 @@ tab_audit, tab_doc, tab_chat, tab_summary, tab_admin = st.tabs([
 with tab_audit:
     current_sheet_name = campaign_info.get("sheet_name", "2026_윤리경영_실천서약")
 
+    # 1) 제목 + 요약(서약 문구)
     st.markdown(f"""
         <div style='background-color: #E3F2FD; padding: 20px; border-radius: 10px; border-left: 5px solid #2196F3; margin-bottom: 20px;'>
-            <h3 style='margin-top:0; color: #1565C0;'>📜 {campaign_info.get('title','2026 윤리경영원칙 실천지침 실천서약')}</h3>
+            <h3 style='margin-top:0; color: #1565C0;'>📜 {campaign_info.get('title','1월 윤리경영원칙 실천지침 실천서약')}</h3>
             <p style='font-size: 1.50rem; color: #444;'>
                 나는 <b>kt MOS북부</b>의 지속적인 발전을 위하여 회사 윤리경영원칙실천지침에 명시된 
                 <b>「임직원의 책임과 의무」</b> 및 <b>「관리자의 책임과 의무」</b>를 성실히 이행할 것을 서약합니다.
@@ -582,16 +586,57 @@ with tab_audit:
         </div>
     """, unsafe_allow_html=True)
 
+    # 2) 실천지침 주요내용(※ 박스) — 책임/의무 체크박스 위로 이동
+    with st.expander("※ 윤리경영원칙 실천지침 주요내용", expanded=True):
+            st.markdown(
+                """
+                <div style='background-color:#FFFDE7; padding: 18px; border-radius: 10px; border-left: 5px solid #FBC02D; margin-bottom: 12px;'>
+                    <div style='font-weight: 800; color:#6D4C41; font-size: 1.05rem; margin-bottom: 6px;'>📌 윤리경영 위반 주요 유형</div>
+                    <div style='color:#444; font-size: 0.95rem; line-height: 1.55;'>
+                        아래 항목은 <b>윤리경영원칙 실천지침</b>의 주요 위반 유형을 정리한 내용입니다.
+                        업무 수행 시 유사 사례가 발생하지 않도록 참고해 주세요.
+                    </div>
+                </div>
+
+                <div style='overflow-x:auto;'>
+                    <table style='width:100%; border-collapse: collapse; background:#FFFFFF; border:1px solid #E0E0E0; border-radius: 10px; overflow:hidden;'>
+                        <thead>
+                            <tr style='background:#FFF8E1;'>
+                                <th style='text-align:left; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037; width:28%;'>구분</th>
+                                <th style='text-align:left; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037;'>윤리경영 위반사항</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td style='padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>고객과의 관계</td>
+                                <td style='padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>고객으로부터 금품 등 이익 수수, 고객만족 저해, 고객정보 유출</td>
+                            </tr>
+                            <tr>
+                                <td style='padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>임직원과 회사의 관계</td>
+                                <td style='padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>공금 유용 및 횡령, 회사재산의 사적 사용, 기업정보 유출, 경영왜곡</td>
+                            </tr>
+                            <tr>
+                                <td style='padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>임직원 상호간의 관계</td>
+                                <td style='padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>직장 내 괴롭힘, 성희롱, 조직질서 문란행위</td>
+                            </tr>
+                            <tr>
+                                <td style='padding:12px; font-weight:700; color:#2C3E50;'>이해관계자와의 관계</td>
+                                <td style='padding:12px; color:#333;'>이해관계자로부터 금품 등 이익 수수, 이해관계자에게 부당한 요구</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div style='margin-top:10px; color:#666; font-size:0.88rem;'>
+                    ※ 위 내용은 안내 목적이며, 세부 기준은 사내 <b>윤리경영원칙 실천지침</b>을 따릅니다.
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+
+    # 3) 책임/의무 체크 → 4) 사번/성명 등 입력 → 5) 서약 제출(버튼)
     with st.form("audit_ethics_form", clear_on_submit=False):
-        c1, c2, c3, c4 = st.columns(4)
-        emp_id = c1.text_input("사번", placeholder="예: 12345")
-        name = c2.text_input("성명")
-        ordered_units = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
-        unit = c3.selectbox("총괄 / 본부 / 단", ordered_units)
-        dept = c4.text_input("상세 부서명")
-
-        st.markdown("---")
-
         st.markdown("#### ■ 임직원의 책임과 의무")
         e1 = st.checkbox("하나, 나는 회사 윤리경영원칙과 윤리경영원칙 실천지침에 따라 판단하고 행동한다.")
         e2 = st.checkbox("하나, 나는 윤리경영원칙 실천지침을 몰랐다는 이유로 면책을 주장하지 않는다.")
@@ -604,6 +649,16 @@ with tab_audit:
         m1 = st.checkbox("하나, 나는 소속 구성원 및 업무상 이해관계자들이 지침을 준수할 수 있도록 지원하고 관리한다.")
         m2 = st.checkbox("하나, 나는 공정하고 깨끗한 의사결정을 통해 지침 준수를 솔선수범한다.")
         m3 = st.checkbox("하나, 나는 부서 내 위반 사안 발생 시 관리자로서의 책임을 다한다.")
+
+        st.markdown("---")
+
+        # ✅ 요청사항: '사번/성명/총괄...' 입력 박스를 '서약 제출' 바로 위로 이동
+        c1, c2, c3, c4 = st.columns(4)
+        emp_id = c1.text_input("사번", placeholder="예: 12345")
+        name = c2.text_input("성명")
+        ordered_units = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
+        unit = c3.selectbox("총괄 / 본부 / 단", ordered_units)
+        dept = c4.text_input("상세 부서명")
 
         st.markdown("---")
 
@@ -634,53 +689,6 @@ with tab_audit:
                     else:
                         st.error(f"❌ 제출 실패: {msg}")
 
-    st.markdown("---")
-    with st.expander("※ 윤리경영원칙 실천지침 주요내용", expanded=True):
-        st.markdown(
-            """
-            <div style='background-color:#FFFDE7; padding: 18px; border-radius: 10px; border-left: 5px solid #FBC02D; margin-bottom: 12px;'>
-                <div style='font-weight: 800; color:#6D4C41; font-size: 1.05rem; margin-bottom: 6px;'>📌 윤리경영 위반 주요 유형</div>
-                <div style='color:#444; font-size: 0.95rem; line-height: 1.55;'>
-                    아래 항목은 <b>윤리경영원칙 실천지침</b>의 주요 위반 유형을 정리한 내용입니다.
-                    업무 수행 시 유사 사례가 발생하지 않도록 참고해 주세요.
-                </div>
-            </div>
-
-            <div style='overflow-x:auto;'>
-                <table style='width:100%; border-collapse: collapse; background:#FFFFFF; border:1px solid #E0E0E0; border-radius: 10px; overflow:hidden;'>
-                    <thead>
-                        <tr style='background:#FFF8E1;'>
-                            <th style='text-align:left; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037; width:28%;'>구분</th>
-                            <th style='text-align:left; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037;'>윤리경영 위반사항</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>고객과의 관계</td>
-                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>고객으로부터 금품 등 이익 수수, 고객만족 저해, 고객정보 유출</td>
-                        </tr>
-                        <tr>
-                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>임직원과 회사의 관계</td>
-                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>공금 유용 및 횡령, 회사재산의 사적 사용, 기업정보 유출, 경영왜곡</td>
-                        </tr>
-                        <tr>
-                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>임직원 상호간의 관계</td>
-                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>직장 내 괴롭힘, 성희롱, 조직질서 문란행위</td>
-                        </tr>
-                        <tr>
-                            <td style='padding:12px; font-weight:700; color:#2C3E50;'>이해관계자와의 관계</td>
-                            <td style='padding:12px; color:#333;'>이해관계자로부터 금품 등 이익 수수, 이해관계자에게 부당한 요구</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <div style='margin-top:10px; color:#666; font-size:0.88rem;'>
-                ※ 위 내용은 안내 목적이며, 세부 기준은 사내 <b>윤리경영원칙 실천지침</b>을 따릅니다.
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
 
 # --- [Tab 2: 문서 정밀 검토] ---
 with tab_doc:
