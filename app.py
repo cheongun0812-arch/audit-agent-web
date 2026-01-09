@@ -642,11 +642,7 @@ with tab_audit:
     st.markdown(f"""
         <div style='background-color: #E3F2FD; padding: 20px; border-radius: 10px; border-left: 5px solid #2196F3; margin-bottom: 20px;'>
             <h3 style='margin-top:0; color: #1565C0;'>📜 {title_for_box}</h3>
-            <p style='font-size: 1.28rem; color: #444;'>
-                나는 <b>kt MOS북부</b>의 지속적인 발전을 위하여 회사 윤리경영원칙실천지침에 명시된
-                <b>「임직원의 책임과 의무」</b> 및 <b>「관리자의 책임과 의무」</b>를 성실히 이행할 것을 서약합니다.
-            </p>
-        </div>
+            </div>
     """, unsafe_allow_html=True)
 
     # 2) 실천지침 주요내용
@@ -665,26 +661,26 @@ with tab_audit:
                 <table style='width:100%; border-collapse: collapse; background:#FFFFFF; border:1px solid #E0E0E0; border-radius: 10px; overflow:hidden;'>
                     <thead>
                         <tr style='background:#FFF8E1;'>
-                            <th style='text-align:left; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037; width:28%;'>구분</th>
-                            <th style='text-align:left; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037;'>윤리경영 위반사항</th>
+                            <th style='text-align:center; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037; width:28%;'>구분</th>
+                            <th style='text-align:center; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037;'>윤리경영 위반사항</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr>
-                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>고객과의 관계</td>
-                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>고객으로부터 금품 등 이익 수수, 고객만족 저해, 고객정보 유출</td>
+                            <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>고객과의 관계</td>
+                            <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>고객으로부터 금품 등 이익 수수, 고객만족 저해, 고객정보 유출</td>
                         </tr>
                         <tr>
-                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>임직원과 회사의 관계</td>
-                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>공금 유용 및 횡령, 회사재산의 사적 사용, 기업정보 유출, 경영왜곡</td>
+                            <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>임직원과 회사의 관계</td>
+                            <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>공금 유용 및 횡령, 회사재산의 사적 사용, 기업정보 유출, 경영왜곡</td>
                         </tr>
                         <tr>
-                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>임직원 상호간의 관계</td>
-                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>직장 내 괴롭힘, 성희롱, 조직질서 문란행위</td>
+                            <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>임직원 상호간의 관계</td>
+                            <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>직장 내 괴롭힘, 성희롱, 조직질서 문란행위</td>
                         </tr>
                         <tr>
-                            <td style='padding:12px; font-weight:700; color:#2C3E50;'>이해관계자와의 관계</td>
-                            <td style='padding:12px; color:#333;'>이해관계자로부터 금품 등 이익 수수, 이해관계자에게 부당한 요구</td>
+                            <td style='text-align:center; padding:12px; font-weight:700; color:#2C3E50;'>이해관계자와의 관계</td>
+                            <td style='text-align:center; padding:12px; color:#333;'>이해관계자로부터 금품 등 이익 수수, 이해관계자에게 부당한 요구</td>
                         </tr>
                     </tbody>
                 </table>
@@ -716,6 +712,15 @@ with tab_audit:
     _render_pledge_group("임직원의 책임과 의무", exec_pledges, all_keys)
     st.markdown("<br>", unsafe_allow_html=True)
     _render_pledge_group("관리자의 책임과 의무", mgr_pledges, all_keys)
+
+    # ✅ (추가) 서약문: 임직원 정보 입력 바로 위에 배치
+    st.markdown("""
+        <div style='background-color:#E3F2FD; padding: 16px 18px; border-radius: 10px; border-left: 5px solid #2196F3; margin-top: 14px; margin-bottom: 8px;'>
+            <p style='font-size: 1.18rem; color: #444; margin: 0; line-height: 1.6;'>
+                I pledge to faithfully fulfill the 「Responsibilities and Obligations of Executives and Employees」 and 「Administrator Responsibilities and Obligations」 specified in the company's Ethical Management Principles Practice Guidelines for the continued development of KT MOS Northern.
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
 
     # ✅ prev 상태 업데이트 (탭 끝에서 1번)
     st.session_state["pledge_prev"] = {k: bool(st.session_state.get(k, False)) for k in all_keys}
