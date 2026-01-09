@@ -767,7 +767,7 @@ with tab_audit:
 
 # --- [Tab 2: 문서 정밀 검토] ---
 with tab_doc:
-    st.markdown("### 📂 문서 및 규정 검토")
+    st.markdown("### 📂 문서 및 법률 검토")
     if "api_key" not in st.session_state:
         st.warning("🔒 로그인 후 이용 가능합니다.")
     else:
