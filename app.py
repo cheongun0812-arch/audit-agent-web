@@ -554,7 +554,7 @@ CURRENT_MONTH = _now_kst.month
 
 campaign_info = {
     "key": f"{CURRENT_YEAR}-{CURRENT_MONTH:02d}",
-    "title": f"{CURRENT_MONTH}월 자율점검",
+    "title": f"{CURRENT_MONTH}월 자율점검(윤리경영원칙 실천지침 실천서약)",
     "sheet_name": f"{CURRENT_YEAR}_{CURRENT_MONTH:02d}_자율점검",
     "start_date": _now_kst.strftime("%Y.%m.%d"),
 }
