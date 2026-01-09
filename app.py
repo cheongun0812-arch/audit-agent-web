@@ -8,7 +8,7 @@ import requests
 from bs4 import BeautifulSoup
 import time
 import glob
-import tempfile
+import tempfiletitle_for_box
 import hashlib
 import base64
 import datetime
@@ -668,18 +668,18 @@ def render_pledge_row(key: str, text: str, enabled: bool, is_active: bool, remai
 with tab_audit:
     current_sheet_name = campaign_info.get("sheet_name", "2026_윤리경영_실천서약")
 
-    # ✅ 제목 문구 변경 (요청: “📜 January self-inspection …”)
-    title_for_box = campaign_info.get("title") or _default_campaign_title(_now_kst)
+   # ✅ 제목을 Google Sheet 캠페인 값과 무관하게 강제 고정
+title_for_box = "January self-inspection (pledge to practice ethical management principles practice guidelines)"
 
-    st.markdown(f"""
-        <div style='background-color: #E3F2FD; padding: 20px; border-radius: 10px; border-left: 5px solid #2196F3; margin-bottom: 20px;'>
-            <h3 style='margin-top:0; color: #1565C0;'>📜 {title_for_box}</h3>
-            <p style='font-size: 1.50rem; color: #444;'>
-                나는 <b>kt MOS북부</b>의 지속적인 발전을 위하여 회사 윤리경영원칙실천지침에 명시된
-                <b>「임직원의 책임과 의무」</b> 및 <b>「관리자의 책임과 의무」</b>를 성실히 이행할 것을 서약합니다.
-            </p>
-        </div>
-    """, unsafe_allow_html=True)
+st.markdown(f"""
+    <div style='background-color: #E3F2FD; padding: 20px; border-radius: 10px; border-left: 5px solid #2196F3; margin-bottom: 20px;'>
+        <h3 style='margin-top:0; color: #1565C0;'>📜 {title_for_box}</h3>
+        <p style='font-size: 1.50rem; color: #444;'>
+            나는 <b>kt MOS북부</b>의 지속적인 발전을 위하여 회사 윤리경영원칙실천지침에 명시된
+            <b>「임직원의 책임과 의무」</b> 및 <b>「관리자의 책임과 의무」</b>를 성실히 이행할 것을 서약합니다.
+        </p>
+    </div>
+""", unsafe_allow_html=True)
 
     # 2) 실천지침 주요내용
     with st.expander("※ 윤리경영원칙 실천지침 주요내용", expanded=True):
