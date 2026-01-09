@@ -8,7 +8,7 @@ import requests
 from bs4 import BeautifulSoup
 import time
 import glob
-import tempfiletitle_for_box
+import tempfile
 import hashlib
 import base64
 import datetime
@@ -131,41 +131,15 @@ div[data-testid="stFormSubmitButton"] > button * {
     opacity: 1 !important;
 }
 
-/* ====== 서약 UI ====== */
-.pledge-box {
-  background: #FFFFFF;
-  border: 1px solid #E6ECF2;
-  border-radius: 14px;
-  padding: 16px 16px;
-}
-.pledge-row {
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap: 10px;
-}
-.pledge-text {
-  font-size: 0.98rem;
-  line-height: 1.5;
-  color: #2C3E50;
-  font-weight: 600;
-}
-.pledge-text.active {
-  color: #0B5ED7;     /* ✅ 더 잘 보이는 색상 */
-  font-weight: 900;
-}
-.pledge-text.blurred {
-  filter: blur(2px);
-  opacity: 0.55;
-}
+/* (서약 우측 카운트다운 표시용) */
 .pledge-right {
-  min-width: 86px;
   display:flex;
   align-items:center;
   justify-content:flex-end;
   gap: 8px;
   font-weight: 900;
   color: #0B5ED7;
+  min-width: 90px;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -359,7 +333,6 @@ def _ensure_campaign_config_sheet(spreadsheet):
         return ws
 
 def _default_campaign_title(dt: datetime.datetime) -> str:
-    # ✅ 1월: 사용자가 요청한 제목 형태로 표기(캠페인 기본값)
     if dt.month == 1:
         return "January self-inspection (pledge to practice ethical management principles practice guidelines)"
     return f"{dt.month}월 자율점검(윤리경영원칙 실천지침 실천서약)"
@@ -560,24 +533,20 @@ tab_audit, tab_doc, tab_chat, tab_summary, tab_admin = st.tabs([
 HOURGLASS_SVG = """
 <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
      xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-  <!-- Outline -->
   <path d="M6 2h12v5c0 2.2-1.4 4.2-3.5 5 2.1.8 3.5 2.8 3.5 5v5H6v-5c0-2.2 1.4-4.2 3.5-5C7.4 11.2 6 9.2 6 7V2Z"
         stroke="#0B5ED7" stroke-width="2" stroke-linejoin="round"/>
   <path d="M8 7h8M8 17h8" stroke="#0B5ED7" stroke-width="2" stroke-linecap="round"/>
 
-  <!-- Sand (Top) : 줄어드는 느낌 -->
   <rect x="9" y="8.2" width="6" height="3.0" rx="1.0" fill="#0B5ED7" opacity="0.95">
     <animate attributeName="height" values="3.0;0.3;3.0" dur="1.0s" repeatCount="indefinite" />
     <animate attributeName="y"      values="8.2;10.9;8.2" dur="1.0s" repeatCount="indefinite" />
   </rect>
 
-  <!-- Sand (Bottom) : 차오르는 느낌 -->
   <rect x="9" y="15.8" width="6" height="0.3" rx="1.0" fill="#0B5ED7" opacity="0.95">
     <animate attributeName="height" values="0.3;3.0;0.3" dur="1.0s" repeatCount="indefinite" />
     <animate attributeName="y"      values="15.8;13.1;15.8" dur="1.0s" repeatCount="indefinite" />
   </rect>
 
-  <!-- Falling grains : 중앙 점들이 떨어지는 느낌 -->
   <circle cx="12" cy="12" r="0.8" fill="#0B5ED7" opacity="0.95">
     <animate attributeName="cy" values="11.2;14.2;11.2" dur="0.6s" repeatCount="indefinite"/>
     <animate attributeName="opacity" values="0.95;0.2;0.95" dur="0.6s" repeatCount="indefinite"/>
@@ -593,93 +562,92 @@ HOURGLASS_SVG = """
 </svg>
 """
 
-COUNTDOWN_SECONDS = 7  # ✅ 사용자가 최종 정정한 값: 7초
+COUNTDOWN_SECONDS = 7  # ✅ 요청 확정: 7초
 
-def _init_pledge_state(keys: list[str]):
-    if "pledge_active_key" not in st.session_state:
-        st.session_state["pledge_active_key"] = None
-    if "pledge_countdown_end" not in st.session_state:
-        st.session_state["pledge_countdown_end"] = 0.0
-    if "pledge_keys" not in st.session_state:
-        st.session_state["pledge_keys"] = keys
+# =========================
+# ✅ 체크 "순간" 감지 + 우측 카운트다운 렌더 유틸
+# =========================
+def _init_pledge_runtime(keys: list[str]) -> None:
+    if "pledge_prev" not in st.session_state:
+        st.session_state["pledge_prev"] = {k: False for k in keys}
+    if "pledge_done" not in st.session_state:
+        st.session_state["pledge_done"] = {k: False for k in keys}
+    if "pledge_running" not in st.session_state:
+        st.session_state["pledge_running"] = {k: False for k in keys}
 
-def _current_required_key(keys: list[str]) -> str | None:
-    for k in keys:
-        if not st.session_state.get(k, False):
-            return k
-    return None
+def _render_pledge_group(title: str, items: list[tuple[str, str]], all_keys: list[str]) -> None:
+    st.markdown(f"### ■ {title}")
 
-def _start_countdown_for(key: str):
-    st.session_state["pledge_active_key"] = key
-    st.session_state["pledge_countdown_end"] = time.time() + COUNTDOWN_SECONDS
+    for key, text in items:
+        c1, c2, c3 = st.columns([0.06, 0.78, 0.16], vertical_alignment="center")
 
-def _run_blocking_countdown_if_needed():
-    ak = st.session_state.get("pledge_active_key")
-    end_ts = float(st.session_state.get("pledge_countdown_end", 0.0) or 0.0)
-    if not ak:
-        return
-    now = time.time()
-    if now >= end_ts:
-        st.session_state["pledge_active_key"] = None
-        st.session_state["pledge_countdown_end"] = 0.0
-        return
+        with c1:
+            st.checkbox("", key=key, label_visibility="collapsed",
+                        disabled=bool(st.session_state["pledge_running"].get(key, False)))
 
-    placeholder = st.empty()
-    remaining = int(end_ts - now)
-    for sec in range(remaining, -1, -1):
-        placeholder.markdown(
-            f"<div class='pledge-right'>{HOURGLASS_SVG}<span>{sec}s</span></div>",
-            unsafe_allow_html=True
-        )
-        time.sleep(1)
-
-    st.session_state["pledge_active_key"] = None
-    st.session_state["pledge_countdown_end"] = 0.0
-    st.rerun()
-
-def render_pledge_row(key: str, text: str, enabled: bool, is_active: bool, remaining: int | None):
-    c1, c2, c3 = st.columns([0.08, 0.80, 0.12], vertical_alignment="center")
-
-    with c1:
-        st.checkbox("", key=key, disabled=(not enabled))
-
-    with c2:
-        cls = "pledge-text"
-        if is_active or st.session_state.get(key, False):
-            cls += " active"
-        if (not enabled) and (not is_active):
-            cls += " blurred"
-
-        st.markdown(
-            f"<div class='pledge-text-wrap'><span class='{cls}'>{text}</span></div>",
-            unsafe_allow_html=True
-        )
-
-    with c3:
-        if is_active and remaining is not None:
+        with c2:
+            checked = bool(st.session_state.get(key, False))
+            color = "#0B5ED7" if checked else "#2C3E50"
+            weight = "900" if checked else "650"
             st.markdown(
-                f"<div class='pledge-right'>{HOURGLASS_SVG}<span>{remaining}s</span></div>",
+                f"<div style='font-size:1.02rem; font-weight:{weight}; color:{color}; line-height:1.55;'>{text}</div>",
                 unsafe_allow_html=True
             )
-        else:
-            st.markdown("<div></div>", unsafe_allow_html=True)
+
+        with c3:
+            ph = st.empty()
+            now_checked = bool(st.session_state.get(key, False))
+            prev_checked = bool(st.session_state["pledge_prev"].get(key, False))
+            done = bool(st.session_state["pledge_done"].get(key, False))
+            running = bool(st.session_state["pledge_running"].get(key, False))
+
+            # ✅ 방금 체크된 순간에만 7초 카운트다운 실행
+            if now_checked and (not prev_checked) and (not done) and (not running):
+                st.session_state["pledge_running"][key] = True
+                for sec in range(COUNTDOWN_SECONDS, 0, -1):
+                    ph.markdown(
+                        f"<div class='pledge-right'>{HOURGLASS_SVG}<span>{sec}s</span></div>",
+                        unsafe_allow_html=True
+                    )
+                    time.sleep(1)
+                st.session_state["pledge_running"][key] = False
+                st.session_state["pledge_done"][key] = True
+                ph.markdown(
+                    "<div style='text-align:right; font-weight:900; color:#27AE60;'>✅ 완료</div>",
+                    unsafe_allow_html=True
+                )
+            else:
+                if running:
+                    ph.markdown(
+                        f"<div class='pledge-right'>{HOURGLASS_SVG}<span>...</span></div>",
+                        unsafe_allow_html=True
+                    )
+                elif done and now_checked:
+                    ph.markdown(
+                        "<div style='text-align:right; font-weight:900; color:#27AE60;'>✅ 완료</div>",
+                        unsafe_allow_html=True
+                    )
+                else:
+                    ph.markdown("", unsafe_allow_html=True)
+
+    # ✅ 그룹 렌더 이후: prev 업데이트는 Tab 끝에서 한번에
 
 # --- [Tab 1: 자율점검] ---
 with tab_audit:
     current_sheet_name = campaign_info.get("sheet_name", "2026_윤리경영_실천서약")
 
-   # ✅ 제목을 Google Sheet 캠페인 값과 무관하게 강제 고정
-title_for_box = "January self-inspection (pledge to practice ethical management principles practice guidelines)"
+    # ✅ (요청 1) 제목: Google Sheet 값과 무관하게 강제 고정
+    title_for_box = "January self-inspection (pledge to practice ethical management principles practice guidelines)"
 
-st.markdown(f"""
-    <div style='background-color: #E3F2FD; padding: 20px; border-radius: 10px; border-left: 5px solid #2196F3; margin-bottom: 20px;'>
-        <h3 style='margin-top:0; color: #1565C0;'>📜 {title_for_box}</h3>
-        <p style='font-size: 1.50rem; color: #444;'>
-            나는 <b>kt MOS북부</b>의 지속적인 발전을 위하여 회사 윤리경영원칙실천지침에 명시된
-            <b>「임직원의 책임과 의무」</b> 및 <b>「관리자의 책임과 의무」</b>를 성실히 이행할 것을 서약합니다.
-        </p>
-    </div>
-""", unsafe_allow_html=True)
+    st.markdown(f"""
+        <div style='background-color: #E3F2FD; padding: 20px; border-radius: 10px; border-left: 5px solid #2196F3; margin-bottom: 20px;'>
+            <h3 style='margin-top:0; color: #1565C0;'>📜 {title_for_box}</h3>
+            <p style='font-size: 1.50rem; color: #444;'>
+                나는 <b>kt MOS북부</b>의 지속적인 발전을 위하여 회사 윤리경영원칙실천지침에 명시된
+                <b>「임직원의 책임과 의무」</b> 및 <b>「관리자의 책임과 의무」</b>를 성실히 이행할 것을 서약합니다.
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
 
     # 2) 실천지침 주요내용
     with st.expander("※ 윤리경영원칙 실천지침 주요내용", expanded=True):
@@ -729,21 +697,13 @@ st.markdown(f"""
             unsafe_allow_html=True
         )
 
-    # ✅ 서약(순차 진행 + 블러 + 7초 카운트다운)
-    st.markdown("<div class='pledge-box'>", unsafe_allow_html=True)
-
-    st.markdown("#### ■ 임직원의 책임과 의무")
-
+    # ✅ (요청 2) 원래처럼 섹션 분리 + 체크 시 우측 모래시계/카운트다운 (모든 항목 동일)
     exec_pledges = [
         ("pledge_e1", "나는 회사 윤리경영원칙과 윤리경영원칙 실천지침에 따라 판단하고 행동한다."),
         ("pledge_e2", "나는 윤리경영원칙 실천지침을 몰랐다는 이유로 면책을 주장하지 않는다."),
         ("pledge_e3", "나는 직무수행 과정에서 윤리적 갈등 상황에 직면한 경우 감사부서의 해석에 따른다."),
         ("pledge_e4", "나는 가족, 친·인척, 지인 등을 이용하여 회사 윤리경영원칙 실천지침을 위반하지 않는다."),
     ]
-
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("#### ■ 관리자의 책임과 의무")
-
     mgr_pledges = [
         ("pledge_m1", "나는 소속 구성원 및 업무상 이해관계자들이 지침을 준수할 수 있도록 지원하고 관리한다."),
         ("pledge_m2", "나는 공정하고 깨끗한 의사결정을 통해 지침 준수를 솔선수범한다."),
@@ -751,45 +711,18 @@ st.markdown(f"""
     ]
 
     all_keys = [k for k, _ in exec_pledges] + [k for k, _ in mgr_pledges]
-    _init_pledge_state(all_keys)
+    _init_pledge_runtime(all_keys)
 
-    required_key = _current_required_key(all_keys)
-    active_key = st.session_state.get("pledge_active_key")
-    end_ts = float(st.session_state.get("pledge_countdown_end", 0.0) or 0.0)
-    now_ts = time.time()
-    remaining = int(end_ts - now_ts) if (active_key and now_ts < end_ts) else None
-
-    # 렌더: 임직원
-    for k, t in exec_pledges:
-        enabled = (active_key is None) and (required_key == k)
-        is_active = (active_key == k)
-        render_pledge_row(k, t, enabled=enabled, is_active=is_active, remaining=remaining if is_active else None)
-
-        # ✅ 체크되면 카운트다운 시작(현재 순서만)
-        if st.session_state.get(k, False) and (required_key == k) and active_key is None:
-            _start_countdown_for(k)
-            st.rerun()
-
+    _render_pledge_group("임직원의 책임과 의무", exec_pledges, all_keys)
     st.markdown("<br>", unsafe_allow_html=True)
+    _render_pledge_group("관리자의 책임과 의무", mgr_pledges, all_keys)
 
-    # 렌더: 관리자
-    for k, t in mgr_pledges:
-        enabled = (active_key is None) and (required_key == k)
-        is_active = (active_key == k)
-        render_pledge_row(k, t, enabled=enabled, is_active=is_active, remaining=remaining if is_active else None)
-
-        if st.session_state.get(k, False) and (required_key == k) and active_key is None:
-            _start_countdown_for(k)
-            st.rerun()
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    # ✅ 카운트다운(7초) 진행 중이면 화면을 7초간 “강제 점유”
-    _run_blocking_countdown_if_needed()
+    # ✅ prev 상태 업데이트 (탭 끝에서 1번)
+    st.session_state["pledge_prev"] = {k: bool(st.session_state.get(k, False)) for k in all_keys}
 
     st.markdown("---")
 
-    # 입력 박스 (기존 위치 유지: 서약 아래, 제출 위)
+    # 입력 박스
     c1, c2, c3, c4 = st.columns(4)
     emp_id = c1.text_input("사번", placeholder="예: 12345")
     name = c2.text_input("성명")
@@ -799,10 +732,9 @@ st.markdown(f"""
 
     st.markdown("---")
 
+    # 제출 버튼은 “체크 전부 완료”일 때만 활성화 (카운트다운 강제는 요구사항에 없어서 제외)
     all_checked = all(bool(st.session_state.get(k, False)) for k in all_keys)
-    can_submit = all_checked and (st.session_state.get("pledge_active_key") is None)
-
-    submit = st.button("서약 제출", use_container_width=True, disabled=(not can_submit))
+    submit = st.button("서약 제출", use_container_width=True, disabled=(not all_checked))
 
     if submit:
         if not emp_id or not name:
