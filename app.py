@@ -333,7 +333,7 @@ def _ensure_campaign_config_sheet(spreadsheet):
         return ws
 
 def _default_campaign_title(dt: datetime.datetime) -> str:
-    if dt.month == :
+    if dt.month == 1:
         return "1월 자율점검(윤리경영원칙 실천지침 실천 서약)"
     return f"{dt.month}월 자율점검(윤리경영원칙 실천지침 실천서약)"
 
