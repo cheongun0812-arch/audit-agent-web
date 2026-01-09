@@ -48,15 +48,19 @@ except ImportError:
 st.set_page_config(
     page_title="AUDIT AI Agent",
     page_icon="🛡️",
-    layout="wide",                 # ✅ 사이드바가 더 안정적으로 표시되도록 wide 권장
+    layout="wide",
     initial_sidebar_state="collapsed"
 )
 
 # ==========================================
 # 2. 🎨 디자인 테마 (사이드바/토글 강제 표시 포함)
+#    + 전체 텍스트 0.2px 증가
 # ==========================================
 st.markdown("""
 <style>
+/* ✅ 전체 글자 크기 +0.2px */
+html { font-size: 16.2px; }
+
 .stApp { background-color: #F4F6F9; }
 [data-testid="stSidebar"] { background-color: #2C3E50; }
 [data-testid="stSidebar"] * { color: #FFFFFF !important; }
@@ -90,8 +94,6 @@ div[data-testid="stTextInput"] button[aria-label] svg * {
     color: #000000 !important;
     opacity: 1 !important;
 }
-
-
 
 .stTextInput input, .stTextArea textarea {
     background-color: #FFFFFF !important;
@@ -129,54 +131,46 @@ div[data-testid="stFormSubmitButton"] > button * {
     opacity: 1 !important;
 }
 
-
-
-
-[data-testid="stSidebar"] div[data-testid="stTextInput"] button:hover {
-    background: rgba(44, 62, 80, 0.12) !important;
-    border-radius: 8px !important;
+/* ====== 서약 UI ====== */
+.pledge-box {
+  background: #FFFFFF;
+  border: 1px solid #E6ECF2;
+  border-radius: 14px;
+  padding: 16px 16px;
 }
-[data-testid="stSidebar"] div[data-testid="stTextInput"] button svg,
-[data-testid="stSidebar"] div[data-testid="stTextInput"] button svg path {
-    fill: currentColor !important;
-    stroke: currentColor !important;
-    opacity: 1 !important;
+.pledge-row {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 10px;
 }
-
-.stButton > button {
-    background: linear-gradient(to right, #2980B9, #2C3E50) !important;
-    color: #FFFFFF !important;
-    border: none !important;
-    font-weight: bold !important;
+.pledge-text {
+  font-size: 0.98rem;
+  line-height: 1.5;
+  color: #2C3E50;
+  font-weight: 600;
 }
-
-
-
-button[aria-label="Show password text"] svg,
-button[aria-label="Hide password text"] svg,
-div[data-testid="stTextInput"] button svg,
-div[data-testid="stTextInput"] button svg path {
-  fill: #000000 !important;
-  stroke: #000000 !important;
-  opacity: 1 !important;
+.pledge-text.active {
+  color: #0B5ED7;     /* ✅ 더 잘 보이는 색상 */
+  font-weight: 900;
 }
-
-/* ✅ form_submit_button / 버튼이 비활성화(disabled)되어도 텍스트가 안 사라지게 */
-div[data-testid="stFormSubmitButton"] > button:disabled,
-.stButton > button:disabled {
-  opacity: 1 !important;
-  color: #2C3E50 !important;
-  background: #E6ECF2 !important;
-  border: 1px solid #CBD6E2 !important;
+.pledge-text.blurred {
+  filter: blur(2px);
+  opacity: 0.55;
 }
-div[data-testid="stFormSubmitButton"] > button:disabled * ,
-.stButton > button:disabled * {
-  opacity: 1 !important;
-  color: #2C3E50 !important;
+.pledge-right {
+  min-width: 86px;
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap: 8px;
+  font-weight: 900;
+  color: #0B5ED7;
 }
 </style>
 """, unsafe_allow_html=True)
-# ✅ PC에서는 사이드바 기본 펼침, 모바일에서는 기본 접힘 (Streamlit 기본 동작 유지)
+
+# ✅ PC에서는 사이드바 기본 펼침, 모바일에서는 기본 접힘
 st.markdown("""
 <script>
 (function() {
@@ -190,7 +184,6 @@ st.markdown("""
       if (!isDesktop()) return;
       if (window.sessionStorage.getItem(KEY) === "1") return;
 
-      // Streamlit 버전에 따라 요소 형태가 다를 수 있어 여러 셀렉터 시도
       const doc = window.parent?.document || document;
       const candidates = [
         '[data-testid="stSidebarCollapsedControl"] button',
@@ -219,7 +212,6 @@ st.markdown("""
 </script>
 """, unsafe_allow_html=True)
 
-
 # ==========================================
 # 3. 로그인 및 세션 관리
 # ==========================================
@@ -237,18 +229,15 @@ def _clear_query_params() -> None:
         st.experimental_set_query_params()
 
 def _validate_and_store_key(clean_key: str) -> None:
-    """키 검증 후 세션에 저장. 실패 시 예외 발생."""
     genai.configure(api_key=clean_key)
-    # 유효성 검사: 모델 목록 호출
     list(genai.list_models())
     st.session_state["api_key"] = clean_key
     st.session_state["login_error"] = None
     _set_query_param_key(clean_key)
 
 def try_login_from_session_key(key_name: str) -> None:
-    """지정된 session_state 키에서 값을 읽어 로그인 처리."""
     raw_key = st.session_state.get(key_name, "")
-    clean_key = "".join(str(raw_key).split())  # 모든 공백 제거
+    clean_key = "".join(str(raw_key).split())
     if not clean_key:
         st.session_state["login_error"] = "⚠️ 키를 입력해주세요."
         return
@@ -314,8 +303,6 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
-
-
 # ==========================================
 # 7. 로그아웃 애니메이션
 # ==========================================
@@ -341,7 +328,6 @@ if st.session_state.get("logout_anim"):
 # ==========================================
 # 8. 핵심 기능 함수 (구글시트, AI, 파일처리)
 # ==========================================
-
 @st.cache_resource
 def init_google_sheet_connection():
     if gspread is None or ServiceAccountCredentials is None:
@@ -373,9 +359,9 @@ def _ensure_campaign_config_sheet(spreadsheet):
         return ws
 
 def _default_campaign_title(dt: datetime.datetime) -> str:
-    # ✅ 2026년 1월은 '윤리경영원칙 실천지침" 실천서약 으로 고정(요청사항)
-    if dt.year == 2026 and dt.month == 1:
-        return "1월 윤리경영원칙 실천지침 실천서약"
+    # ✅ 1월: 사용자가 요청한 제목 형태로 표기(캠페인 기본값)
+    if dt.month == 1:
+        return "January self-inspection (pledge to practice ethical management principles practice guidelines)"
     return f"{dt.month}월 자율점검(윤리경영원칙 실천지침 실천서약)"
 
 def _default_campaign_sheet_name(dt: datetime.datetime, spreadsheet=None) -> str:
@@ -547,14 +533,13 @@ def get_web_content(url):
 st.markdown("<h1 style='text-align: center; color: #2C3E50;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
 st.markdown("<div style='text-align: center; color: #555; margin-bottom: 20px;'>Professional Legal & Audit Assistant System</div>", unsafe_allow_html=True)
 
-
 _now_kst = _korea_now()
 CURRENT_YEAR = _now_kst.year
 CURRENT_MONTH = _now_kst.month
 
 campaign_info = {
     "key": f"{CURRENT_YEAR}-{CURRENT_MONTH:02d}",
-    "title": f"{CURRENT_MONTH}월 자율점검(윤리경영원칙 실천지침 실천서약)",
+    "title": _default_campaign_title(_now_kst),
     "sheet_name": f"{CURRENT_YEAR}_{CURRENT_MONTH:02d}_자율점검",
     "start_date": _now_kst.strftime("%Y.%m.%d"),
 }
@@ -571,124 +556,266 @@ tab_audit, tab_doc, tab_chat, tab_summary, tab_admin = st.tabs([
     f"✅ {CURRENT_MONTH} 자율점검", "📄 법률 검토", "💬 AI 에이전트(챗봇)", "📰 스마트 요약", "🔒 관리자 모드"
 ])
 
+# ---------- (아이콘) 인라인 SVG: 애니메이션 모래시계 ----------
+HOURGLASS_SVG = """
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+     xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <!-- Outline -->
+  <path d="M6 2h12v5c0 2.2-1.4 4.2-3.5 5 2.1.8 3.5 2.8 3.5 5v5H6v-5c0-2.2 1.4-4.2 3.5-5C7.4 11.2 6 9.2 6 7V2Z"
+        stroke="#0B5ED7" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M8 7h8M8 17h8" stroke="#0B5ED7" stroke-width="2" stroke-linecap="round"/>
+
+  <!-- Sand (Top) : 줄어드는 느낌 -->
+  <rect x="9" y="8.2" width="6" height="3.0" rx="1.0" fill="#0B5ED7" opacity="0.95">
+    <animate attributeName="height" values="3.0;0.3;3.0" dur="1.0s" repeatCount="indefinite" />
+    <animate attributeName="y"      values="8.2;10.9;8.2" dur="1.0s" repeatCount="indefinite" />
+  </rect>
+
+  <!-- Sand (Bottom) : 차오르는 느낌 -->
+  <rect x="9" y="15.8" width="6" height="0.3" rx="1.0" fill="#0B5ED7" opacity="0.95">
+    <animate attributeName="height" values="0.3;3.0;0.3" dur="1.0s" repeatCount="indefinite" />
+    <animate attributeName="y"      values="15.8;13.1;15.8" dur="1.0s" repeatCount="indefinite" />
+  </rect>
+
+  <!-- Falling grains : 중앙 점들이 떨어지는 느낌 -->
+  <circle cx="12" cy="12" r="0.8" fill="#0B5ED7" opacity="0.95">
+    <animate attributeName="cy" values="11.2;14.2;11.2" dur="0.6s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.95;0.2;0.95" dur="0.6s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="11" cy="12" r="0.6" fill="#0B5ED7" opacity="0.80">
+    <animate attributeName="cy" values="11.0;14.0;11.0" dur="0.7s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.8;0.15;0.8" dur="0.7s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="13" cy="12" r="0.6" fill="#0B5ED7" opacity="0.80">
+    <animate attributeName="cy" values="11.4;14.4;11.4" dur="0.8s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.8;0.15;0.8" dur="0.8s" repeatCount="indefinite"/>
+  </circle>
+</svg>
+"""
+
+COUNTDOWN_SECONDS = 7  # ✅ 사용자가 최종 정정한 값: 7초
+
+def _init_pledge_state(keys: list[str]):
+    if "pledge_active_key" not in st.session_state:
+        st.session_state["pledge_active_key"] = None
+    if "pledge_countdown_end" not in st.session_state:
+        st.session_state["pledge_countdown_end"] = 0.0
+    if "pledge_keys" not in st.session_state:
+        st.session_state["pledge_keys"] = keys
+
+def _current_required_key(keys: list[str]) -> str | None:
+    for k in keys:
+        if not st.session_state.get(k, False):
+            return k
+    return None
+
+def _start_countdown_for(key: str):
+    st.session_state["pledge_active_key"] = key
+    st.session_state["pledge_countdown_end"] = time.time() + COUNTDOWN_SECONDS
+
+def _run_blocking_countdown_if_needed():
+    ak = st.session_state.get("pledge_active_key")
+    end_ts = float(st.session_state.get("pledge_countdown_end", 0.0) or 0.0)
+    if not ak:
+        return
+    now = time.time()
+    if now >= end_ts:
+        st.session_state["pledge_active_key"] = None
+        st.session_state["pledge_countdown_end"] = 0.0
+        return
+
+    placeholder = st.empty()
+    remaining = int(end_ts - now)
+    for sec in range(remaining, -1, -1):
+        placeholder.markdown(
+            f"<div class='pledge-right'>{HOURGLASS_SVG}<span>{sec}s</span></div>",
+            unsafe_allow_html=True
+        )
+        time.sleep(1)
+
+    st.session_state["pledge_active_key"] = None
+    st.session_state["pledge_countdown_end"] = 0.0
+    st.rerun()
+
+def render_pledge_row(key: str, text: str, enabled: bool, is_active: bool, remaining: int | None):
+    c1, c2, c3 = st.columns([0.08, 0.80, 0.12], vertical_alignment="center")
+
+    with c1:
+        st.checkbox("", key=key, disabled=(not enabled))
+
+    with c2:
+        cls = "pledge-text"
+        if is_active or st.session_state.get(key, False):
+            cls += " active"
+        if (not enabled) and (not is_active):
+            cls += " blurred"
+
+        st.markdown(
+            f"<div class='pledge-text-wrap'><span class='{cls}'>{text}</span></div>",
+            unsafe_allow_html=True
+        )
+
+    with c3:
+        if is_active and remaining is not None:
+            st.markdown(
+                f"<div class='pledge-right'>{HOURGLASS_SVG}<span>{remaining}s</span></div>",
+                unsafe_allow_html=True
+            )
+        else:
+            st.markdown("<div></div>", unsafe_allow_html=True)
+
 # --- [Tab 1: 자율점검] ---
 with tab_audit:
     current_sheet_name = campaign_info.get("sheet_name", "2026_윤리경영_실천서약")
 
-    # 1) 제목 + 요약(서약 문구)
+    # ✅ 제목 문구 변경 (요청: “📜 January self-inspection …”)
+    title_for_box = campaign_info.get("title") or _default_campaign_title(_now_kst)
+
     st.markdown(f"""
         <div style='background-color: #E3F2FD; padding: 20px; border-radius: 10px; border-left: 5px solid #2196F3; margin-bottom: 20px;'>
-            <h3 style='margin-top:0; color: #1565C0;'>📜 {campaign_info.get('title','1월 윤리경영원칙 실천지침 실천서약')}</h3>
+            <h3 style='margin-top:0; color: #1565C0;'>📜 {title_for_box}</h3>
             <p style='font-size: 1.50rem; color: #444;'>
-                나는 <b>kt MOS북부</b>의 지속적인 발전을 위하여 회사 윤리경영원칙실천지침에 명시된 
+                나는 <b>kt MOS북부</b>의 지속적인 발전을 위하여 회사 윤리경영원칙실천지침에 명시된
                 <b>「임직원의 책임과 의무」</b> 및 <b>「관리자의 책임과 의무」</b>를 성실히 이행할 것을 서약합니다.
             </p>
         </div>
     """, unsafe_allow_html=True)
 
-    # 2) 실천지침 주요내용(※ 박스) — 책임/의무 체크박스 위로 이동
+    # 2) 실천지침 주요내용
     with st.expander("※ 윤리경영원칙 실천지침 주요내용", expanded=True):
-            st.markdown(
-                """
-                <div style='background-color:#FFFDE7; padding: 18px; border-radius: 10px; border-left: 5px solid #FBC02D; margin-bottom: 12px;'>
-                    <div style='font-weight: 800; color:#6D4C41; font-size: 1.05rem; margin-bottom: 6px;'>📌 윤리경영 위반 주요 유형</div>
-                    <div style='color:#444; font-size: 0.95rem; line-height: 1.55;'>
-                        아래 항목은 <b>윤리경영원칙 실천지침</b>의 주요 위반 유형을 정리한 내용입니다.
-                        업무 수행 시 유사 사례가 발생하지 않도록 참고해 주세요.
-                    </div>
+        st.markdown(
+            """
+            <div style='background-color:#FFFDE7; padding: 18px; border-radius: 10px; border-left: 5px solid #FBC02D; margin-bottom: 12px;'>
+                <div style='font-weight: 800; color:#6D4C41; font-size: 1.05rem; margin-bottom: 6px;'>📌 윤리경영 위반 주요 유형</div>
+                <div style='color:#444; font-size: 0.95rem; line-height: 1.55;'>
+                    아래 항목은 <b>윤리경영원칙 실천지침</b>의 주요 위반 유형을 정리한 내용입니다.
+                    업무 수행 시 유사 사례가 발생하지 않도록 참고해 주세요.
                 </div>
+            </div>
 
-                <div style='overflow-x:auto;'>
-                    <table style='width:100%; border-collapse: collapse; background:#FFFFFF; border:1px solid #E0E0E0; border-radius: 10px; overflow:hidden;'>
-                        <thead>
-                            <tr style='background:#FFF8E1;'>
-                                <th style='text-align:left; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037; width:28%;'>구분</th>
-                                <th style='text-align:left; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037;'>윤리경영 위반사항</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td style='padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>고객과의 관계</td>
-                                <td style='padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>고객으로부터 금품 등 이익 수수, 고객만족 저해, 고객정보 유출</td>
-                            </tr>
-                            <tr>
-                                <td style='padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>임직원과 회사의 관계</td>
-                                <td style='padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>공금 유용 및 횡령, 회사재산의 사적 사용, 기업정보 유출, 경영왜곡</td>
-                            </tr>
-                            <tr>
-                                <td style='padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>임직원 상호간의 관계</td>
-                                <td style='padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>직장 내 괴롭힘, 성희롱, 조직질서 문란행위</td>
-                            </tr>
-                            <tr>
-                                <td style='padding:12px; font-weight:700; color:#2C3E50;'>이해관계자와의 관계</td>
-                                <td style='padding:12px; color:#333;'>이해관계자로부터 금품 등 이익 수수, 이해관계자에게 부당한 요구</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
+            <div style='overflow-x:auto;'>
+                <table style='width:100%; border-collapse: collapse; background:#FFFFFF; border:1px solid #E0E0E0; border-radius: 10px; overflow:hidden;'>
+                    <thead>
+                        <tr style='background:#FFF8E1;'>
+                            <th style='text-align:left; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037; width:28%;'>구분</th>
+                            <th style='text-align:left; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037;'>윤리경영 위반사항</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>고객과의 관계</td>
+                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>고객으로부터 금품 등 이익 수수, 고객만족 저해, 고객정보 유출</td>
+                        </tr>
+                        <tr>
+                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>임직원과 회사의 관계</td>
+                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>공금 유용 및 횡령, 회사재산의 사적 사용, 기업정보 유출, 경영왜곡</td>
+                        </tr>
+                        <tr>
+                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>임직원 상호간의 관계</td>
+                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>직장 내 괴롭힘, 성희롱, 조직질서 문란행위</td>
+                        </tr>
+                        <tr>
+                            <td style='padding:12px; font-weight:700; color:#2C3E50;'>이해관계자와의 관계</td>
+                            <td style='padding:12px; color:#333;'>이해관계자로부터 금품 등 이익 수수, 이해관계자에게 부당한 요구</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
 
-                <div style='margin-top:10px; color:#666; font-size:0.88rem;'>
-                    ※ 위 내용은 안내 목적이며, 세부 기준은 사내 <b>윤리경영원칙 실천지침</b>을 따릅니다.
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+            <div style='margin-top:10px; color:#666; font-size:0.88rem;'>
+                ※ 위 내용은 안내 목적이며, 세부 기준은 사내 <b>윤리경영원칙 실천지침</b>을 따릅니다.
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
+    # ✅ 서약(순차 진행 + 블러 + 7초 카운트다운)
+    st.markdown("<div class='pledge-box'>", unsafe_allow_html=True)
 
-    # 3) 책임/의무 체크 → 4) 사번/성명 등 입력 → 5) 서약 제출(버튼)
-    with st.form("audit_ethics_form", clear_on_submit=False):
-        st.markdown("#### ■ 임직원의 책임과 의무")
-        e1 = st.checkbox("하나, 나는 회사 윤리경영원칙과 윤리경영원칙 실천지침에 따라 판단하고 행동한다.")
-        e2 = st.checkbox("하나, 나는 윤리경영원칙 실천지침을 몰랐다는 이유로 면책을 주장하지 않는다.")
-        e3 = st.checkbox("하나, 나는 직무수행 과정에서 윤리적 갈등 상황에 직면한 경우 감사부서의 해석에 따른다.")
-        e4 = st.checkbox("하나, 나는 가족, 친·인척, 지인 등을 이용하여 회사 윤리경영원칙 실천지침을 위반하지 않는다.")
+    st.markdown("#### ■ 임직원의 책임과 의무")
 
-        st.markdown("<br>", unsafe_allow_html=True)
+    exec_pledges = [
+        ("pledge_e1", "나는 회사 윤리경영원칙과 윤리경영원칙 실천지침에 따라 판단하고 행동한다."),
+        ("pledge_e2", "나는 윤리경영원칙 실천지침을 몰랐다는 이유로 면책을 주장하지 않는다."),
+        ("pledge_e3", "나는 직무수행 과정에서 윤리적 갈등 상황에 직면한 경우 감사부서의 해석에 따른다."),
+        ("pledge_e4", "나는 가족, 친·인척, 지인 등을 이용하여 회사 윤리경영원칙 실천지침을 위반하지 않는다."),
+    ]
 
-        st.markdown("#### ■ 관리자의 책임과 의무")
-        m1 = st.checkbox("하나, 나는 소속 구성원 및 업무상 이해관계자들이 지침을 준수할 수 있도록 지원하고 관리한다.")
-        m2 = st.checkbox("하나, 나는 공정하고 깨끗한 의사결정을 통해 지침 준수를 솔선수범한다.")
-        m3 = st.checkbox("하나, 나는 부서 내 위반 사안 발생 시 관리자로서의 책임을 다한다.")
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("#### ■ 관리자의 책임과 의무")
 
-        st.markdown("---")
+    mgr_pledges = [
+        ("pledge_m1", "나는 소속 구성원 및 업무상 이해관계자들이 지침을 준수할 수 있도록 지원하고 관리한다."),
+        ("pledge_m2", "나는 공정하고 깨끗한 의사결정을 통해 지침 준수를 솔선수범한다."),
+        ("pledge_m3", "나는 부서 내 위반 사안 발생 시 관리자로서의 책임을 다한다."),
+    ]
 
-        # ✅ 요청사항: '사번/성명/총괄...' 입력 박스를 '서약 제출' 바로 위로 이동
-        c1, c2, c3, c4 = st.columns(4)
-        emp_id = c1.text_input("사번", placeholder="예: 12345")
-        name = c2.text_input("성명")
-        ordered_units = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
-        unit = c3.selectbox("총괄 / 본부 / 단", ordered_units)
-        dept = c4.text_input("상세 부서명")
+    all_keys = [k for k, _ in exec_pledges] + [k for k, _ in mgr_pledges]
+    _init_pledge_state(all_keys)
 
-        st.markdown("---")
+    required_key = _current_required_key(all_keys)
+    active_key = st.session_state.get("pledge_active_key")
+    end_ts = float(st.session_state.get("pledge_countdown_end", 0.0) or 0.0)
+    now_ts = time.time()
+    remaining = int(end_ts - now_ts) if (active_key and now_ts < end_ts) else None
 
-        submit = st.form_submit_button("서약 제출", use_container_width=True)
+    # 렌더: 임직원
+    for k, t in exec_pledges:
+        enabled = (active_key is None) and (required_key == k)
+        is_active = (active_key == k)
+        render_pledge_row(k, t, enabled=enabled, is_active=is_active, remaining=remaining if is_active else None)
 
-        if submit:
-            if not emp_id or not name:
-                st.warning("⚠️ 사번과 성명을 입력해주세요.")
+        # ✅ 체크되면 카운트다운 시작(현재 순서만)
+        if st.session_state.get(k, False) and (required_key == k) and active_key is None:
+            _start_countdown_for(k)
+            st.rerun()
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # 렌더: 관리자
+    for k, t in mgr_pledges:
+        enabled = (active_key is None) and (required_key == k)
+        is_active = (active_key == k)
+        render_pledge_row(k, t, enabled=enabled, is_active=is_active, remaining=remaining if is_active else None)
+
+        if st.session_state.get(k, False) and (required_key == k) and active_key is None:
+            _start_countdown_for(k)
+            st.rerun()
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # ✅ 카운트다운(7초) 진행 중이면 화면을 7초간 “강제 점유”
+    _run_blocking_countdown_if_needed()
+
+    st.markdown("---")
+
+    # 입력 박스 (기존 위치 유지: 서약 아래, 제출 위)
+    c1, c2, c3, c4 = st.columns(4)
+    emp_id = c1.text_input("사번", placeholder="예: 12345")
+    name = c2.text_input("성명")
+    ordered_units = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
+    unit = c3.selectbox("총괄 / 본부 / 단", ordered_units)
+    dept = c4.text_input("상세 부서명")
+
+    st.markdown("---")
+
+    all_checked = all(bool(st.session_state.get(k, False)) for k in all_keys)
+    can_submit = all_checked and (st.session_state.get("pledge_active_key") is None)
+
+    submit = st.button("서약 제출", use_container_width=True, disabled=(not can_submit))
+
+    if submit:
+        if not emp_id or not name:
+            st.warning("⚠️ 사번과 성명을 입력해주세요.")
+        else:
+            answer = "윤리경영 서약서 제출 완료 (임직원 의무 4/4, 관리자 의무 3/3)"
+            with st.spinner("제출 중..."):
+                success, msg = save_audit_result(emp_id, name, unit, dept, answer, current_sheet_name)
+            if success:
+                st.success(f"✅ {name}님, 윤리경영 서약서 제출이 완료되었습니다!")
+                st.balloons()
             else:
-                unchecked = []
-                if not e1: unchecked.append("임직원 의무 1")
-                if not e2: unchecked.append("임직원 의무 2")
-                if not e3: unchecked.append("임직원 의무 3")
-                if not e4: unchecked.append("임직원 의무 4")
-                if not m1: unchecked.append("관리자 의무 1")
-                if not m2: unchecked.append("관리자 의무 2")
-                if not m3: unchecked.append("관리자 의무 3")
-
-                if unchecked:
-                    st.error("❌ 서약 항목이 모두 체크되어야 제출할 수 있습니다. (미체크: " + ", ".join(unchecked) + ")")
-                else:
-                    answer = "윤리경영 서약서 제출 완료 (임직원 의무 4/4, 관리자 의무 3/3)"
-                    with st.spinner("제출 중..."):
-                        success, msg = save_audit_result(emp_id, name, unit, dept, answer, current_sheet_name)
-                    if success:
-                        st.success(f"✅ {name}님, 윤리경영 서약서 제출이 완료되었습니다!")
-                        st.balloons()
-                    else:
-                        st.error(f"❌ 제출 실패: {msg}")
-
+                st.error(f"❌ 제출 실패: {msg}")
 
 # --- [Tab 2: 문서 정밀 검토] ---
 with tab_doc:
@@ -898,7 +1025,9 @@ with tab_admin:
                   </div>
                   <div style='margin-top:10px; font-size:1.05rem; font-weight:700; color:#34495E;'>
                     {date_kor}일 현재&nbsp;&nbsp;|&nbsp;&nbsp;
-                    총 대상자 <b>{total_target:,}명</b> · 참여 인원 <b>{total_participated:,}명</b> · 참여율 <b>{total_rate:.2f}%</b>
+                    총 대상자 <b>{total_target:,}</b>명&nbsp;&nbsp;|&nbsp;&nbsp;
+                    참여완료 <b>{total_participated:,}</b>명&nbsp;&nbsp;|&nbsp;&nbsp;
+                    참여율 <b>{total_rate:.2f}%</b>
                   </div>
                   <div style='margin-top:6px; font-size:0.85rem; color:#7F8C8D;'>마지막 업데이트: {last_update or "—"} &nbsp;|&nbsp; 신호등: <b style='color:{lamp_color};'>{lamp_label}</b></div>
                 </div>
