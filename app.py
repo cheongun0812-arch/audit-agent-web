@@ -637,7 +637,7 @@ with tab_audit:
     current_sheet_name = campaign_info.get("sheet_name", "2026_윤리경영_실천서약")
 
     # ✅ (요청 1) 제목: Google Sheet 값과 무관하게 강제 고정
-    title_for_box = "January self-inspection (pledge to practice ethical management principles practice guidelines)"
+    title_for_box = "2026 임직원 윤리경영원칙 실천지침 실천서약)"
 
     st.markdown(f"""
         <div style='background-color: #E3F2FD; padding: 20px; border-radius: 10px; border-left: 5px solid #2196F3; margin-bottom: 20px;'>
