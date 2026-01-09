@@ -141,6 +141,22 @@ div[data-testid="stFormSubmitButton"] > button * {
   color: #0B5ED7;
   min-width: 90px;
 }
+
+/* ✅ (추가) 자율점검 안내 박스/서약 문구 전용 스타일 */
+.km-gap-8 { height: 8px; }
+.km-gap-12 { height: 12px; }
+.km-gap-18 { height: 18px; }
+
+.km-pledge-line {
+  font-size: 1.08rem;            /* 서약 문장 기본 크기 */
+  line-height: 1.75;
+  margin: 0;
+  letter-spacing: 0.1px;
+}
+.km-pledge-line b{
+  font-weight: 900;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -640,7 +656,7 @@ with tab_audit:
     title_for_box = "2026 임직원 윤리경영원칙 실천지침 실천서약"
 
     st.markdown(f"""
-        <div style='background-color: #E3F2FD; padding: 20px; border-radius: 10px; border-left: 5px solid #2196F3; margin-bottom: 20px;'>
+        <div style='background-color: #E3F2FD; padding: 20px; border-radius: 10px; border-left: 5px solid #2196F3; margin-bottom: 26px;'>
             <h3 style='margin-top:0; color: #1565C0;'>📜 {title_for_box}</h3>
         </div>
     """, unsafe_allow_html=True)
@@ -649,8 +665,8 @@ with tab_audit:
     with st.expander("※ 윤리경영원칙 실천지침 주요내용", expanded=True):
         st.markdown(
             """
-            <div style='background-color:#FFFDE7; padding: 18px; border-radius: 10px; border-left: 5px solid #FBC02D; margin-bottom: 12px;'>
-                <div style='font-weight: 800; color:#6D4C41; font-size: 1.05rem; margin-bottom: 6px;'>📌 윤리경영 위반 주요 유형</div>
+            <div style='background-color:#FFFDE7; padding: 18px; border-radius: 10px; border-left: 5px solid #FBC02D; margin-bottom: 22px;'>
+                <div style='font-weight: 900; color:#6D4C41; font-size: 1.18rem; margin-bottom: 10px;'>📌 윤리경영 위반 주요 유형</div>
                 <div style='color:#444; font-size: 0.95rem; line-height: 1.55;'>
                     아래 항목은 <b>윤리경영원칙 실천지침</b>의 주요 위반 유형을 정리한 내용입니다.
                     업무 수행 시 유사 사례가 발생하지 않도록 참고해 주세요.
@@ -719,12 +735,10 @@ with tab_audit:
     st.markdown("---")
 
     st.markdown(
-        "나는 KT MOS 북부의 지속적인 발전을 위하여 회사 윤리경영원칙실천지침에 명시된 "
-        "**「임직원의 책임과 의무」** 및 "
-        "**「관리자의 책임과 의무」**를 성실히 이행할 것을 서약합니다."
-    )
-
-    # 입력 박스
+        """<p class='km-pledge-line'>나는 KT MOS 북부의 지속적인 발전을 위하여 회사 윤리경영원칙실천지침에 명시된
+        <b>「임직원의 책임과 의무」</b> 및 <b>「관리자의 책임과 의무」</b>를 성실히 이행할 것을 서약합니다.</p>""",
+        unsafe_allow_html=True
+    )# 입력 박스
     c1, c2, c3, c4 = st.columns(4)
     emp_id = c1.text_input("사번", placeholder="예: 12345")
     name = c2.text_input("성명")
