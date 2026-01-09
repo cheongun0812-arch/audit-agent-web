@@ -202,411 +202,251 @@ def _clear_query_params() -> None:
     except Exception:
         st.experimental_set_query_params()
 
-def _validate_and_store_key(clean_key: str) -> None:
-    genai.configure(api_key=clean_key)
-    list(genai.list_models())
-    st.session_state["api_key"] = clean_key
-    st.session_state["login_error"] = None
-    _set_query_param_key(clean_key)
-
-def try_login_from_session_key(key_name: str) -> None:
-    raw_key = st.session_state.get(key_name, "")
-    clean_key = "".join(str(raw_key).split())
-    if not clean_key:
-        st.session_state["login_error"] = "⚠️ 키를 입력해주세요."
-        return
+def _get_query_param_key() -> str:
     try:
-        _validate_and_store_key(clean_key)
-    except Exception as e:
-        st.session_state["login_error"] = f"❌ 인증 실패: {e}"
-
-def perform_logout():
-    st.session_state["logout_anim"] = True
-
-# ==========================================
-# 4. 자동 로그인 복구 (URL 파라미터)
-# ==========================================
-if "api_key" not in st.session_state:
-    try:
-        qp = st.query_params
-        if "k" in qp:
-            k_val = qp["k"] if isinstance(qp["k"], str) else qp["k"][0]
-            restored_key = base64.b64decode(k_val).decode("utf-8")
-            _validate_and_store_key(restored_key)
-            st.toast("🔄 세션이 복구되었습니다.", icon="✨")
-            st.rerun()
+        qp = st.query_params.get("k", None)
+        if isinstance(qp, list):
+            qp = qp[0] if qp else None
     except Exception:
-        pass
+        qp = st.experimental_get_query_params().get("k", [None])[0]
 
-# ==========================================
-# 5. 사이드바 (로그인/로그아웃)
-# ==========================================
-with st.sidebar:
-    st.markdown("### 🏛️ Control Center")
-    st.markdown("---")
+    if not qp:
+        return ""
 
-    if "api_key" not in st.session_state:
-        with st.form(key="login_form"):
-            st.markdown("<h4 style='color:white;'>🔐 Access Key</h4>", unsafe_allow_html=True)
-            st.text_input(
-                "Key",
-                type="password",
-                placeholder="API 키를 입력해 주세요",
-                label_visibility="collapsed",
-                key="login_input_key",
-            )
-            st.form_submit_button(
-                label="시스템 접속 (Login)",
-                on_click=try_login_from_session_key,
-                args=("login_input_key",),
-                use_container_width=True,
-            )
+    try:
+        return base64.b64decode(qp.encode()).decode().strip()
+    except Exception:
+        return ""
 
-        if st.session_state.get("login_error"):
-            st.error(st.session_state["login_error"])
-    else:
-        st.success("🟢 정상 가동 중")
-        st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("로그아웃 (Logout)", type="primary", use_container_width=True):
-            perform_logout()
-            st.rerun()
-
-    st.markdown("---")
-    st.markdown(
-        "<div style='color:white; text-align:center; font-size:12px; opacity:0.8;'>ktMOS북부 Audit AI Solution © 2026<br>Engine: Gemini 1.5 Pro</div>",
-        unsafe_allow_html=True,
-    )
-
-# ==========================================
-# 7. 로그아웃 애니메이션
-# ==========================================
-if st.session_state.get("logout_anim"):
-    st.markdown("""
-<div style="background:#0B1B2B; padding:44px 26px; border-radius:18px; text-align:center; border:1px solid rgba(255,255,255,0.12);">
-  <div style="font-size: 78px; margin-bottom: 12px; line-height:1.1;">🎆✨</div>
-  <div style="font-size: 22px; font-weight: 900; color: #FFFFFF; margin-bottom: 8px;">새해 복 많이 받으세요!</div>
-  <div style="font-size: 15px; color: rgba(255,255,255,0.85); line-height: 1.55;">
-    올해도 건강과 행운이 가득하시길 바랍니다.<br>
-    안전하게 로그아웃되었습니다.
-  </div>
-  <div style="margin-top:18px; font-size: 12px; color: rgba(255,255,255,0.65);">
-    ktMOS북부 Audit AI Solution © 2026
-  </div>
-</div>
-""", unsafe_allow_html=True)
-    time.sleep(3.0)
+def _logout():
+    for k in ["api_key", "api_verified", "audit_verified"]:
+        if k in st.session_state:
+            del st.session_state[k]
     _clear_query_params()
-    st.session_state.clear()
     st.rerun()
 
 # ==========================================
-# 8. 핵심 기능 함수 (구글시트, AI, 파일처리)
+# 4. 사이드바 (로그인)
 # ==========================================
-@st.cache_resource
-def init_google_sheet_connection():
-    if gspread is None or ServiceAccountCredentials is None:
-        return None
+with st.sidebar:
+    st.markdown("## 🔐 시스템 접속")
+    st.markdown("시스템 접속을 위해 API Key를 입력하세요.")
+    api_input = st.text_input("API Key", type="password", placeholder="입력 후 Enter")
+    if st.button("로그인"):
+        if api_input.strip():
+            st.session_state["api_key"] = api_input.strip()
+            st.session_state["api_verified"] = True
+            _set_query_param_key(api_input.strip())
+            st.success("✅ 로그인 완료!")
+            st.rerun()
+        else:
+            st.warning("⚠️ API Key를 입력해주세요.")
+
+    st.markdown("---")
+
+    st.markdown("## 🚪 로그아웃")
+    if st.button("로그아웃"):
+        _logout()
+
+# ==========================================
+# 5. 쿼리파라미터 자동 로그인
+# ==========================================
+if "api_key" not in st.session_state:
+    qp_key = _get_query_param_key()
+    if qp_key:
+        st.session_state["api_key"] = qp_key
+        st.session_state["api_verified"] = True
+
+# ==========================================
+# 6. Gemini 설정
+# ==========================================
+if "api_key" in st.session_state:
+    genai.configure(api_key=st.session_state["api_key"])
+
+# ==========================================
+# 7. 유틸 함수
+# ==========================================
+def get_youtube_transcript(url: str) -> str:
     try:
-        scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
-        return gspread.authorize(creds)
-    except Exception:
-        return None
-
-def _korea_now():
-    try:
-        kst = pytz.timezone("Asia/Seoul")
-        return datetime.datetime.now(kst)
-    except Exception:
-        return datetime.datetime.now()
-
-def _campaign_key(dt: datetime.datetime) -> str:
-    return f"{dt.year}-{dt.month:02d}"
-
-def _ensure_campaign_config_sheet(spreadsheet):
-    try:
-        ws = spreadsheet.worksheet("Campaign_Config")
-        return ws
-    except Exception:
-        ws = spreadsheet.add_worksheet(title="Campaign_Config", rows=200, cols=10)
-        ws.append_row(["campaign_key", "title", "sheet_name", "start_date"])
-        return ws
-
-def _default_campaign_title(dt: datetime.datetime) -> str:
-    if dt.month == 1:
-        return "1월 자율점검(윤리경영원칙 실천지침 실천 서약)"
-    return f"{dt.month}월 자율점검(윤리경영원칙 실천지침 실천서약)"
-
-def _default_campaign_sheet_name(dt: datetime.datetime, spreadsheet=None) -> str:
-    if spreadsheet is not None and dt.year == 2026 and dt.month == 1:
-        try:
-            spreadsheet.worksheet("2026_윤리경영_실천서약")
-            return "2026_윤리경영_실천서약"
-        except Exception:
-            pass
-    return f"{dt.year}_{dt.month:02d}_자율점검"
-
-def get_current_campaign_info(spreadsheet, now_dt: datetime.datetime | None = None) -> dict:
-    now_dt = now_dt or _korea_now()
-    key = _campaign_key(now_dt)
-    cfg_ws = _ensure_campaign_config_sheet(spreadsheet)
-    records = cfg_ws.get_all_records()
-    for r in records:
-        if str(r.get("campaign_key", "")).strip() == key:
-            title = str(r.get("title") or "").strip() or _default_campaign_title(now_dt)
-            sheet_name = str(r.get("sheet_name") or "").strip() or _default_campaign_sheet_name(now_dt, spreadsheet)
-            start_date = str(r.get("start_date") or "").strip()
-            return {"key": key, "title": title, "sheet_name": sheet_name, "start_date": start_date}
-
-    title = _default_campaign_title(now_dt)
-    sheet_name = _default_campaign_sheet_name(now_dt, spreadsheet)
-    start_date = now_dt.strftime("%Y.%m.%d")
-    cfg_ws.append_row([key, title, sheet_name, start_date])
-    return {"key": key, "title": title, "sheet_name": sheet_name, "start_date": start_date}
-
-def set_current_campaign_info(spreadsheet, title: str | None = None, sheet_name: str | None = None, now_dt: datetime.datetime | None = None) -> dict:
-    now_dt = now_dt or _korea_now()
-    key = _campaign_key(now_dt)
-    cfg_ws = _ensure_campaign_config_sheet(spreadsheet)
-    all_rows = cfg_ws.get_all_values()
-    row_idx = None
-    for i in range(2, len(all_rows) + 1):
-        if len(all_rows[i-1]) >= 1 and str(all_rows[i-1][0]).strip() == key:
-            row_idx = i
-            break
-    if row_idx is None:
-        _ = get_current_campaign_info(spreadsheet, now_dt)
-        row_idx = len(all_rows) + 1
-
-    cur = get_current_campaign_info(spreadsheet, now_dt)
-    new_title = (title or cur["title"]).strip()
-    new_sheet = (sheet_name or cur["sheet_name"]).strip()
-    new_start = cur.get("start_date") or now_dt.strftime("%Y.%m.%d")
-    cfg_ws.update(f"B{row_idx}:D{row_idx}", [[new_title, new_sheet, new_start]])
-    return {"key": key, "title": new_title, "sheet_name": new_sheet, "start_date": new_start}
-
-def save_audit_result(emp_id, name, unit, dept, answer, sheet_name):
-    client = init_google_sheet_connection()
-    if not client:
-        return False, "구글 시트 연결 실패 (Secrets 확인)"
-    try:
-        spreadsheet = client.open("Audit_Result_2026")
-        try:
-            sheet = spreadsheet.worksheet(sheet_name)
-        except Exception:
-            sheet = spreadsheet.add_worksheet(title=sheet_name, rows=2000, cols=10)
-            sheet.append_row(["저장시간", "사번", "성명", "총괄/본부/단", "부서", "답변", "비고"])
-
-        if str(emp_id) in sheet.col_values(2):
-            return False, "이미 참여하셨습니다."
-
-        korea_tz = pytz.timezone("Asia/Seoul")
-        now = datetime.datetime.now(korea_tz).strftime("%Y-%m-%d %H:%M:%S")
-        sheet.append_row([now, emp_id, name, unit, dept, answer, "완료"])
-        return True, "성공"
-    except Exception as e:
-        return False, str(e)
-
-def get_model():
-    if "api_key" in st.session_state:
-        genai.configure(api_key=st.session_state["api_key"])
-    try:
-        available_models = [m.name for m in genai.list_models() if "generateContent" in m.supported_generation_methods]
-        for m in available_models:
-            if "1.5-pro" in m:
-                return genai.GenerativeModel(m)
-        for m in available_models:
-            if "1.5-flash" in m:
-                return genai.GenerativeModel(m)
-        if available_models:
-            return genai.GenerativeModel(available_models[0])
-    except Exception:
-        pass
-    return genai.GenerativeModel("gemini-1.5-flash")
-
-def read_file(uploaded_file):
-    content = ""
-    try:
-        if uploaded_file.name.endswith(".txt"):
-            content = uploaded_file.getvalue().decode("utf-8")
-        elif uploaded_file.name.endswith(".pdf"):
-            reader = PyPDF2.PdfReader(uploaded_file)
-            for page in reader.pages:
-                content += (page.extract_text() or "") + "\n"
-        elif uploaded_file.name.endswith(".docx"):
-            doc = Document(uploaded_file)
-            content = "\n".join([para.text for para in doc.paragraphs])
-    except Exception:
-        return None
-    return content
-
-def process_media_file(uploaded_file):
-    try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp_file:
-            tmp_file.write(uploaded_file.getvalue())
-            tmp_path = tmp_file.name
-
-        st.toast("🤖 AI에게 분석 자료를 전달하고 있습니다...", icon="📂")
-        myfile = genai.upload_file(tmp_path)
-        with st.spinner("🎧 AI가 데이터를 분석하고 있습니다..."):
-            while myfile.state.name == "PROCESSING":
-                time.sleep(2)
-                myfile = genai.get_file(myfile.name)
-
-        os.remove(tmp_path)
-        if myfile.state.name == "FAILED":
-            return None
-        return myfile
-    except Exception:
-        return None
-
-def download_and_upload_youtube_audio(url):
-    if yt_dlp is None:
-        return None
-    try:
-        ydl_opts = {"format": "bestaudio/best", "outtmpl": "temp_audio.%(ext)s", "quiet": True}
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
-        audio_files = glob.glob("temp_audio.*")
-        if not audio_files:
-            return None
-        audio_path = audio_files[0]
-        myfile = genai.upload_file(audio_path)
-        with st.spinner("🎧 유튜브 분석 중..."):
-            while myfile.state.name == "PROCESSING":
-                time.sleep(2)
-                myfile = genai.get_file(myfile.name)
-        os.remove(audio_path)
-        return myfile
-    except Exception:
-        return None
-
-def get_youtube_transcript(url):
-    try:
-        video_id = url.split("v=")[-1].split("&")[0]
+        video_id = url.split("v=")[1].split("&")[0]
         transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=["ko", "en"])
-        return " ".join([t["text"] for t in transcript])
-    except Exception:
-        return None
+        return "\n".join([t["text"] for t in transcript])
+    except Exception as e:
+        return f"❌ 유튜브 자막을 불러오지 못했습니다: {e}"
 
-def get_web_content(url):
+def read_file(uploaded_file) -> str:
+    try:
+        if uploaded_file.type == "text/plain":
+            return uploaded_file.getvalue().decode("utf-8", errors="ignore")
+
+        if uploaded_file.type == "application/pdf":
+            reader = PyPDF2.PdfReader(uploaded_file)
+            return "\n".join([page.extract_text() or "" for page in reader.pages])
+
+        if uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            doc = Document(uploaded_file)
+            return "\n".join([p.text for p in doc.paragraphs])
+
+        return ""
+    except Exception as e:
+        st.error(f"❌ 파일 읽기 오류: {e}")
+        return ""
+
+def is_url(text: str) -> bool:
+    return text.startswith("http://") or text.startswith("https://")
+
+def fetch_web_content(url: str) -> str:
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
-        response = requests.get(url, headers=headers, timeout=15)
-        soup = BeautifulSoup(response.text, "html.parser")
+        res = requests.get(url, headers=headers, timeout=15)
+        res.raise_for_status()
+        soup = BeautifulSoup(res.text, "html.parser")
         for script in soup(["script", "style"]):
             script.decompose()
-        return soup.get_text()[:10000]
-    except Exception:
+        return soup.get_text("\n", strip=True)
+    except Exception as e:
+        return f"❌ 웹페이지 내용을 가져오지 못했습니다: {e}"
+
+# ==========================================
+# 8. Google Sheet 저장 기능
+# ==========================================
+def get_sheet_client():
+    if gspread is None or ServiceAccountCredentials is None:
         return None
 
+    scope = [
+        "https://spreadsheets.google.com/feeds",
+        "https://www.googleapis.com/auth/drive"
+    ]
+    try:
+        creds_dict = st.secrets["gcp_service_account"]
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+        client = gspread.authorize(creds)
+        return client
+    except Exception as e:
+        st.error(f"❌ 구글 인증 실패: {e}")
+        return None
+
+def get_or_create_worksheet(spreadsheet, title):
+    try:
+        worksheet = spreadsheet.worksheet(title)
+        return worksheet
+    except Exception:
+        worksheet = spreadsheet.add_worksheet(title=title, rows="5000", cols="20")
+        return worksheet
+
+def get_campaign_sheet_name():
+    tz = pytz.timezone("Asia/Seoul")
+    now = datetime.datetime.now(tz)
+    dt = now.date()
+
+    # 캠페인 기간 예시 (필요 시 수정)
+    # 2026년 1월 캠페인
+    if dt.year == 2026 and dt.month == 1:
+        return "1월 자율점검(윤리경영원칙 실천지침 실천 서약)"
+
+    return f"{dt.month}월 자율점검(윤리경영원칙 실천지침 실천서약)"
+
+def ensure_2026_sheet(spreadsheet):
+    try:
+        spreadsheet.worksheet("2026_윤리경영_실천서약")
+        return "2026_윤리경영_실천서약"
+    except Exception:
+        spreadsheet.add_worksheet(title="2026_윤리경영_실천서약", rows="5000", cols="20")
+        return "2026_윤리경영_실천서약"
+
+def save_audit_result(emp_id, name, unit, dept, answer, sheet_name):
+    client = get_sheet_client()
+    if client is None:
+        return False, "구글 시트 클라이언트 연결 실패"
+
+    try:
+        spreadsheet = client.open_by_key(st.secrets["spreadsheet_key"])
+    except Exception as e:
+        return False, f"스프레드시트 열기 실패: {e}"
+
+    try:
+        worksheet = get_or_create_worksheet(spreadsheet, sheet_name)
+    except Exception as e:
+        return False, f"워크시트 생성/열기 실패: {e}"
+
+    headers = ["제출일시", "사번", "성명", "총괄/본부/단", "상세부서", "서약결과"]
+    try:
+        first_row = worksheet.row_values(1)
+        if first_row != headers:
+            worksheet.insert_row(headers, index=1)
+    except Exception:
+        worksheet.insert_row(headers, index=1)
+
+    tz = pytz.timezone("Asia/Seoul")
+    now = datetime.datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
+
+    row = [now, emp_id, name, unit, dept, answer]
+    try:
+        worksheet.append_row(row, value_input_option="USER_ENTERED")
+        return True, "저장 완료"
+    except Exception as e:
+        return False, f"저장 실패: {e}"
+
 # ==========================================
-# 9. 메인 화면 및 탭 구성
+# 9. Streamlit 메인 UI
 # ==========================================
-st.markdown("<h1 style='text-align: center; color: #2C3E50;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
-st.markdown("<div style='text-align: center; color: #555; margin-bottom: 20px;'>Professional Legal & Audit Assistant System</div>", unsafe_allow_html=True)
+st.title("🛡️ AUDIT AI Agent")
 
-_now_kst = _korea_now()
-CURRENT_YEAR = _now_kst.year
-CURRENT_MONTH = _now_kst.month
+tab_audit, tab_doc = st.tabs(["✅ 자율점검", "📂 문서 정밀 검토"])
 
-campaign_info = {
-    "key": f"{CURRENT_YEAR}-{CURRENT_MONTH:02d}",
-    "title": _default_campaign_title(_now_kst),
-    "sheet_name": f"{CURRENT_YEAR}_{CURRENT_MONTH:02d}_자율점검",
-    "start_date": _now_kst.strftime("%Y.%m.%d"),
-}
+# --- Tab 1: 자율점검 전용 설정/함수 ---
+def _init_pledge_runtime(keys):
+    if "pledge_prev" not in st.session_state:
+        st.session_state["pledge_prev"] = {}
+    if "pledge_running" not in st.session_state:
+        st.session_state["pledge_running"] = {}
+    if "pledge_done" not in st.session_state:
+        st.session_state["pledge_done"] = {}
 
-try:
-    _client_for_campaign = init_google_sheet_connection()
-    if _client_for_campaign:
-        _ss_for_campaign = _client_for_campaign.open("Audit_Result_2026")
-        campaign_info = get_current_campaign_info(_ss_for_campaign, _now_kst)
-except Exception:
-    pass
+    for k in keys:
+        st.session_state["pledge_prev"].setdefault(k, False)
+        st.session_state["pledge_running"].setdefault(k, False)
+        st.session_state["pledge_done"].setdefault(k, False)
 
-tab_audit, tab_doc, tab_chat, tab_summary, tab_admin = st.tabs([
-    f"✅ {CURRENT_MONTH} 자율점검", "📄 법률 검토", "💬 AI 에이전트(챗봇)", "📰 스마트 요약", "🔒 관리자 모드"
-])
-
-# ---------- (아이콘) 인라인 SVG: 애니메이션 모래시계 ----------
 HOURGLASS_SVG = """
-<svg width="18" height="18" viewBox="0 0 24 24" fill="none"
-     xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-  <path d="M6 2h12v5c0 2.2-1.4 4.2-3.5 5 2.1.8 3.5 2.8 3.5 5v5H6v-5c0-2.2 1.4-4.2 3.5-5C7.4 11.2 6 9.2 6 7V2Z"
-        stroke="#0B5ED7" stroke-width="2" stroke-linejoin="round"/>
-  <path d="M8 7h8M8 17h8" stroke="#0B5ED7" stroke-width="2" stroke-linecap="round"/>
-
-  <rect x="9" y="8.2" width="6" height="3.0" rx="1.0" fill="#0B5ED7" opacity="0.95">
-    <animate attributeName="height" values="3.0;0.3;3.0" dur="1.0s" repeatCount="indefinite" />
-    <animate attributeName="y"      values="8.2;10.9;8.2" dur="1.0s" repeatCount="indefinite" />
-  </rect>
-
-  <rect x="9" y="15.8" width="6" height="0.3" rx="1.0" fill="#0B5ED7" opacity="0.95">
-    <animate attributeName="height" values="0.3;3.0;0.3" dur="1.0s" repeatCount="indefinite" />
-    <animate attributeName="y"      values="15.8;13.1;15.8" dur="1.0s" repeatCount="indefinite" />
-  </rect>
-
-  <circle cx="12" cy="12" r="0.8" fill="#0B5ED7" opacity="0.95">
-    <animate attributeName="cy" values="11.2;14.2;11.2" dur="0.6s" repeatCount="indefinite"/>
-    <animate attributeName="opacity" values="0.95;0.2;0.95" dur="0.6s" repeatCount="indefinite"/>
-  </circle>
-  <circle cx="11" cy="12" r="0.6" fill="#0B5ED7" opacity="0.80">
-    <animate attributeName="cy" values="11.0;14.0;11.0" dur="0.7s" repeatCount="indefinite"/>
-    <animate attributeName="opacity" values="0.8;0.15;0.8" dur="0.7s" repeatCount="indefinite"/>
-  </circle>
-  <circle cx="13" cy="12" r="0.6" fill="#0B5ED7" opacity="0.80">
-    <animate attributeName="cy" values="11.4;14.4;11.4" dur="0.8s" repeatCount="indefinite"/>
-    <animate attributeName="opacity" values="0.8;0.15;0.8" dur="0.8s" repeatCount="indefinite"/>
-  </circle>
+<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24">
+  <path d="M6 2h12v6c0 2.2-1.2 4.2-3 5 1.8.8 3 2.8 3 5v6H6v-6c0-2.2 1.2-4.2 3-5-1.8-.8-3-2.8-3-5V2z" stroke="#0B5ED7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M9 6h6" stroke="#0B5ED7" stroke-width="2" stroke-linecap="round"/>
+  <path d="M9 18h6" stroke="#0B5ED7" stroke-width="2" stroke-linecap="round"/>
 </svg>
 """
 
-COUNTDOWN_SECONDS = 7  # ✅ 요청 확정: 7초
+def _render_pledge_group(title, items, all_keys):
+    st.markdown(
+        f"""
+        <div style="background:#FFFFFF; border:1px solid #E5E7EB; border-radius:12px; padding:14px 16px; margin-bottom: 10px;">
+          <div style="font-weight:900; font-size:1.06rem; margin-bottom: 8px;">{title}</div>
+        """,
+        unsafe_allow_html=True
+    )
 
-# =========================
-# ✅ 체크 "순간" 감지 + 우측 카운트다운 렌더 유틸
-# =========================
-def _init_pledge_runtime(keys: list[str]) -> None:
-    if "pledge_prev" not in st.session_state:
-        st.session_state["pledge_prev"] = {k: False for k in keys}
-    if "pledge_done" not in st.session_state:
-        st.session_state["pledge_done"] = {k: False for k in keys}
-    if "pledge_running" not in st.session_state:
-        st.session_state["pledge_running"] = {k: False for k in keys}
+    for idx, (key, text_) in enumerate(items, start=1):
+        prev = bool(st.session_state["pledge_prev"].get(key, False))
+        now_checked = bool(st.session_state.get(key, False))
+        running = bool(st.session_state["pledge_running"].get(key, False))
+        done = bool(st.session_state["pledge_done"].get(key, False))
 
-def _render_pledge_group(title: str, items: list[tuple[str, str]], all_keys: list[str]) -> None:
-    st.markdown(f"### ■ {title}")
+        should_start = (not prev) and now_checked and (not done)
 
-    for key, text in items:
-        c1, c2, c3 = st.columns([0.06, 0.78, 0.16], vertical_alignment="center")
+        left, right = st.columns([0.78, 0.22])
 
-        with c1:
-            st.checkbox("", key=key, label_visibility="collapsed",
-                        disabled=bool(st.session_state["pledge_running"].get(key, False)))
+        with left:
+            st.checkbox(f"{idx}. {text_}", key=key)
 
-        with c2:
-            checked = bool(st.session_state.get(key, False))
-            color = "#0B5ED7" if checked else "#2C3E50"
-            weight = "900" if checked else "650"
-            st.markdown(
-                f"<div style='font-size:1.02rem; font-weight:{weight}; color:{color}; line-height:1.55;'>{text}</div>",
-                unsafe_allow_html=True
-            )
-
-        with c3:
+        with right:
             ph = st.empty()
-            now_checked = bool(st.session_state.get(key, False))
-            prev_checked = bool(st.session_state["pledge_prev"].get(key, False))
-            done = bool(st.session_state["pledge_done"].get(key, False))
-            running = bool(st.session_state["pledge_running"].get(key, False))
-
-            # ✅ 방금 체크된 순간에만 7초 카운트다운 실행
-            if now_checked and (not prev_checked) and (not done) and (not running):
+            if should_start:
                 st.session_state["pledge_running"][key] = True
-                for sec in range(COUNTDOWN_SECONDS, 0, -1):
+                seconds = 7
+                for s in range(seconds, 0, -1):
                     ph.markdown(
-                        f"<div class='pledge-right'>{HOURGLASS_SVG}<span>{sec}s</span></div>",
+                        f"<div class='pledge-right'>{HOURGLASS_SVG}<span>{s}s</span></div>",
                         unsafe_allow_html=True
                     )
                     time.sleep(1)
@@ -630,10 +470,11 @@ def _render_pledge_group(title: str, items: list[tuple[str, str]], all_keys: lis
                 else:
                     ph.markdown("", unsafe_allow_html=True)
 
-    # ✅ 그룹 렌더 이후: prev 업데이트는 Tab 끝에서 한번에
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # --- [Tab 1: 자율점검] ---
 with tab_audit:
+    campaign_info = {"sheet_name": ensure_2026_sheet(get_sheet_client().open_by_key(st.secrets["spreadsheet_key"]))} if get_sheet_client() else {}
     current_sheet_name = campaign_info.get("sheet_name", "2026_윤리경영_실천서약")
 
     # ✅ (요청 1) 제목: Google Sheet 값과 무관하게 강제 고정
@@ -642,7 +483,7 @@ with tab_audit:
     st.markdown(f"""
         <div style='background-color: #E3F2FD; padding: 20px; border-radius: 10px; border-left: 5px solid #2196F3; margin-bottom: 20px;'>
             <h3 style='margin-top:0; color: #1565C0;'>📜 {title_for_box}</h3>
-            </div>
+        </div>
     """, unsafe_allow_html=True)
 
     # 2) 실천지침 주요내용
@@ -713,24 +554,16 @@ with tab_audit:
     st.markdown("<br>", unsafe_allow_html=True)
     _render_pledge_group("관리자의 책임과 의무", mgr_pledges, all_keys)
 
-    # ✅ (추가) 서약문: 임직원 정보 입력 바로 위에 배치
-    st.markdown("""
-        <div style='background-color:#E3F2FD; padding: 16px 18px; border-radius: 10px; border-left: 5px solid #2196F3; margin-top: 14px; margin-bottom: 8px;'>
-            <p style='font-size: 1.18rem; color: #444; margin: 0; line-height: 1.6;'>
-    st.markdown(
-    "나는 KT MOS 북부의 지속적인 발전을 위하여 회사 윤리경영원칙실천지침에 명시된 "
-    "**「임직원의 책임과 의무」** 및 "
-    "**「관리자의 책임과 의무」**를 성실히 이행할 것을 서약합니다."
-)
-
-                </p>
-        </div>
-    """, unsafe_allow_html=True)
-
     # ✅ prev 상태 업데이트 (탭 끝에서 1번)
     st.session_state["pledge_prev"] = {k: bool(st.session_state.get(k, False)) for k in all_keys}
 
     st.markdown("---")
+
+    st.markdown(
+        "나는 KT MOS 북부의 지속적인 발전을 위하여 회사 윤리경영원칙실천지침에 명시된 "
+        "**「임직원의 책임과 의무」** 및 "
+        "**「관리자의 책임과 의무」**를 성실히 이행할 것을 서약합니다."
+    )
 
     # 입력 박스
     c1, c2, c3, c4 = st.columns(4)
@@ -788,212 +621,12 @@ with tab_doc:
                     content = read_file(uploaded_file)
                     if content:
                         with st.spinner("🧠 AI가 분석 중입니다..."):
-                            try:
-                                prompt = f"[역할] 전문 감사인\n[작업] {option}\n[내용] {content}"
-                                res = get_model().generate_content(prompt)
-                                st.success("분석 완료")
-                                st.markdown(res.text)
-                            except Exception as e:
-                                st.error(f"오류: {e}")
-
-# --- [Tab 3: AI 에이전트] ---
-with tab_chat:
-    st.markdown("### 💬 AI 법률/감사 챗봇")
-    if "api_key" not in st.session_state:
-        st.warning("🔒 로그인 후 이용 가능합니다.")
-    else:
-        if "messages" not in st.session_state:
-            st.session_state.messages = []
-
-        with st.form(key="chat_input_form", clear_on_submit=True):
-            user_input = st.text_input("질문 입력")
-            send_btn = st.form_submit_button("전송 📤", use_container_width=True)
-
-        if send_btn and user_input:
-            st.session_state.messages.append({"role": "user", "content": user_input})
-            with st.spinner("답변 생성 중..."):
-                try:
-                    res = get_model().generate_content(user_input)
-                    st.session_state.messages.append({"role": "assistant", "content": res.text})
-                except Exception as e:
-                    st.error(f"오류: {e}")
-
-        for msg in reversed(st.session_state.messages):
-            with st.chat_message(msg["role"]):
-                st.write(msg["content"])
-
-# --- [Tab 4: 스마트 요약] ---
-with tab_summary:
-    st.markdown("### 📰 스마트 요약")
-    if "api_key" not in st.session_state:
-        st.warning("🔒 로그인 후 이용 가능합니다.")
-    else:
-        st_type = st.radio("입력 방식", ["URL (유튜브/웹)", "미디어 파일", "텍스트"])
-        final_input = None
-        is_multimodal = False
-
-        if "URL" in st_type:
-            url = st.text_input("URL 입력")
-            if url and "youtu" in url:
-                with st.spinner("자막 추출 중..."):
-                    final_input = get_youtube_transcript(url)
-                    if not final_input:
-                        final_input = download_and_upload_youtube_audio(url)
-                        is_multimodal = True
-            elif url:
-                with st.spinner("웹페이지 분석 중..."):
-                    final_input = get_web_content(url)
-
-        elif "미디어" in st_type:
-            mf = st.file_uploader("파일 업로드", type=["mp3", "wav", "mp4"])
-            if mf:
-                final_input = process_media_file(mf)
-                is_multimodal = True
-        else:
-            final_input = st.text_area("텍스트 입력", height=200)
-
-        if st.button("⚡ 요약 실행", use_container_width=True):
-            if final_input:
-                with st.spinner("요약 중..."):
-                    try:
-                        p = "다음 내용을 핵심 요약, 상세 내용, 인사이트로 정리해줘."
-                        if is_multimodal:
-                            res = get_model().generate_content([p, final_input])
-                        else:
-                            res = get_model().generate_content(f"{p}\n\n{str(final_input)[:30000]}")
-                        st.markdown(res.text)
-                    except Exception as e:
-                        st.error(f"오류: {e}")
-
-# --- [Tab 5: 관리자 대시보드] ---
-with tab_admin:
-    st.markdown("### 🔒 관리자 전용 대시보드")
-    admin_pw = st.text_input("관리자 비밀번호", type="password", key="admin_dash_pw")
-
-    if admin_pw.strip() == "ktmos0402!":
-        st.success("접속 성공")
-
-        client = init_google_sheet_connection()
-        if not client:
-            st.error("구글 시트 연결 실패: st.secrets / gspread 설정을 확인하세요.")
-        else:
-            try:
-                ss = client.open("Audit_Result_2026")
-            except Exception as e:
-                st.error(f"스프레드시트 오픈 실패: {e}")
-                ss = None
-
-            if ss:
-                camp = get_current_campaign_info(ss, _now_kst)
-
-                with st.expander("⚙️ 이번 달 테마 런칭/변경 (관리자)", expanded=False):
-                    new_title = st.text_input("테마 제목", value=camp.get("title", ""), key="camp_title_input")
-                    new_sheet = st.text_input("연동 시트명", value=camp.get("sheet_name", ""), key="camp_sheet_input")
-                    cA, cB = st.columns([1, 1])
-                    if cA.button("🚀 테마 적용", use_container_width=True):
-                        camp = set_current_campaign_info(ss, title=new_title, sheet_name=new_sheet, now_dt=_now_kst)
-                        st.session_state.pop("admin_df", None)
-                        st.session_state.pop("admin_stats_df", None)
-                        st.session_state["admin_cache_key"] = camp["key"]
-                        st.toast("✅ 테마가 적용되었습니다.", icon="🚀")
-                        st.rerun()
-                    cB.caption("※ 매월 말일 자정(=월 변경 시점) 자동으로 새 캠페인으로 전환됩니다.")
-
-                st.caption(f"현재 테마: **{camp['title']}**  |  연동 시트: `{camp['sheet_name']}`  |  캠페인 키: `{camp['key']}`")
-
-                target_dict = {"경영총괄": 45, "사업총괄": 37, "강북본부": 222, "강남본부": 174, "서부본부": 290, "강원본부": 104, "품질지원단": 138, "감사실": 3}
-                ordered_units = list(target_dict.keys())
-
-                refresh_clicked = st.button("🔄 데이터 최신화", use_container_width=True)
-                need_reload = (refresh_clicked
-                              or st.session_state.get("admin_cache_key") != camp["key"]
-                              or "admin_df" not in st.session_state
-                              or "admin_stats_df" not in st.session_state)
-
-                if need_reload:
-                    try:
-                        ws = ss.worksheet(camp["sheet_name"])
-                        df = pd.DataFrame(ws.get_all_records())
-                    except Exception:
-                        df = pd.DataFrame()
-
-                    if (not df.empty) and ("총괄/본부/단" in df.columns):
-                        counts = df["총괄/본부/단"].astype(str).value_counts().to_dict()
+                            model = genai.GenerativeModel("gemini-1.5-pro")
+                            prompt = f"다음 문서를 정밀 검토해줘:\n\n{content}"
+                            resp = model.generate_content(prompt)
+                        st.markdown("### ✅ 분석 결과")
+                        st.write(resp.text)
                     else:
-                        counts = {}
-
-                    stats_rows = []
-                    for unit_name in ordered_units:
-                        participated = int(counts.get(unit_name, 0))
-                        target = int(target_dict.get(unit_name, 0))
-                        not_part = max(target - participated, 0)
-                        rate = round((participated / target) * 100, 2) if target > 0 else 0.0
-                        stats_rows.append({"조직": unit_name, "참여완료": participated, "미참여": not_part, "참여율": rate})
-                    stats_df = pd.DataFrame(stats_rows)
-
-                    st.session_state["admin_df"] = df
-                    st.session_state["admin_stats_df"] = stats_df
-                    st.session_state["admin_cache_key"] = camp["key"]
-                    st.session_state["admin_last_update"] = _korea_now().strftime("%Y-%m-%d %H:%M:%S")
-
-                df = st.session_state.get("admin_df", pd.DataFrame())
-                stats_df = st.session_state.get("admin_stats_df", pd.DataFrame())
-                last_update = st.session_state.get("admin_last_update")
-
-                total_target = int(sum(target_dict.values()))
-                total_participated = int(stats_df["참여완료"].sum()) if (stats_df is not None and not stats_df.empty) else 0
-                total_rate = (total_participated / total_target * 100) if total_target > 0 else 0.0
-                date_kor = _korea_now().strftime("%Y.%m.%d")
-
-                if total_rate < 50:
-                    lamp_color = "#E74C3C"; lamp_label = "RED"; lamp_msg = "위험"
-                elif total_rate < 80:
-                    lamp_color = "#F39C12"; lamp_label = "ORANGE"; lamp_msg = "주의"
+                        st.warning("⚠️ 파일 내용을 읽지 못했습니다.")
                 else:
-                    lamp_color = "#2980B9"; lamp_label = "BLUE"; lamp_msg = "양호"
-
-                display_title = camp.get("title", "")
-                if "서약" not in display_title:
-                    display_title = display_title + " 서약서"
-
-                st.markdown(f"""
-                <div style='background:#FFFFFF; border:1px solid #E6EAF0; padding:18px 18px; border-radius:14px; margin-top:10px; margin-bottom:14px;'>
-                  <div style='display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;'>
-                    <div style='font-size:1.35rem; font-weight:800; color:#2C3E50;'>📊 {display_title} 참여현황</div>
-                    <div style='display:flex; align-items:center; gap:8px;'>
-                      <span style='display:inline-block; width:14px; height:14px; border-radius:50%; background:{lamp_color};'></span>
-                      <span style='font-weight:800; color:{lamp_color};'>{lamp_msg}</span>
-                    </div>
-                  </div>
-                  <div style='margin-top:10px; font-size:1.05rem; font-weight:700; color:#34495E;'>
-                    {date_kor}일 현재&nbsp;&nbsp;|&nbsp;&nbsp;
-                    총 대상자 <b>{total_target:,}</b>명&nbsp;&nbsp;|&nbsp;&nbsp;
-                    참여완료 <b>{total_participated:,}</b>명&nbsp;&nbsp;|&nbsp;&nbsp;
-                    참여율 <b>{total_rate:.2f}%</b>
-                  </div>
-                  <div style='margin-top:6px; font-size:0.85rem; color:#7F8C8D;'>마지막 업데이트: {last_update or "—"} &nbsp;|&nbsp; 신호등: <b style='color:{lamp_color};'>{lamp_label}</b></div>
-                </div>
-                """, unsafe_allow_html=True)
-
-                if df is None or df.empty:
-                    st.info("데이터가 없습니다.")
-                else:
-                    melt_df = stats_df.melt(id_vars="조직", value_vars=["참여완료", "미참여"], var_name="구분", value_name="인원")
-                    fig_bar = px.bar(melt_df, x="조직", y="인원", color="구분", barmode="stack", text="인원", title="조직별 참여 현황")
-                    fig_bar.update_layout(dragmode="pan", autosize=True, margin=dict(l=20, r=20, t=60, b=20))
-                    fig_bar.update_traces(textposition="outside", cliponaxis=False)
-                    st.plotly_chart(fig_bar, use_container_width=True, config=PLOTLY_CONFIG)
-
-                    fig_line = px.line(stats_df, x="조직", y="참여율", markers=True, text="참여율", title="조직별 참여율(%)")
-                    fig_line.update_layout(dragmode="pan", autosize=True, margin=dict(l=20, r=20, t=60, b=20))
-                    fig_line.update_traces(textposition="top center")
-                    st.plotly_chart(fig_line, use_container_width=True, config=PLOTLY_CONFIG)
-
-                    st.dataframe(df, use_container_width=True)
-                    st.download_button(
-                        label="📥 엑셀 다운로드",
-                        data=df.to_csv(index=False).encode("utf-8-sig"),
-                        file_name=f"audit_result_{camp['key']}.csv",
-                        mime="text/csv",
-                        use_container_width=True,
-                    )
+                    st.warning("⚠️ 파일을 업로드해주세요.")
