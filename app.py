@@ -717,11 +717,11 @@ with tab_audit:
     st.markdown("""
         <div style='background-color:#E3F2FD; padding: 16px 18px; border-radius: 10px; border-left: 5px solid #2196F3; margin-top: 14px; margin-bottom: 8px;'>
             <p style='font-size: 1.18rem; color: #444; margin: 0; line-height: 1.6;'>
+            
                 st.markdown(
-    "I pledge to faithfully fulfill the "
-    "**“Responsibilities and Obligations of Executives and Employees”** and "
-    "**“Responsibilities and Obligations of Managers”** specified in the company’s Ethical Management Principles "
-    "Practice Guidelines for the continued development of KT MOS Northern."
+    "나는 KT MOS 북부의 지속적인 발전을 위하여 회사 윤리경영원칙실천지침에 명시된 "
+    "**「임직원의 책임과 의무」** 및 "
+    "**「관리자의 책임과 의무」**를 성실히 이행할 것을 서약합니다."
 )
                 </p>
         </div>
