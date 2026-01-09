@@ -373,10 +373,10 @@ def _ensure_campaign_config_sheet(spreadsheet):
         return ws
 
 def _default_campaign_title(dt: datetime.datetime) -> str:
-    # ✅ 2026년 1월은 '윤리경영원칙 실천지침 실천서약'으로 고정(요청사항)
+    # ✅ 2026년 1월은 '윤리경영원칙 실천지침" 실천서약 으로 고정(요청사항)
     if dt.year == 2026 and dt.month == 1:
         return "1월 윤리경영원칙 실천지침 실천서약"
-    return f"{dt.month}월 자율점검"
+    return f"{dt.month}월 자율점검(윤리경영원칙 실천지침 실천서약)"
 
 def _default_campaign_sheet_name(dt: datetime.datetime, spreadsheet=None) -> str:
     if spreadsheet is not None and dt.year == 2026 and dt.month == 1:
