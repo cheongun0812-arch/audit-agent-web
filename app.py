@@ -58,148 +58,109 @@ st.set_page_config(
 # ==========================================
 st.markdown("""
 <style>
-/* ✅ 전체 글자 크기 +0.2px */
-html { font-size: 16.2px; }
-
-.stApp { background-color: #F4F6F9; }
-[data-testid="stSidebar"] { background-color: #2C3E50; }
-[data-testid="stSidebar"] * { color: #FFFFFF !important; }
-
-/* ✅ 사이드바 텍스트 입력의 아이콘(눈/지우기 등)을 항상 검정색으로 */
-[data-testid="stSidebar"] div[data-testid="stTextInput"] button,
-[data-testid="stSidebar"] div[data-testid="stTextInput"] button:hover,
-[data-testid="stSidebar"] div[data-testid="stTextInput"] button:focus,
-[data-testid="stSidebar"] div[data-testid="stTextInput"] button:active {
-    background: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-    color: #000000 !important;
-    opacity: 1 !important;
+/* =========================================================
+   [수정1] 상단 간격(스트림릿 헤더/상단 패딩) 정리
+   - '복구됐나?' 느낌이 안 나도록 TOP 여백을 줄이고,
+   - 기본 Streamlit 상단 바는 살짝 정리(숨기거나 최소화)
+   ========================================================= */
+header[data-testid="stHeader"]{
+  height: 0px !important;
+  min-height: 0px !important;
+}
+header[data-testid="stHeader"] *{
+  display: none !important;
+}
+div.block-container{
+  padding-top: 10px !important;   /* <- 여기 숫자로 미세 조정 가능 (8~16 추천) */
 }
 
-[data-testid="stSidebar"] div[data-testid="stTextInput"] button svg,
-[data-testid="stSidebar"] div[data-testid="stTextInput"] button svg *,
-[data-testid="stSidebar"] div[data-testid="stTextInput"] button svg path {
-    fill: #000000 !important;
-    stroke: #000000 !important;
-    opacity: 1 !important;
+/* =========================================================
+   [수정1-추가] 타이틀 영역(히어로) 위/아래 간격을 더 정돈
+   ========================================================= */
+.hero{
+  margin-top: 0px !important;
+  padding-top: 18px !important;
+  padding-bottom: 18px !important;
 }
 
-/* aria-label이 환경/언어에 따라 달라도 적용되도록, 패스워드 토글 버튼도 강제 */
-div[data-testid="stTextInput"] button[aria-label],
-div[data-testid="stTextInput"] button[aria-label] svg,
-div[data-testid="stTextInput"] button[aria-label] svg * {
-    fill: #000000 !important;
-    stroke: #000000 !important;
-    color: #000000 !important;
-    opacity: 1 !important;
+/* =========================================================
+   [수정1+2] 프로그램 제목 폰트 키우기 + '정체성' 강화
+   - 메뉴 텍스트보다 크고, 포털의 "간판"처럼 보이게
+   ========================================================= */
+.hero-title{
+  font-size: 22px !important;     /* 20~26 사이 취향대로 */
+  font-weight: 900 !important;
+  letter-spacing: .3px !important;
+}
+.hero-sub{
+  font-size: 13px !important;
+  opacity: .92 !important;
+}
+.badge{
+  width: 34px !important;
+  height: 34px !important;
+  border-radius: 12px !important;
 }
 
-.stTextInput input, .stTextArea textarea {
-    background-color: #FFFFFF !important;
-    color: #000000 !important;
-    -webkit-text-fill-color: #000000 !important;
-    border: 1px solid #BDC3C7 !important;
+/* =========================================================
+   [수정3] 사이드바 텍스트 톤업 (다크 배경에서 어두운 글자 방지)
+   - 라벨/설명/슬라이더 값까지 전부 밝게
+   ========================================================= */
+[data-testid="stSidebar"] *{
+  color: #EDEFF4 !important;
+  -webkit-text-fill-color: #EDEFF4 !important;
+}
+[data-testid="stSidebar"] small,
+[data-testid="stSidebar"] .stCaption,
+[data-testid="stSidebar"] .stMarkdown p{
+  color: #B9C2D6 !important;
+  -webkit-text-fill-color: #B9C2D6 !important;
 }
 
-/* ✅ 버튼 스타일 (일반 버튼 + 폼 제출 버튼) */
-.stButton > button,
-div[data-testid="stFormSubmitButton"] > button {
-    background: linear-gradient(to right, #2980B9, #2C3E50) !important;
-    color: #FFFFFF !important;
-    border: none !important;
-    border-radius: 10px !important;
-    padding: 0.6rem 1rem !important;
-    font-weight: 800 !important;
-    width: 100% !important;
-    opacity: 1 !important;
+/* 슬라이더 눈금/값이 흐리면 여기에서 확실히 올림 */
+[data-testid="stSidebar"] [data-testid="stSlider"] *{
+  color: #EDEFF4 !important;
+  -webkit-text-fill-color: #EDEFF4 !important;
 }
 
-/* ✅ disabled여도 텍스트가 흐려지지 않도록 */
-.stButton > button:disabled,
-div[data-testid="stFormSubmitButton"] > button:disabled {
-    background: linear-gradient(to right, #2980B9, #2C3E50) !important;
-    color: #FFFFFF !important;
-    opacity: 1 !important;
-    filter: none !important;
+/* =========================================================
+   [수정2-추가] 업로더가 '원복'된 것처럼 보이는 문제(스타일 강제)
+   - FileUploader(드롭존) + 업로드된 파일 카드 영역까지 강하게 지정
+   ========================================================= */
+section.main [data-testid="stFileUploader"],
+section.main [data-testid="stFileUploader"] > div{
+  background: #0E1117 !important;
+  border: 1px dashed rgba(214,178,94,.45) !important;
+  border-radius: 14px !important;
+}
+section.main [data-testid="stFileUploader"] *{
+  color: #EDEFF4 !important;
+  -webkit-text-fill-color: #EDEFF4 !important;
+}
+section.main [data-testid="stFileUploader"] small,
+section.main [data-testid="stFileUploader"] label{
+  color: #B9C2D6 !important;
+  -webkit-text-fill-color: #B9C2D6 !important;
+}
+section.main [data-testid="stFileUploader"] button{
+  border: 1px solid rgba(214,178,94,.55) !important;
+  border-radius: 12px !important;
 }
 
-/* ✅ 버튼 내부 텍스트/아이콘도 상시 선명 */
-.stButton > button *,
-div[data-testid="stFormSubmitButton"] > button * {
-    color: #FFFFFF !important;
-    opacity: 1 !important;
+/* 업로드 후 선택된 파일명/정보 표시(카드) */
+section.main div[data-testid="stFileUploaderFile"],
+section.main div[data-testid="stFileUploaderFile"] * ,
+section.main div[data-testid="stFileUploaderFileName"],
+section.main div[data-testid="stFileUploaderFileName"] *{
+  color: #EDEFF4 !important;
+  -webkit-text-fill-color: #EDEFF4 !important;
 }
-
-/* (서약 우측 카운트다운 표시용) */
-.pledge-right {
-  display:flex;
-  align-items:center;
-  justify-content:flex-end;
-  gap: 8px;
-  font-weight: 900;
-  color: #0B5ED7;
-  min-width: 90px;
+section.main div[data-testid="stFileUploaderFile"]{
+  background: #0E1117 !important;
+  border: 1px solid #2D3446 !important;
+  border-radius: 12px !important;
 }
-
-/* ✅ (추가) 자율점검 안내 박스/서약 문구 전용 스타일 */
-.km-gap-8 { height: 8px; }
-.km-gap-12 { height: 12px; }
-.km-gap-18 { height: 18px; }
-
-.km-pledge-line {
-  font-size: 1.08rem;            /* 서약 문장 기본 크기 */
-  line-height: 1.75;
-  margin: 0;
-  letter-spacing: 0.1px;
-}
-.km-pledge-line b{
-  font-weight: 900;
-}
-
 </style>
-""", unsafe_allow_html=True)
-
-# ✅ PC에서는 사이드바 기본 펼침, 모바일에서는 기본 접힘
-st.markdown("""
-<script>
-(function() {
-  const KEY = "__sidebar_autopen_done__";
-  const isDesktop = () => (window.innerWidth || 0) >= 900;
-  let tries = 0;
-  const maxTries = 25;
-
-  function clickToggleIfNeeded() {
-    try {
-      if (!isDesktop()) return;
-      if (window.sessionStorage.getItem(KEY) === "1") return;
-
-      const doc = window.parent?.document || document;
-      const candidates = [
-        '[data-testid="stSidebarCollapsedControl"] button',
-        '[data-testid="stSidebarCollapsedControl"]',
-        'button[title="Open sidebar"]',
-        'button[aria-label="Open sidebar"]'
-      ];
-
-      for (const sel of candidates) {
-        const el = doc.querySelector(sel);
-        if (el) {
-          el.click();
-          window.sessionStorage.setItem(KEY, "1");
-          return;
-        }
-      }
-    } catch (e) {}
-  }
-
-  const timer = setInterval(() => {
-    tries += 1;
-    clickToggleIfNeeded();
-    if (tries >= maxTries) clearInterval(timer);
-  }, 250);
-})();
-</script>
 """, unsafe_allow_html=True)
 
 # ==========================================
