@@ -737,22 +737,14 @@ with tab_audit:
 
 
         st.markdown(
-
-
-            "나는 KT MOS 북부의 지속적인 발전을 위하여 회사 윤리경영원칙실천지침에 명시된 "
-
-
-            "**「임직원의 책임과 의무」** 및 "
-
-
-            "**「관리자의 책임과 의무」**를 성실히 이행할 것을 서약합니다."
-
-
+            "I pledge to faithfully fulfill the "
+            "**「Responsibilities and Obligations of Executives and Employees」 and 「Responsibilities and Obligations of Managers」** "
+            "specified in the Company's Ethical Management Principles Practice Guidelines for the continued development of KT MOS North."
         )
 
 
 
-        st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height:69px;'></div>", unsafe_allow_html=True)
 
 
 
