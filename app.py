@@ -59,7 +59,7 @@ st.set_page_config(
 st.markdown("""
 <style>
 /* ✅ 전체 글자 크기 +0.2px */
-html { font-size: 18.5px; }
+html { font-size: 16.2px; }
 
 .stApp { background-color: #F4F6F9; }
 [data-testid="stSidebar"] { background-color: #2C3E50; }
@@ -709,28 +709,72 @@ with tab_audit:
     all_keys = [k for k, _ in exec_pledges] + [k for k, _ in mgr_pledges]
     _init_pledge_runtime(all_keys)
 
-    _render_pledge_group("임직원의 책임과 의무", exec_pledges, all_keys)
-    st.markdown("<br>", unsafe_allow_html=True)
-    _render_pledge_group("관리자의 책임과 의무", mgr_pledges, all_keys)
+    with st.expander("✅ 서약 확인 및 임직원 정보 입력", expanded=True):
 
-    # ✅ prev 상태 업데이트 (탭 끝에서 1번)
-    st.session_state["pledge_prev"] = {k: bool(st.session_state.get(k, False)) for k in all_keys}
 
-    st.markdown("---")
+        _render_pledge_group("임직원의 책임과 의무", exec_pledges, all_keys)
 
-    st.markdown(
-        "나는 KT MOS 북부의 지속적인 발전을 위하여 회사 윤리경영원칙실천지침에 명시된 "
-        "**「임직원의 책임과 의무」** 및 "
-        "**「관리자의 책임과 의무」**를 성실히 이행할 것을 서약합니다."
-    )
 
-    # 입력 박스
-    c1, c2, c3, c4 = st.columns(4)
-    emp_id = c1.text_input("사번", placeholder="예: 12345")
-    name = c2.text_input("성명")
-    ordered_units = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
-    unit = c3.selectbox("총괄 / 본부 / 단", ordered_units)
-    dept = c4.text_input("상세 부서명")
+        st.markdown("<br>", unsafe_allow_html=True)
+
+
+        _render_pledge_group("관리자의 책임과 의무", mgr_pledges, all_keys)
+
+
+
+        # ✅ prev 상태 업데이트 (탭 끝에서 1번)
+
+
+        st.session_state["pledge_prev"] = {k: bool(st.session_state.get(k, False)) for k in all_keys}
+
+
+
+        # ✅ 서약 문구를 현재 위치보다 약 20mm(≈76px) 아래로 내리기
+
+
+        st.markdown("<div style='height:76px;'></div>", unsafe_allow_html=True)
+
+
+
+        st.markdown(
+
+
+            "나는 KT MOS 북부의 지속적인 발전을 위하여 회사 윤리경영원칙실천지침에 명시된 "
+
+
+            "**「임직원의 책임과 의무」** 및 "
+
+
+            "**「관리자의 책임과 의무」**를 성실히 이행할 것을 서약합니다."
+
+
+        )
+
+
+
+        st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
+
+
+
+        # 입력 박스 (한 박스 안)
+
+
+        c1, c2, c3, c4 = st.columns(4)
+
+
+        emp_id = c1.text_input("사번", placeholder="예: 12345")
+
+
+        name = c2.text_input("성명")
+
+
+        ordered_units = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
+
+
+        unit = c3.selectbox("총괄 / 본부 / 단", ordered_units)
+
+
+        dept = c4.text_input("상세 부서명")
 
     st.markdown("---")
 
