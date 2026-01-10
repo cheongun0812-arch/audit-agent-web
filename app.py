@@ -575,21 +575,52 @@ def _init_pledge_runtime(keys: list[str]) -> None:
     if "pledge_running" not in st.session_state:
         st.session_state["pledge_running"] = {k: False for k in keys}
 
-def _render_pledge_group(title: str, items: list[tuple[str, str]], all_keys: list[str]) -> None:
+# =========================
+# ✅ 서약 체크 순서 제어(임직원 → 관리자) + 경고 토스트
+# =========================
+def _order_enforce_cb(changed_key: str, prereq_keys: list[str], message: str) -> None:
+    """체크 순서가 어긋나면 체크를 되돌리고, 경고 메시지를 세션에 기록합니다."""
+    try:
+        now_checked = bool(st.session_state.get(changed_key, False))
+        prereq_ok = all(bool(st.session_state.get(k, False)) for k in prereq_keys)
+        if now_checked and (not prereq_ok):
+            st.session_state[changed_key] = False
+            st.session_state["order_warning"] = message
+    except Exception:
+        pass
+
+def _render_pledge_group(
+    title: str,
+    items: list[tuple[str, str]],
+    all_keys: list[str],
+    order_guard: dict | None = None,   # {"keys": [...], "prereq": [...], "message": "..."}
+) -> None:
     st.markdown(f"### ■ {title}")
+
+    guard_keys = set(order_guard.get("keys", [])) if isinstance(order_guard, dict) else set()
+    prereq_keys = list(order_guard.get("prereq", [])) if isinstance(order_guard, dict) else []
+    guard_msg  = str(order_guard.get("message", "")) if isinstance(order_guard, dict) else ""
 
     for key, text in items:
         c1, c2, c3 = st.columns([0.06, 0.78, 0.16], vertical_alignment="center")
 
         with c1:
-            st.checkbox("", key=key, label_visibility="collapsed",
-                        disabled=bool(st.session_state["pledge_running"].get(key, False)))
+            cb_kwargs = dict(
+                key=key,
+                label_visibility="collapsed",
+                disabled=bool(st.session_state["pledge_running"].get(key, False)),
+            )
+            # ✅ 관리자 서약을 임직원 서약보다 먼저 체크하려 하면: 체크를 되돌리고 토스트 경고
+            if key in guard_keys:
+                cb_kwargs.update(dict(
+                    on_change=_order_enforce_cb,
+                    args=(key, prereq_keys, guard_msg),
+                ))
+
+            st.checkbox("", **cb_kwargs)
 
         with c2:
             checked = bool(st.session_state.get(key, False))
-            # ✅ 사용자가 서약 항목을 하나라도 체크하면 expander는 계속 펼쳐진 상태 유지
-            if checked:
-                st.session_state["pledge_box_open"] = True
             color = "#0B5ED7" if checked else "#2C3E50"
             weight = "900" if checked else "650"
             st.markdown(
@@ -719,6 +750,11 @@ with tab_audit:
 
     with st.expander("✅ 서약 확인 및 임직원 정보 입력", expanded=st.session_state["pledge_box_open"]):
 
+        # ✅ 체크 순서 안내/경고 (관리자 서약을 먼저 체크하면 자동으로 되돌리고 토스트 표시)
+        if st.session_state.get("order_warning"):
+            st.toast(st.session_state["order_warning"], icon="⚠️")
+            st.session_state.pop("order_warning", None)
+
 
         _render_pledge_group("임직원의 책임과 의무", exec_pledges, all_keys)
 
@@ -726,9 +762,9 @@ with tab_audit:
         st.markdown("<br>", unsafe_allow_html=True)
 
 
-        _render_pledge_group("관리자의 책임과 의무", mgr_pledges, all_keys)
+        st.info("📌 진행 순서 안내: **임직원의 책임과 의무(4개)**를 먼저 확인(체크)하신 후, **관리자의 책임과 의무(3개)**를 순서대로 진행해 주세요.")
 
-
+        _render_pledge_group("관리자의 책임과 의무", mgr_pledges, all_keys, order_guard={'keys': ['pledge_m1', 'pledge_m2', 'pledge_m3'], 'prereq': ['pledge_e1', 'pledge_e2', 'pledge_e3', 'pledge_e4'], 'message': '⚠️ 순서 안내: 먼저 "임직원의 책임과 의무" 4개 항목을 모두 체크한 뒤 "관리자의 책임과 의무"를 진행해 주세요.'})
 
         # ✅ prev 상태 업데이트 (탭 끝에서 1번)
 
