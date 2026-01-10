@@ -587,6 +587,9 @@ def _render_pledge_group(title: str, items: list[tuple[str, str]], all_keys: lis
 
         with c2:
             checked = bool(st.session_state.get(key, False))
+            # ✅ 사용자가 서약 항목을 하나라도 체크하면 expander는 계속 펼쳐진 상태 유지
+            if checked:
+                st.session_state["pledge_box_open"] = True
             color = "#0B5ED7" if checked else "#2C3E50"
             weight = "900" if checked else "650"
             st.markdown(
@@ -714,11 +717,6 @@ with tab_audit:
     all_keys = [k for k, _ in exec_pledges] + [k for k, _ in mgr_pledges]
     _init_pledge_runtime(all_keys)
 
-    # ✅ 중간 트리거: 체크하면 서약/정보입력 박스가 펼쳐집니다.
-    open_trigger = st.checkbox("✅ 서약 확인 및 임직원 정보 입력 펼치기", key="pledge_open_trigger")
-    if open_trigger:
-        st.session_state["pledge_box_open"] = True
-
     with st.expander("✅ 서약 확인 및 임직원 정보 입력", expanded=st.session_state["pledge_box_open"]):
 
 
@@ -781,6 +779,10 @@ with tab_audit:
 
 
         dept = c4.text_input("상세 부서명")
+
+        # ✅ 입력을 시작하면 expander가 다시 접히지 않도록 유지
+        if any([str(emp_id).strip(), str(name).strip(), str(dept).strip()]):
+            st.session_state["pledge_box_open"] = True
 
     st.markdown("---")
 
