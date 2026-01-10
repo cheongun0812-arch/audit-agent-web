@@ -841,7 +841,7 @@ with tab_audit:
 
 # --- [Tab 2: 문서 정밀 검토] ---
 with tab_doc:
-    st.markdown("### 📂 문서 및 규정 검토")
+    st.markdown("### 📂 법률 검토")
     if "api_key" not in st.session_state:
         st.warning("🔒 로그인 후 이용 가능합니다.")
     else:
@@ -878,7 +878,7 @@ with tab_doc:
 
 # --- [Tab 3: AI 에이전트] ---
 with tab_chat:
-    st.markdown("### 💬 AI 법률/감사 챗봇")
+    st.markdown("### 💬 AI 에이전트/챗봇")
     if "api_key" not in st.session_state:
         st.warning("🔒 로그인 후 이용 가능합니다.")
     else:
