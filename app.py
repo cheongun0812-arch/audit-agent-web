@@ -841,40 +841,63 @@ with tab_audit:
 
 # --- [Tab 2: 문서 정밀 검토] ---
 with tab_doc:
-    st.markdown("### 📂 법률 검토")
+    st.markdown("### ⚖️ 사내 지침 기반 법률 검토 (RAG)")
     if "api_key" not in st.session_state:
         st.warning("🔒 로그인 후 이용 가능합니다.")
     else:
+        # 1. 지침서 로드 (성능 최적화: 캐싱 적용)
+        @st.cache_resource
+        def get_internal_rules():
+            rules_text = ""
+            files = ["2025년 재원운영기준(20250930).pdf", "재무_3_계약 지침_20250519.pdf"]
+            for f_name in files:
+                if os.path.exists(f_name):
+                    with open(f_name, "rb") as f:
+                        pdf = PyPDF2.PdfReader(f)
+                        rules_text += f"\n[지침: {f_name}]\n"
+                        for page in pdf.pages:
+                            rules_text += page.extract_text()
+            return rules_text
+
+        internal_rules = get_internal_rules()
+        
         option = st.selectbox("작업 유형", ["법률 리스크 정밀 검토", "감사 보고서 검증", "오타 수정 및 교정", "기안문 작성"])
 
-        is_authenticated = True
-        if option == "감사 보고서 검증":
-            if "audit_verified" not in st.session_state:
-                is_authenticated = False
-                st.warning("🔒 감사실 전용 메뉴입니다. 인증이 필요합니다.")
-                with st.form("doc_auth_form"):
-                    pass_input = st.text_input("인증키 입력", type="password")
-                    if st.form_submit_button("확인"):
-                        if pass_input.strip() == "ktmos0402!":
-                            st.session_state["audit_verified"] = True
-                            st.rerun()
-                        else:
-                            st.error("❌ 인증키 불일치")
+        if option == "법률 리스크 정밀 검토":
+            st.info("💡 사내 지침을 바탕으로 계약서의 위반 여부를 실시간 대조합니다.")
+            
+            uploaded_file = st.file_uploader("검토할 파일을 업로드하세요", type=['pdf', 'docx', 'txt'], key="legal_audit")
 
-        if is_authenticated:
-            uploaded_file = st.file_uploader("파일 업로드 (PDF, Word, TXT)", type=["txt", "pdf", "docx"])
-            if st.button("🚀 분석 시작", use_container_width=True):
-                if uploaded_file:
-                    content = read_file(uploaded_file)
-                    if content:
-                        with st.spinner("🧠 AI가 분석 중입니다..."):
-                            try:
-                                prompt = f"[역할] 전문 감사인\n[작업] {option}\n[내용] {content}"
-                                res = get_model().generate_content(prompt)
-                                st.success("분석 완료")
-                                st.markdown(res.text)
-                            except Exception as e:
-                                st.error(f"오류: {e}")
+            if uploaded_file:
+                # [성능 최적화] 파일 해시로 중복 분석 방지
+                f_hash = hashlib.md5(uploaded_file.getvalue()).hexdigest()
+                
+                if f"res_{f_hash}" in st.session_state:
+                    st.success("✅ 이미 분석된 문서입니다. (API 비용 절약)")
+                    st.markdown(st.session_state[f"res_{f_hash}"])
+                else:
+                    with st.spinner("지침서 조항 대조 중..."):
+                        # (사용자 문서 텍스트 추출 부분은 기존 extract_text 함수 등을 활용하세요)
+                        # 여기서는 예시로 로직만 넣었습니다.
+                        user_content = extract_text_from_file(uploaded_file) 
+                        
+                        prompt = f"""
+                        당신은 kt MOS 북부의 법무 전문가입니다.
+                        제공된 [사내 지침]을 정답으로 삼아 [검토 문서]를 분석하세요.
+                        
+                        [사내 지침]
+                        {internal_rules[:8000]}
+                        
+                        [검토 문서]
+                        {user_content[:4000]}
+                        
+                        결과에는 반드시 위반되는 지침 조항 번호를 포함하세요.
+                        """
+                        
+                        response = get_gemini_response(prompt, None)
+                        st.session_state[f"res_{f_hash}"] = response
+                        st.markdown(response)
+                        st.download_button("📥 결과 다운로드", response, file_name="Audit_Report.md")
 
 # --- [Tab 3: AI 에이전트] ---
 with tab_chat:
