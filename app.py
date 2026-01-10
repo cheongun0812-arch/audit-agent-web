@@ -59,7 +59,7 @@ st.set_page_config(
 st.markdown("""
 <style>
 /* ✅ 전체 글자 크기 +0.2px */
-html { font-size: 20.0px; }
+html { font-size: 18.5px; }
 
 .stApp { background-color: #F4F6F9; }
 [data-testid="stSidebar"] { background-color: #2C3E50; }
