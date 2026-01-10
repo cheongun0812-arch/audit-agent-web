@@ -58,25 +58,6 @@ st.set_page_config(
 # ==========================================
 st.markdown("""
 <style>
-/* =========================================================
-   ✅ CSS LOAD CHECK (반영 확인용 배지)
-   - 화면 좌측 상단에 'CSS LOADED' 배지가 떠야 정상 반영
-   ========================================================= */
-.stApp::before{
-  content: "CSS LOADED • UI FIX v2";
-  position: fixed;
-  top: 10px;
-  left: 10px;
-  z-index: 999999;
-  padding: 6px 10px;
-  border-radius: 10px;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: .2px;
-  background: rgba(214,178,94,.18);
-  border: 1px solid rgba(214,178,94,.45);
-  color: #D6B25E;
-}
 
 /* =========================================================
    1) TOP BAR / HEADER 간격 "확실히" 줄이기 (버전별 대응)
