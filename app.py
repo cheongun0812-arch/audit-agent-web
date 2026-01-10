@@ -59,106 +59,184 @@ st.set_page_config(
 st.markdown("""
 <style>
 /* =========================================================
-   [수정1] 상단 간격(스트림릿 헤더/상단 패딩) 정리
-   - '복구됐나?' 느낌이 안 나도록 TOP 여백을 줄이고,
-   - 기본 Streamlit 상단 바는 살짝 정리(숨기거나 최소화)
+   ✅ CSS LOAD CHECK (반영 확인용 배지)
+   - 화면 좌측 상단에 'CSS LOADED' 배지가 떠야 정상 반영
    ========================================================= */
-header[data-testid="stHeader"]{
-  height: 0px !important;
-  min-height: 0px !important;
-}
-header[data-testid="stHeader"] *{
-  display: none !important;
-}
-div.block-container{
-  padding-top: 10px !important;   /* <- 여기 숫자로 미세 조정 가능 (8~16 추천) */
+.stApp::before{
+  content: "CSS LOADED • UI FIX v2";
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 999999;
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .2px;
+  background: rgba(214,178,94,.18);
+  border: 1px solid rgba(214,178,94,.45);
+  color: #D6B25E;
 }
 
 /* =========================================================
-   [수정1-추가] 타이틀 영역(히어로) 위/아래 간격을 더 정돈
+   1) TOP BAR / HEADER 간격 "확실히" 줄이기 (버전별 대응)
+   ========================================================= */
+/* 최신 Streamlit에서 상단 툴바/헤더 후보들 */
+header[data-testid="stHeader"],
+div[data-testid="stToolbar"],
+div[data-testid="stDecoration"],
+div[data-testid="stStatusWidget"]{
+  height: 0px !important;
+  min-height: 0px !important;
+  display: none !important;
+}
+
+/* 레이아웃 상단 패딩 강제 축소 (핵심) */
+div.block-container{
+  padding-top: 12px !important;  /* 8~16 사이로 취향 조정 */
+}
+
+/* =========================================================
+   2) 전체 톤 통일 (다크 & 품격)
+   ========================================================= */
+:root{
+  --bg:#0B0D10;
+  --panel:#12151B;
+  --border:#232836;
+  --text:#EDEFF4;
+  --muted:#B9C2D6;
+  --gold:#D6B25E;
+}
+
+.stApp{
+  background: radial-gradient(1200px 600px at 20% 0%, rgba(214,178,94,.08), transparent 60%),
+              radial-gradient(1000px 600px at 90% 10%, rgba(90,132,255,.08), transparent 55%),
+              var(--bg);
+  color: var(--text);
+}
+
+/* =========================================================
+   3) HERO(타이틀) 폰트/정체성 강화 (메뉴보다 크게)
+   - 네 코드에서 hero-title 클래스를 쓰고 있으니 여기서 확실히 키움
    ========================================================= */
 .hero{
   margin-top: 0px !important;
-  padding-top: 18px !important;
-  padding-bottom: 18px !important;
+  padding: 18px 22px !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 18px !important;
+  background: linear-gradient(135deg, rgba(214,178,94,.15) 0%, rgba(255,255,255,.03) 100%) !important;
 }
-
-/* =========================================================
-   [수정1+2] 프로그램 제목 폰트 키우기 + '정체성' 강화
-   - 메뉴 텍스트보다 크고, 포털의 "간판"처럼 보이게
-   ========================================================= */
 .hero-title{
-  font-size: 22px !important;     /* 20~26 사이 취향대로 */
+  font-size: 26px !important;    /* 제목 크게 */
   font-weight: 900 !important;
+  color: var(--text) !important;
   letter-spacing: .3px !important;
 }
 .hero-sub{
   font-size: 13px !important;
-  opacity: .92 !important;
-}
-.badge{
-  width: 34px !important;
-  height: 34px !important;
-  border-radius: 12px !important;
+  color: var(--muted) !important;
 }
 
 /* =========================================================
-   [수정3] 사이드바 텍스트 톤업 (다크 배경에서 어두운 글자 방지)
-   - 라벨/설명/슬라이더 값까지 전부 밝게
+   4) Sidebar 배경/텍스트 톤업 (어두운 글자 문제 해결)
    ========================================================= */
+[data-testid="stSidebar"]{
+  background: linear-gradient(180deg, #0E1116 0%, #0A0C10 100%) !important;
+  border-right: 1px solid var(--border) !important;
+}
+
+/* 사이드바 내부 텍스트 전부 밝게 */
 [data-testid="stSidebar"] *{
-  color: #EDEFF4 !important;
-  -webkit-text-fill-color: #EDEFF4 !important;
+  color: var(--text) !important;
+  -webkit-text-fill-color: var(--text) !important;
 }
 [data-testid="stSidebar"] small,
 [data-testid="stSidebar"] .stCaption,
 [data-testid="stSidebar"] .stMarkdown p{
-  color: #B9C2D6 !important;
-  -webkit-text-fill-color: #B9C2D6 !important;
-}
-
-/* 슬라이더 눈금/값이 흐리면 여기에서 확실히 올림 */
-[data-testid="stSidebar"] [data-testid="stSlider"] *{
-  color: #EDEFF4 !important;
-  -webkit-text-fill-color: #EDEFF4 !important;
+  color: var(--muted) !important;
+  -webkit-text-fill-color: var(--muted) !important;
 }
 
 /* =========================================================
-   [수정2-추가] 업로더가 '원복'된 것처럼 보이는 문제(스타일 강제)
-   - FileUploader(드롭존) + 업로드된 파일 카드 영역까지 강하게 지정
+   5) Selectbox / Input / TextArea — 다크 배경 + 밝은 글자
    ========================================================= */
-section.main [data-testid="stFileUploader"],
-section.main [data-testid="stFileUploader"] > div{
-  background: #0E1117 !important;
-  border: 1px dashed rgba(214,178,94,.45) !important;
-  border-radius: 14px !important;
-}
-section.main [data-testid="stFileUploader"] *{
-  color: #EDEFF4 !important;
-  -webkit-text-fill-color: #EDEFF4 !important;
-}
-section.main [data-testid="stFileUploader"] small,
-section.main [data-testid="stFileUploader"] label{
-  color: #B9C2D6 !important;
-  -webkit-text-fill-color: #B9C2D6 !important;
-}
-section.main [data-testid="stFileUploader"] button{
-  border: 1px solid rgba(214,178,94,.55) !important;
+div[data-baseweb="select"] > div{
+  background-color: #0E1117 !important;
+  border: 1px solid #2D3446 !important;
   border-radius: 12px !important;
 }
-
-/* 업로드 후 선택된 파일명/정보 표시(카드) */
-section.main div[data-testid="stFileUploaderFile"],
-section.main div[data-testid="stFileUploaderFile"] * ,
-section.main div[data-testid="stFileUploaderFileName"],
-section.main div[data-testid="stFileUploaderFileName"] *{
-  color: #EDEFF4 !important;
-  -webkit-text-fill-color: #EDEFF4 !important;
+div[data-baseweb="select"] span,
+div[data-baseweb="select"] input{
+  color: var(--text) !important;
+  -webkit-text-fill-color: var(--text) !important;
 }
-section.main div[data-testid="stFileUploaderFile"]{
+input, textarea{
+  background-color: #0E1117 !important;
+  border: 1px solid #2D3446 !important;
+  border-radius: 12px !important;
+  color: var(--text) !important;
+  -webkit-text-fill-color: var(--text) !important;
+}
+input::placeholder, textarea::placeholder{
+  color: var(--muted) !important;
+  -webkit-text-fill-color: var(--muted) !important;
+}
+
+/* 드롭다운 펼쳤을 때(listbox)도 다크/밝은 텍스트 */
+div[role="listbox"]{
   background: #0E1117 !important;
   border: 1px solid #2D3446 !important;
   border-radius: 12px !important;
+}
+div[role="listbox"] span{
+  color: var(--text) !important;
+  -webkit-text-fill-color: var(--text) !important;
+}
+
+/* =========================================================
+   6) FileUploader (Browse files) + 선택된 파일명 카드 "확실히"
+   ========================================================= */
+[data-testid="stFileUploader"]{
+  background: #0E1117 !important;
+  border: 1px dashed rgba(214,178,94,.55) !important;
+  border-radius: 14px !important;
+  padding: 12px !important;
+}
+[data-testid="stFileUploader"] *{
+  color: var(--text) !important;
+  -webkit-text-fill-color: var(--text) !important;
+}
+[data-testid="stFileUploader"] small,
+[data-testid="stFileUploader"] label{
+  color: var(--muted) !important;
+  -webkit-text-fill-color: var(--muted) !important;
+}
+[data-testid="stFileUploader"] button{
+  border: 1px solid rgba(214,178,94,.65) !important;
+  border-radius: 12px !important;
+}
+
+/* 업로드된 파일 표시 줄(파일명/사이즈/삭제X) */
+div[data-testid="stFileUploaderFile"],
+div[data-testid="stFileUploaderFile"] * ,
+div[data-testid="stFileUploaderFileName"],
+div[data-testid="stFileUploaderFileName"] *{
+  color: var(--text) !important;
+  -webkit-text-fill-color: var(--text) !important;
+}
+div[data-testid="stFileUploaderFile"]{
+  background: #0E1117 !important;
+  border: 1px solid #2D3446 !important;
+  border-radius: 12px !important;
+}
+
+/* =========================================================
+   7) Panel(카드) 기본 톤 (있는 경우)
+   ========================================================= */
+.panel{
+  background: linear-gradient(180deg, rgba(255,255,255,.03) 0%, rgba(255,255,255,.015) 100%), var(--panel) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 16px !important;
 }
 </style>
 """, unsafe_allow_html=True)
