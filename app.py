@@ -636,6 +636,11 @@ def _render_pledge_group(title: str, items: list[tuple[str, str]], all_keys: lis
 with tab_audit:
     current_sheet_name = campaign_info.get("sheet_name", "2026_윤리경영_실천서약")
 
+    # ✅ (UX) '서약 확인/임직원 정보 입력' 영역: 최초에는 접힘, 체크 시 자동 펼침
+    if "pledge_box_open" not in st.session_state:
+        st.session_state["pledge_box_open"] = False
+
+
     # ✅ (요청 1) 제목: Google Sheet 값과 무관하게 강제 고정
     title_for_box = "2026 임직원 윤리경영원칙 실천지침 실천서약"
 
@@ -709,7 +714,12 @@ with tab_audit:
     all_keys = [k for k, _ in exec_pledges] + [k for k, _ in mgr_pledges]
     _init_pledge_runtime(all_keys)
 
-    with st.expander("✅ 서약 확인 및 임직원 정보 입력", expanded=True):
+    # ✅ 중간 트리거: 체크하면 서약/정보입력 박스가 펼쳐집니다.
+    open_trigger = st.checkbox("✅ 서약 확인 및 임직원 정보 입력 펼치기", key="pledge_open_trigger")
+    if open_trigger:
+        st.session_state["pledge_box_open"] = True
+
+    with st.expander("✅ 서약 확인 및 임직원 정보 입력", expanded=st.session_state["pledge_box_open"]):
 
 
         _render_pledge_group("임직원의 책임과 의무", exec_pledges, all_keys)
