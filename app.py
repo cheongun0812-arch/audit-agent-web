@@ -18,27 +18,6 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 
-# --- [추가] 파일에서 텍스트를 추출하는 범용 함수 (NameError 해결용) ---
-def extract_text_from_file(file):
-    text = ""
-    try:
-        if file.type == "application/pdf":
-            import PyPDF2
-            reader = PyPDF2.PdfReader(file)
-            for page in reader.pages:
-                content = page.extract_text()
-                if content: text += content
-        elif file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-            from docx import Document
-            doc = Document(file)
-            for para in doc.paragraphs:
-                text += para.text + "\n"
-        elif file.type == "text/plain":
-            text = file.getvalue().decode("utf-8")
-    except Exception as e:
-        st.error(f"파일 읽기 오류: {e}")
-    return text
-
 # Plotly: 확대/축소 후 "원점 복원" 가능하도록 모드바 항상 표시
 PLOTLY_CONFIG = {
     "displayModeBar": True,
@@ -445,29 +424,6 @@ def get_model():
         pass
     return genai.GenerativeModel("gemini-1.5-flash")
 
-
-
-def get_ai_response(prompt: str, uploaded_media=None):
-    """
-    Gemini 호출을 위한 단일 엔트리 함수.
-    - prompt: 텍스트 프롬프트
-    - uploaded_media: genai.upload_file()로 업로드된 파일 객체(선택)
-    반환값: Gemini 응답 객체 (일반적으로 .text 속성을 가짐)
-    """
-    model = get_model()
-
-    # 멀티모달(파일 포함)
-    if uploaded_media is not None:
-        return model.generate_content([prompt, uploaded_media])
-
-    # 텍스트만
-    return model.generate_content(prompt)
-
-
-# 기존 코드 호환을 위한 별칭 (어떤 구간은 get_gemini_response를 호출)
-def get_gemini_response(prompt: str, uploaded_media=None):
-    return get_ai_response(prompt, uploaded_media)
-
 def read_file(uploaded_file):
     content = ""
     try:
@@ -619,49 +575,15 @@ def _init_pledge_runtime(keys: list[str]) -> None:
     if "pledge_running" not in st.session_state:
         st.session_state["pledge_running"] = {k: False for k in keys}
 
-# =========================
-# ✅ 서약 체크 순서 제어(임직원 → 관리자) + 경고 토스트
-# =========================
-def _order_enforce_cb(changed_key: str, prereq_keys: list[str], message: str) -> None:
-    """체크 순서가 어긋나면 체크를 되돌리고, 경고 메시지를 세션에 기록합니다."""
-    try:
-        now_checked = bool(st.session_state.get(changed_key, False))
-        prereq_ok = all(bool(st.session_state.get(k, False)) for k in prereq_keys)
-        if now_checked and (not prereq_ok):
-            st.session_state[changed_key] = False
-            st.session_state["order_warning"] = message
-    except Exception:
-        pass
-
-def _render_pledge_group(
-    title: str,
-    items: list[tuple[str, str]],
-    all_keys: list[str],
-    order_guard: dict | None = None,   # {"keys": [...], "prereq": [...], "message": "..."}
-) -> None:
+def _render_pledge_group(title: str, items: list[tuple[str, str]], all_keys: list[str]) -> None:
     st.markdown(f"### ■ {title}")
-
-    guard_keys = set(order_guard.get("keys", [])) if isinstance(order_guard, dict) else set()
-    prereq_keys = list(order_guard.get("prereq", [])) if isinstance(order_guard, dict) else []
-    guard_msg  = str(order_guard.get("message", "")) if isinstance(order_guard, dict) else ""
 
     for key, text in items:
         c1, c2, c3 = st.columns([0.06, 0.78, 0.16], vertical_alignment="center")
 
         with c1:
-            cb_kwargs = dict(
-                key=key,
-                label_visibility="collapsed",
-                disabled=bool(st.session_state["pledge_running"].get(key, False)),
-            )
-            # ✅ 관리자 서약을 임직원 서약보다 먼저 체크하려 하면: 체크를 되돌리고 토스트 경고
-            if key in guard_keys:
-                cb_kwargs.update(dict(
-                    on_change=_order_enforce_cb,
-                    args=(key, prereq_keys, guard_msg),
-                ))
-
-            st.checkbox("", **cb_kwargs)
+            st.checkbox("", key=key, label_visibility="collapsed",
+                        disabled=bool(st.session_state["pledge_running"].get(key, False)))
 
         with c2:
             checked = bool(st.session_state.get(key, False))
@@ -714,17 +636,16 @@ def _render_pledge_group(
 with tab_audit:
     current_sheet_name = campaign_info.get("sheet_name", "2026_윤리경영_실천서약")
 
-    # ✅ (UX) '서약 확인/임직원 정보 입력' 영역: 최초에는 접힘, 체크 시 자동 펼침
-    if "pledge_box_open" not in st.session_state:
-        st.session_state["pledge_box_open"] = False
-
-
     # ✅ (요청 1) 제목: Google Sheet 값과 무관하게 강제 고정
     title_for_box = "2026 임직원 윤리경영원칙 실천지침 실천서약"
 
     st.markdown(f"""
         <div style='background-color: #E3F2FD; padding: 20px; border-radius: 10px; border-left: 5px solid #2196F3; margin-bottom: 20px;'>
             <h3 style='margin-top:0; color: #1565C0;'>📜 {title_for_box}</h3>
+            <p style='font-size: 1.28rem; color: #444;'>
+                나는 <b>kt MOS북부</b>의 지속적인 발전을 위하여 회사 윤리경영원칙실천지침에 명시된
+                <b>「임직원의 책임과 의무」</b> 및 <b>「관리자의 책임과 의무」</b>를 성실히 이행할 것을 서약합니다.
+            </p>
         </div>
     """, unsafe_allow_html=True)
 
@@ -744,26 +665,26 @@ with tab_audit:
                 <table style='width:100%; border-collapse: collapse; background:#FFFFFF; border:1px solid #E0E0E0; border-radius: 10px; overflow:hidden;'>
                     <thead>
                         <tr style='background:#FFF8E1;'>
-                            <th style='text-align:center; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037; width:28%;'>구분</th>
-                            <th style='text-align:center; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037;'>윤리경영 위반사항</th>
+                            <th style='text-align:left; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037; width:28%;'>구분</th>
+                            <th style='text-align:left; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037;'>윤리경영 위반사항</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr>
-                            <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>고객과의 관계</td>
-                            <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>고객으로부터 금품 등 이익 수수, 고객만족 저해, 고객정보 유출</td>
+                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>고객과의 관계</td>
+                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>고객으로부터 금품 등 이익 수수, 고객만족 저해, 고객정보 유출</td>
                         </tr>
                         <tr>
-                            <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>임직원과 회사의 관계</td>
-                            <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>공금 유용 및 횡령, 회사재산의 사적 사용, 기업정보 유출, 경영왜곡</td>
+                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>임직원과 회사의 관계</td>
+                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>공금 유용 및 횡령, 회사재산의 사적 사용, 기업정보 유출, 경영왜곡</td>
                         </tr>
                         <tr>
-                            <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>임직원 상호간의 관계</td>
-                            <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>직장 내 괴롭힘, 성희롱, 조직질서 문란행위</td>
+                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>임직원 상호간의 관계</td>
+                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>직장 내 괴롭힘, 성희롱, 조직질서 문란행위</td>
                         </tr>
                         <tr>
-                            <td style='text-align:center; padding:12px; font-weight:700; color:#2C3E50;'>이해관계자와의 관계</td>
-                            <td style='text-align:center; padding:12px; color:#333;'>이해관계자로부터 금품 등 이익 수수, 이해관계자에게 부당한 요구</td>
+                            <td style='padding:12px; font-weight:700; color:#2C3E50;'>이해관계자와의 관계</td>
+                            <td style='padding:12px; color:#333;'>이해관계자로부터 금품 등 이익 수수, 이해관계자에게 부당한 요구</td>
                         </tr>
                     </tbody>
                 </table>
@@ -792,73 +713,22 @@ with tab_audit:
     all_keys = [k for k, _ in exec_pledges] + [k for k, _ in mgr_pledges]
     _init_pledge_runtime(all_keys)
 
-    with st.expander("✅ 서약 확인 및 임직원 정보 입력", expanded=st.session_state["pledge_box_open"]):
+    _render_pledge_group("임직원의 책임과 의무", exec_pledges, all_keys)
+    st.markdown("<br>", unsafe_allow_html=True)
+    _render_pledge_group("관리자의 책임과 의무", mgr_pledges, all_keys)
 
-        # ✅ 체크 순서 안내/경고 (관리자 서약을 먼저 체크하면 자동으로 되돌리고 토스트 표시)
-        if st.session_state.get("order_warning"):
-            st.toast(st.session_state["order_warning"], icon="⚠️")
-            st.session_state.pop("order_warning", None)
+    # ✅ prev 상태 업데이트 (탭 끝에서 1번)
+    st.session_state["pledge_prev"] = {k: bool(st.session_state.get(k, False)) for k in all_keys}
 
+    st.markdown("---")
 
-        _render_pledge_group("임직원의 책임과 의무", exec_pledges, all_keys)
-
-
-        st.markdown("<br>", unsafe_allow_html=True)
-
-
-        st.info("📌 진행 순서 안내: **임직원의 책임과 의무(4개)**를 먼저 확인(체크)하신 후, **관리자의 책임과 의무(3개)**를 순서대로 진행해 주세요.")
-
-        _render_pledge_group("관리자의 책임과 의무", mgr_pledges, all_keys, order_guard={'keys': ['pledge_m1', 'pledge_m2', 'pledge_m3'], 'prereq': ['pledge_e1', 'pledge_e2', 'pledge_e3', 'pledge_e4'], 'message': '⚠️ 순서 안내: 먼저 "임직원의 책임과 의무" 4개 항목을 모두 체크한 뒤 "관리자의 책임과 의무"를 진행해 주세요.'})
-
-        # ✅ prev 상태 업데이트 (탭 끝에서 1번)
-
-
-        st.session_state["pledge_prev"] = {k: bool(st.session_state.get(k, False)) for k in all_keys}
-
-
-
-        # ✅ 서약 문구를 현재 위치보다 약 20mm(≈76px) 아래로 내리기
-
-
-        st.markdown("<div style='height:76px;'></div>", unsafe_allow_html=True)
-
-
-
-        st.markdown(
-            "나는 <b>KT MOS 북부</b>의 지속적인 발전을 위하여 회사 윤리경영원칙 실천지침에 명시된 "
-            "<b>「임직원의 책임과 의무」 및 「관리자의 책임과 의무」</b>를 <b>성실히 이행할 것을 서약합니다.</b>",
-            unsafe_allow_html=True
-        )
-
-
-
-        st.markdown("<div style='height:69px;'></div>", unsafe_allow_html=True)
-
-
-
-        # 입력 박스 (한 박스 안)
-
-
-        c1, c2, c3, c4 = st.columns(4)
-
-
-        emp_id = c1.text_input("사번", placeholder="예: 12345")
-
-
-        name = c2.text_input("성명")
-
-
-        ordered_units = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
-
-
-        unit = c3.selectbox("총괄 / 본부 / 단", ordered_units)
-
-
-        dept = c4.text_input("상세 부서명")
-
-        # ✅ 입력을 시작하면 expander가 다시 접히지 않도록 유지
-        if any([str(emp_id).strip(), str(name).strip(), str(dept).strip()]):
-            st.session_state["pledge_box_open"] = True
+    # 입력 박스
+    c1, c2, c3, c4 = st.columns(4)
+    emp_id = c1.text_input("사번", placeholder="예: 12345")
+    name = c2.text_input("성명")
+    ordered_units = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
+    unit = c3.selectbox("총괄 / 본부 / 단", ordered_units)
+    dept = c4.text_input("상세 부서명")
 
     st.markdown("---")
 
@@ -879,132 +749,283 @@ with tab_audit:
             else:
                 st.error(f"❌ 제출 실패: {msg}")
 
-# --- [Tab 2: 문서 정밀 검토] ---
+# --- [Tab 2: 문서/규정 검토 & 감사보고서 작성] ---
 with tab_doc:
-    st.markdown("### ⚖️ 사내 지침 기반 법률 검토 (RAG)")
+    st.markdown("### 📄 문서·규정 검토 / 감사보고서 작성·검증")
+
     if "api_key" not in st.session_state:
         st.warning("🔒 로그인 후 이용 가능합니다.")
     else:
-        # 1. 지침서 로드 (성능 최적화: 캐싱 적용)
-        @st.cache_resource
-        def get_internal_rules():
-            rules_text = ""
-            files = ["2025년 재원운영기준(20250930).pdf", "재무_3_계약 지침_20250519.pdf"]
-            for f_name in files:
-                if os.path.exists(f_name):
-                    with open(f_name, "rb") as f:
-                        pdf = PyPDF2.PdfReader(f)
-                        rules_text += f"\n[지침: {f_name}]\n"
-                        for page in pdf.pages:
-                            rules_text += page.extract_text()
-            return rules_text
+        # 2-레벨 메뉴: 커리큘럼 1(법률 리스크) / 커리큘럼 2(감사보고서)
+        cur1, cur2 = st.tabs(["⚖️ 커리큘럼 1: 법률 리스크 심층 검토", "🔍 커리큘럼 2: 감사보고서 작성·검증"])
 
-        internal_rules = get_internal_rules()
-        
-        option = st.selectbox("작업 유형", ["법률 리스크 정밀 검토", "감사 보고서 검증", "오타 수정 및 교정", "기안문 작성"], key="legal_step_select")
+        # -------------------------
+        # ⚖️ 커리큘럼 1: 법률 리스크 심층 검토
+        # -------------------------
+        with cur1:
+            st.markdown("#### ⚖️ 법률 리스크 정밀 검토")
+            st.caption("PDF/Word/TXT 파일을 업로드하면, 핵심 쟁점·리스크·개선안을 구조적으로 정리합니다.")
 
-        if option == "법률 리스크 정밀 검토":
-            st.info("💡 사내 지침을 바탕으로 계약서의 위반 여부를 실시간 대조합니다.")
-            
-            uploaded_file = st.file_uploader("검토할 파일을 업로드하세요", type=['pdf', 'docx', 'txt'], key="legal_audit")
+            uploaded_file = st.file_uploader("파일 업로드 (PDF, Word, TXT)", type=["txt", "pdf", "docx"], key="cur1_file")
 
-            if uploaded_file:  # <--- 여기서부터 아래 내용을 교체!
-                f_hash = hashlib.md5(uploaded_file.getvalue()).hexdigest()
-                
-                if f"res_{f_hash}" in st.session_state:
-                    st.success("✅ 이미 분석된 문서입니다. (API 비용 절약)")
-                    st.markdown(st.session_state[f"res_{f_hash}"])
+            analysis_depth = st.selectbox(
+                "분석 수준",
+                ["핵심 요약", "리스크 식별(중점)", "조항/근거 중심(가능 범위 내)"],
+                index=1,
+                key="cur1_depth"
+            )
+
+            if st.button("🚀 분석 시작", use_container_width=True, key="cur1_run"):
+                if not uploaded_file:
+                    st.warning("⚠️ 먼저 파일을 업로드해주세요.")
                 else:
-                    with st.spinner("지침서 조항 대조 중..."):
-                        # 1. 문서 텍스트 추출
-                        user_content = extract_text_from_file(uploaded_file) 
-                        
-                        # 2. 분석용 프롬프트 구성
-                        prompt = f"""
-                        당신은 kt MOS 북부의 법무 전문가입니다.
-                        제공된 [사내 지침]을 기준으로 [검토 문서]를 분석하세요.
-                        
-                        [사내 지침]
-                        {internal_rules[:8000]}
-                        
-                        [검토 문서 본문]
-                        {user_content[:4000]}
-                        """
-                        
-                        # 3. AI 호출 (NameError 방지 통합형)
+                    content = read_file(uploaded_file)
+                    if not content:
+                        st.error("❌ 파일에서 텍스트를 추출하지 못했습니다.")
+                    else:
+                        with st.spinner("🧠 AI가 분석 중입니다..."):
+                            try:
+                                prompt = f"""[역할] 법률/준법 리스크 심층 검토 전문가
+[작업] 법률 리스크 정밀 검토
+[분석 수준] {analysis_depth}
+
+[작성 원칙]
+- 사실과 의견을 구분해 작성
+- 근거가 부족하면 '근거 미확인'으로 표시
+- 회사에 불리할 수 있는 문구(단정/추정)는 피하고, 조건부 표현 사용
+
+[입력 문서]
+{content[:30000]}
+"""
+                                res = get_model().generate_content(prompt)
+                                st.success("✅ 분석 완료")
+                                st.markdown(res.text)
+                            except Exception as e:
+                                st.error(f"오류: {e}")
+
+        # -------------------------
+        # 🔍 커리큘럼 2: 감사보고서 작성·검증 (Multi-Source Upload)
+        # -------------------------
+        with cur2:
+            st.markdown("#### 🔍 감사보고서 작성·검증 (Multi-Source Upload)")
+            st.caption("면담/증거/조사자료/회사규정/표준감사보고서 형식을 함께 입력받아, 정형화된 감사보고서를 작성·검증합니다.")
+
+            st.info(
+                "⚠️ 민감정보(주민등록번호/계좌/건강/징계대상 실명 등) 업로드 전 반드시 내부 보안 기준을 확인하세요. "
+                "본 기능은 '감사 판단'을 보조하는 도구이며, 최종 판단 및 결재는 감사실 책임 하에 수행되어야 합니다."
+            )
+
+            mode = st.radio(
+                "작업 모드",
+                ["🧾 감사보고서 초안 생성", "✅ 감사보고서 검증·교정(오탈자/논리/형식)"],
+                horizontal=True,
+                key="cur2_mode"
+            )
+
+            st.markdown("### ① 감사 자료 입력")
+            left, right = st.columns(2)
+
+            with left:
+                interview_audio = st.file_uploader("🎧 면담 음성 (mp3/wav/mp4)", type=["mp3", "wav", "mp4"], key="cur2_audio")
+                interview_transcript = st.file_uploader("📝 면담 녹취(텍스트/문서)", type=["txt", "pdf", "docx"], key="cur2_transcript")
+
+            with right:
+                evidence_files = st.file_uploader(
+                    "📂 증거/조사 자료 (복수 업로드 가능)",
+                    type=["pdf", "txt", "docx", "xlsx", "csv", "jpg", "png"],
+                    accept_multiple_files=True,
+                    key="cur2_evidence"
+                )
+
+            st.markdown("### ② 회사 규정/기준 (인사규정/시행지침/윤리경영 실천지침 등)")
+            regulations_files = st.file_uploader(
+                "📘 회사 규정 파일 업로드 (복수 가능)",
+                type=["pdf", "docx", "txt"],
+                accept_multiple_files=True,
+                key="cur2_regs"
+            )
+
+            st.markdown("### ③ 표준 감사보고서 형식(참조용)")
+            reference_reports = st.file_uploader(
+                "📑 표준 감사보고서 파일 업로드 (복수 가능)",
+                type=["pdf", "docx", "txt"],
+                accept_multiple_files=True,
+                key="cur2_refs"
+            )
+
+            st.markdown("### ④ 사건 개요(필수) 및 작성 옵션")
+            case_title = st.text_input("사건명/건명", placeholder="예: 법인카드 사적 사용 의혹 조사", key="cur2_title")
+            case_scope = st.text_area(
+                "사건 개요(무엇을, 언제, 누가, 어떤 경위로) — 요약",
+                height=120,
+                key="cur2_scope"
+            )
+
+            report_tone = st.selectbox(
+                "문서 톤",
+                ["감사보고서(공식·중립)", "보고서(간결·결정 중심)", "상신용(결재/조치 권고 중심)"],
+                index=0,
+                key="cur2_tone"
+            )
+
+            # ---- 내부 유틸: 파일 리스트 -> 텍스트(최대 길이 제한) ----
+            def _files_to_text(files, title: str, limit: int = 24000) -> str:
+                if not files:
+                    return ""
+                parts = [f"[{title}]"]
+                used = 0
+                for f in files:
+                    try:
+                        t = extract_text_from_file(f)
+                        t = (t or "").strip()
+                        if not t:
+                            continue
+                        header = f"\n\n--- 파일: {getattr(f, 'name', 'unknown')} ---\n"
+                        chunk = header + t
+                        if used + len(chunk) > limit:
+                            remain = max(0, limit - used)
+                            if remain > 200:
+                                parts.append(chunk[:remain] + "\n...[이하 생략]...")
+                            break
+                        parts.append(chunk)
+                        used += len(chunk)
+                    except Exception:
+                        continue
+                return "\n".join(parts).strip()
+
+            # ---- (선택) 음성 파일을 Gemini 파일로 업로드하여 멀티모달로 참조 ----
+            interview_audio_obj = None
+            if interview_audio is not None:
+                st.caption("※ 면담 음성은 업로드 후 AI가 참고할 수 있도록 처리됩니다(환경에 따라 시간이 걸릴 수 있음).")
+                if st.button("🎧 면담 음성 준비(업로드)", key="cur2_audio_prepare"):
+                    with st.spinner("면담 음성을 준비 중입니다..."):
+                        interview_audio_obj = process_media_file(interview_audio)
+                        if interview_audio_obj is None:
+                            st.error("❌ 음성 파일 처리에 실패했습니다.")
+                        else:
+                            st.success("✅ 면담 음성 준비 완료")
+                            st.session_state["cur2_audio_obj_name"] = interview_audio_obj.name
+
+            # 세션에 저장된 멀티모달 파일 핸들 복구
+            if "cur2_audio_obj_name" in st.session_state and interview_audio_obj is None:
+                try:
+                    interview_audio_obj = genai.get_file(st.session_state["cur2_audio_obj_name"])
+                except Exception:
+                    interview_audio_obj = None
+
+            # ---- 실행 버튼 ----
+            run_label = "🧠 감사보고서 생성" if "초안" in mode else "🧪 감사보고서 검증·교정"
+            if st.button(run_label, use_container_width=True, key="cur2_run"):
+                if not case_title.strip():
+                    st.warning("⚠️ 사건명/건명을 입력해주세요.")
+                elif not case_scope.strip():
+                    st.warning("⚠️ 사건 개요를 입력해주세요.")
+                else:
+                    transcript_text = extract_text_from_file(interview_transcript) if interview_transcript else ""
+                    evidence_text = _files_to_text(evidence_files, "증거/조사자료", limit=22000)
+                    regs_text = _files_to_text(regulations_files, "회사 규정/기준", limit=26000)
+                    refs_text = _files_to_text(reference_reports, "표준 감사보고서 형식(참조)", limit=20000)
+
+                    # 보고서 템플릿 (고정)
+                    report_structure = """[감사보고서 구성]
+Ⅰ. 감사 개요
+Ⅱ. 조사 경과 및 방법
+Ⅲ. 사실관계 정리(객관)
+Ⅳ. 규정 위반 여부 판단(근거 제시)
+Ⅴ. 고의성·중대성 판단(규정 기준에 따른 조건부 판단)
+Ⅵ. 징계/조치 기준 검토(가능 범위 내, '근거 미확인' 허용)
+Ⅶ. 종합 의견 및 조치 권고
+Ⅷ. 첨부자료 목록(업로드된 자료 기준)
+"""
+
+                    base_rules = """[작성 원칙(필수)]
+- 사실과 의견을 명확히 구분(사실=자료 근거, 의견=판단)
+- 제공된 회사 규정/기준 텍스트에서 확인되는 내용만 '조항/기준'으로 언급
+- 근거 텍스트에서 확인되지 않으면 반드시 '근거 미확인'으로 표기
+- 단정적 표현 금지(가능성/소지/추정/조건부 표현 사용)
+- 개인정보/민감정보는 마스킹(예: 홍*동, 1234-****)
+"""
+
+                    if "초안" in mode:
+                        task = "감사보고서 초안 작성"
+                        instructions = f"""[작업] {task}
+[문서 톤] {report_tone}
+{report_structure}
+{base_rules}
+
+[사건명/건명]
+{case_title}
+
+[사건 개요]
+{case_scope}
+
+[면담 녹취(텍스트)]
+{(transcript_text or "").strip()[:18000]}
+
+{evidence_text}
+
+{regs_text}
+
+{refs_text}
+
+[출력 요구]
+- 위 구성(Ⅰ~Ⅷ)을 유지
+- 표/목록을 적극 활용(가독성)
+- '규정 위반 여부'에는 '가능/불가/근거 미확인' 3단으로 표시
+"""
+                    else:
+                        task = "감사보고서 검증·교정"
+                        draft = st.text_area("검증할 감사보고서(초안/기존본)를 붙여넣기", height=220, key="cur2_draft")
+                        if not draft.strip():
+                            st.warning("⚠️ 검증할 보고서 내용을 입력해주세요.")
+                            st.stop()
+
+                        instructions = f"""[작업] {task}
+{base_rules}
+
+[검증 기준]
+1) 논리/사실관계: 자료와 불일치/모순 여부 지적
+2) 규정 근거: 제공된 규정 텍스트에서 확인 가능한지(불가하면 '근거 미확인' 표시)
+3) 표현: 단정/감정/주관 표현 제거 → 중립/조건부 표현으로 교정
+4) 형식: 감사보고서 표준 구조(Ⅰ~Ⅷ) 충족 여부 및 누락 항목 보완
+5) 오탈자/문장 교정: 의미 훼손 없이 교정
+
+[사건명/건명]
+{case_title}
+
+[사건 개요]
+{case_scope}
+
+[검증 대상 보고서]
+{draft[:25000]}
+
+{regs_text}
+
+{refs_text}
+
+[출력 요구]
+- (A) 핵심 수정사항 요약
+- (B) 문장 교정본(가능하면 전체)
+- (C) 근거 확인/미확인 표(항목별)
+"""
+
+                    with st.spinner("🧠 AI가 작성/검증 중입니다..."):
                         try:
-                            # 상단에 정의된 함수 이름이 get_gemini_response인 경우
-                            response_obj = get_gemini_response(prompt, None)
-                            full_text = response_obj.text if hasattr(response_obj, 'text') else response_obj
-                        except NameError:
-                            # 상단에 정의된 함수 이름이 get_ai_response인 경우
-                            response_obj = get_ai_response(prompt, None)
-                            full_text = response_obj.text if hasattr(response_obj, 'text') else response_obj
-                        
-                        # 4. 결과 출력 및 저장
-                        st.session_state[f"res_{f_hash}"] = full_text
-                        st.markdown(full_text)
-                        st.download_button("📥 결과 다운로드", full_text, file_name="Audit_Report.md")
+                            model = get_model()
+                            if interview_audio_obj is not None:
+                                res = model.generate_content([instructions, interview_audio_obj])
+                            else:
+                                res = model.generate_content(instructions)
 
-        elif option == "감사보고서 생성 및 검증":
-            st.markdown("#### 🔍 고도화된 감사보고서 분석 및 작성")
-            st.info("💡 인터뷰 녹취, 거증 자료, 규정 문서를 통합 분석하여 양정 기준에 맞는 보고서 초안을 작성합니다.")
+                            st.success("✅ 완료")
+                            st.markdown(res.text)
+                        except Exception as e:
+                            st.error(f"오류: {e}")
 
-            # --- [데이터 입력 창구] ---
-            col1, col2 = st.columns(2)
-            with col1:
-                interview_file = st.file_uploader("🎙️ 인터뷰 녹취/음성 파일", type=['txt', 'docx', 'mp3', 'wav'], key="audit_v1")
-                evidence_file = st.file_uploader("📂 비위 조사 거증 자료", type=['pdf', 'docx', 'xlsx', 'zip'], key="audit_v2")
-            with col2:
-                rule_file = st.file_uploader("📜 인사규정/징계양정기준", type=['pdf', 'docx'], key="audit_v3")
-                template_file = st.file_uploader("📑 참고용 보고서 양식(포맷)", type=['pdf', 'docx'], key="audit_v4")
 
-            if st.button("🚀 종합 감사보고서 초안 생성"):
-                with st.spinner("방대한 자료를 분석하여 '기-승-전-결' 보고서를 구성 중입니다..."):
-                    # 각 파일에서 텍스트 추출 (앞서 만든 extract_text_from_file 활용)
-                    interview_txt = extract_text_from_file(interview_file) if interview_file else "내용 없음"
-                    evidence_txt = extract_text_from_file(evidence_file) if evidence_file else "내용 없음"
-                    rule_txt = extract_text_from_file(rule_file) if rule_file else "내용 없음"
-                    template_txt = extract_text_from_file(template_file) if template_file else "표준 양식 활용"
-
-                    # [심도 있는 분석 프롬프트]
-                    prompt = f"""
-                    당신은 관공서 및 대기업 감사를 전문으로 하는 수석 감사관입니다.
-                    제공된 자료를 바탕으로 [감사 결과 보고서]를 작성하세요.
-
-                    1. 분석 대상:
-                    - 인터뷰/녹취: {interview_txt[:3000]}
-                    - 거증 자료: {evidence_txt[:3000]}
-                    - 사내 규정/양정기준: {rule_txt[:4000]}
-                    - 표준 양식: {template_txt[:2000]}
-
-                    2. 보고서 구성 원칙 (기-승-전-결):
-                    - [기] 감사 배경 및 개요: 조사가 시작된 경위와 대상자 인적사항.
-                    - [승] 비위 사실 확인: 거증 자료와 인터뷰 내용을 대조하여 확인된 구체적 위반 행위.
-                    - [전] 관련 규정 대조 및 판단: 윤리경영 원칙 및 인사규정 양정기준에 근거한 비위의 경중(고의성, 과실 여부).
-                    - [결] 조치 의견: 최종 징계 요구 수준 및 재발 방지 대책.
-
-                    3. 요구 사항:
-                    - 오타 및 전문 용어 오사용을 완벽히 교정할 것.
-                    - 사실관계는 객관적이고 건조한 문어체(~함, ~바람)로 작성할 것.
-                    - 특히 '양정 기준'에 따른 판단 근거를 법리적으로 기술할 것.
-                    """
-
-                    # AI 호출 및 결과 출력 (함수 이름은 상단 정의에 맞춰 get_gemini_response 유지)
-                    response_obj = get_gemini_response(prompt, None)
-                    full_text = response_obj.text if hasattr(response_obj, 'text') else response_obj
-                    
-                    st.markdown("### 📝 생성된 감사보고서 초안")
-                    st.markdown(full_text)
-                    st.download_button(
-                        label="📥 감사보고서 다운로드 (.md)", 
-                        data=full_text, 
-                        file_name=f"Audit_Final_Report_{datetime.datetime.now().strftime('%Y%m%d')}.md"
-                    )
-                        
 # --- [Tab 3: AI 에이전트] ---
 with tab_chat:
-    st.markdown("### 💬 AI 에이전트/챗봇")
+    st.markdown("### 💬 AI 법률/감사 챗봇")
     if "api_key" not in st.session_state:
         st.warning("🔒 로그인 후 이용 가능합니다.")
     else:
