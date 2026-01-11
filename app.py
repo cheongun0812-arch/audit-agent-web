@@ -178,7 +178,7 @@ st.markdown("""
   }
 
   const timer = setInterval(() => {
-    tries += ;
+    tries += 1;
     clickToggleIfNeeded();
     if (tries >= maxTries) clearInterval(timer);
   }, 250);
