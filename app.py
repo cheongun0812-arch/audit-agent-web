@@ -884,7 +884,7 @@ with tab_doc:
         
         option = st.selectbox("작업 유형", ["법률 리스크 정밀 검토", "감사 보고서 검증", "오타 수정 및 교정", "기안문 작성"])
 
-       option = st.selectbox("작업 유형", ["법률 리스크 정밀 검토", ...], key="legal_work_type")
+        option = st.selectbox("작업 유형", ["법률 리스크 정밀 검토", ...], key="legal_work_type")
             st.info("💡 사내 지침을 바탕으로 계약서의 위반 여부를 실시간 대조합니다.")
             
             uploaded_file = st.file_uploader("검토할 파일을 업로드하세요", type=['pdf', 'docx', 'txt'], key="legal_audit")
