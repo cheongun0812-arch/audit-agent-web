@@ -1343,9 +1343,9 @@ with tab_admin:
                 </div>
                 """, unsafe_allow_html=True)
 
-                if df is None or df.empty:
-                    st.info("데이터가 없습니다.")
-  else:
+if df is None or df.empty:
+    st.info("데이터가 없습니다.")
+else:
     melt_df = stats_df.melt(
         id_vars="조직",
         value_vars=["참여완료", "미참여"],
@@ -1384,11 +1384,11 @@ with tab_admin:
     fig_line.update_traces(textposition="top center")
     st.plotly_chart(fig_line, use_container_width=True, config=PLOTLY_CONFIG)
 
-                    st.dataframe(df, use_container_width=True)
-                    st.download_button(
-                        label="📥 엑셀 다운로드",
-                        data=df.to_csv(index=False).encode("utf-8-sig"),
-                        file_name=f"audit_result_{camp['key']}.csv",
-                        mime="text/csv",
-                        use_container_width=True,
-                    )
+    st.dataframe(df, use_container_width=True)
+    st.download_button(
+        label="📥 엑셀 다운로드",
+        data=df.to_csv(index=False).encode("utf-8-sig"),
+        file_name=f"audit_result_{camp['key']}.csv",
+        mime="text/csv",
+        use_container_width=True,
+    )
