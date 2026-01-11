@@ -950,55 +950,61 @@ with tab_doc:
                         st.markdown(full_text)
                         st.download_button("📥 결과 다운로드", full_text, file_name="Audit_Report.md")
 
-elif option == "감사보고서 생성 및 검증":
-    st.markdown("#### 🔍 고도화된 감사보고서 분석 및 작성")
-    st.info("💡 인터뷰 녹취, 거증 자료, 규정 문서를 통합 분석하여 양정 기준에 맞는 보고서 초안을 작성합니다.")
+  elif option == "감사보고서 생성 및 검증":
+            st.markdown("#### 🔍 고도화된 감사보고서 분석 및 작성")
+            st.info("💡 인터뷰 녹취, 거증 자료, 규정 문서를 통합 분석하여 양정 기준에 맞는 보고서 초안을 작성합니다.")
 
-    # --- [데이터 입력 창구] ---
-    col1, col2 = st.columns(2)
-    with col1:
-        interview_file = st.file_uploader("🎙️ 인터뷰 녹취/음성 파일", type=['txt', 'docx', 'mp3', 'wav'], key="audit_v1")
-        evidence_file = st.file_uploader("📂 비위 조사 거증 자료", type=['pdf', 'docx', 'xlsx', 'zip'], key="audit_v2")
-    with col2:
-        rule_file = st.file_uploader("📜 인사규정/징계양정기준", type=['pdf', 'docx'], key="audit_v3")
-        template_file = st.file_uploader("📑 참고용 보고서 양식(포맷)", type=['pdf', 'docx'], key="audit_v4")
+            # --- [데이터 입력 창구] ---
+            col1, col2 = st.columns(2)
+            with col1:
+                interview_file = st.file_uploader("🎙️ 인터뷰 녹취/음성 파일", type=['txt', 'docx', 'mp3', 'wav'], key="audit_v1")
+                evidence_file = st.file_uploader("📂 비위 조사 거증 자료", type=['pdf', 'docx', 'xlsx', 'zip'], key="audit_v2")
+            with col2:
+                rule_file = st.file_uploader("📜 인사규정/징계양정기준", type=['pdf', 'docx'], key="audit_v3")
+                template_file = st.file_uploader("📑 참고용 보고서 양식(포맷)", type=['pdf', 'docx'], key="audit_v4")
 
-    if st.button("🚀 종합 감사보고서 초안 생성"):
-        with st.spinner("방대한 자료를 분석하여 '기-승-전-결' 보고서를 구성 중입니다..."):
-            # 각 파일에서 텍스트 추출 (앞서 만든 extract_text_from_file 활용)
-            interview_txt = extract_text_from_file(interview_file) if interview_file else "내용 없음"
-            evidence_txt = extract_text_from_file(evidence_file) if evidence_file else "내용 없음"
-            rule_txt = extract_text_from_file(rule_file) if rule_file else "내용 없음"
-            template_txt = extract_text_from_file(template_file) if template_file else "표준 양식 활용"
+            if st.button("🚀 종합 감사보고서 초안 생성"):
+                with st.spinner("방대한 자료를 분석하여 '기-승-전-결' 보고서를 구성 중입니다..."):
+                    # 각 파일에서 텍스트 추출 (앞서 만든 extract_text_from_file 활용)
+                    interview_txt = extract_text_from_file(interview_file) if interview_file else "내용 없음"
+                    evidence_txt = extract_text_from_file(evidence_file) if evidence_file else "내용 없음"
+                    rule_txt = extract_text_from_file(rule_file) if rule_file else "내용 없음"
+                    template_txt = extract_text_from_file(template_file) if template_file else "표준 양식 활용"
 
-            # [심도 있는 분석 프롬프트]
-            prompt = f"""
-            당신은 관공서 및 대기업 감사를 전문으로 하는 수석 감사관입니다.
-            제공된 자료를 바탕으로 [감사 결과 보고서]를 작성하세요.
+                    # [심도 있는 분석 프롬프트]
+                    prompt = f"""
+                    당신은 관공서 및 대기업 감사를 전문으로 하는 수석 감사관입니다.
+                    제공된 자료를 바탕으로 [감사 결과 보고서]를 작성하세요.
 
-            1. 분석 대상:
-            - 인터뷰/녹취: {interview_txt[:3000]}
-            - 거증 자료: {evidence_txt[:3000]}
-            - 사내 규정/양정기준: {rule_txt[:4000]}
-            - 표준 양식: {template_txt[:2000]}
+                    1. 분석 대상:
+                    - 인터뷰/녹취: {interview_txt[:3000]}
+                    - 거증 자료: {evidence_txt[:3000]}
+                    - 사내 규정/양정기준: {rule_txt[:4000]}
+                    - 표준 양식: {template_txt[:2000]}
 
-            2. 보고서 구성 원칙 (기-승-전-결):
-            - [기] 감사 배경 및 개요: 조사가 시작된 경위와 대상자 인적사항.
-            - [승] 비위 사실 확인: 거증 자료와 인터뷰 내용을 대조하여 확인된 구체적 위반 행위.
-            - [전] 관련 규정 대조 및 판단: 윤리경영 원칙 및 인사규정 양정기준에 근거한 비위의 경중(고의성, 과실 여부).
-            - [결] 조치 의견: 최종 징계 요구 수준 및 재발 방지 대책.
+                    2. 보고서 구성 원칙 (기-승-전-결):
+                    - [기] 감사 배경 및 개요: 조사가 시작된 경위와 대상자 인적사항.
+                    - [승] 비위 사실 확인: 거증 자료와 인터뷰 내용을 대조하여 확인된 구체적 위반 행위.
+                    - [전] 관련 규정 대조 및 판단: 윤리경영 원칙 및 인사규정 양정기준에 근거한 비위의 경중(고의성, 과실 여부).
+                    - [결] 조치 의견: 최종 징계 요구 수준 및 재발 방지 대책.
 
-            3. 요구 사항:
-            - 오타 및 전문 용어 오사용을 완벽히 교정할 것.
-            - 사실관계는 객관적이고 건조한 문어체(~함, ~바람)로 작성할 것.
-            - 특히 '양정 기준'에 따른 판단 근거를 법리적으로 기술할 것.
-            """
+                    3. 요구 사항:
+                    - 오타 및 전문 용어 오사용을 완벽히 교정할 것.
+                    - 사실관계는 객관적이고 건조한 문어체(~함, ~바람)로 작성할 것.
+                    - 특히 '양정 기준'에 따른 판단 근거를 법리적으로 기술할 것.
+                    """
 
-            # AI 호출 및 결과 출력
-            response = get_gemini_response(prompt, None)
-            st.markdown("### 📝 생성된 감사보고서 초안")
-            st.write(response)
-            st.download_button("📥 감사보고서 다운로드 (.md)", response, file_name=f"Audit_Final_Report_{datetime.datetime.now().strftime('%Y%m%d')}.md")
+                    # AI 호출 및 결과 출력 (함수 이름은 상단 정의에 맞춰 get_gemini_response 유지)
+                    response_obj = get_gemini_response(prompt, None)
+                    full_text = response_obj.text if hasattr(response_obj, 'text') else response_obj
+                    
+                    st.markdown("### 📝 생성된 감사보고서 초안")
+                    st.markdown(full_text)
+                    st.download_button(
+                        label="📥 감사보고서 다운로드 (.md)", 
+                        data=full_text, 
+                        file_name=f"Audit_Final_Report_{datetime.datetime.now().strftime('%Y%m%d')}.md"
+                    )
                         
 # --- [Tab 3: AI 에이전트] ---
 with tab_chat:
