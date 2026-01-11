@@ -58,7 +58,7 @@ st.set_page_config(
 # ==========================================
 st.markdown("""
 <style>
-/* ✅ 전체 글자 크기 +0.2px */
+/* ✅ 전체 글자 크기 +0.1px */
 html { font-size: 16.2px; }
 
 .stApp { background-color: #F4F6F9; }
@@ -178,7 +178,7 @@ st.markdown("""
   }
 
   const timer = setInterval(() => {
-    tries += 1;
+    tries += ;
     clickToggleIfNeeded();
     if (tries >= maxTries) clearInterval(timer);
   }, 250);
@@ -338,7 +338,7 @@ def _default_campaign_title(dt: datetime.datetime) -> str:
     return f"{dt.month}월 자율점검(윤리경영원칙 실천지침 실천서약)"
 
 def _default_campaign_sheet_name(dt: datetime.datetime, spreadsheet=None) -> str:
-    if spreadsheet is not None and dt.year == 2026 and dt.month == 1:
+    if spreadsheet is not None and dt.year == 2026 and dt.month == :
         try:
             spreadsheet.worksheet("2026_윤리경영_실천서약")
             return "2026_윤리경영_실천서약"
