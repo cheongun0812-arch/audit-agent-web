@@ -882,7 +882,7 @@ with tab_doc:
 
         internal_rules = get_internal_rules()
         
-        option = st.selectbox("작업 유형", ["법률 리스크 정밀 검토", "감사 보고서 검증", "오타 수정 및 교정", "기안문 작성"])
+        option = st.selectbox("작업 유형", ["법률 리스크 정밀 검토", "감사 보고서 검증", "오타 수정 및 교정", "기안문 작성"]), key="legal_step_select")
 
         if option == "법률 리스크 정밀 검토":
             st.info("💡 사내 지침을 바탕으로 계약서의 위반 여부를 실시간 대조합니다.")
@@ -913,7 +913,7 @@ with tab_doc:
                         """
                         
                         # 기존 호출 함수 사용
-                        response = get_gemini_response(prompt, None)
+                        response = get_ai_response(prompt, None)
                         st.session_state[f"res_{f_hash}"] = response
                         st.markdown(response)
                         st.download_button("📥 결과 다운로드", response, file_name="Audit_Report.md")
