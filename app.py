@@ -1346,16 +1346,43 @@ with tab_admin:
                 if df is None or df.empty:
                     st.info("데이터가 없습니다.")
                 else:
-                    melt_df = stats_df.melt(id_vars="조직", value_vars=["참여완료", "미참여"], var_name="구분", value_name="인원")
-                    fig_bar = px.bar(melt_df, x="조직", y="인원", color="구분", barmode="stack", text="인원", title="조직별 참여 현황")
-                    fig_bar.update_layout(dragmode="pan", autosize=True, margin=dict(l=20, r=20, t=60, b=20))
-                    fig_bar.update_traces(textposition="outside", cliponaxis=False)
-                    st.plotly_chart(fig_bar, use_container_width=True, config=PLOTLY_CONFIG)
+    melt_df = stats_df.melt(
+        id_vars="조직",
+        value_vars=["참여완료", "미참여"],
+        var_name="구분",
+        value_name="인원"
+    )
 
-                    fig_line = px.line(stats_df, x="조직", y="참여율", markers=True, text="참여율", title="조직별 참여율(%)")
-                    fig_line.update_layout(dragmode="pan", autosize=True, margin=dict(l=20, r=20, t=60, b=20))
-                    fig_line.update_traces(textposition="top center")
-                    st.plotly_chart(fig_line, use_container_width=True, config=PLOTLY_CONFIG)
+    fig_bar = px.bar(
+        melt_df,
+        x="조직",
+        y="인원",
+        color="구분",
+        barmode="stack",
+        text="인원",
+        title="조직별 참여 현황"
+    )
+    fig_bar.update_layout(
+        autosize=True,
+        margin=dict(l=20, r=20, t=60, b=20)
+    )
+    fig_bar.update_traces(textposition="outside", cliponaxis=False)
+    st.plotly_chart(fig_bar, use_container_width=True, config=PLOTLY_CONFIG)
+
+    fig_line = px.line(
+        stats_df,
+        x="조직",
+        y="참여율",
+        markers=True,
+        text="참여율",
+        title="조직별 참여율(%)"
+    )
+    fig_line.update_layout(
+        autosize=True,
+        margin=dict(l=20, r=20, t=60, b=20)
+    )
+    fig_line.update_traces(textposition="top center")
+    st.plotly_chart(fig_line, use_container_width=True, config=PLOTLY_CONFIG)
 
                     st.dataframe(df, use_container_width=True)
                     st.download_button(
