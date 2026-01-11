@@ -949,6 +949,52 @@ with tab_doc:
                         st.session_state[f"res_{f_hash}"] = full_text
                         st.markdown(full_text)
                         st.download_button("📥 결과 다운로드", full_text, file_name="Audit_Report.md")
+
+elif option == "감사 보고서 검증":
+    st.info("🔍 작성된 감사 보고서의 논리적 오류와 규정 준수 여부를 검증합니다.")
+    uploaded_file = st.file_uploader("감사 보고서 초안을 업로드하세요", type=['docx', 'pdf'], key="audit_verify")
+    
+    if uploaded_file:
+        user_content = extract_text_from_file(uploaded_file)
+        with st.spinner("보고서 검증 중..."):
+            # 감사 보고서 전용 프롬프트
+            prompt = f"""
+            당신은 시니어 감사관입니다. 다음 [감사 보고서 초안]을 검토하세요.
+            1. 문장이 객관적인가? (추측성 표현 배제)
+            2. 지적 사항이 사내 규정과 일치하는가?
+            3. 개선 권고 사항이 구체적이고 실행 가능한가?
+            
+            [보고서 내용]
+            {user_content[:4000]}
+            """
+            response = get_gemini_response(prompt, None)
+            st.markdown(response)
+
+elif option in ["오타 수정 및 교정", "기안문 작성"]:
+    st.info("📝 입력한 내용을 바탕으로 표준 기안문을 작성하거나 문장을 교정합니다.")
+    user_input = st.text_area("내용을 입력하거나 파일을 업로드하세요.", height=200)
+    uploaded_file = st.file_uploader("참고 파일 업로드 (선택)", type=['docx', 'pdf', 'txt'], key="draft_file")
+
+    if st.button("실행하기"):
+        context = extract_text_from_file(uploaded_file) if uploaded_file else ""
+        with st.spinner("문서 작업 중..."):
+            prompt = f"""
+            당신은 kt MOS 북부의 전문 행정관입니다.
+            요청: {option}
+            
+            [입력 내용]
+            {user_input}
+            
+            [참고 자료]
+            {context}
+            
+            [지침]
+            - 오타 수정: 맞춤법, 띄어쓰기, 비즈니스 전문 용어 교정.
+            - 기안문 작성: '1. 개요, 2. 관련 근거, 3. 주요 내용, 4. 기대 효과' 순서로 작성.
+            - 말투: 격식 있고 정중한 문어체(~바람, ~함).
+            """
+            response = get_gemini_response(prompt, None)
+            st.markdown(response)
                         
 # --- [Tab 3: AI 에이전트] ---
 with tab_chat:
