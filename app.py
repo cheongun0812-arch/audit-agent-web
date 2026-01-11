@@ -3,7 +3,7 @@ import os
 import google.generativeai as genai
 from docx import Document
 import PyPDF2
-from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api import YouTubeTranscriptApi        
 import requests
 from bs4 import BeautifulSoup
 import time
@@ -526,7 +526,7 @@ except Exception:
     pass
 
 tab_audit, tab_doc, tab_chat, tab_summary, tab_admin = st.tabs([
-    "Self-inspection", "📄 법률 검토", "💬 AI 에이전트(챗봇)", "📰 스마트 요약", "🔒 관리자 모드"
+    "✅ 자율점검", "📄 법률 검토", "💬 AI 에이전트(챗봇)", "📰 스마트 요약", "🔒 관리자 모드"
 ])
 
 # ---------- (아이콘) 인라인 SVG: 애니메이션 모래시계 ----------
