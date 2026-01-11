@@ -1235,83 +1235,94 @@ with tab_summary:
 
 # --- [Tab 5: 관리자 대시보드] ---
 with tab_admin:
-               st.markdown("🔒 관리자 전용 대시보드")
-<div style='background:#FFFFFF; border:1px solid #E6EAF0; padding:18px 18px; border-radius:14px; margin-top:10px; margin-bottom:14px;'>
-  <div style='display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;'>
-    <div style='font-size:1.35rem; font-weight:800; color:#2C3E50;'>📊 {display_title} 참여현황</div>
-    <div style='display:flex; align-items:center; gap:8px;'>
-      <span style='display:inline-block; width:14px; height:14px; border-radius:50%; background:{lamp_color};'></span>
-      <span style='font-weight:800; color:{lamp_color};'>{lamp_msg}</span>
-    </div>
-  </div>
-  <div style='margin-top:10px; font-size:1.05rem; font-weight:700; color:#34495E;'>
-    {date_kor}일 현재&nbsp;&nbsp;|&nbsp;&nbsp;
-    총 대상자 <b>{total_target:,}</b>명&nbsp;&nbsp;|&nbsp;&nbsp;
-    참여완료 <b>{total_participated:,}</b>명&nbsp;&nbsp;|&nbsp;&nbsp;
-    참여율 <b>{total_rate:.2f}%</b>
-  </div>
-  <div style='margin-top:6px; font-size:0.85rem; color:#7F8C8D;'>
-    마지막 업데이트: {last_update or "—"} &nbsp;|&nbsp;
-    신호등: <b style='color:{lamp_color};'>{lamp_label}</b>
-  </div>
-</div>
-""", unsafe_allow_html=True)
+    st.markdown("### 🔒 관리자 전용 대시보드")
 
-                # ✅ 여기부터는 반드시 tab_admin 블록 내부여야 합니다.
-                if df is None or df.empty:
-                    st.info("데이터가 없습니다.")
-                else:
-                    # -------------------------
-                    # ✅ 조직별 참여 현황(스택 바) + 참여율(라인)
-                    #    - 모바일 스크롤 방해 방지를 위해 dragmode="pan" 제거
-                    # -------------------------
-                    melt_df = stats_df.melt(
-                        id_vars="조직",
-                        value_vars=["참여완료", "미참여"],
-                        var_name="구분",
-                        value_name="인원"
-                    )
+    # (중요) 아래 변수들은 이 블록보다 위에서 이미 계산/정의되어 있어야 합니다.
+    # display_title, lamp_color, lamp_msg, date_kor, total_target, total_participated, total_rate, last_update, lamp_label
+    # df, stats_df, camp, PLOTLY_CONFIG
 
-                    fig_bar = px.bar(
-                        melt_df,
-                        x="조직",
-                        y="인원",
-                        color="구분",
-                        barmode="stack",
-                        text="인원",
-                        title="조직별 참여 현황"
-                    )
-                    fig_bar.update_layout(
-                        autosize=True,
-                        margin=dict(l=20, r=20, t=60, b=20)
-                    )
-                    fig_bar.update_traces(textposition="outside", cliponaxis=False)
-                    st.plotly_chart(fig_bar, use_container_width=True, config=PLOTLY_CONFIG)
+    st.markdown(
+        f"""
+        <div style='background:#FFFFFF; border:1px solid #E6EAF0; padding:18px 18px; border-radius:14px; margin-top:10px; margin-bottom:14px;'>
+          <div style='display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;'>
+            <div style='font-size:1.35rem; font-weight:800; color:#2C3E50;'>📊 {display_title} 참여현황</div>
+            <div style='display:flex; align-items:center; gap:8px;'>
+              <span style='display:inline-block; width:14px; height:14px; border-radius:50%; background:{lamp_color};'></span>
+              <span style='font-weight:800; color:{lamp_color};'>{lamp_msg}</span>
+            </div>
+          </div>
 
-                    fig_line = px.line(
-                        stats_df,
-                        x="조직",
-                        y="참여율",
-                        markers=True,
-                        text="참여율",
-                        title="조직별 참여율(%)"
-                    )
-                    fig_line.update_layout(
-                        autosize=True,
-                        margin=dict(l=20, r=20, t=60, b=20)
-                    )
-                    fig_line.update_traces(textposition="top center")
-                    st.plotly_chart(fig_line, use_container_width=True, config=PLOTLY_CONFIG)
+          <div style='margin-top:10px; font-size:1.05rem; font-weight:700; color:#34495E;'>
+            {date_kor}일 현재&nbsp;&nbsp;|&nbsp;&nbsp;
+            총 대상자 <b>{total_target:,}</b>명&nbsp;&nbsp;|&nbsp;&nbsp;
+            참여완료 <b>{total_participated:,}</b>명&nbsp;&nbsp;|&nbsp;&nbsp;
+            참여율 <b>{total_rate:.2f}%</b>
+          </div>
 
-                    # -------------------------
-                    # ✅ 원본 데이터 테이블 + 다운로드
-                    # -------------------------
-                    st.dataframe(df, use_container_width=True)
+          <div style='margin-top:6px; font-size:0.85rem; color:#7F8C8D;'>
+            마지막 업데이트: {last_update or "—"} &nbsp;|&nbsp;
+            신호등: <b style='color:{lamp_color};'>{lamp_label}</b>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
-                    st.download_button(
-                        label="📥 엑셀 다운로드",
-                        data=df.to_csv(index=False).encode("utf-8-sig"),
-                        file_name=f"audit_result_{camp['key']}.csv",
-                        mime="text/csv",
-                        use_container_width=True,
-                    )
+    # ✅ 여기부터는 반드시 tab_admin 블록 내부
+    if df is None or df.empty:
+        st.info("데이터가 없습니다.")
+    else:
+        # -------------------------
+        # ✅ 조직별 참여 현황(스택 바) + 참여율(라인)
+        #    - 모바일 스크롤 방해 방지를 위해 dragmode="pan" 제거
+        # -------------------------
+        melt_df = stats_df.melt(
+            id_vars="조직",
+            value_vars=["참여완료", "미참여"],
+            var_name="구분",
+            value_name="인원"
+        )
+
+        fig_bar = px.bar(
+            melt_df,
+            x="조직",
+            y="인원",
+            color="구분",
+            barmode="stack",
+            text="인원",
+            title="조직별 참여 현황"
+        )
+        fig_bar.update_layout(
+            autosize=True,
+            margin=dict(l=20, r=20, t=60, b=20)
+        )
+        fig_bar.update_traces(textposition="outside", cliponaxis=False)
+        st.plotly_chart(fig_bar, use_container_width=True, config=PLOTLY_CONFIG)
+
+        fig_line = px.line(
+            stats_df,
+            x="조직",
+            y="참여율",
+            markers=True,
+            text="참여율",
+            title="조직별 참여율(%)"
+        )
+        fig_line.update_layout(
+            autosize=True,
+            margin=dict(l=20, r=20, t=60, b=20)
+        )
+        fig_line.update_traces(textposition="top center")
+        st.plotly_chart(fig_line, use_container_width=True, config=PLOTLY_CONFIG)
+
+        # -------------------------
+        # ✅ 원본 데이터 테이블 + 다운로드
+        # -------------------------
+        st.dataframe(df, use_container_width=True)
+
+        st.download_button(
+            label="📥 엑셀 다운로드",
+            data=df.to_csv(index=False).encode("utf-8-sig"),
+            file_name=f"audit_result_{camp['key']}.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
