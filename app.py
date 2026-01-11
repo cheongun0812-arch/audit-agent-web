@@ -1345,7 +1345,7 @@ with tab_admin:
 
                 if df is None or df.empty:
                     st.info("데이터가 없습니다.")
-                else:
+  else:
     melt_df = stats_df.melt(
         id_vars="조직",
         value_vars=["참여완료", "미참여"],
