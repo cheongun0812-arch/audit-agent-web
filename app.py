@@ -889,8 +889,7 @@ with tab_doc:
             
             uploaded_file = st.file_uploader("검토할 파일을 업로드하세요", type=['pdf', 'docx', 'txt'], key="legal_audit")
 
-            if uploaded_file:
-                # 파일 해시로 중복 분석 방지 (성능 최적화)
+            if uploaded_file:  # <--- 여기서부터 아래 내용을 교체!
                 f_hash = hashlib.md5(uploaded_file.getvalue()).hexdigest()
                 
                 if f"res_{f_hash}" in st.session_state:
@@ -898,9 +897,10 @@ with tab_doc:
                     st.markdown(st.session_state[f"res_{f_hash}"])
                 else:
                     with st.spinner("지침서 조항 대조 중..."):
-                        # 위에서 정의한 함수 호출
+                        # 1. 문서 텍스트 추출
                         user_content = extract_text_from_file(uploaded_file) 
                         
+                        # 2. 분석용 프롬프트 구성
                         prompt = f"""
                         당신은 kt MOS 북부의 법무 전문가입니다.
                         제공된 [사내 지침]을 기준으로 [검토 문서]를 분석하세요.
@@ -912,11 +912,20 @@ with tab_doc:
                         {user_content[:4000]}
                         """
                         
-                        # 기존 호출 함수 사용
-                        response = get_ai_response(prompt, None)
-                        st.session_state[f"res_{f_hash}"] = response
-                        st.markdown(response)
-                        st.download_button("📥 결과 다운로드", response, file_name="Audit_Report.md")
+                        # 3. AI 호출 (NameError 방지 통합형)
+                        try:
+                            # 상단에 정의된 함수 이름이 get_gemini_response인 경우
+                            response_obj = get_gemini_response(prompt, None)
+                            full_text = response_obj.text if hasattr(response_obj, 'text') else response_obj
+                        except NameError:
+                            # 상단에 정의된 함수 이름이 get_ai_response인 경우
+                            response_obj = get_ai_response(prompt, None)
+                            full_text = response_obj.text if hasattr(response_obj, 'text') else response_obj
+                        
+                        # 4. 결과 출력 및 저장
+                        st.session_state[f"res_{f_hash}"] = full_text
+                        st.markdown(full_text)
+                        st.download_button("📥 결과 다운로드", full_text, file_name="Audit_Report.md")
                         
 # --- [Tab 3: AI 에이전트] ---
 with tab_chat:
