@@ -890,7 +890,7 @@ with tab_doc:
             uploaded_file = st.file_uploader("검토할 파일을 업로드하세요", type=['pdf', 'docx', 'txt'], key="legal_audit")
 
             if uploaded_file:
-                # [성능 최적화] 파일 해시로 중복 분석 방지
+                # [성능 최적화] 파일 해시로 중복 분석 방지 (1000명 접속 대비)
                 f_hash = hashlib.md5(uploaded_file.getvalue()).hexdigest()
                 
                 if f"res_{f_hash}" in st.session_state:
@@ -898,23 +898,26 @@ with tab_doc:
                     st.markdown(st.session_state[f"res_{f_hash}"])
                 else:
                     with st.spinner("지침서 조항 대조 중..."):
-                        # (사용자 문서 텍스트 추출 부분은 기존 extract_text 함수 등을 활용하세요)
-                        # 여기서는 예시로 로직만 넣었습니다.
+                        # --- [중요] 이 부분이 바로 그 '수정' 포인트입니다 ---
                         user_content = extract_text_from_file(uploaded_file) 
                         
                         prompt = f"""
                         당신은 kt MOS 북부의 법무 전문가입니다.
-                        제공된 [사내 지침]을 정답으로 삼아 [검토 문서]를 분석하세요.
+                        아래 제공된 [사내 지침]을 '절대 기준'으로 삼아 [검토 문서]를 분석하세요.
                         
                         [사내 지침]
                         {internal_rules[:8000]}
                         
-                        [검토 문서]
+                        [검토 문서 본문]
                         {user_content[:4000]}
                         
-                        결과에는 반드시 위반되는 지침 조항 번호를 포함하세요.
+                        [보고서 형식]
+                        1. 지침 위반: (조항 번호와 위반 내용)
+                        2. 리스크: (회사에 불리한 점)
+                        3. 제안: (수정 문구)
                         """
                         
+                        # 기존에 쓰시던 Gemini 호출 함수 그대로 사용
                         response = get_gemini_response(prompt, None)
                         st.session_state[f"res_{f_hash}"] = response
                         st.markdown(response)
