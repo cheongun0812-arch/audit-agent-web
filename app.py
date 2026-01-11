@@ -636,16 +636,17 @@ def _render_pledge_group(title: str, items: list[tuple[str, str]], all_keys: lis
 with tab_audit:
     current_sheet_name = campaign_info.get("sheet_name", "2026_윤리경영_실천서약")
 
+    # ✅ (UX) '서약 확인/임직원 정보 입력' 영역: 최초에는 접힘, 체크 시 자동 펼침
+    if "pledge_box_open" not in st.session_state:
+        st.session_state["pledge_box_open"] = False
+
+
     # ✅ (요청 1) 제목: Google Sheet 값과 무관하게 강제 고정
     title_for_box = "2026 임직원 윤리경영원칙 실천지침 실천서약"
 
     st.markdown(f"""
         <div style='background-color: #E3F2FD; padding: 20px; border-radius: 10px; border-left: 5px solid #2196F3; margin-bottom: 20px;'>
             <h3 style='margin-top:0; color: #1565C0;'>📜 {title_for_box}</h3>
-            <p style='font-size: 1.28rem; color: #444;'>
-                나는 <b>kt MOS북부</b>의 지속적인 발전을 위하여 회사 윤리경영원칙실천지침에 명시된
-                <b>「임직원의 책임과 의무」</b> 및 <b>「관리자의 책임과 의무」</b>를 성실히 이행할 것을 서약합니다.
-            </p>
         </div>
     """, unsafe_allow_html=True)
 
@@ -665,26 +666,26 @@ with tab_audit:
                 <table style='width:100%; border-collapse: collapse; background:#FFFFFF; border:1px solid #E0E0E0; border-radius: 10px; overflow:hidden;'>
                     <thead>
                         <tr style='background:#FFF8E1;'>
-                            <th style='text-align:left; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037; width:28%;'>구분</th>
-                            <th style='text-align:left; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037;'>윤리경영 위반사항</th>
+                            <th style='text-align:center; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037; width:28%;'>구분</th>
+                            <th style='text-align:center; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037;'>윤리경영 위반사항</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr>
-                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>고객과의 관계</td>
-                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>고객으로부터 금품 등 이익 수수, 고객만족 저해, 고객정보 유출</td>
+                            <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>고객과의 관계</td>
+                            <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>고객으로부터 금품 등 이익 수수, 고객만족 저해, 고객정보 유출</td>
                         </tr>
                         <tr>
-                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>임직원과 회사의 관계</td>
-                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>공금 유용 및 횡령, 회사재산의 사적 사용, 기업정보 유출, 경영왜곡</td>
+                            <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>임직원과 회사의 관계</td>
+                            <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>공금 유용 및 횡령, 회사재산의 사적 사용, 기업정보 유출, 경영왜곡</td>
                         </tr>
                         <tr>
-                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>임직원 상호간의 관계</td>
-                            <td style='padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>직장 내 괴롭힘, 성희롱, 조직질서 문란행위</td>
+                            <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; font-weight:700; color:#2C3E50;'>임직원 상호간의 관계</td>
+                            <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>직장 내 괴롭힘, 성희롱, 조직질서 문란행위</td>
                         </tr>
                         <tr>
-                            <td style='padding:12px; font-weight:700; color:#2C3E50;'>이해관계자와의 관계</td>
-                            <td style='padding:12px; color:#333;'>이해관계자로부터 금품 등 이익 수수, 이해관계자에게 부당한 요구</td>
+                            <td style='text-align:center; padding:12px; font-weight:700; color:#2C3E50;'>이해관계자와의 관계</td>
+                            <td style='text-align:center; padding:12px; color:#333;'>이해관계자로부터 금품 등 이익 수수, 이해관계자에게 부당한 요구</td>
                         </tr>
                     </tbody>
                 </table>
@@ -713,22 +714,58 @@ with tab_audit:
     all_keys = [k for k, _ in exec_pledges] + [k for k, _ in mgr_pledges]
     _init_pledge_runtime(all_keys)
 
-    _render_pledge_group("임직원의 책임과 의무", exec_pledges, all_keys)
-    st.markdown("<br>", unsafe_allow_html=True)
-    _render_pledge_group("관리자의 책임과 의무", mgr_pledges, all_keys)
+    with st.expander("✅ 서약 확인 및 임직원 정보 입력", expanded=st.session_state["pledge_box_open"]):
 
-    # ✅ prev 상태 업데이트 (탭 끝에서 1번)
-    st.session_state["pledge_prev"] = {k: bool(st.session_state.get(k, False)) for k in all_keys}
+        # ✅ 체크 순서 안내/경고 (관리자 서약을 먼저 체크하면 자동으로 되돌리고 토스트 표시)
+        if st.session_state.get("order_warning"):
+            st.toast(st.session_state["order_warning"], icon="⚠️")
+            st.session_state.pop("order_warning", None)
 
-    st.markdown("---")
+        _render_pledge_group("임직원의 책임과 의무", exec_pledges, all_keys)
 
-    # 입력 박스
-    c1, c2, c3, c4 = st.columns(4)
-    emp_id = c1.text_input("사번", placeholder="예: 12345")
-    name = c2.text_input("성명")
-    ordered_units = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
-    unit = c3.selectbox("총괄 / 본부 / 단", ordered_units)
-    dept = c4.text_input("상세 부서명")
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        st.info("📌 진행 순서 안내: **임직원의 책임과 의무(4개)**를 먼저 확인(체크)하신 후, **관리자의 책임과 의무(3개)**를 순서대로 진행해 주세요.")
+
+        _render_pledge_group("관리자의 책임과 의무", mgr_pledges, all_keys, order_guard={'keys': ['pledge_m1', 'pledge_m2', 'pledge_m3'], 'prereq': ['pledge_e1', 'pledge_e2', 'pledge_e3', 'pledge_e4'], 'message': '⚠️ 순서 안내: 먼저 "임직원의 책임과 의무" 4개 항목을 모두 체크한 뒤 "관리자의 책임과 의무"를 진행해 주세요.'})
+
+        # ✅ prev 상태 업데이트 (탭 끝에서 1번)
+
+        st.session_state["pledge_prev"] = {k: bool(st.session_state.get(k, False)) for k in all_keys}
+
+        # ✅ 서약 문구를 현재 위치보다 약 20mm(≈76px) 아래로 내리기
+
+        st.markdown("<div style='height:76px;'></div>", unsafe_allow_html=True)
+
+        st.markdown(
+    """
+    나는 <b>KT MOS 북부</b>의 지속적인 발전을 위하여 
+    회사 윤리경영원칙 실천지침에 명시된 
+    <b>「임직원의 책임과 의무」 및 「관리자의 책임과 의무」</b>를 
+    <b>성실히 이행할 것을 서약합니다.</b>
+    """,
+    unsafe_allow_html=True
+)
+
+        st.markdown("<div style='height:69px;'></div>", unsafe_allow_html=True)
+
+        # 입력 박스 (한 박스 안)
+
+        c1, c2, c3, c4 = st.columns(4)
+
+        emp_id = c1.text_input("사번", placeholder="예: 12345")
+
+        name = c2.text_input("성명")
+
+        ordered_units = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
+
+        unit = c3.selectbox("총괄 / 본부 / 단", ordered_units)
+
+        dept = c4.text_input("상세 부서명")
+
+        # ✅ 입력을 시작하면 expander가 다시 접히지 않도록 유지
+        if any([str(emp_id).strip(), str(name).strip(), str(dept).strip()]):
+            st.session_state["pledge_box_open"] = True
 
     st.markdown("---")
 
