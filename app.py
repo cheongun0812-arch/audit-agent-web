@@ -445,6 +445,29 @@ def get_model():
         pass
     return genai.GenerativeModel("gemini-1.5-flash")
 
+
+
+def get_ai_response(prompt: str, uploaded_media=None):
+    """
+    Gemini 호출을 위한 단일 엔트리 함수.
+    - prompt: 텍스트 프롬프트
+    - uploaded_media: genai.upload_file()로 업로드된 파일 객체(선택)
+    반환값: Gemini 응답 객체 (일반적으로 .text 속성을 가짐)
+    """
+    model = get_model()
+
+    # 멀티모달(파일 포함)
+    if uploaded_media is not None:
+        return model.generate_content([prompt, uploaded_media])
+
+    # 텍스트만
+    return model.generate_content(prompt)
+
+
+# 기존 코드 호환을 위한 별칭 (어떤 구간은 get_gemini_response를 호출)
+def get_gemini_response(prompt: str, uploaded_media=None):
+    return get_ai_response(prompt, uploaded_media)
+
 def read_file(uploaded_file):
     content = ""
     try:
