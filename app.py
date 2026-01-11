@@ -1235,7 +1235,7 @@ with tab_summary:
 
 # --- [Tab 5: 관리자 대시보드] ---
 with tab_admin:
-                st.markdown(f"""
+                st.markdown("### 🔒 관리자 전용 대시보드")
                 <div style='background:#FFFFFF; border:1px solid #E6EAF0; padding:18px 18px; border-radius:14px; margin-top:10px; margin-bottom:14px;'>
                   <div style='display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;'>
                     <div style='font-size:1.35rem; font-weight:800; color:#2C3E50;'>📊 {display_title} 참여현황</div>
