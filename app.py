@@ -825,14 +825,10 @@ with tab_audit:
 
 
         st.markdown(
-    """
-    나는 <b>KT MOS 북부</b>의 지속적인 발전을 위하여 
-    회사 윤리경영원칙 실천지침에 명시된 
-    <b>「임직원의 책임과 의무」 및 「관리자의 책임과 의무」</b>를 
-    <b>성실히 이행할 것을 서약합니다.</b>
-    """,
-    unsafe_allow_html=True
-)
+            "나는 <b>KT MOS 북부</b>의 지속적인 발전을 위하여 회사 윤리경영원칙 실천지침에 명시된 "
+            "<b>「임직원의 책임과 의무」 및 「관리자의 책임과 의무」</b>를 <b>성실히 이행할 것을 서약합니다.</b>",
+            unsafe_allow_html=True
+        )
 
 
 
@@ -950,7 +946,7 @@ with tab_doc:
                         st.markdown(full_text)
                         st.download_button("📥 결과 다운로드", full_text, file_name="Audit_Report.md")
 
-  elif option == "감사보고서 생성 및 검증":
+        elif option == "감사보고서 생성 및 검증":
             st.markdown("#### 🔍 고도화된 감사보고서 분석 및 작성")
             st.info("💡 인터뷰 녹취, 거증 자료, 규정 문서를 통합 분석하여 양정 기준에 맞는 보고서 초안을 작성합니다.")
 
