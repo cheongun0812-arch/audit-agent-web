@@ -884,13 +884,13 @@ with tab_doc:
         
         option = st.selectbox("작업 유형", ["법률 리스크 정밀 검토", "감사 보고서 검증", "오타 수정 및 교정", "기안문 작성"])
 
-        option = st.selectbox("작업 유형", ["법률 리스크 정밀 검토", ...], key="legal_work_type")
+        if option == "법률 리스크 정밀 검토":
             st.info("💡 사내 지침을 바탕으로 계약서의 위반 여부를 실시간 대조합니다.")
             
             uploaded_file = st.file_uploader("검토할 파일을 업로드하세요", type=['pdf', 'docx', 'txt'], key="legal_audit")
 
             if uploaded_file:
-                # [성능 최적화] 파일 해시로 중복 분석 방지 (1000명 접속 대비)
+                # 파일 해시로 중복 분석 방지 (성능 최적화)
                 f_hash = hashlib.md5(uploaded_file.getvalue()).hexdigest()
                 
                 if f"res_{f_hash}" in st.session_state:
@@ -898,31 +898,26 @@ with tab_doc:
                     st.markdown(st.session_state[f"res_{f_hash}"])
                 else:
                     with st.spinner("지침서 조항 대조 중..."):
-                        # --- [중요] 이 부분이 바로 그 '수정' 포인트입니다 ---
+                        # 위에서 정의한 함수 호출
                         user_content = extract_text_from_file(uploaded_file) 
                         
                         prompt = f"""
                         당신은 kt MOS 북부의 법무 전문가입니다.
-                        아래 제공된 [사내 지침]을 '절대 기준'으로 삼아 [검토 문서]를 분석하세요.
+                        제공된 [사내 지침]을 기준으로 [검토 문서]를 분석하세요.
                         
                         [사내 지침]
                         {internal_rules[:8000]}
                         
                         [검토 문서 본문]
                         {user_content[:4000]}
-                        
-                        [보고서 형식]
-                        1. 지침 위반: (조항 번호와 위반 내용)
-                        2. 리스크: (회사에 불리한 점)
-                        3. 제안: (수정 문구)
                         """
                         
-                        # 기존에 쓰시던 Gemini 호출 함수 그대로 사용
+                        # 기존 호출 함수 사용
                         response = get_gemini_response(prompt, None)
                         st.session_state[f"res_{f_hash}"] = response
                         st.markdown(response)
                         st.download_button("📥 결과 다운로드", response, file_name="Audit_Report.md")
-
+                        
 # --- [Tab 3: AI 에이전트] ---
 with tab_chat:
     st.markdown("### 💬 AI 에이전트/챗봇")
