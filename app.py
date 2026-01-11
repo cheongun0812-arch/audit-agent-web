@@ -882,7 +882,7 @@ with tab_doc:
 
         internal_rules = get_internal_rules()
         
-        option = st.selectbox("작업 유형", ["법률 리스크 정밀 검토", "감사 보고서 검증", "오타 수정 및 교정", "기안문 작성"]), key="legal_step_select")
+        option = st.selectbox("작업 유형", ["법률 리스크 정밀 검토", "감사 보고서 검증", "오타 수정 및 교정", "기안문 작성"], key="legal_step_select")
 
         if option == "법률 리스크 정밀 검토":
             st.info("💡 사내 지침을 바탕으로 계약서의 위반 여부를 실시간 대조합니다.")
