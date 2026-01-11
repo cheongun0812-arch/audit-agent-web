@@ -18,6 +18,27 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 
+# --- [추가] 파일에서 텍스트를 추출하는 범용 함수 (NameError 해결용) ---
+def extract_text_from_file(file):
+    text = ""
+    try:
+        if file.type == "application/pdf":
+            import PyPDF2
+            reader = PyPDF2.PdfReader(file)
+            for page in reader.pages:
+                content = page.extract_text()
+                if content: text += content
+        elif file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            from docx import Document
+            doc = Document(file)
+            for para in doc.paragraphs:
+                text += para.text + "\n"
+        elif file.type == "text/plain":
+            text = file.getvalue().decode("utf-8")
+    except Exception as e:
+        st.error(f"파일 읽기 오류: {e}")
+    return text
+
 # Plotly: 확대/축소 후 "원점 복원" 가능하도록 모드바 항상 표시
 PLOTLY_CONFIG = {
     "displayModeBar": True,
