@@ -1235,24 +1235,27 @@ with tab_summary:
 
 # --- [Tab 5: 관리자 대시보드] ---
 with tab_admin:
-                st.markdown("🔒 관리자 전용 대시보드")
-                <div style='background:#FFFFFF; border:1px solid #E6EAF0; padding:18px 18px; border-radius:14px; margin-top:10px; margin-bottom:14px;'>
-                  <div style='display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;'>
-                    <div style='font-size:1.35rem; font-weight:800; color:#2C3E50;'>📊 {display_title} 참여현황</div>
-                    <div style='display:flex; align-items:center; gap:8px;'>
-                      <span style='display:inline-block; width:14px; height:14px; border-radius:50%; background:{lamp_color};'></span>
-                      <span style='font-weight:800; color:{lamp_color};'>{lamp_msg}</span>
-                    </div>
-                  </div>
-                  <div style='margin-top:10px; font-size:1.05rem; font-weight:700; color:#34495E;'>
-                    {date_kor}일 현재&nbsp;&nbsp;|&nbsp;&nbsp;
-                    총 대상자 <b>{total_target:,}</b>명&nbsp;&nbsp;|&nbsp;&nbsp;
-                    참여완료 <b>{total_participated:,}</b>명&nbsp;&nbsp;|&nbsp;&nbsp;
-                    참여율 <b>{total_rate:.2f}%</b>
-                  </div>
-                  <div style='margin-top:6px; font-size:0.85rem; color:#7F8C8D;'>마지막 업데이트: {last_update or "—"} &nbsp;|&nbsp; 신호등: <b style='color:{lamp_color};'>{lamp_label}</b></div>
-                </div>
-                """, unsafe_allow_html=True)
+               st.markdown("🔒 관리자 전용 대시보드")
+<div style='background:#FFFFFF; border:1px solid #E6EAF0; padding:18px 18px; border-radius:14px; margin-top:10px; margin-bottom:14px;'>
+  <div style='display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;'>
+    <div style='font-size:1.35rem; font-weight:800; color:#2C3E50;'>📊 {display_title} 참여현황</div>
+    <div style='display:flex; align-items:center; gap:8px;'>
+      <span style='display:inline-block; width:14px; height:14px; border-radius:50%; background:{lamp_color};'></span>
+      <span style='font-weight:800; color:{lamp_color};'>{lamp_msg}</span>
+    </div>
+  </div>
+  <div style='margin-top:10px; font-size:1.05rem; font-weight:700; color:#34495E;'>
+    {date_kor}일 현재&nbsp;&nbsp;|&nbsp;&nbsp;
+    총 대상자 <b>{total_target:,}</b>명&nbsp;&nbsp;|&nbsp;&nbsp;
+    참여완료 <b>{total_participated:,}</b>명&nbsp;&nbsp;|&nbsp;&nbsp;
+    참여율 <b>{total_rate:.2f}%</b>
+  </div>
+  <div style='margin-top:6px; font-size:0.85rem; color:#7F8C8D;'>
+    마지막 업데이트: {last_update or "—"} &nbsp;|&nbsp;
+    신호등: <b style='color:{lamp_color};'>{lamp_label}</b>
+  </div>
+</div>
+""", unsafe_allow_html=True)
 
                 # ✅ 여기부터는 반드시 tab_admin 블록 내부여야 합니다.
                 if df is None or df.empty:
