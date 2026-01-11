@@ -1235,95 +1235,6 @@ with tab_summary:
 
 # --- [Tab 5: 관리자 대시보드] ---
 with tab_admin:
-    st.markdown("### 🔒 관리자 전용 대시보드")
-    admin_pw = st.text_input("관리자 비밀번호", type="password", key="admin_dash_pw")
-
-    if admin_pw.strip() == "ktmos0402!":
-        st.success("접속 성공")
-
-        client = init_google_sheet_connection()
-        if not client:
-            st.error("구글 시트 연결 실패: st.secrets / gspread 설정을 확인하세요.")
-        else:
-            try:
-                ss = client.open("Audit_Result_2026")
-            except Exception as e:
-                st.error(f"스프레드시트 오픈 실패: {e}")
-                ss = None
-
-            if ss:
-                camp = get_current_campaign_info(ss, _now_kst)
-
-                with st.expander("⚙️ 이번 달 테마 런칭/변경 (관리자)", expanded=False):
-                    new_title = st.text_input("테마 제목", value=camp.get("title", ""), key="camp_title_input")
-                    new_sheet = st.text_input("연동 시트명", value=camp.get("sheet_name", ""), key="camp_sheet_input")
-                    cA, cB = st.columns([1, 1])
-                    if cA.button("🚀 테마 적용", use_container_width=True):
-                        camp = set_current_campaign_info(ss, title=new_title, sheet_name=new_sheet, now_dt=_now_kst)
-                        st.session_state.pop("admin_df", None)
-                        st.session_state.pop("admin_stats_df", None)
-                        st.session_state["admin_cache_key"] = camp["key"]
-                        st.toast("✅ 테마가 적용되었습니다.", icon="🚀")
-                        st.rerun()
-                    cB.caption("※ 매월 말일 자정(=월 변경 시점) 자동으로 새 캠페인으로 전환됩니다.")
-
-                st.caption(f"현재 테마: **{camp['title']}**  |  연동 시트: `{camp['sheet_name']}`  |  캠페인 키: `{camp['key']}`")
-
-                target_dict = {"경영총괄": 45, "사업총괄": 37, "강북본부": 222, "강남본부": 174, "서부본부": 290, "강원본부": 104, "품질지원단": 138, "감사실": 3}
-                ordered_units = list(target_dict.keys())
-
-                refresh_clicked = st.button("🔄 데이터 최신화", use_container_width=True)
-                need_reload = (refresh_clicked
-                              or st.session_state.get("admin_cache_key") != camp["key"]
-                              or "admin_df" not in st.session_state
-                              or "admin_stats_df" not in st.session_state)
-
-                if need_reload:
-                    try:
-                        ws = ss.worksheet(camp["sheet_name"])
-                        df = pd.DataFrame(ws.get_all_records())
-                    except Exception:
-                        df = pd.DataFrame()
-
-                    if (not df.empty) and ("총괄/본부/단" in df.columns):
-                        counts = df["총괄/본부/단"].astype(str).value_counts().to_dict()
-                    else:
-                        counts = {}
-
-                    stats_rows = []
-                    for unit_name in ordered_units:
-                        participated = int(counts.get(unit_name, 0))
-                        target = int(target_dict.get(unit_name, 0))
-                        not_part = max(target - participated, 0)
-                        rate = round((participated / target) * 100, 2) if target > 0 else 0.0
-                        stats_rows.append({"조직": unit_name, "참여완료": participated, "미참여": not_part, "참여율": rate})
-                    stats_df = pd.DataFrame(stats_rows)
-
-                    st.session_state["admin_df"] = df
-                    st.session_state["admin_stats_df"] = stats_df
-                    st.session_state["admin_cache_key"] = camp["key"]
-                    st.session_state["admin_last_update"] = _korea_now().strftime("%Y-%m-%d %H:%M:%S")
-
-                df = st.session_state.get("admin_df", pd.DataFrame())
-                stats_df = st.session_state.get("admin_stats_df", pd.DataFrame())
-                last_update = st.session_state.get("admin_last_update")
-
-                total_target = int(sum(target_dict.values()))
-                total_participated = int(stats_df["참여완료"].sum()) if (stats_df is not None and not stats_df.empty) else 0
-                total_rate = (total_participated / total_target * 100) if total_target > 0 else 0.0
-                date_kor = _korea_now().strftime("%Y.%m.%d")
-
-                if total_rate < 50:
-                    lamp_color = "#E74C3C"; lamp_label = "RED"; lamp_msg = "위험"
-                elif total_rate < 80:
-                    lamp_color = "#F39C12"; lamp_label = "ORANGE"; lamp_msg = "주의"
-                else:
-                    lamp_color = "#2980B9"; lamp_label = "BLUE"; lamp_msg = "양호"
-
-                display_title = camp.get("title", "")
-                if "서약" not in display_title:
-                    display_title = display_title + " 서약서"
-
                 st.markdown(f"""
                 <div style='background:#FFFFFF; border:1px solid #E6EAF0; padding:18px 18px; border-radius:14px; margin-top:10px; margin-bottom:14px;'>
                   <div style='display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;'>
@@ -1343,52 +1254,61 @@ with tab_admin:
                 </div>
                 """, unsafe_allow_html=True)
 
-if df is None or df.empty:
-    st.info("데이터가 없습니다.")
-else:
-    melt_df = stats_df.melt(
-        id_vars="조직",
-        value_vars=["참여완료", "미참여"],
-        var_name="구분",
-        value_name="인원"
-    )
+                # ✅ 여기부터는 반드시 tab_admin 블록 내부여야 합니다.
+                if df is None or df.empty:
+                    st.info("데이터가 없습니다.")
+                else:
+                    # -------------------------
+                    # ✅ 조직별 참여 현황(스택 바) + 참여율(라인)
+                    #    - 모바일 스크롤 방해 방지를 위해 dragmode="pan" 제거
+                    # -------------------------
+                    melt_df = stats_df.melt(
+                        id_vars="조직",
+                        value_vars=["참여완료", "미참여"],
+                        var_name="구분",
+                        value_name="인원"
+                    )
 
-    fig_bar = px.bar(
-        melt_df,
-        x="조직",
-        y="인원",
-        color="구분",
-        barmode="stack",
-        text="인원",
-        title="조직별 참여 현황"
-    )
-    fig_bar.update_layout(
-        autosize=True,
-        margin=dict(l=20, r=20, t=60, b=20)
-    )
-    fig_bar.update_traces(textposition="outside", cliponaxis=False)
-    st.plotly_chart(fig_bar, use_container_width=True, config=PLOTLY_CONFIG)
+                    fig_bar = px.bar(
+                        melt_df,
+                        x="조직",
+                        y="인원",
+                        color="구분",
+                        barmode="stack",
+                        text="인원",
+                        title="조직별 참여 현황"
+                    )
+                    fig_bar.update_layout(
+                        autosize=True,
+                        margin=dict(l=20, r=20, t=60, b=20)
+                    )
+                    fig_bar.update_traces(textposition="outside", cliponaxis=False)
+                    st.plotly_chart(fig_bar, use_container_width=True, config=PLOTLY_CONFIG)
 
-    fig_line = px.line(
-        stats_df,
-        x="조직",
-        y="참여율",
-        markers=True,
-        text="참여율",
-        title="조직별 참여율(%)"
-    )
-    fig_line.update_layout(
-        autosize=True,
-        margin=dict(l=20, r=20, t=60, b=20)
-    )
-    fig_line.update_traces(textposition="top center")
-    st.plotly_chart(fig_line, use_container_width=True, config=PLOTLY_CONFIG)
+                    fig_line = px.line(
+                        stats_df,
+                        x="조직",
+                        y="참여율",
+                        markers=True,
+                        text="참여율",
+                        title="조직별 참여율(%)"
+                    )
+                    fig_line.update_layout(
+                        autosize=True,
+                        margin=dict(l=20, r=20, t=60, b=20)
+                    )
+                    fig_line.update_traces(textposition="top center")
+                    st.plotly_chart(fig_line, use_container_width=True, config=PLOTLY_CONFIG)
 
-    st.dataframe(df, use_container_width=True)
-    st.download_button(
-        label="📥 엑셀 다운로드",
-        data=df.to_csv(index=False).encode("utf-8-sig"),
-        file_name=f"audit_result_{camp['key']}.csv",
-        mime="text/csv",
-        use_container_width=True,
-    )
+                    # -------------------------
+                    # ✅ 원본 데이터 테이블 + 다운로드
+                    # -------------------------
+                    st.dataframe(df, use_container_width=True)
+
+                    st.download_button(
+                        label="📥 엑셀 다운로드",
+                        data=df.to_csv(index=False).encode("utf-8-sig"),
+                        file_name=f"audit_result_{camp['key']}.csv",
+                        mime="text/csv",
+                        use_container_width=True,
+                    )
