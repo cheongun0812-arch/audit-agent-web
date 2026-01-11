@@ -338,7 +338,7 @@ def _default_campaign_title(dt: datetime.datetime) -> str:
     return f"{dt.month}월 자율점검(윤리경영원칙 실천지침 실천서약)"
 
 def _default_campaign_sheet_name(dt: datetime.datetime, spreadsheet=None) -> str:
-    if spreadsheet is not None and dt.year == 2026 and dt.month == :
+    if spreadsheet is not None and dt.year == 2026 and dt.month == 1:
         try:
             spreadsheet.worksheet("2026_윤리경영_실천서약")
             return "2026_윤리경영_실천서약"
