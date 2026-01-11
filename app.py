@@ -820,7 +820,7 @@ with tab_audit:
 
 # --- [Tab 2: 법률 리스크/규정/계약 검토 & 감사보고서 작성] ---
 with tab_doc:
-    st.markdown("### 📄 문서·규정 검토 / 감사보고서 작성·검증")
+    st.markdown("### 📄 법률 리스크(계약서)·규정 검토 / 감사보고서 작성·검증")
 
     if "api_key" not in st.session_state:
         st.warning("🔒 로그인 후 이용 가능합니다.")
