@@ -950,51 +950,55 @@ with tab_doc:
                         st.markdown(full_text)
                         st.download_button("📥 결과 다운로드", full_text, file_name="Audit_Report.md")
 
-elif option == "감사 보고서 검증":
-    st.info("🔍 작성된 감사 보고서의 논리적 오류와 규정 준수 여부를 검증합니다.")
-    uploaded_file = st.file_uploader("감사 보고서 초안을 업로드하세요", type=['docx', 'pdf'], key="audit_verify")
-    
-    if uploaded_file:
-        user_content = extract_text_from_file(uploaded_file)
-        with st.spinner("보고서 검증 중..."):
-            # 감사 보고서 전용 프롬프트
-            prompt = f"""
-            당신은 시니어 감사관입니다. 다음 [감사 보고서 초안]을 검토하세요.
-            1. 문장이 객관적인가? (추측성 표현 배제)
-            2. 지적 사항이 사내 규정과 일치하는가?
-            3. 개선 권고 사항이 구체적이고 실행 가능한가?
-            
-            [보고서 내용]
-            {user_content[:4000]}
-            """
-            response = get_gemini_response(prompt, None)
-            st.markdown(response)
+elif option == "감사보고서 생성 및 검증":
+    st.markdown("#### 🔍 고도화된 감사보고서 분석 및 작성")
+    st.info("💡 인터뷰 녹취, 거증 자료, 규정 문서를 통합 분석하여 양정 기준에 맞는 보고서 초안을 작성합니다.")
 
-elif option in ["오타 수정 및 교정", "기안문 작성"]:
-    st.info("📝 입력한 내용을 바탕으로 표준 기안문을 작성하거나 문장을 교정합니다.")
-    user_input = st.text_area("내용을 입력하거나 파일을 업로드하세요.", height=200)
-    uploaded_file = st.file_uploader("참고 파일 업로드 (선택)", type=['docx', 'pdf', 'txt'], key="draft_file")
+    # --- [데이터 입력 창구] ---
+    col1, col2 = st.columns(2)
+    with col1:
+        interview_file = st.file_uploader("🎙️ 인터뷰 녹취/음성 파일", type=['txt', 'docx', 'mp3', 'wav'], key="audit_v1")
+        evidence_file = st.file_uploader("📂 비위 조사 거증 자료", type=['pdf', 'docx', 'xlsx', 'zip'], key="audit_v2")
+    with col2:
+        rule_file = st.file_uploader("📜 인사규정/징계양정기준", type=['pdf', 'docx'], key="audit_v3")
+        template_file = st.file_uploader("📑 참고용 보고서 양식(포맷)", type=['pdf', 'docx'], key="audit_v4")
 
-    if st.button("실행하기"):
-        context = extract_text_from_file(uploaded_file) if uploaded_file else ""
-        with st.spinner("문서 작업 중..."):
+    if st.button("🚀 종합 감사보고서 초안 생성"):
+        with st.spinner("방대한 자료를 분석하여 '기-승-전-결' 보고서를 구성 중입니다..."):
+            # 각 파일에서 텍스트 추출 (앞서 만든 extract_text_from_file 활용)
+            interview_txt = extract_text_from_file(interview_file) if interview_file else "내용 없음"
+            evidence_txt = extract_text_from_file(evidence_file) if evidence_file else "내용 없음"
+            rule_txt = extract_text_from_file(rule_file) if rule_file else "내용 없음"
+            template_txt = extract_text_from_file(template_file) if template_file else "표준 양식 활용"
+
+            # [심도 있는 분석 프롬프트]
             prompt = f"""
-            당신은 kt MOS 북부의 전문 행정관입니다.
-            요청: {option}
-            
-            [입력 내용]
-            {user_input}
-            
-            [참고 자료]
-            {context}
-            
-            [지침]
-            - 오타 수정: 맞춤법, 띄어쓰기, 비즈니스 전문 용어 교정.
-            - 기안문 작성: '1. 개요, 2. 관련 근거, 3. 주요 내용, 4. 기대 효과' 순서로 작성.
-            - 말투: 격식 있고 정중한 문어체(~바람, ~함).
+            당신은 관공서 및 대기업 감사를 전문으로 하는 수석 감사관입니다.
+            제공된 자료를 바탕으로 [감사 결과 보고서]를 작성하세요.
+
+            1. 분석 대상:
+            - 인터뷰/녹취: {interview_txt[:3000]}
+            - 거증 자료: {evidence_txt[:3000]}
+            - 사내 규정/양정기준: {rule_txt[:4000]}
+            - 표준 양식: {template_txt[:2000]}
+
+            2. 보고서 구성 원칙 (기-승-전-결):
+            - [기] 감사 배경 및 개요: 조사가 시작된 경위와 대상자 인적사항.
+            - [승] 비위 사실 확인: 거증 자료와 인터뷰 내용을 대조하여 확인된 구체적 위반 행위.
+            - [전] 관련 규정 대조 및 판단: 윤리경영 원칙 및 인사규정 양정기준에 근거한 비위의 경중(고의성, 과실 여부).
+            - [결] 조치 의견: 최종 징계 요구 수준 및 재발 방지 대책.
+
+            3. 요구 사항:
+            - 오타 및 전문 용어 오사용을 완벽히 교정할 것.
+            - 사실관계는 객관적이고 건조한 문어체(~함, ~바람)로 작성할 것.
+            - 특히 '양정 기준'에 따른 판단 근거를 법리적으로 기술할 것.
             """
+
+            # AI 호출 및 결과 출력
             response = get_gemini_response(prompt, None)
-            st.markdown(response)
+            st.markdown("### 📝 생성된 감사보고서 초안")
+            st.write(response)
+            st.download_button("📥 감사보고서 다운로드 (.md)", response, file_name=f"Audit_Final_Report_{datetime.datetime.now().strftime('%Y%m%d')}.md")
                         
 # --- [Tab 3: AI 에이전트] ---
 with tab_chat:
