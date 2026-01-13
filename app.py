@@ -930,7 +930,7 @@ with tab_audit:
 
         # 입력 박스 (한 박스 안)
         c1, c2, c3, c4 = st.columns(4)
-        emp_id = c1.text_input("사번", placeholder="예: 회사 사번(1000****"")
+        emp_id = c1.text_input("사번", placeholder="예: 회사사번(1000****")
         name = c2.text_input("성명")
         ordered_units = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
         unit = c3.selectbox(
