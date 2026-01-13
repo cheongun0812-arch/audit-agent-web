@@ -188,28 +188,44 @@ div[data-testid="stFormSubmitButton"] > button * {
     color: #2C3E50 !important;
 }
 
-/* ✅ (요청 4) '총괄/본부/단' 셀렉트 선택값/버튼을 더 굵고 선명하게 */
-#audit-tab div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
-    border: 1px solid #90A4AE !important;
-    background-color: #FFFFFF !important;
-}
-#audit-tab div[data-testid="stSelectbox"] div[data-baseweb="select"] span,
-#audit-tab div[data-testid="stSelectbox"] div[data-baseweb="select"] input {
+/* ✅ 메인 화면의 Selectbox(총괄/본부/단) 선택값 가독성 강제 */
+section.main div[data-testid="stSelectbox"] div[data-baseweb="select"] {
+    font-size: 1.08rem !important;    /* ← 원하면 더 키우세요 */
     font-weight: 900 !important;
+}
+
+/* 선택값이 들어있는 실제 박스(콤보박스) */
+section.main div[data-testid="stSelectbox"] div[role="combobox"] {
+    background: #FFFFFF !important;
+    border: 1px solid #90A4AE !important;
+}
+
+/* 선택된 텍스트(대부분 span에 들어감) */
+section.main div[data-testid="stSelectbox"] div[role="combobox"] span {
     color: #2C3E50 !important;
-    -webkit-text-fill-color: #2C3E50 !important;
+    font-weight: 900 !important;
     opacity: 1 !important;
 }
 
-/* 드롭다운 옵션도 굵게 */
-#audit-tab div[role="listbox"] * {
-    font-weight: 850 !important;
+/* 어떤 환경에서는 input에 값이 들어가므로 같이 처리 */
+section.main div[data-testid="stSelectbox"] div[role="combobox"] input {
+    color: #2C3E50 !important;
+    -webkit-text-fill-color: #2C3E50 !important;
+    font-weight: 900 !important;
+    opacity: 1 !important;
 }
 
-/* Expander 내용 영역의 기본 텍스트도 너무 옅지 않게 */
-#audit-tab .stMarkdown, 
-#audit-tab .stMarkdown p {
-    color: #2C3E50;
+/* 드롭다운 화살표(아이콘)도 선명하게 */
+section.main div[data-testid="stSelectbox"] svg,
+section.main div[data-testid="stSelectbox"] svg * {
+    fill: #2C3E50 !important;
+    stroke: #2C3E50 !important;
+    opacity: 1 !important;
+}
+
+/* 드롭다운 옵션 목록도 굵게 */
+div[role="listbox"] * {
+    font-weight: 850 !important;
 }
 </style>
 """, unsafe_allow_html=True)
