@@ -941,7 +941,7 @@ with tab_audit:
     label_visibility="collapsed",
     key="unit_select"
 )
-        dept = c4.text_input("상세 부서명")
+        dept = c4.text_input("상세 부서명", placeholder=" 현재 소속부서명 입력")
 
         # ✅ 입력을 시작하면 expander가 다시 접히지 않도록 유지
         if any([str(emp_id).strip(), str(name).strip(), str(dept).strip()]):
