@@ -74,8 +74,11 @@ details[open] > summary {
 }
 
 /* summary 안의 span도 같이 잡아줌 (환경 차이 대응) */
+details > summary,
 details > summary span,
+details[open] > summary,
 details[open] > summary span {
+    font-size: 1.35rem !important;   /* ← 여기 숫자만 조절 */
     font-weight: 900 !important;
     color: #1565C0 !important;
 }
