@@ -59,6 +59,27 @@ st.set_page_config(
 # ==========================================
 st.markdown("""
 <style>
+* 🔥 Expander 제목 가독성 강제 개선 */
+details > summary {
+    font-size: 1.15rem !important;
+    font-weight: 900 !important;
+    color: #1565C0 !important;  /* 📜 서약 타이틀과 동일 색상 */
+}
+
+/* 펼쳐졌을 때도 동일하게 유지 */
+details[open] > summary {
+    font-size: 1.15rem !important;
+    font-weight: 900 !important;
+    color: #1565C0 !important;
+}
+
+/* summary 안의 span도 같이 잡아줌 (환경 차이 대응) */
+details > summary span,
+details[open] > summary span {
+    font-weight: 900 !important;
+    color: #1565C0 !important;
+}
+
 /* ✅ 전체 글자 크기 +0.1px */
 html { font-size: 16.2px; }
 
