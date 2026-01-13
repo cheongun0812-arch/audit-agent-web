@@ -227,6 +227,38 @@ section.main div[data-testid="stSelectbox"] svg * {
 div[role="listbox"] * {
     font-weight: 850 !important;
 }
+/* ✅ 메인 영역 selectbox를 텍스트 입력창처럼 보이게 (흰박스 + 동일 톤) */
+section.main div[data-testid="stSelectbox"] div[role="combobox"]{
+  background:#FFFFFF !important;
+  border:1px solid #CBD5E1 !important;
+  border-radius:6px !important;
+  min-height: 42px !important;
+  box-shadow: none !important;
+}
+
+/* ✅ 선택값 텍스트(진하게) */
+section.main div[data-testid="stSelectbox"] div[role="combobox"] span{
+  color:#2C3E50 !important;
+  font-weight: 800 !important;
+  opacity: 1 !important;
+}
+
+/* ✅ '선택/placeholder'처럼 보이는 텍스트(옅은 회색) */
+/* Streamlit/브라우저마다 placeholder가 input에 들어가거나 span으로 들어가서 둘 다 커버 */
+section.main div[data-testid="stSelectbox"] div[role="combobox"] input{
+  color:#94A3B8 !important;                 /* search box 느낌의 회색 */
+  -webkit-text-fill-color:#94A3B8 !important;
+  font-weight: 700 !important;
+  opacity: 1 !important;
+}
+
+/* ✅ 드롭다운 화살표도 선명하게 */
+section.main div[data-testid="stSelectbox"] svg,
+section.main div[data-testid="stSelectbox"] svg *{
+  fill:#64748B !important;
+  stroke:#64748B !important;
+  opacity:1 !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -898,10 +930,17 @@ with tab_audit:
 
         # 입력 박스 (한 박스 안)
         c1, c2, c3, c4 = st.columns(4)
-        emp_id = c1.text_input("사번", placeholder="예: 1000****")
+        emp_id = c1.text_input("사번", placeholder="예: 회사 사번(1000****"")
         name = c2.text_input("성명")
         ordered_units = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
-        unit = c3.selectbox("총괄 / 본부 / 단", ordered_units)
+        unit = c3.selectbox(
+    "총괄 / 본부 / 단",
+    ordered_units,
+    index=None,                     # ✅ 처음엔 아무것도 선택 안 됨(placeholder처럼 보이게)
+    placeholder="총괄 / 본부 / 단 선택",  # ✅ Streamlit 버전에 따라 지원(지원 안 되면 아래 CSS가 커버)
+    label_visibility="collapsed",
+    key="unit_select"
+)
         dept = c4.text_input("상세 부서명")
 
         # ✅ 입력을 시작하면 expander가 다시 접히지 않도록 유지
