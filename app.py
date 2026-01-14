@@ -1220,18 +1220,107 @@ with tab_summary:
 # --- [Tab 5: 관리자 대시보드] ---
 with tab_admin:
     st.markdown("### 🔒 관리자 전용 대시보드")
+    st.caption("제출 데이터 조회 / 다운로드 (Excel 또는 CSV)")
 
-    PLOTLY_CONFIG = {
-        "staticPlot": True,
-        "displayModeBar": False,
-        "responsive": True,
-    }
-
+    # ✅ 관리자 비밀번호
     admin_pw = st.text_input("관리자 비밀번호", type="password", key="admin_dash_pw")
-
     if admin_pw.strip() != "ktmos0402!":
         st.info("관리자 비밀번호를 입력하세요.")
-    else:
-        st.success("접속 성공")
-        st.info("※ 관리자 탭 코드는 기존 로직을 유지합니다. (이번 요청 범위 외)")
+        st.stop()
 
+    st.success("✅ 접속 성공")
+
+    # ✅ 구글시트 연결
+    try:
+        client = init_google_sheet_connection()
+    except Exception as e:
+        st.error(f"구글시트 연결 함수 호출 오류: {e}")
+        st.stop()
+
+    if not client:
+        st.error("구글 시트 연결 실패 (Secrets / gspread / 권한 확인 필요)")
+        st.stop()
+
+    # ✅ 스프레드시트 열기
+    try:
+        spreadsheet = client.open("Audit_Result_2026")
+        st.info(f"📌 Spreadsheet: {spreadsheet.title}")
+    except Exception as e:
+        st.error(f"스프레드시트(Audit_Result_2026) 접근 오류: {e}")
+        st.stop()
+
+    # ✅ 시트 목록
+    try:
+        ws_list = spreadsheet.worksheets()
+        sheet_names = [ws.title for ws in ws_list]
+    except Exception as e:
+        st.error(f"시트 목록 로드 오류: {e}")
+        st.stop()
+
+    if not sheet_names:
+        st.warning("스프레드시트에 시트가 없습니다.")
+        st.stop()
+
+    # ✅ 조회할 시트 선택
+    selected_sheet = st.selectbox("조회할 시트 선택", sheet_names, key="admin_sheet_select")
+    try:
+        ws = spreadsheet.worksheet(selected_sheet)
+        values = ws.get_all_values()
+    except Exception as e:
+        st.error(f"선택 시트 읽기 오류: {e}")
+        st.stop()
+
+    if not values or len(values) < 2:
+        st.warning("선택한 시트에 데이터가 없습니다.")
+        st.stop()
+
+    # ✅ DataFrame 표시
+    try:
+        df = pd.DataFrame(values[1:], columns=values[0])
+    except Exception as e:
+        st.error(f"데이터프레임 변환 오류: {e}")
+        st.stop()
+
+    st.markdown("#### 📄 제출 데이터")
+    st.dataframe(df, use_container_width=True, hide_index=True)
+
+    st.markdown("---")
+    st.markdown("#### ⬇️ 다운로드")
+
+    # ✅ CSV는 100% 가능(의존성 없음)
+    try:
+        csv_bytes = df.to_csv(index=False).encode("utf-8-sig")
+        st.download_button(
+            label="📥 CSV 다운로드",
+            data=csv_bytes,
+            file_name=f"{selected_sheet}_export.csv",
+            mime="text/csv",
+            use_container_width=True,
+            key="dl_csv",
+        )
+    except Exception as e:
+        st.warning(f"CSV 다운로드 준비 중 오류(치명적이지 않음): {e}")
+
+    # ✅ Excel은 openpyxl이 없으면 실패할 수 있으므로 안전하게 처리
+    try:
+        from io import BytesIO
+
+        buf = BytesIO()
+        with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+            df.to_excel(writer, index=False, sheet_name=selected_sheet[:31])  # 시트명 31자 제한
+        buf.seek(0)
+
+        st.download_button(
+            label="📥 Excel(.xlsx) 다운로드",
+            data=buf.getvalue(),
+            file_name=f"{selected_sheet}_export.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+            key="dl_xlsx",
+        )
+    except Exception as e:
+        st.info(
+            "ℹ️ Excel 다운로드는 'openpyxl'이 설치되어 있어야 합니다.\n"
+            "현재 환경에서 Excel 생성이 불가하여 CSV 다운로드를 이용해 주세요.\n"
+            f"(오류: {e})"
+        )
