@@ -517,16 +517,17 @@ def save_audit_result(emp_id, name, unit, dept, answer, sheet_name):
 
         # ✅ 중복 참여 체크: (사번 + 성명) 둘 다 같을 때만 중복 처리
 emp = str(emp_id).strip()
-nm = str(name).strip()
+    nm  = str(name).strip()
 
-# 헤더 제외하고 가져오기 (2열=사번, 3열=성명)
-emp_list = [str(v).strip() for v in sheet.col_values(2)[1:]]
-name_list = [str(v).strip() for v in sheet.col_values(3)[1:]]
+    emp_list  = [str(v).strip() for v in sheet.col_values(2)[1:]]
+    name_list = [str(v).strip() for v in sheet.col_values(3)[1:]]
 
-# 길이 안전장치 (혹시 열 길이가 다를 수 있어 min 사용)
-for e, n in zip(emp_list, name_list):
-    if e == emp and n == nm:
-        return False, "중복 참여"
+    for e, n in zip(emp_list, name_list):
+        if e == emp and n == nm:
+            return False, "중복 참여"
+
+except Exception as e:
+    return False, f"중복 검증 오류: {e}"
 
         korea_tz = pytz.timezone("Asia/Seoul")
         now = datetime.datetime.now(korea_tz).strftime("%Y-%m-%d %H:%M:%S")
