@@ -503,7 +503,7 @@ def set_current_campaign_info(spreadsheet, title: str | None = None, sheet_name:
     cfg_ws.update(f"B{row_idx}:D{row_idx}", [[new_title, new_sheet, new_start]])
     return {"key": key, "title": new_title, "sheet_name": new_sheet, "start_date": new_start}
 
-def save_audit_result(emp_id, name, unit, dept, answer, sheet_name):
+ddef save_audit_result(emp_id, name, unit, dept, answer, sheet_name):
     client = init_google_sheet_connection()
     if not client:
         return False, "구글 시트 연결 실패 (Secrets 확인)"
@@ -515,8 +515,27 @@ def save_audit_result(emp_id, name, unit, dept, answer, sheet_name):
             sheet = spreadsheet.add_worksheet(title=sheet_name, rows=2000, cols=10)
             sheet.append_row(["저장시간", "사번", "성명", "총괄/본부/단", "부서", "답변", "비고"])
 
-        if str(emp_id) in sheet.col_values(2):
-            return False, "이미 참여하셨습니다."
+        # ==========================================
+        # ✅ 중복 검증 로직 개선 (사번 + 성명 조합)
+        # ==========================================
+        all_records = sheet.get_all_records()
+        emp_id_str = str(emp_id).strip()
+        name_str = str(name).strip()
+
+        for record in all_records:
+            # 시트의 사번과 성명 데이터를 가져옴 (컬럼명 기준)
+            existing_emp_id = str(record.get("사번", "")).strip()
+            existing_name = str(record.get("성명", "")).strip()
+
+            if emp_id_str == "00000000":
+                # 사번이 00000000인 경우: 사번과 성명이 모두 같아야 중복으로 처리
+                if existing_emp_id == "00000000" and existing_name == name_str:
+                    return False, f"'{name_str}'님은 이미 '00000000' 사번으로 참여하셨습니다."
+            else:
+                # 일반 사번인 경우: 사번만 같아도 중복으로 처리
+                if existing_emp_id == emp_id_str:
+                    return False, f"사번 {emp_id_str}은(는) 이미 참여한 기록이 있습니다."
+        # ==========================================
 
         korea_tz = pytz.timezone("Asia/Seoul")
         now = datetime.datetime.now(korea_tz).strftime("%Y-%m-%d %H:%M:%S")
