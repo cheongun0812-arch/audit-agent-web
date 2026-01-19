@@ -1244,12 +1244,12 @@ with tab_summary:
                     except Exception as e:
                         st.error(f"오류: {e}")
 
-# --- [Tab 5: 관리자 대시보드] ---
+# --- [Tab 5: 관리자 대시보드 최종 버전] ---
 with tab_admin:
     st.markdown("### 🔒 관리자 전용 대시보드")
-    st.caption("제출 데이터 조회 / 다운로드 (Excel 또는 CSV)")
+    st.caption("실시간 참여율 분석 및 제출 데이터 통합 관리")
 
-    # ✅ 관리자 비밀번호
+    # 1. 관리자 비밀번호 검증
     admin_pw = st.text_input("관리자 비밀번호", type="password", key="admin_dash_pw")
     if admin_pw.strip() != "ktmos0402!":
         st.info("관리자 비밀번호를 입력하세요.")
@@ -1257,97 +1257,111 @@ with tab_admin:
 
     st.success("✅ 접속 성공")
 
-    # ✅ 구글시트 연결
-    try:
-        client = init_google_sheet_connection()
-    except Exception as e:
-        st.error(f"구글시트 연결 함수 호출 오류: {e}")
-        st.stop()
-
+    # 2. 데이터 로드 (구글 시트 연결)
+    client = init_google_sheet_connection()
     if not client:
-        st.error("구글 시트 연결 실패 (Secrets / gspread / 권한 확인 필요)")
+        st.error("❌ 구글 시트 연결 실패. API 권한 및 Secrets 설정을 확인하세요.")
         st.stop()
 
-    # ✅ 스프레드시트 열기
     try:
         spreadsheet = client.open("Audit_Result_2026")
-        st.info(f"📌 Spreadsheet: {spreadsheet.title}")
-    except Exception as e:
-        st.error(f"스프레드시트(Audit_Result_2026) 접근 오류: {e}")
-        st.stop()
-
-    # ✅ 시트 목록
-    try:
         ws_list = spreadsheet.worksheets()
-        sheet_names = [ws.title for ws in ws_list]
-    except Exception as e:
-        st.error(f"시트 목록 로드 오류: {e}")
-        st.stop()
-
-    if not sheet_names:
-        st.warning("스프레드시트에 시트가 없습니다.")
-        st.stop()
-
-    # ✅ 조회할 시트 선택
-    selected_sheet = st.selectbox("조회할 시트 선택", sheet_names, key="admin_sheet_select")
-    try:
+        sheet_names = [ws.title for ws in ws_list if ws.title != "Campaign_Config"]
+        
+        selected_sheet = st.selectbox("📊 분석 대상 시트 선택", sheet_names, key="admin_sheet_select")
         ws = spreadsheet.worksheet(selected_sheet)
         values = ws.get_all_values()
-    except Exception as e:
-        st.error(f"선택 시트 읽기 오류: {e}")
-        st.stop()
-
-    if not values or len(values) < 2:
-        st.warning("선택한 시트에 데이터가 없습니다.")
-        st.stop()
-
-    # ✅ DataFrame 표시
-    try:
+        
+        if not values or len(values) < 2:
+            st.warning("선택한 시트에 데이터가 없습니다.")
+            st.stop()
+            
         df = pd.DataFrame(values[1:], columns=values[0])
     except Exception as e:
-        st.error(f"데이터프레임 변환 오류: {e}")
+        st.error(f"데이터 로드 중 오류 발생: {e}")
         st.stop()
 
-    st.markdown("#### 📄 제출 데이터")
-    st.dataframe(df, use_container_width=True, hide_index=True)
-
+    # 3. 실시간 참여율 대시보드 (이미지 정원 데이터 반영)
     st.markdown("---")
-    st.markdown("#### ⬇️ 다운로드")
+    st.markdown("#### 📈 실시간 참여 현황 분석")
 
-    # ✅ CSV는 100% 가능(의존성 없음)
-    try:
+    # 조직별 정원 설정 (제공된 이미지 데이터 기반)
+    total_staff_map = {
+        "감사실": 3,
+        "경영총괄": 27,
+        "사업총괄": 39,
+        "강북본부": 221,
+        "강남본부": 173,
+        "서부본부": 278,
+        "강원본부": 101,
+        "품질지원단": 137
+    }
+
+    # 현재 제출 현황 집계
+    unit_counts = df['총괄/본부/단'].value_counts().to_dict()
+    
+    stats_data = []
+    for unit, total in total_staff_map.items():
+        current = unit_counts.get(unit, 0)
+        ratio = (current / total) * 100 if total > 0 else 0
+        stats_data.append({
+            "조직": unit,
+            "정원": total,
+            "참여인원": current,
+            "참여율(%)": round(ratio, 1)
+        })
+    
+    stats_df = pd.DataFrame(stats_data)
+
+    # 상단 요약 지표
+    total_target = sum(total_staff_map.values()) # 총 979명
+    total_current = len(df)
+    total_ratio = (total_current / total_target) * 100
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric("전체 대상자", f"{total_target}명")
+    m2.metric("현재 참여자", f"{total_current}명")
+    m3.metric("전체 참여율", f"{total_ratio:.1f}%")
+
+    # 시각화 차트
+    c1, c2 = st.columns(2)
+    
+    with c1:
+        fig1 = px.bar(stats_df, x="조직", y="참여인원", text="참여인원",
+                      title="조직별 참여 인원", color="참여인원", color_continuous_scale="Blues")
+        st.plotly_chart(fig1, use_container_width=True, config=PLOTLY_CONFIG)
+        
+    with c2:
+        fig2 = px.bar(stats_df, x="조직", y="참여율(%)", text="참여율(%)",
+                      title="조직별 참여율(%)", color="참여율(%)", color_continuous_scale="Viridis")
+        fig2.add_hline(y=100, line_dash="dash", line_color="red")
+        st.plotly_chart(fig2, use_container_width=True, config=PLOTLY_CONFIG)
+
+    # 4. 제출 데이터 상세 조회
+    with st.expander("📄 제출 데이터 상세 보기 / 검색", expanded=False):
+        # 간단한 검색 기능 추가
+        search_term = st.text_input("🔍 성명 또는 부서 검색", "")
+        if search_term:
+            display_df = df[df.apply(lambda row: row.astype(str).str.contains(search_term).any(), axis=1)]
+        else:
+            display_df = df
+        st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+    # 5. 데이터 다운로드
+    st.markdown("---")
+    st.markdown("#### ⬇️ 데이터 내보내기")
+    d1, d2 = st.columns(2)
+    
+    with d1:
         csv_bytes = df.to_csv(index=False).encode("utf-8-sig")
-        st.download_button(
-            label="📥 CSV 다운로드",
-            data=csv_bytes,
-            file_name=f"{selected_sheet}_export.csv",
-            mime="text/csv",
-            use_container_width=True,
-            key="dl_csv",
-        )
-    except Exception as e:
-        st.warning(f"CSV 다운로드 준비 중 오류(치명적이지 않음): {e}")
-
-    # ✅ Excel은 openpyxl이 없으면 실패할 수 있으므로 안전하게 처리
-    try:
-        from io import BytesIO
-
-        buf = BytesIO()
-        with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-            df.to_excel(writer, index=False, sheet_name=selected_sheet[:31])  # 시트명 31자 제한
-        buf.seek(0)
-
-        st.download_button(
-            label="📥 Excel(.xlsx) 다운로드",
-            data=buf.getvalue(),
-            file_name=f"{selected_sheet}_export.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True,
-            key="dl_xlsx",
-        )
-    except Exception as e:
-        st.info(
-            "ℹ️ Excel 다운로드는 'openpyxl'이 설치되어 있어야 합니다.\n"
-            "현재 환경에서 Excel 생성이 불가하여 CSV 다운로드를 이용해 주세요.\n"
-            f"(오류: {e})"
-        )
+        st.download_button("📥 CSV 다운로드", csv_bytes, f"{selected_sheet}.csv", "text/csv", use_container_width=True)
+        
+    with d2:
+        try:
+            from io import BytesIO
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                df.to_excel(writer, index=False, sheet_name='참여현황')
+            st.download_button("📥 Excel 다운로드", output.getvalue(), f"{selected_sheet}.xlsx", use_container_width=True)
+        except Exception:
+            st.info("Excel 엔진 미설치로 CSV 이용을 권장합니다.")
