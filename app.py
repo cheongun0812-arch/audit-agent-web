@@ -7,7 +7,7 @@ from youtube_transcript_api import YouTubeTranscriptApi
 import requests
 from bs4 import BeautifulSoup
 import time
-import glob    
+import glob
 import tempfile
 import hashlib
 import base64
@@ -515,16 +515,8 @@ def save_audit_result(emp_id, name, unit, dept, answer, sheet_name):
             sheet = spreadsheet.add_worksheet(title=sheet_name, rows=2000, cols=10)
             sheet.append_row(["저장시간", "사번", "성명", "총괄/본부/단", "부서", "답변", "비고"])
 
-        # ✅ 중복 참여 체크: (사번 + 성명) 둘 다 같을 때만 중복 처리
-emp = str(emp_id).strip()
-nm  = str(name).strip()
-
-emp_list  = [str(v).strip() for v in sheet.col_values(2)[1:]]
-name_list = [str(v).strip() for v in sheet.col_values(3)[1:]]
-
-for e, n in zip(emp_list, name_list):
-    if e == emp and n == nm:
-        return False, "중복 참여"
+        if str(emp_id) in sheet.col_values(2):
+            return False, "이미 참여하셨습니다."
 
         korea_tz = pytz.timezone("Asia/Seoul")
         now = datetime.datetime.now(korea_tz).strftime("%Y-%m-%d %H:%M:%S")
