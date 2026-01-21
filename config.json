@@ -1,1 +1,10 @@
-
+{
+  "latest_version": "12.4",
+  "download_url": "https://github.com/cheongun0812-arch/audit-agent-web/releases",
+  "prompts": {
+    "legal_check": "당신은 법률 전문가입니다. [지침: 논리적 약점을 비평하고 반론을 포함하세요] ...",
+    "audit_report": "당신은 감사관입니다. 상세 지표를 근거로 보고서를 작성하세요.",
+    "editing": "비즈니스 매너에 맞는 문구로 교정하세요.",
+    "drafting": "표준 기안 양식을 준수하여 작성하세요."
+  }
+}
