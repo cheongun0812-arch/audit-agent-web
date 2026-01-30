@@ -59,7 +59,7 @@ st.set_page_config(
 # ==========================================
 st.markdown("""
 <style>
-/* 🔥 Expander 제목 가독성 강제 개선 */
+* 🔥 Expander 제목 가독성 강제 개선 */
 details > summary {
     font-size: 1.15rem !important;
     font-weight: 900 !important;
@@ -831,226 +831,167 @@ def _render_pledge_group(
 
 # --- [Tab 1: 자율점검] ---
 with tab_audit:
-    # ✅ 자율점검 탭 전용 스타일 범위 시작(#audit-tab)
-    st.markdown('<div id="audit-tab">', unsafe_allow_html=True)
+    # ✅ (요청) 자율점검 탭만 '2026 설맞이 클린캠페인' 테마로 교체 (다른 메뉴/탭은 변경하지 않음)
+    import streamlit.components.v1 as components
 
-    # ==========================================================
-    # 🎍 2026 설맞이 클린캠페인 (윤리·청렴 실천 서약)
-    # - 기존 '윤리경영원칙 실천지침 서약' 화면을 대체
-    # - 다른 탭(법률검토/챗봇/요약/관리자)에는 영향 없음
-    # - 임직원 정보 입력창(사번/성명/총괄·본부·단/부서)은 기존과 동일 구성 유지
-    # ==========================================================
+    CAMPAIGN_SHEET = "2026_설_클린캠페인"
+    TOTAL_STAFF = 979  # 전사 정원(참여율 계산 기준)
 
-    CAMPAIGN_TITLE = "2026 설맞이 클린캠페인 (청렴·윤리 실천 서약)"
-    CAMPAIGN_SHEET_NAME = "2026_설_클린캠페인"
-    TOTAL_TARGET = 979  # 전사 대상자(관리자 대시보드 기준)
-
-    # --------- 상단 타이틀 ----------
-    st.markdown(f"""
-        <div style='background-color:#E8F5E9; padding: 20px; border-radius: 12px; border-left: 6px solid #2E7D32; margin-bottom: 18px;'>
-            <div style='display:flex; align-items:center; gap:10px;'>
-                <div style='font-size: 28px;'>🎍</div>
-                <h3 style='margin:0; color:#1B5E20; font-weight:900;'>{CAMPAIGN_TITLE}</h3>
-            </div>
-            <div style='margin-top:8px; color:#2E3A3A; font-weight:650; line-height:1.55;'>
-                설 명절 전·후로 발생할 수 있는 <b>선물/접대/금품 수수</b> 및 <b>부당 청탁</b>을 예방하고,
-                전 임직원이 <b>청렴·공정 원칙</b>을 다시 한 번 점검하기 위한 캠페인입니다.
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
-
-    # --------- 안내/핵심 준수사항 ----------
-    with st.expander("📌 캠페인 안내 및 핵심 준수사항", expanded=True):
-        st.markdown("""
-        <div style='background:#FFFDE7; padding:16px; border-radius: 10px; border-left: 5px solid #FBC02D;'>
-            <div style='font-weight:900; color:#6D4C41; font-size: 1.08rem; margin-bottom: 6px;'>🚫 명절 전후 특히 주의해 주세요</div>
-            <div style='color:#444; font-size: 0.97rem; line-height: 1.6;'>
-                아래 항목은 설 명절 전후에 빈번하게 발생하는 리스크 유형입니다. <b>오해 소지가 없도록</b> 먼저 차단해 주세요.
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        st.markdown("""
-        <div style='overflow-x:auto; margin-top: 10px;'>
-            <table style='width:100%; border-collapse: collapse; background:#FFFFFF; border:1px solid #E0E0E0; border-radius: 10px; overflow:hidden;'>
-                <thead>
-                    <tr style='background:#FFF8E1;'>
-                        <th style='text-align:center; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037; width:28%;'>구분</th>
-                        <th style='text-align:center; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037;'>유형</th>
-                        <th style='text-align:center; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037;'>예시(주의)</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; font-weight:900; color:#2C3E50;'>금품/선물/접대</td>
-                        <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>수수, 제공, 알선</td>
-                        <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>상품권/현금, 고가 선물, 과도한 식사·주류 제공</td>
-                    </tr>
-                    <tr>
-                        <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; font-weight:900; color:#2C3E50;'>부당 청탁</td>
-                        <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>편의 제공 요청/압력</td>
-                        <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>계약/발주/검수 관련 '봐주기', 특혜성 요청</td>
-                    </tr>
-                    <tr>
-                        <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; font-weight:900; color:#2C3E50;'>이해상충</td>
-                        <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>사적 관계 개입</td>
-                        <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>지인/친인척 업체 우대, 내부정보 공유</td>
-                    </tr>
-                    <tr>
-                        <td style='text-align:center; padding:12px; font-weight:900; color:#2C3E50;'>직장 내 존중</td>
-                        <td style='text-align:center; padding:12px; color:#333;'>괴롭힘/성희롱</td>
-                        <td style='text-align:center; padding:12px; color:#333;'>회식·명절 분위기에서의 부적절 언행, 강요</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-        """, unsafe_allow_html=True)
-
-        st.markdown(
-            "<div style='margin-top:10px; color:#666; font-size:0.88rem;'>"
-            "※ 위 내용은 캠페인 안내 목적이며, 세부 기준은 사내 윤리·준법 기준/지침을 따릅니다."
-            "</div>",
-            unsafe_allow_html=True
-        )
-
-    st.markdown("---")
-
-    # --------- 서약 + 이벤트 참여 ----------
+    # ✅ (현재 테마 코드 그대로) 설맞이 클린캠페인 전용 스타일
     st.markdown("""
-        <div style='background:#0B1B2B; padding: 24px; border-radius: 14px; border:1px solid rgba(255,255,255,0.12);'>
-            <div style='color:#FBBF24; font-weight:900; font-size: 1.22rem; margin-bottom: 10px;'>🖋️ 청렴 서약 및 이벤트 참여</div>
-            <div style='color: rgba(255,255,255,0.88); line-height: 1.7; font-size: 0.98rem;'>
-                아래 서약에 동의하고, 정보를 입력해 제출하면 참여 완료입니다.<br>
-                <b>참여율 50% 달성 시</b> 참여자 중 <b>50명</b>을 추첨하여 <b>모바일 커피쿠폰</b>을 제공합니다.
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
+<style>
+/* Expander 및 텍스트 가독성 */
+details > summary { font-size: 1.15rem !important; font-weight: 900 !important; color: #1565C0 !important; }
+html { font-size: 16.2px; }
+.stApp { background-color: #F4F6F9; }
+[data-testid="stSidebar"] { background-color: #2C3E50; }
+[data-testid="stSidebar"] * { color: #FFFFFF !important; }
 
-    # --- 참여 현황 조회 함수(탭 내부) ---
-    def _get_sheet_row_count(sheet_name: str) -> int:
+/* 설맞이 클린캠페인 전용 스타일 (자율점검 탭에만 적용) */
+.clean-campaign-scope .clean-container { max-width: 850px; margin: 0 auto; }
+.clean-campaign-scope div[data-testid="stForm"] {
+    background-color: #0F172A !important;
+    border: 2px solid #334155 !important;
+    border-radius: 25px !important;
+    padding: 30px !important;
+}
+.clean-campaign-scope .stTextInput input {
+    background-color: #1E293B !important;
+    color: white !important;
+    border: 1px solid #475569 !important;
+    height: 55px !important;
+    text-align: center !important;
+}
+.clean-campaign-scope .stSelectbox div[role="combobox"] { background-color: #1E293B !important; color: white !important; height: 55px !important; }
+
+/* 버튼 스타일 */
+.clean-campaign-scope .stButton > button, .clean-campaign-scope div[data-testid="stFormSubmitButton"] > button {
+    background: linear-gradient(to right, #2980B9, #2C3E50) !important;
+    color: #FFFFFF !important;
+    font-weight: 800 !important;
+}
+
+/* 캠페인 제출 버튼 커스텀 */
+.clean-campaign-scope .clean-submit button {
+    background: linear-gradient(to right, #E11D48, #9F1239) !important;
+    height: 65px !important;
+    font-size: 1.3rem !important;
+    border-radius: 15px !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+    # ✅ 참여자 수 집계
+    def _get_participation_count(sheet_name: str) -> int:
+        client = init_google_sheet_connection()
+        if not client:
+            return 0
         try:
-            c = init_google_sheet_connection()
-            if not c:
-                return 0
-            ss = c.open("Audit_Result_2026")
+            ss = client.open("Audit_Result_2026")
             ws = ss.worksheet(sheet_name)
             values = ws.get_all_values()
             return max(0, len(values) - 1)  # header 제외
         except Exception:
             return 0
 
-    # --- 서약 확인(7초 카운트다운) ---
-    if "cc_prev" not in st.session_state:
-        st.session_state["cc_prev"] = False
-    if "cc_done" not in st.session_state:
-        st.session_state["cc_done"] = False
-    if "cc_running" not in st.session_state:
-        st.session_state["cc_running"] = False
+    st.markdown('<div class="clean-campaign-scope">', unsafe_allow_html=True)
 
-    st.markdown("<div style='height:14px;'></div>", unsafe_allow_html=True)
+    st.markdown("""
+    ### 🎍 2026 설맞이 클린캠페인 (윤리경영 실천 서약)
+    - 설 명절 전·후로 발생할 수 있는 **선물/접대/금품 수수**를 예방하고,
+    - 전 임직원이 **청렴·공정 원칙**을 다시 한 번 점검하기 위한 캠페인입니다.
+    """)
 
-    pledge_text = """
-    <div style="background:#FFFFFF; padding:18px; border-radius:12px; border-left:6px solid #0B5ED7;">
-      <div style="font-size:1.05rem; font-weight:900; color:#0B5ED7; margin-bottom:6px;">[청렴·윤리 실천 서약]</div>
-      <div style="font-size:0.98rem; color:#2C3E50; line-height:1.75; font-weight:650;">
-        나는 설 명절 전·후를 포함하여 업무 수행 전 과정에서<br>
-        <b>금품·향응·접대 수수 및 부당 청탁을 일절 하지 않으며</b>,<br>
-        이해관계자와의 관계에서 <b>공정·투명 원칙</b>을 준수하고,<br>
-        위반 또는 위반 우려 사항을 인지한 경우 <b>즉시 보고/상담</b>하겠습니다.
-      </div>
-    </div>
-    """
-    st.markdown(pledge_text, unsafe_allow_html=True)
+    # ✅ 인포그래픽(형식/레이아웃 그대로) 렌더링
+    try:
+        with open("CleanCampaign2026_Visual.html", "r", encoding="utf-8") as f:
+            visual_html = f.read()
+        components.html(visual_html, height=2800, scrolling=False)
+    except Exception:
+        st.error("⚠️ 캠페인 인포그래픽 파일(CleanCampaign2026_Visual.html)을 찾을 수 없습니다.")
 
-    cc_check = st.checkbox("위 서약 내용을 확인했으며, 청렴 실천에 동의합니다. (체크 후 7초 확인)", key="cc_check")
+    st.markdown("---")
 
-    # 체크 '순간' 감지 후 7초 카운트다운
-    ph = st.empty()
-    if cc_check and (not st.session_state["cc_prev"]) and (not st.session_state["cc_done"]) and (not st.session_state["cc_running"]):
-        st.session_state["cc_running"] = True
-        for sec in range(COUNTDOWN_SECONDS, 0, -1):
-            ph.markdown(f"<div class='pledge-right'>{HOURGLASS_SVG}<span>{sec}s</span></div>", unsafe_allow_html=True)
-            time.sleep(1)
-        st.session_state["cc_running"] = False
-        st.session_state["cc_done"] = True
-        ph.markdown("<div style='text-align:right; font-weight:900; color:#27AE60;'>✅ 확인 완료</div>", unsafe_allow_html=True)
-    else:
-        if st.session_state["cc_running"]:
-            ph.markdown(f"<div class='pledge-right'>{HOURGLASS_SVG}<span>...</span></div>", unsafe_allow_html=True)
-        elif st.session_state["cc_done"] and cc_check:
-            ph.markdown("<div style='text-align:right; font-weight:900; color:#27AE60;'>✅ 확인 완료</div>", unsafe_allow_html=True)
-        else:
-            ph.markdown("", unsafe_allow_html=True)
+    # ✅ 서약 + 이벤트 참여 폼 (현재 테마 코드 그대로)
+    _, col_mid, _ = st.columns([1, 4, 1])
+    with col_mid:
+        st.markdown("""
+            <div style='background: #0F172A; padding: 35px; border-radius: 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); border-left: 10px solid #E11D48; margin-bottom: 30px; color: white;'>
+                <h2 style='color: #FBBF24; font-weight: 900; margin-top:0;'>🖋️ 청렴 서약에 동참해 주세요</h2>
+                <p style='font-size: 1.1rem; line-height: 1.8;'>
+                    스스로 청렴에 동참하겠다는 의지로 <b>"청렴 서약"</b>을 완료한 임직원이 <b>전체 50%</b>를 넘으면 <br/>
+                    참여자 중 <b>50분</b>을 추첨하여 <b>"모바일 커피 쿠폰"</b>을 쏩니다!
+                </p>
+            </div>
+        """, unsafe_allow_html=True)
 
-    st.session_state["cc_prev"] = bool(cc_check)
+        # ✅ (요청) 임직원 정보 입력창: 기존 '윤리경영원칙 실천지침' 서약 화면과 동일 구성 사용
+        with st.form("campaign_2026_lny"):
+            c1, c2, c3, c4 = st.columns(4)
 
-    st.markdown("<div style='height:18px;'></div>", unsafe_allow_html=True)
+            emp_id = c1.text_input("사번", placeholder="사번(1000*)없으면(00000000)")
+            name = c2.text_input("성명")
 
-    # --------- ✅ 임직원 정보 입력창: 기존 윤리경영 실천지침 서약 화면과 동일 스타일/구성 유지 ----------
-    st.markdown("#### ✍️ 임직원 정보 입력 (이벤트 참여)")
-    c1, c2, c3, c4 = st.columns(4)
-    emp_id = c1.text_input("사번", placeholder="사번(1000*)없으면(00000000)")
-    name = c2.text_input("성명")
+            ordered_units = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
+            unit = c3.selectbox(
+                "총괄 / 본부 / 단",
+                ordered_units,
+                index=None,                     # ✅ 처음엔 아무것도 선택 안 됨(placeholder처럼 보이게)
+                placeholder="총괄 / 본부 / 단 선택",  # ✅ Streamlit 버전에 따라 지원
+                label_visibility="collapsed",
+                key="unit_select"
+            )
+            dept = c4.text_input("상세 부서명", placeholder="현 소속부서명 입력")
 
-    ordered_units = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
-    unit = c3.selectbox(
-        "총괄 / 본부 / 단",
-        ordered_units,
-        index=None,
-        placeholder="총괄 / 본부 / 단 선택",
-        key="unit_select_clean"
-    )
+            st.markdown('<div class="clean-submit">', unsafe_allow_html=True)
+            submitted = st.form_submit_button("🛡️ 청렴 서약 완료 및 이벤트 응모하기")
+            st.markdown('</div>', unsafe_allow_html=True)
 
-    dept = c4.text_input("상세 부서명", placeholder="현 소속부서명 입력")
-
-    # --------- 제출 ----------
-    st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
-    can_submit = bool(st.session_state.get("cc_done"))  # 서약 확인 완료 후 제출 가능
-    submit = st.button("🛡️ 서약 제출 및 이벤트 참여 완료", use_container_width=True, disabled=(not can_submit))
-
-    if submit:
-        if not emp_id or not name or not unit:
-            st.warning("⚠️ 필수 정보(사번/성명/총괄·본부·단)를 입력해 주세요.")
-        else:
-            ok, msg = validate_emp_id(emp_id)
-            if not ok:
-                st.warning(msg)
+        if submitted:
+            # 필수값 체크 (기존 입력창 로직 유지)
+            if not emp_id or not name or (unit is None):
+                st.warning("⚠️ 필수 정보를 입력해 주세요. (사번/성명/총괄·본부·단)")
             else:
-                answer = "2026 설맞이 클린캠페인 청렴·윤리 실천 서약 완료"
-                with st.spinner("제출 중..."):
-                    success, msg2 = save_audit_result(emp_id, name, unit, dept, answer, CAMPAIGN_SHEET_NAME)
-                if success:
-                    st.success(f"✅ {name}님, 참여가 완료되었습니다! (서약 제출 완료)")
-                    st.balloons()
-
-                    # 참여율 표시
-                    count = _get_sheet_row_count(CAMPAIGN_SHEET_NAME)
-                    rate = min(100.0, (count / TOTAL_TARGET) * 100.0 if TOTAL_TARGET else 0.0)
-
-                    st.markdown(f"""
-                        <div style='background:#0F172A; padding:26px; border-radius: 14px; border:1px solid rgba(255,255,255,0.12); margin-top: 14px;'>
-                            <div style='color:#94A3B8; letter-spacing:2px; font-weight:900;'>참여율 현황</div>
-                            <div style='font-size: 3.4rem; font-weight:900; color:#FBBF24; margin-top: 6px;'>{rate:.1f}%</div>
-                            <div style='width:100%; background:#1E293B; height:14px; border-radius:10px; overflow:hidden; margin: 10px 0 6px;'>
-                                <div style='width:{rate}%; height:14px; background: linear-gradient(to right, #FBBF24, #E11D48); transition: width 0.8s;'></div>
-                            </div>
-                            <div style='color:rgba(255,255,255,0.85);'>현재 <b>{count}명</b>이 참여했습니다. (목표 {TOTAL_TARGET}명)</div>
-                            <div style='color:rgba(255,255,255,0.70); font-size:0.9rem; margin-top: 6px;'>
-                                * 참여율 50% 달성 시, 참여자 중 50명 추첨(모바일 커피쿠폰)
-                            </div>
-                        </div>
-                    """, unsafe_allow_html=True)
+                ok, msg = validate_emp_id(emp_id)
+                if not ok:
+                    st.warning(msg)
                 else:
-                    st.error(f"❌ 제출 실패: {msg2}")
+                    answer = "2026 설맞이 클린캠페인 청렴·윤리 실천 서약 완료"
+                    with st.spinner("제출 중..."):
+                        success, msg2 = save_audit_result(emp_id, name, unit, dept, answer, CAMPAIGN_SHEET)
 
-    st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
-    st.info("문의/신고/상담은 감사실 또는 내부 신고 채널을 이용해 주세요. (오해 소지가 있을 때는 먼저 차단/상담이 최선입니다.)")
+                    if success:
+                        st.session_state["campaign_success"] = True
+                        st.session_state["campaign_name"] = name
 
-    # ✅ 자율점검 탭 전용 스타일 범위 종료
-    st.markdown("</div>", unsafe_allow_html=True)
+                        # ✅ 폭죽(현재 코드 그대로)
+                        components.html("""
+                        <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+                        <script>
+                            confetti({{particleCount:150, spread:70, origin:{{y:0.6}}}});
+                        </script>
+                        """, height=0)
+                    else:
+                        st.error(f"❌ {{msg2}}")
 
+        if st.session_state.get("campaign_success"):
+            st.success(f"🎊 {{st.session_state.get('campaign_name', '')}}님, 서약이 완료되었습니다!")
 
-# --- [Tab 2: 법률 리스크/규정/계약 검토 & 감사보고서 작성] ---
+            count = _get_participation_count(CAMPAIGN_SHEET)
+            rate = min(100, (count / TOTAL_STAFF) * 100) if TOTAL_STAFF else 0
+
+            st.markdown(f"""
+                <div style='background:#0F172A; padding:40px; border-radius: 25px; text-align:center; color:white; margin-top: 30px; border: 4px solid #FBBF24;'>
+                    <p style='color:#94A3B8; letter-spacing:3px; font-weight:900;'>참여율 대시보드</p>
+                    <div style='font-size: 7rem; font-weight:900; color:#FBBF24;'>{{rate:.1f}}%</div>
+                    <div style='width:100%; background:#1E293B; height:15px; border-radius:10px; overflow:hidden; margin: 20px 0;'>
+                        <div style='width:{{rate}}%; height:15px; background: linear-gradient(to right, #FBBF24, #E11D48); transition: width 2s;'></div>
+                    </div>
+                    <p>현재 {{count}}명의 임직원이 함께하고 있습니다.</p>
+                </div>
+            """, unsafe_allow_html=True)
+
+    st.markdown('</div>', unsafe_allow_html=True)
 with tab_doc:
     st.markdown("### 📄 법률 리스크(계약서)·규정 검토 / 감사보고서 작성·검증")
 
