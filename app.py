@@ -893,28 +893,7 @@ with tab_audit:
                 # 기존 app.py에 정의된 저장 함수(save_audit_result 등)를 호출하는 로직
                 st.success(f"🎊 {emp_name}님, 청렴 서약이 성공적으로 등록되었습니다!")
     
-    # 4. 하단 서약 폼 (기존 app.py의 제출 로직과 연동)
-    _, col_mid, _ = st.columns([1, 4, 1])
-    with col_mid:
-        st.markdown("### 🖋️ 2026 설맞이 청렴 서약")
-        with st.form("lny_pledge_form"):
-            c1, c2 = st.columns(2)
-            e_id = c1.text_input("사번", placeholder="10******")
-            e_name = c2.text_input("성명")
-            
-            # (기존 logic 유지) 부서 선택 및 제출 버튼
-            submitted = st.form_submit_button("🛡️ 서약 완료 및 이벤트 응모")
-            if submitted:
-                # 사번 검증 및 저장 로직 실행
-                ok, msg = validate_emp_id(e_id)
-                if ok:
-                    success, res_msg = save_audit_result(e_id, e_name, "본부", "부서", "설맞이 서약 완료", current_sheet_name)
-                    if success: st.success(f"🎊 {e_name}님 서약이 완료되었습니다!")
-                    else: st.error(res_msg)
-                else:
-                    st.warning(msg)
-
-    st.markdown('</div>', unsafe_allow_html=True)
+       st.markdown('</div>', unsafe_allow_html=True)
 
     if "api_key" not in st.session_state:
         st.warning("🔒 로그인 후 이용 가능합니다.")
