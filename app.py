@@ -831,233 +831,86 @@ def _render_pledge_group(
 
 # --- [Tab 1: 자율점검] ---
 with tab_audit:
-    # ✅ 자율점검 탭 전용(설맞이 클린캠페인) — 다른 탭/메뉴/관리자 설정값은 변경하지 않습니다.
-    st.markdown('<div id="audit-tab">', unsafe_allow_html=True)
-
-    import streamlit.components.v1 as components
-
-    # ✅ (표시용 고정 타이틀) 월별 타이틀 관리(campaign_info["title"])와 충돌하지 않도록,
-    #    관리자 설정값은 그대로 두고 화면 표시만 고정합니다.
-    DISPLAY_TITLE = "Lunar New Year Clean Campaign"
-
-    # ✅ 결과 저장 시트명은 기존과 동일하게 월별 자동(campaign_info["sheet_name"])
-    current_sheet_name = campaign_info.get("sheet_name", "2026_윤리경영_실천서약")
-
-    TOTAL_STAFF = 979  # 참여율 기준 전사 정원(요청값 그대로 유지)
-
-    # ✅ Tab 1(자율점검)에서만 스타일이 영향가도록 스코프 클래스 사용
+    # 1. 화면 가독성 강화를 위한 스타일 설정
     st.markdown("""
-    <style>
-      .clean-campaign-scope .clean-container { max-width: 900px; margin: 0 auto; }
-
-      .clean-campaign-scope div[data-testid="stForm"] {
-          background-color: #0F172A !important;
-          border: 2px solid #334155 !important;
-          border-radius: 25px !important;
-          padding: 30px !important;
-      }
-      .clean-campaign-scope .stTextInput input {
-          background-color: #1E293B !important;
-          color: white !important;
-          border: 1px solid #475569 !important;
-          height: 55px !important;
-          text-align: center !important;
-      }
-      .clean-campaign-scope .stSelectbox div[role="combobox"] {
-          background-color: #1E293B !important;
-          color: white !important;
-          height: 55px !important;
-      }
-
-      .clean-campaign-scope .stButton > button,
-      .clean-campaign-scope div[data-testid="stFormSubmitButton"] > button {
-          background: linear-gradient(to right, #2980B9, #2C3E50) !important;
-          color: #FFFFFF !important;
-          font-weight: 800 !important;
-      }
-      .clean-campaign-scope .stButton > button:hover,
-      .clean-campaign-scope div[data-testid="stFormSubmitButton"] > button:hover {
-          transform: scale(1.03);
-          transition: 0.2s;
-      }
-
-      /* 제출 버튼 크게 */
-      .clean-campaign-scope .clean-submit button {
-          background: linear-gradient(to right, #E11D48, #9F1239) !important;
-          height: 65px !important;
-          font-size: 1.3rem !important;
-          border-radius: 15px !important;
-          width: 100% !important;
-          font-weight: 900 !important;
-      }
-    </style>
+        <style>
+            [data-testid="stHorizontalBlock"] { width: 100% !important; }
+            .stTabs [data-baseweb="tab-panel"] { padding: 0 !important; }
+            iframe { border: none !important; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        </style>
     """, unsafe_allow_html=True)
 
-    st.markdown('<div class="clean-campaign-scope">', unsafe_allow_html=True)
+    # 2. 동영상 배경 처리 (2026년 New year.mp4)
+    video_src = ""
+    video_path = "2026년 New year.mp4"
+    if os.path.exists(video_path):
+        with open(video_path, "rb") as f:
+            v_bytes = f.read()
+            video_src = f"data:video/mp4;base64,{base64.b64encode(v_bytes).decode()}"
 
-    st.markdown(f"""
-    ### 🎍 {DISPLAY_TITLE}
-    - 설 명절 전·후로 발생할 수 있는 **선물/접대/금품 수수**를 예방하고,
-    - 전 임직원이 **청렴·공정 원칙**을 다시 한 번 점검하기 위한 캠페인입니다.
-    """)
-
-    # -----------------------------
-    # (DEV) 인포그래픽 파일 업로더
-    # -----------------------------
-    def _get_query_param(name: str):
-        try:
-            return st.query_params.get(name)  # streamlit 최신
-        except Exception:
-            try:
-                qp = st.experimental_get_query_params()  # 구버전 호환
-                v = qp.get(name, [None])[0]
-                return v
-            except Exception:
-                return None
-
-    dev_flag = _get_query_param("dev")
-    dev_mode = str(dev_flag).strip().lower() in ("1", "true", "yes", "y", "on")
-
-    if dev_mode:
-        with st.expander("(DEV) Upload infographic: CleanCampaign2026_Visual.html", expanded=False):
-            up = st.file_uploader(
-                "CleanCampaign2026_Visual.html 업로드(즉시 적용)",
-                type=["html"],
-                key="cc_visual_uploader"
-            )
-            if up is not None:
-                try:
-                    html_text = up.getvalue().decode("utf-8", errors="ignore")
-                    st.session_state["cc_visual_html"] = html_text
-
-                    # 가능한 환경이면 실제 파일로 저장(Cloud 환경은 영구 저장이 보장되지 않을 수 있음)
-                    try:
-                        with open("CleanCampaign2026_Visual.html", "w", encoding="utf-8") as f:
-                            f.write(html_text)
-                        st.success("✅ 업로드 완료: 파일로 저장 및 화면에 즉시 적용했습니다.")
-                    except Exception:
-                        st.success("✅ 업로드 완료: 화면에 즉시 적용했습니다. (파일 저장은 환경상 제한될 수 있습니다.)")
-
-                    st.download_button(
-                        "⬇️ 현재 적용 중인 HTML 다운로드",
-                        data=html_text,
-                        file_name="CleanCampaign2026_Visual.html",
-                        mime="text/html",
-                        use_container_width=True
-                    )
-                except Exception as e:
-                    st.error(f"업로드 처리 중 오류: {e}")
-
-    # -----------------------------
-    # 인포그래픽(형식/레이아웃 그대로) 렌더링
-    # -----------------------------
-    visual_html = st.session_state.get("cc_visual_html", None)
-    if not visual_html:
-        try:
-            with open("CleanCampaign2026_Visual.html", "r", encoding="utf-8") as f:
-                visual_html = f.read()
-        except Exception:
-            visual_html = None
-
-    if visual_html:
-        components.html(visual_html, height=2200, scrolling=False)  # auto-resized by JS inside the HTML
-    else:
-        st.error("⚠️ 캠페인 인포그래픽 파일(CleanCampaign2026_Visual.html)을 찾을 수 없습니다. app.py와 같은 폴더에 파일을 두거나, ?dev=1 모드에서 업로드해 주세요.")
-
-    st.markdown("---")
-
-    # ✅ 참여자 수 집계(해당 월 시트 기준)
-    def _get_participation_count(sheet_name: str) -> int:
-        client = init_google_sheet_connection()
-        if not client:
-            return 0
-        try:
-            ss = client.open("Audit_Result_2026")
-            ws = ss.worksheet(sheet_name)
-            values = ws.get_all_values()
-            return max(0, len(values) - 1)  # header 제외
-        except Exception:
-            return 0
-
-    # ✅ 서약 + 이벤트 참여 폼 (현재 테마 레이아웃 유지)
-    _, col_mid, _ = st.columns([1, 4, 1])
-    with col_mid:
-        st.markdown(f"""
-            <div style='background: #0F172A; padding: 35px; border-radius: 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); border-left: 10px solid #E11D48; margin-bottom: 30px; color: white;'>
-                <h2 style='color: #FBBF24; font-weight: 900; margin-top:0;'>🖋️ {DISPLAY_TITLE} Pledge</h2>
-                <p style='font-size: 1.1rem; line-height: 1.8;'>
-                    스스로 청렴에 동참하겠다는 의지로 <b>"청렴 서약"</b>을 완료한 임직원이 <b>전체 50%</b>를 넘으면 <br/>
-                    참여자 중 <b>50분</b>을 추첨하여 <b>"모바일 커피 쿠폰"</b>을 제공합니다.
-                </p>
+    # 3. 프리미엄 인포그래픽 HTML (새 텍스트 문서(3).html의 감성을 app.py에 맞게 최적화)
+    premium_ui = f"""
+    <div style="width:100%; min-height:100vh; position:relative; background:#020617; border-radius:25px; overflow:hidden;">
+        <video autoplay muted loop playsinline style="position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; opacity:0.4; z-index:0;">
+            <source src="{video_src}" type="video/mp4">
+        </video>
+        <div style="position:relative; z-index:1; padding:80px 40px; font-family:'Pretendard', sans-serif; color:white; text-align:center;">
+            <div style="display:inline-block; padding:8px 20px; background:rgba(225,29,72,0.2); border:1px solid rgba(225,29,72,0.3); border-radius:999px; color:#ff4d4d; font-weight:bold; font-size:14px; margin-bottom:20px;">
+                🎍 2026 병오년(丙午年) 설맞이 클린캠페인
             </div>
-        """, unsafe_allow_html=True)
-
-        # ✅ 임직원 정보 입력창: 기존 윤리서약 입력 UI 구성 그대로 사용
-        with st.form("campaign_lny_form"):
-            c1, c2, c3, c4 = st.columns(4)
-            emp_id = c1.text_input("사번", placeholder="사번(1000*)없으면(00000000)")
-            name = c2.text_input("성명")
-            ordered_units = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
-            unit = c3.selectbox(
-                "총괄 / 본부 / 단",
-                ordered_units,
-                index=None,
-                placeholder="총괄 / 본부 / 단 선택",
-                label_visibility="collapsed",
-                key="unit_select"
-            )
-            dept = c4.text_input("상세 부서명", placeholder="현 소속부서명 입력")
-
-            st.markdown('<div class="clean-submit">', unsafe_allow_html=True)
-            submitted = st.form_submit_button("🛡️ 청렴 서약 완료 및 이벤트 응모하기")
-            st.markdown("</div>", unsafe_allow_html=True)
-
-        if submitted:
-            if not emp_id or not name:
-                st.warning("⚠️ 사번과 성명을 입력해 주세요.")
-            else:
-                ok, msg = validate_emp_id(emp_id)
-                if not ok:
-                    st.warning(msg)
-                else:
-                    answer = f"{DISPLAY_TITLE} pledge completed"
-                    with st.spinner("제출 중..."):
-                        success, msg2 = save_audit_result(emp_id, name, unit, dept, answer, current_sheet_name)
-
-                    if success:
-                        st.session_state["lny_success"] = True
-                        st.session_state["lny_name"] = name
-
-                        # ✅ 폭죽(현재 테마 코드 유지)
-                        components.html("""
-                        <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-                        <script>
-                            confetti({particleCount:150, spread:70, origin:{y:0.6}});
-                        </script>
-                        """, height=0)
-                    else:
-                        st.error(f"❌ {msg2}")
-
-        if st.session_state.get("lny_success"):
-            st.success(f"🎊 {st.session_state.get('lny_name','')}님, 서약이 완료되었습니다!")
-
-            count = _get_participation_count(current_sheet_name)
-            rate = min(100, (count / TOTAL_STAFF) * 100) if TOTAL_STAFF else 0
-
-            st.markdown(f"""
-                <div style='background:#0F172A; padding:40px; border-radius: 25px; text-align:center; color:white; margin-top: 30px; border: 4px solid #FBBF24;'>
-                    <p style='color:#94A3B8; letter-spacing:3px; font-weight:900;'>참여율 대시보드</p>
-                    <div style='font-size: 7rem; font-weight:900; color:#FBBF24;'>{rate:.1f}%</div>
-                    <div style='width:100%; background:#1E293B; height:15px; border-radius:10px; overflow:hidden; margin: 20px 0;'>
-                        <div style='width:{rate}%; height:15px; background: linear-gradient(to right, #FBBF24, #E11D48); transition: width 2s;'></div>
-                    </div>
-                    <p>현재 {count}명의 임직원이 함께하고 있습니다.</p>
+            <h1 style="font-size:5rem; font-weight:900; line-height:1.1; margin-bottom:20px; text-shadow: 0 5px 20px rgba(0,0,0,0.7);">
+                새해 복 <br><span style="color:#E11D48;">많이 받으십시오</span>
+            </h1>
+            <p style="font-size:1.4rem; color:#cbd5e1; max-width:800px; margin:0 auto 60px; line-height:1.6;">
+                정직과 신뢰를 바탕으로 더 크게 도약하는 2026년이 되시길 기원합니다.<br>
+                <b>ktMOS북부</b>는 깨끗하고 투명한 명절 문화를 선도합니다.
+            </p>
+            
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:25px; max-width:1200px; margin:0 auto;">
+                <div style="background:rgba(255,255,255,0.05); backdrop-filter:blur(15px); padding:40px; border-radius:30px; border:1px solid rgba(255,255,255,0.1); text-align:left;">
+                    <h3 style="font-size:1.8rem; font-weight:800; color:#FBBF24; margin-bottom:15px;">🎯 캠페인 아젠다</h3>
+                    <ul style="list-style:none; padding:0; color:#94a3b8; font-size:1.1rem; line-height:1.8;">
+                        <li>• 직무관련자 명절 선물 수수 금지</li>
+                        <li>• 부적절한 향응 및 편의 제공 차단</li>
+                        <li>• 투명한 업무 처리 및 원칙 준수</li>
+                    </ul>
                 </div>
-            """, unsafe_allow_html=True)
+                <div style="background:rgba(255,255,255,0.05); backdrop-filter:blur(15px); padding:40px; border-radius:30px; border:1px solid rgba(255,255,255,0.1); text-align:left;">
+                    <h3 style="font-size:1.8rem; font-weight:800; color:#38BDF8; margin-bottom:15px;">🛡️ 신고 및 상담</h3>
+                    <p style="color:#94a3b8; font-size:1.1rem; line-height:1.6;">
+                        비윤리적 상황 발생 시 즉시 신고해 주세요.<br>
+                        <b>- 감사실:</b> 02-3414-1919<br>
+                        <b>- 이메일:</b> ethics@ktmos.com
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+    """
+    st.components.v1.html(premium_ui, height=1000, scrolling=False)
 
-    st.markdown("</div>", unsafe_allow_html=True)  # .clean-campaign-scope end
-    st.markdown("</div>", unsafe_allow_html=True)  # #audit-tab end
-with tab_doc:
+    # 4. 서약 폼 섹션 (기존 기능과 통합)
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    _, col_form, _ = st.columns([1, 2, 1])
+    with col_form:
+        st.markdown("### 🖋️ 2026 설맞이 청렴 서약")
+        with st.form("lny_clean_form"):
+            emp_id = st.text_input("사번 (8자리)", placeholder="10******")
+            emp_name = st.text_input("성명")
+            unit_opt = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
+            unit = st.selectbox("소속 (본부/단)", unit_opt, index=None, placeholder="소속 선택")
+            
+            if st.form_submit_button("🛡️ 청렴 서약 완료 및 응모"):
+                if emp_id and emp_name and unit:
+                    ok, v_msg = validate_emp_id(emp_id)
+                    if ok:
+                        success, s_msg = save_audit_result(emp_id, emp_name, unit, "해당부서", "2026 설맞이 청렴서약 완료", campaign_info["sheet_name"])
+                        if success: st.success(f"🎊 {emp_name}님, 서약이 완료되었습니다!")
+                        else: st.error(s_msg)
+                    else: st.warning(v_msg)
+                else:
+                    st.warning("⚠️ 모든 항목을 입력해 주세요.")
+                    
     st.markdown("### 📄 법률 리스크(계약서)·규정 검토 / 감사보고서 작성·검증")
 
     if "api_key" not in st.session_state:
