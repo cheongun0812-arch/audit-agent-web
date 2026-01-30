@@ -18,16 +18,16 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 
-# Plotly 설정
+# Plotly: 확대/축소 후 "원점 복원" 가능하도록 모드바 항상 표시
 PLOTLY_CONFIG = {
     "displayModeBar": True,
     "displaylogo": False,
     "responsive": True,
-    "scrollZoom": False,
-    "doubleClick": "reset",
+    "scrollZoom": False,          # 스크롤로 의도치 않은 확대 방지
+    "doubleClick": "reset",       # 더블클릭/더블탭 시 원점 복원
 }
 
-# 구글 시트 라이브러리 체크
+# [필수] 구글 시트 라이브러리 체크
 try:
     import gspread
     from oauth2client.service_account import ServiceAccountCredentials
@@ -36,13 +36,15 @@ except ImportError:
     ServiceAccountCredentials = None
     st.error("❌ 구글 시트 라이브러리가 없습니다. requirements.txt를 확인하세요.")
 
-# yt_dlp 체크
+# [필수] yt_dlp 라이브러리 체크
 try:
     import yt_dlp
 except ImportError:
     yt_dlp = None
 
+# ==========================================
 # 1. 페이지 설정
+# ==========================================
 st.set_page_config(
     page_title="AUDIT AI Agent",
     page_icon="🛡️",
@@ -50,173 +52,1017 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# 2. 전역 스타일 테마
+# ==========================================
+# 2. 🎨 디자인 테마 (사이드바/토글 강제 표시 포함)
+#    + 전체 텍스트 0.2px 증가
+#    + ✅ (요청 반영) 자율점검 탭(#audit-tab) 내 Expander 헤더/입력라벨/셀렉트 가독성 강화
+# ==========================================
 st.markdown("""
 <style>
-details > summary { font-size: 1.5rem !important; font-weight: 900 !important; color: #1565C0 !important; }
+* 🔥 Expander 제목 가독성 강제 개선 */
+details > summary {
+    font-size: 1.15rem !important;
+    font-weight: 900 !important;
+    color: #1565C0 !important;  /* 📜 서약 타이틀과 동일 색상 */
+}
+
+/* 펼쳐졌을 때도 동일하게 유지 */
+details[open] > summary {
+    font-size: 1.15rem !important;
+    font-weight: 900 !important;
+    color: #1565C0 !important;
+}
+
+/* summary 안의 span도 같이 잡아줌 (환경 차이 대응) */
+details > summary,
+details > summary span,
+details[open] > summary,
+details[open] > summary span {
+    font-size: 1.5rem !important;   /* ← 여기 숫자만 조절 */
+    font-weight: 900 !important;
+    color: #1565C0 !important;
+}
+
+/* ✅ 전체 글자 크기 +0.1px */
 html { font-size: 16.2px; }
+
 .stApp { background-color: #F4F6F9; }
 [data-testid="stSidebar"] { background-color: #2C3E50; }
-.stButton > button {
+[data-testid="stSidebar"] * { color: #FFFFFF !important; }
+
+/* ✅ 사이드바 텍스트 입력의 아이콘(눈/지우기 등)을 항상 검정색으로 */
+[data-testid="stSidebar"] div[data-testid="stTextInput"] button,
+[data-testid="stSidebar"] div[data-testid="stTextInput"] button:hover,
+[data-testid="stSidebar"] div[data-testid="stTextInput"] button:focus,
+[data-testid="stSidebar"] div[data-testid="stTextInput"] button:active {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    color: #000000 !important;
+    opacity: 1 !important;
+}
+
+[data-testid="stSidebar"] div[data-testid="stTextInput"] button svg,
+[data-testid="stSidebar"] div[data-testid="stTextInput"] button svg *,
+[data-testid="stSidebar"] div[data-testid="stTextInput"] button svg path {
+    fill: #000000 !important;
+    stroke: #000000 !important;
+    opacity: 1 !important;
+}
+
+/* aria-label이 환경/언어에 따라 달라도 적용되도록, 패스워드 토글 버튼도 강제 */
+div[data-testid="stTextInput"] button[aria-label],
+div[data-testid="stTextInput"] button[aria-label] svg,
+div[data-testid="stTextInput"] button[aria-label] svg * {
+    fill: #000000 !important;
+    stroke: #000000 !important;
+    color: #000000 !important;
+    opacity: 1 !important;
+}
+
+.stTextInput input, .stTextArea textarea {
+    background-color: #FFFFFF !important;
+    color: #000000 !important;
+    -webkit-text-fill-color: #000000 !important;
+    border: 1px solid #BDC3C7 !important;
+}
+
+/* ✅ 버튼 스타일 (일반 버튼 + 폼 제출 버튼) */
+.stButton > button,
+div[data-testid="stFormSubmitButton"] > button {
     background: linear-gradient(to right, #2980B9, #2C3E50) !important;
     color: #FFFFFF !important;
+    border: none !important;
     border-radius: 10px !important;
+    padding: 0.6rem 1rem !important;
     font-weight: 800 !important;
+    width: 100% !important;
+    opacity: 1 !important;
 }
-#audit-tab div[data-testid="stTextInput"] label { font-weight: 900 !important; color: #2C3E50 !important; }
+
+/* ✅ disabled여도 텍스트가 흐려지지 않도록 */
+.stButton > button:disabled,
+div[data-testid="stFormSubmitButton"] > button:disabled {
+    background: linear-gradient(to right, #2980B9, #2C3E50) !important;
+    color: #FFFFFF !important;
+    opacity: 1 !important;
+    filter: none !important;
+}
+
+/* ✅ 버튼 내부 텍스트/아이콘도 상시 선명 */
+.stButton > button *,
+div[data-testid="stFormSubmitButton"] > button * {
+    color: #FFFFFF !important;
+    opacity: 1 !important;
+}
+
+/* (서약 우측 카운트다운 표시용) */
+.pledge-right {
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap: 8px;
+  font-weight: 900;
+  color: #0B5ED7;
+  min-width: 90px;
+}
+
+/* =========================================================
+   ✅ (요청 1,3,4) 자율점검 탭 전용 가독성 강화
+   - 다른 탭/영역 영향 최소화: #audit-tab 내부에서만 적용
+   ========================================================= */
+#audit-tab [data-testid="stExpander"] summary {
+    font-weight: 900 !important;
+    font-size: 1.12rem !important;
+    color: #1565C0 !important;                 /* 📜 타이틀 색상과 동일 */
+}
+#audit-tab [data-testid="stExpander"] summary * {
+    font-weight: 900 !important;
+    color: #1565C0 !important;
+}
+
+/* 입력 라벨(사번/성명/총괄/본부/단/상세 부서명) 굵게 */
+#audit-tab div[data-testid="stTextInput"] label,
+#audit-tab div[data-testid="stSelectbox"] label {
+    font-weight: 900 !important;
+    color: #2C3E50 !important;
+}
+
+/* ✅ 메인 화면의 Selectbox(총괄/본부/단) 선택값 가독성 강제 */
+section.main div[data-testid="stSelectbox"] div[data-baseweb="select"] {
+    font-size: 1.08rem !important;    /* ← 원하면 더 키우세요 */
+    font-weight: 900 !important;
+}
+
+/* 선택값이 들어있는 실제 박스(콤보박스) */
+section.main div[data-testid="stSelectbox"] div[role="combobox"] {
+    background: #FFFFFF !important;
+    border: 1px solid #90A4AE !important;
+}
+
+/* 선택된 텍스트(대부분 span에 들어감) */
+section.main div[data-testid="stSelectbox"] div[role="combobox"] span {
+    color: #2C3E50 !important;
+    font-weight: 900 !important;
+    opacity: 1 !important;
+}
+
+/* 어떤 환경에서는 input에 값이 들어가므로 같이 처리 */
+section.main div[data-testid="stSelectbox"] div[role="combobox"] input {
+    color: #2C3E50 !important;
+    -webkit-text-fill-color: #2C3E50 !important;
+    font-weight: 900 !important;
+    opacity: 1 !important;
+}
+
+/* 드롭다운 화살표(아이콘)도 선명하게 */
+section.main div[data-testid="stSelectbox"] svg,
+section.main div[data-testid="stSelectbox"] svg * {
+    fill: #2C3E50 !important;
+    stroke: #2C3E50 !important;
+    opacity: 1 !important;
+}
+
+/* 드롭다운 옵션 목록도 굵게 */
+div[role="listbox"] * {
+    font-weight: 850 !important;
+}
+/* ✅ 메인 영역 selectbox를 텍스트 입력창처럼 보이게 (흰박스 + 동일 톤) */
+section.main div[data-testid="stSelectbox"] div[role="combobox"]{
+  background:#FFFFFF !important;
+  border:1px solid #CBD5E1 !important;
+  border-radius:6px !important;
+  min-height: 42px !important;
+  box-shadow: none !important;
+}
+
+/* ✅ 선택값 텍스트(진하게) */
+section.main div[data-testid="stSelectbox"] div[role="combobox"] span{
+  color:#2C3E50 !important;
+  font-weight: 800 !important;
+  opacity: 1 !important;
+}
+
+/* ✅ '선택/placeholder'처럼 보이는 텍스트(옅은 회색) */
+/* Streamlit/브라우저마다 placeholder가 input에 들어가거나 span으로 들어가서 둘 다 커버 */
+section.main div[data-testid="stSelectbox"] div[role="combobox"] input{
+  color:#94A3B8 !important;                 /* search box 느낌의 회색 */
+  -webkit-text-fill-color:#94A3B8 !important;
+  font-weight: 700 !important;
+  opacity: 1 !important;
+}
+
+/* ✅ 드롭다운 화살표도 선명하게 */
+section.main div[data-testid="stSelectbox"] svg,
+section.main div[data-testid="stSelectbox"] svg *{
+  fill:#64748B !important;
+  stroke:#64748B !important;
+  opacity:1 !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
-# 3. 핵심 기능 함수 (구글시트, 모델 호출 등)
+# ✅ PC에서는 사이드바 기본 펼침, 모바일에서는 기본 접힘
+st.markdown("""
+<script>
+(function() {
+  const KEY = "__sidebar_autopen_done__";
+  const isDesktop = () => (window.innerWidth || 0) >= 900;
+  let tries = 0;
+  const maxTries = 25;
+
+  function clickToggleIfNeeded() {
+    try {
+      if (!isDesktop()) return;
+      if (window.sessionStorage.getItem(KEY) === "1") return;
+
+      const doc = window.parent?.document || document;
+      const candidates = [
+        '[data-testid="stSidebarCollapsedControl"] button',
+        '[data-testid="stSidebarCollapsedControl"]',
+        'button[title="Open sidebar"]',
+        'button[aria-label="Open sidebar"]'
+      ];
+
+      for (const sel of candidates) {
+        const el = doc.querySelector(sel);
+        if (el) {
+          el.click();
+          window.sessionStorage.setItem(KEY, "1");
+          return;
+        }
+      }
+    } catch (e) {}
+  }
+
+  const timer = setInterval(() => {
+    tries += 1;
+    clickToggleIfNeeded();
+    if (tries >= maxTries) clearInterval(timer);
+  }, 250);
+})();
+</script>
+""", unsafe_allow_html=True)
+
+# ==========================================
+# 3. 로그인 및 세션 관리
+# ==========================================
+def _set_query_param_key(clean_key: str) -> None:
+    encoded_key = base64.b64encode(clean_key.encode()).decode()
+    try:
+        st.query_params["k"] = encoded_key
+    except Exception:
+        st.experimental_set_query_params(k=encoded_key)
+
+def _clear_query_params() -> None:
+    try:
+        st.query_params.clear()
+    except Exception:
+        st.experimental_set_query_params()
+
+def _validate_and_store_key(clean_key: str) -> None:
+    genai.configure(api_key=clean_key)
+    list(genai.list_models())
+    st.session_state["api_key"] = clean_key
+    st.session_state["login_error"] = None
+    _set_query_param_key(clean_key)
+
+def try_login_from_session_key(key_name: str) -> None:
+    raw_key = st.session_state.get(key_name, "")
+    clean_key = "".join(str(raw_key).split())
+    if not clean_key:
+        st.session_state["login_error"] = "⚠️ 키를 입력해주세요."
+        return
+    try:
+        _validate_and_store_key(clean_key)
+    except Exception as e:
+        st.session_state["login_error"] = f"❌ 인증 실패: {e}"
+
+def perform_logout():
+    st.session_state["logout_anim"] = True
+
+# ==========================================
+# 4. 자동 로그인 복구 (URL 파라미터)
+# ==========================================
+if "api_key" not in st.session_state:
+    try:
+        qp = st.query_params
+        if "k" in qp:
+            k_val = qp["k"] if isinstance(qp["k"], str) else qp["k"][0]
+            restored_key = base64.b64decode(k_val).decode("utf-8")
+            _validate_and_store_key(restored_key)
+            st.toast("🔄 세션이 복구되었습니다.", icon="✨")
+            st.rerun()
+    except Exception:
+        pass
+
+# ==========================================
+# 5. 사이드바 (로그인/로그아웃)
+# ==========================================
+with st.sidebar:
+    st.markdown("### 🏛️ Control Center")
+    st.markdown("---")
+
+    if "api_key" not in st.session_state:
+        with st.form(key="login_form"):
+            st.markdown("<h4 style='color:white;'>🔐 Access Key</h4>", unsafe_allow_html=True)
+            st.text_input(
+                "Key",
+                type="password",
+                placeholder="API 키를 입력해 주세요",
+                label_visibility="collapsed",
+                key="login_input_key",
+            )
+            st.form_submit_button(
+                label="시스템 접속 (Login)",
+                on_click=try_login_from_session_key,
+                args=("login_input_key",),
+                use_container_width=True,
+            )
+
+        if st.session_state.get("login_error"):
+            st.error(st.session_state["login_error"])
+    else:
+        st.success("🟢 정상 가동 중")
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("로그아웃 (Logout)", type="primary", use_container_width=True):
+            perform_logout()
+            st.rerun()
+
+    st.markdown("---")
+    st.markdown(
+        "<div style='color:white; text-align:center; font-size:12px; opacity:0.8;'>ktMOS북부 Audit AI Solution © 2026<br>Engine: Gemini 1.5 Pro</div>",
+        unsafe_allow_html=True,
+    )
+
+# ==========================================
+# 7. 로그아웃 애니메이션
+# ==========================================
+if st.session_state.get("logout_anim"):
+    st.markdown("""
+<div style="background:#0B1B2B; padding:44px 26px; border-radius:18px; text-align:center; border:1px solid rgba(255,255,255,0.12);">
+  <div style="font-size: 78px; margin-bottom: 12px; line-height:1.1;">🎆✨</div>
+  <div style="font-size: 22px; font-weight: 900; color: #FFFFFF; margin-bottom: 8px;">새해 복 많이 받으세요!</div>
+  <div style="font-size: 15px; color: rgba(255,255,255,0.85); line-height: 1.55;">
+    올해도 건강과 행운이 가득하시길 바랍니다.<br>
+    안전하게 로그아웃되었습니다.
+  </div>
+  <div style="margin-top:18px; font-size: 12px; color: rgba(255,255,255,0.65);">
+    ktMOS북부 Audit AI Solution © 2026
+  </div>
+</div>
+""", unsafe_allow_html=True)
+    time.sleep(3.0)
+    _clear_query_params()
+    st.session_state.clear()
+    st.rerun()
+
+# ==========================================
+# 8. 핵심 기능 함수 (구글시트, AI, 파일처리)
+# ==========================================
 @st.cache_resource
 def init_google_sheet_connection():
-    if gspread is None or ServiceAccountCredentials is None: return None
+    if gspread is None or ServiceAccountCredentials is None:
+        return None
     try:
         scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
         creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
         return gspread.authorize(creds)
-    except: return None
+    except Exception:
+        return None
 
 def _korea_now():
-    try: return datetime.datetime.now(pytz.timezone("Asia/Seoul"))
-    except: return datetime.datetime.now()
+    try:
+        kst = pytz.timezone("Asia/Seoul")
+        return datetime.datetime.now(kst)
+    except Exception:
+        return datetime.datetime.now()
+
+def _campaign_key(dt: datetime.datetime) -> str:
+    return f"{dt.year}-{dt.month:02d}"
+
+def _ensure_campaign_config_sheet(spreadsheet):
+    try:
+        ws = spreadsheet.worksheet("Campaign_Config")
+        return ws
+    except Exception:
+        ws = spreadsheet.add_worksheet(title="Campaign_Config", rows=200, cols=10)
+        ws.append_row(["campaign_key", "title", "sheet_name", "start_date"])
+        return ws
+
+def _default_campaign_title(dt: datetime.datetime) -> str:
+    if dt.month == 1:
+        return "1월 자율점검(윤리경영원칙 실천지침 실천 서약)"
+    return f"{dt.month}월 자율점검(윤리경영원칙 실천지침 실천서약)"
+
+def _default_campaign_sheet_name(dt: datetime.datetime, spreadsheet=None) -> str:
+    if spreadsheet is not None and dt.year == 2026 and dt.month == 1:
+        try:
+            spreadsheet.worksheet("2026_윤리경영_실천서약")
+            return "2026_윤리경영_실천서약"
+        except Exception:
+            pass
+    return f"{dt.year}_{dt.month:02d}_자율점검"
+
+def get_current_campaign_info(spreadsheet, now_dt: datetime.datetime | None = None) -> dict:
+    now_dt = now_dt or _korea_now()
+    key = _campaign_key(now_dt)
+    cfg_ws = _ensure_campaign_config_sheet(spreadsheet)
+    records = cfg_ws.get_all_records()
+    for r in records:
+        if str(r.get("campaign_key", "")).strip() == key:
+            title = str(r.get("title") or "").strip() or _default_campaign_title(now_dt)
+            sheet_name = str(r.get("sheet_name") or "").strip() or _default_campaign_sheet_name(now_dt, spreadsheet)
+            start_date = str(r.get("start_date") or "").strip()
+            return {"key": key, "title": title, "sheet_name": sheet_name, "start_date": start_date}
+
+    title = _default_campaign_title(now_dt)
+    sheet_name = _default_campaign_sheet_name(now_dt, spreadsheet)
+    start_date = now_dt.strftime("%Y.%m.%d")
+    cfg_ws.append_row([key, title, sheet_name, start_date])
+    return {"key": key, "title": title, "sheet_name": sheet_name, "start_date": start_date}
+
+def set_current_campaign_info(spreadsheet, title: str | None = None, sheet_name: str | None = None, now_dt: datetime.datetime | None = None) -> dict:
+    now_dt = now_dt or _korea_now()
+    key = _campaign_key(now_dt)
+    cfg_ws = _ensure_campaign_config_sheet(spreadsheet)
+    all_rows = cfg_ws.get_all_values()
+    row_idx = None
+    for i in range(2, len(all_rows) + 1):
+        if len(all_rows[i-1]) >= 1 and str(all_rows[i-1][0]).strip() == key:
+            row_idx = i
+            break
+    if row_idx is None:
+        _ = get_current_campaign_info(spreadsheet, now_dt)
+        row_idx = len(all_rows) + 1
+
+    cur = get_current_campaign_info(spreadsheet, now_dt)
+    new_title = (title or cur["title"]).strip()
+    new_sheet = (sheet_name or cur["sheet_name"]).strip()
+    new_start = cur.get("start_date") or now_dt.strftime("%Y.%m.%d")
+    cfg_ws.update(f"B{row_idx}:D{row_idx}", [[new_title, new_sheet, new_start]])
+    return {"key": key, "title": new_title, "sheet_name": new_sheet, "start_date": new_start}
 
 def save_audit_result(emp_id, name, unit, dept, answer, sheet_name):
     client = init_google_sheet_connection()
-    if not client: return False, "연결 실패"
+    if not client:
+        return False, "구글 시트 연결 실패 (Secrets 확인)"
     try:
         spreadsheet = client.open("Audit_Result_2026")
-        try: sheet = spreadsheet.worksheet(sheet_name)
-        except:
+        try:
+            sheet = spreadsheet.worksheet(sheet_name)
+        except Exception:
             sheet = spreadsheet.add_worksheet(title=sheet_name, rows=2000, cols=10)
             sheet.append_row(["저장시간", "사번", "성명", "총괄/본부/단", "부서", "답변", "비고"])
-        
-        # 중복 체크
+
+        # ==========================================
+        # ✅ 중복 검증 로직 개선 (사번 + 성명 조합)
+        # ==========================================
         all_records = sheet.get_all_records()
-        for r in all_records:
-            if str(r.get("사번")).strip() == str(emp_id).strip() and str(emp_id).strip() != "00000000":
-                return False, "이미 참여하셨습니다."
-        
-        now = _korea_now().strftime("%Y-%m-%d %H:%M:%S")
+        emp_id_str = str(emp_id).strip()
+        name_str = str(name).strip()
+
+        for record in all_records:
+            # 시트의 사번과 성명 데이터를 가져옴
+            existing_emp_id = str(record.get("사번", "")).strip()
+            existing_name = str(record.get("성명", "")).strip()
+
+            if emp_id_str == "00000000":
+                # 예외 사번(00000000)인 경우: 사번과 성명이 모두 같아야 중복
+                if existing_emp_id == "00000000" and existing_name == name_str:
+                    return False, f"'{name_str}'님은 이미 '00000000' 사번으로 참여하셨습니다."
+            else:
+                # 일반 사번인 경우: 사번만 같아도 중복 처리
+                if existing_emp_id == emp_id_str:
+                    return False, f"사번 {emp_id_str}은(는) 이미 참여한 기록이 있습니다."
+        # ==========================================
+
+        korea_tz = pytz.timezone("Asia/Seoul")
+        now = datetime.datetime.now(korea_tz).strftime("%Y-%m-%d %H:%M:%S")
         sheet.append_row([now, emp_id, name, unit, dept, answer, "완료"])
         return True, "성공"
-    except Exception as e: return False, str(e)
-
-def validate_emp_id(emp_id):
-    s = (emp_id or "").strip()
-    if not s: return False, "사번을 입력하세요."
-    if s == "00000000": return True, ""
-    if len(s) == 8 and s.isdigit() and s.startswith("10"): return True, ""
-    return False, "사번 형식이 올바르지 않습니다."
+    except Exception as e:
+        return False, str(e)
 
 def get_model():
-    if "api_key" in st.session_state: genai.configure(api_key=st.session_state["api_key"])
+    if "api_key" in st.session_state:
+        genai.configure(api_key=st.session_state["api_key"])
+    try:
+        available_models = [m.name for m in genai.list_models() if "generateContent" in m.supported_generation_methods]
+        for m in available_models:
+            if "1.5-pro" in m:
+                return genai.GenerativeModel(m)
+        for m in available_models:
+            if "1.5-flash" in m:
+                return genai.GenerativeModel(m)
+        if available_models:
+            return genai.GenerativeModel(available_models[0])
+    except Exception:
+        pass
     return genai.GenerativeModel("gemini-1.5-flash")
 
-# --- 자동 로그인 및 사이드바 로직 생략 (기존 유지) ---
-if "api_key" not in st.session_state:
-    with st.sidebar:
-        with st.form("login_form"):
-            key = st.text_input("Key", type="password")
-            if st.form_submit_button("Login"):
-                st.session_state["api_key"] = key
-                st.rerun()
-    st.info("🔒 로그인 후 이용 가능합니다.")
-    st.stop()
+def read_file(uploaded_file):
+    content = ""
+    try:
+        if uploaded_file.name.endswith(".txt"):
+            content = uploaded_file.getvalue().decode("utf-8")
+        elif uploaded_file.name.endswith(".pdf"):
+            reader = PyPDF2.PdfReader(uploaded_file)
+            for page in reader.pages:
+                content += (page.extract_text() or "") + "\n"
+        elif uploaded_file.name.endswith(".docx"):
+            doc = Document(uploaded_file)
+            content = "\n".join([para.text for para in doc.paragraphs])
+    except Exception:
+        return None
+    return content
 
-# 4. 메인 탭 구성
+def process_media_file(uploaded_file):
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp_file:
+            tmp_file.write(uploaded_file.getvalue())
+            tmp_path = tmp_file.name
+
+        st.toast("🤖 AI에게 분석 자료를 전달하고 있습니다...", icon="📂")
+        myfile = genai.upload_file(tmp_path)
+        with st.spinner("🎧 AI가 데이터를 분석하고 있습니다..."):
+            while myfile.state.name == "PROCESSING":
+                time.sleep(2)
+                myfile = genai.get_file(myfile.name)
+
+        os.remove(tmp_path)
+        if myfile.state.name == "FAILED":
+            return None
+        return myfile
+    except Exception:
+        return None
+
+def download_and_upload_youtube_audio(url):
+    if yt_dlp is None:
+        return None
+    try:
+        ydl_opts = {"format": "bestaudio/best", "outtmpl": "temp_audio.%(ext)s", "quiet": True}
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
+        audio_files = glob.glob("temp_audio.*")
+        if not audio_files:
+            return None
+        audio_path = audio_files[0]
+        myfile = genai.upload_file(audio_path)
+        with st.spinner("🎧 유튜브 분석 중..."):
+            while myfile.state.name == "PROCESSING":
+                time.sleep(2)
+                myfile = genai.get_file(myfile.name)
+        os.remove(audio_path)
+        return myfile
+    except Exception:
+        return None
+
+def get_youtube_transcript(url):
+    try:
+        video_id = url.split("v=")[-1].split("&")[0]
+        transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=["ko", "en"])
+        return " ".join([t["text"] for t in transcript])
+    except Exception:
+        return None
+
+def get_web_content(url):
+    try:
+        headers = {"User-Agent": "Mozilla/5.0"}
+        response = requests.get(url, headers=headers, timeout=15)
+        soup = BeautifulSoup(response.text, "html.parser")
+        for script in soup(["script", "style"]):
+            script.decompose()
+        return soup.get_text()[:10000]
+    except Exception:
+        return None
+
+# ==========================================
+# ✅ (요청 2) 사번 검증 유틸
+# ==========================================
+def validate_emp_id(emp_id: str) -> tuple[bool, str]:
+    """
+    규칙:
+    - 기본: 8자리 숫자, '10'으로 시작 (10******)
+    - 예외: 사번 미부여자는 '00000000' 허용(제출 가능)
+    """
+    s = (emp_id or "").strip()
+
+    if not s:
+        return False, "⚠️ 사번을 입력해 주세요. (사번 미부여 시 '00000000')"
+
+    # ✅ 예외 허용: 사번 미부여
+    if s == "00000000":
+        return True, "ℹ️ 사번 미부여: '00000000'으로 제출됩니다. 제출 후 관리자에게 연락해 주세요."
+
+    # 기본 형식 체크
+    if (len(s) != 8) or (not s.isdigit()):
+        return False, "⚠️ 사번이 8자리 숫자가 아닙니다. 사번을 정확히 입력했는지 다시 확인해 주세요."
+
+    # 기본 규칙: 10으로 시작
+    if not s.startswith("10"):
+        return False, "⚠️ 사번을 정확히 입력했는지 확인해 주세요. 사번이 '10********'이 아니라면 '00000000'을 입력해 제출 후 관리자에게 연락해 주세요."
+
+    return True, ""
+
+# ==========================================
+# 9. 메인 화면 및 탭 구성
+# ==========================================
+st.markdown("<h1 style='text-align: center; color: #2C3E50;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
+st.markdown("<div style='text-align: center; color: #555; margin-bottom: 20px;'>Professional Legal & Audit Assistant System</div>", unsafe_allow_html=True)
+
+_now_kst = _korea_now()
+CURRENT_YEAR = _now_kst.year
+CURRENT_MONTH = _now_kst.month
+
+campaign_info = {
+    "key": f"{CURRENT_YEAR}-{CURRENT_MONTH:02d}",
+    "title": _default_campaign_title(_now_kst),
+    "sheet_name": f"{CURRENT_YEAR}_{CURRENT_MONTH:02d}_자율점검",
+    "start_date": _now_kst.strftime("%Y.%m.%d"),
+}
+
+try:
+    _client_for_campaign = init_google_sheet_connection()
+    if _client_for_campaign:
+        _ss_for_campaign = _client_for_campaign.open("Audit_Result_2026")
+        campaign_info = get_current_campaign_info(_ss_for_campaign, _now_kst)
+except Exception:
+    pass
+
 tab_audit, tab_doc, tab_chat, tab_summary, tab_admin = st.tabs([
     "✅ 자율점검", "📄 법률 검토", "💬 AI 에이전트(챗봇)", "📰 스마트 요약", "🔒 관리자 모드"
 ])
 
+# ---------- (아이콘) 인라인 SVG: 애니메이션 모래시계 ----------
+HOURGLASS_SVG = """
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+     xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <path d="M6 2h12v5c0 2.2-1.4 4.2-3.5 5 2.1.8 3.5 2.8 3.5 5v5H6v-5c0-2.2 1.4-4.2 3.5-5C7.4 11.2 6 9.2 6 7V2Z"
+        stroke="#0B5ED7" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M8 7h8M8 17h8" stroke="#0B5ED7" stroke-width="2" stroke-linecap="round"/>
+
+  <rect x="9" y="8.2" width="6" height="3.0" rx="1.0" fill="#0B5ED7" opacity="0.95">
+    <animate attributeName="height" values="3.0;0.3;3.0" dur="1.0s" repeatCount="indefinite" />
+    <animate attributeName="y"      values="8.2;10.9;8.2" dur="1.0s" repeatCount="indefinite" />
+  </rect>
+
+  <rect x="9" y="15.8" width="6" height="0.3" rx="1.0" fill="#0B5ED7" opacity="0.95">
+    <animate attributeName="height" values="0.3;3.0;0.3" dur="1.0s" repeatCount="indefinite" />
+    <animate attributeName="y"      values="15.8;13.1;15.8" dur="1.0s" repeatCount="indefinite" />
+  </rect>
+
+  <circle cx="12" cy="12" r="0.8" fill="#0B5ED7" opacity="0.95">
+    <animate attributeName="cy" values="11.2;14.2;11.2" dur="0.6s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.95;0.2;0.95" dur="0.6s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="11" cy="12" r="0.6" fill="#0B5ED7" opacity="0.80">
+    <animate attributeName="cy" values="11.0;14.0;11.0" dur="0.7s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.8;0.15;0.8" dur="0.7s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="13" cy="12" r="0.6" fill="#0B5ED7" opacity="0.80">
+    <animate attributeName="cy" values="11.4;14.4;11.4" dur="0.8s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.8;0.15;0.8" dur="0.8s" repeatCount="indefinite"/>
+  </circle>
+</svg>
+"""
+
+COUNTDOWN_SECONDS = 7  # ✅ 요청 확정: 7초
+
+# =========================
+# ✅ 체크 "순간" 감지 + 우측 카운트다운 렌더 유틸
+# =========================
+def _init_pledge_runtime(keys: list[str]) -> None:
+    if "pledge_prev" not in st.session_state:
+        st.session_state["pledge_prev"] = {k: False for k in keys}
+    if "pledge_done" not in st.session_state:
+        st.session_state["pledge_done"] = {k: False for k in keys}
+    if "pledge_running" not in st.session_state:
+        st.session_state["pledge_running"] = {k: False for k in keys}
+
+def _order_enforce_cb(changed_key: str, prereq_keys: list[str], message: str) -> None:
+    """체크 순서가 어긋나면 체크를 되돌리고, 경고 메시지를 세션에 기록합니다."""
+    try:
+        now_checked = bool(st.session_state.get(changed_key, False))
+        prereq_ok = all(bool(st.session_state.get(k, False)) for k in prereq_keys)
+        if now_checked and (not prereq_ok):
+            st.session_state[changed_key] = False
+            st.session_state["order_warning"] = message
+    except Exception:
+        pass
+
+def _render_pledge_group(
+    title: str,
+    items: list[tuple[str, str]],
+    all_keys: list[str],
+    order_guard: dict | None = None,   # {"keys": [...], "prereq": [...], "message": "..."}
+) -> None:
+    st.markdown(f"### ■ {title}")
+
+    guard_keys = set(order_guard.get("keys", [])) if isinstance(order_guard, dict) else set()
+    prereq_keys = list(order_guard.get("prereq", [])) if isinstance(order_guard, dict) else []
+    guard_msg = str(order_guard.get("message", "")) if isinstance(order_guard, dict) else ""
+
+    for key, text in items:
+        c1, c2, c3 = st.columns([0.06, 0.78, 0.16], vertical_alignment="center")
+
+        with c1:
+            cb_kwargs = dict(
+                key=key,
+                label_visibility="collapsed",
+                disabled=bool(st.session_state["pledge_running"].get(key, False)),
+            )
+
+            # ✅ 관리자 서약을 임직원 서약보다 먼저 체크하려 하면: 체크를 되돌리고 토스트 경고
+            if key in guard_keys:
+                cb_kwargs.update(
+                    dict(
+                        on_change=_order_enforce_cb,
+                        args=(key, prereq_keys, guard_msg),
+                    )
+                )
+
+            st.checkbox("", **cb_kwargs)
+
+        with c2:
+            checked = bool(st.session_state.get(key, False))
+            color = "#0B5ED7" if checked else "#2C3E50"
+            weight = "900" if checked else "650"
+            st.markdown(
+                f"<div style='font-size:1.02rem; font-weight:{weight}; color:{color}; line-height:1.55;'>{text}</div>",
+                unsafe_allow_html=True
+            )
+
+        with c3:
+            ph = st.empty()
+            now_checked = bool(st.session_state.get(key, False))
+            prev_checked = bool(st.session_state["pledge_prev"].get(key, False))
+            done = bool(st.session_state["pledge_done"].get(key, False))
+            running = bool(st.session_state["pledge_running"].get(key, False))
+
+            # ✅ 방금 체크된 순간에만 7초 카운트다운 실행
+            if now_checked and (not prev_checked) and (not done) and (not running):
+                st.session_state["pledge_running"][key] = True
+                for sec in range(COUNTDOWN_SECONDS, 0, -1):
+                    ph.markdown(
+                        f"<div class='pledge-right'>{HOURGLASS_SVG}<span>{sec}s</span></div>",
+                        unsafe_allow_html=True
+                    )
+                    time.sleep(1)
+                st.session_state["pledge_running"][key] = False
+                st.session_state["pledge_done"][key] = True
+                ph.markdown(
+                    "<div style='text-align:right; font-weight:900; color:#27AE60;'>✅ 완료</div>",
+                    unsafe_allow_html=True
+                )
+            else:
+                if running:
+                    ph.markdown(
+                        f"<div class='pledge-right'>{HOURGLASS_SVG}<span>...</span></div>",
+                        unsafe_allow_html=True
+                    )
+                elif done and now_checked:
+                    ph.markdown(
+                        "<div style='text-align:right; font-weight:900; color:#27AE60;'>✅ 완료</div>",
+                        unsafe_allow_html=True
+                    )
+                else:
+                    ph.markdown("", unsafe_allow_html=True)
+
 # --- [Tab 1: 자율점검] ---
 with tab_audit:
+    # ✅ 자율점검 탭 전용(설맞이 클린캠페인) — 다른 탭/메뉴/관리자 설정값은 변경하지 않습니다.
     st.markdown('<div id="audit-tab">', unsafe_allow_html=True)
-    
-    # 레이아웃 최적화 스타일
+
+    import streamlit.components.v1 as components
+
+    # ✅ (표시용 고정 타이틀) 월별 타이틀 관리(campaign_info["title"])와 충돌하지 않도록,
+    #    관리자 설정값은 그대로 두고 화면 표시만 고정합니다.
+    DISPLAY_TITLE = "Lunar New Year Clean Campaign"
+
+    # ✅ 결과 저장 시트명은 기존과 동일하게 월별 자동(campaign_info["sheet_name"])
+    current_sheet_name = campaign_info.get("sheet_name", "2026_윤리경영_실천서약")
+
+    TOTAL_STAFF = 979  # 참여율 기준 전사 정원(요청값 그대로 유지)
+
+    # ✅ Tab 1(자율점검)에서만 스타일이 영향가도록 스코프 클래스 사용
     st.markdown("""
-        <style>
-            [data-testid="stHorizontalBlock"] { width: 100% !important; }
-            iframe { border: none !important; border-radius: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        </style>
+    <style>
+      .clean-campaign-scope .clean-container { max-width: 900px; margin: 0 auto; }
+
+      .clean-campaign-scope div[data-testid="stForm"] {
+          background-color: #0F172A !important;
+          border: 2px solid #334155 !important;
+          border-radius: 25px !important;
+          padding: 30px !important;
+      }
+      .clean-campaign-scope .stTextInput input {
+          background-color: #1E293B !important;
+          color: white !important;
+          border: 1px solid #475569 !important;
+          height: 55px !important;
+          text-align: center !important;
+      }
+      .clean-campaign-scope .stSelectbox div[role="combobox"] {
+          background-color: #1E293B !important;
+          color: white !important;
+          height: 55px !important;
+      }
+
+      .clean-campaign-scope .stButton > button,
+      .clean-campaign-scope div[data-testid="stFormSubmitButton"] > button {
+          background: linear-gradient(to right, #2980B9, #2C3E50) !important;
+          color: #FFFFFF !important;
+          font-weight: 800 !important;
+      }
+      .clean-campaign-scope .stButton > button:hover,
+      .clean-campaign-scope div[data-testid="stFormSubmitButton"] > button:hover {
+          transform: scale(1.03);
+          transition: 0.2s;
+      }
+
+      /* 제출 버튼 크게 */
+      .clean-campaign-scope .clean-submit button {
+          background: linear-gradient(to right, #E11D48, #9F1239) !important;
+          height: 65px !important;
+          font-size: 1.3rem !important;
+          border-radius: 15px !important;
+          width: 100% !important;
+          font-weight: 900 !important;
+      }
+    </style>
     """, unsafe_allow_html=True)
 
-    # 동영상 인코딩
-    v_src = ""
-    v_path = "2026년 New year.mp4"
-    if os.path.exists(v_path):
-        with open(v_path, "rb") as f:
-            v_src = f"data:video/mp4;base64,{base64.b64encode(f.read()).decode()}"
+    st.markdown('<div class="clean-campaign-scope">', unsafe_allow_html=True)
 
-    # 프리미엄 인포그래픽 HTML
-    premium_ui = f"""
-    <div style="width:100%; min-height:900px; position:relative; background:#020617; border-radius:25px; overflow:hidden;">
-        <video autoplay muted loop playsinline style="position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; opacity:0.4; z-index:0;">
-            <source src="{v_src}" type="video/mp4">
-        </video>
-        <div style="position:relative; z-index:1; padding:80px 40px; font-family:'Pretendard', sans-serif; color:white; text-align:center;">
-            <div style="display:inline-block; padding:8px 20px; background:rgba(225,29,72,0.2); border:1px solid rgba(225,29,72,0.3); border-radius:999px; color:#ff4d4d; font-weight:bold; font-size:14px; margin-bottom:20px;">
-                🎍 2026 병오년(丙午年) 설맞이 클린캠페인
+    st.markdown(f"""
+    ### 🎍 {DISPLAY_TITLE}
+    - 설 명절 전·후로 발생할 수 있는 **선물/접대/금품 수수**를 예방하고,
+    - 전 임직원이 **청렴·공정 원칙**을 다시 한 번 점검하기 위한 캠페인입니다.
+    """)
+
+    # -----------------------------
+    # (DEV) 인포그래픽 파일 업로더
+    # -----------------------------
+    def _get_query_param(name: str):
+        try:
+            return st.query_params.get(name)  # streamlit 최신
+        except Exception:
+            try:
+                qp = st.experimental_get_query_params()  # 구버전 호환
+                v = qp.get(name, [None])[0]
+                return v
+            except Exception:
+                return None
+
+    dev_flag = _get_query_param("dev")
+    dev_mode = str(dev_flag).strip().lower() in ("1", "true", "yes", "y", "on")
+
+    if dev_mode:
+        with st.expander("(DEV) Upload infographic: CleanCampaign2026_Visual.html", expanded=False):
+            up = st.file_uploader(
+                "CleanCampaign2026_Visual.html 업로드(즉시 적용)",
+                type=["html"],
+                key="cc_visual_uploader"
+            )
+            if up is not None:
+                try:
+                    html_text = up.getvalue().decode("utf-8", errors="ignore")
+                    st.session_state["cc_visual_html"] = html_text
+
+                    # 가능한 환경이면 실제 파일로 저장(Cloud 환경은 영구 저장이 보장되지 않을 수 있음)
+                    try:
+                        with open("CleanCampaign2026_Visual.html", "w", encoding="utf-8") as f:
+                            f.write(html_text)
+                        st.success("✅ 업로드 완료: 파일로 저장 및 화면에 즉시 적용했습니다.")
+                    except Exception:
+                        st.success("✅ 업로드 완료: 화면에 즉시 적용했습니다. (파일 저장은 환경상 제한될 수 있습니다.)")
+
+                    st.download_button(
+                        "⬇️ 현재 적용 중인 HTML 다운로드",
+                        data=html_text,
+                        file_name="CleanCampaign2026_Visual.html",
+                        mime="text/html",
+                        use_container_width=True
+                    )
+                except Exception as e:
+                    st.error(f"업로드 처리 중 오류: {e}")
+
+    # -----------------------------
+    # 인포그래픽(형식/레이아웃 그대로) 렌더링
+    # -----------------------------
+    visual_html = st.session_state.get("cc_visual_html", None)
+    if not visual_html:
+        try:
+            with open("CleanCampaign2026_Visual.html", "r", encoding="utf-8") as f:
+                visual_html = f.read()
+        except Exception:
+            visual_html = None
+
+    if visual_html:
+        components.html(visual_html, height=2200, scrolling=False)  # auto-resized by JS inside the HTML
+    else:
+        st.error("⚠️ 캠페인 인포그래픽 파일(CleanCampaign2026_Visual.html)을 찾을 수 없습니다. app.py와 같은 폴더에 파일을 두거나, ?dev=1 모드에서 업로드해 주세요.")
+
+    st.markdown("---")
+
+    # ✅ 참여자 수 집계(해당 월 시트 기준)
+    def _get_participation_count(sheet_name: str) -> int:
+        client = init_google_sheet_connection()
+        if not client:
+            return 0
+        try:
+            ss = client.open("Audit_Result_2026")
+            ws = ss.worksheet(sheet_name)
+            values = ws.get_all_values()
+            return max(0, len(values) - 1)  # header 제외
+        except Exception:
+            return 0
+
+    # ✅ 서약 + 이벤트 참여 폼 (현재 테마 레이아웃 유지)
+    _, col_mid, _ = st.columns([1, 4, 1])
+    with col_mid:
+        st.markdown(f"""
+            <div style='background: #0F172A; padding: 35px; border-radius: 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); border-left: 10px solid #E11D48; margin-bottom: 30px; color: white;'>
+                <h2 style='color: #FBBF24; font-weight: 900; margin-top:0;'>🖋️ {DISPLAY_TITLE} Pledge</h2>
+                <p style='font-size: 1.1rem; line-height: 1.8;'>
+                    스스로 청렴에 동참하겠다는 의지로 <b>"청렴 서약"</b>을 완료한 임직원이 <b>전체 50%</b>를 넘으면 <br/>
+                    참여자 중 <b>50분</b>을 추첨하여 <b>"모바일 커피 쿠폰"</b>을 제공합니다.
+                </p>
             </div>
-            <h1 style="font-size:4.5rem; font-weight:900; line-height:1.1; margin-bottom:20px; text-shadow: 0 5px 20px rgba(0,0,0,0.7);">
-                새해 복 <br><span style="color:#E11D48;">많이 받으십시오</span>
-            </h1>
-            <p style="font-size:1.3rem; color:#cbd5e1; max-width:800px; margin:0 auto 50px; line-height:1.6;">
-                정직과 신뢰를 바탕으로 더 크게 도약하는 2026년이 되시길 기원합니다.<br>
-                <b>ktMOS북부</b> 임직원의 청렴한 다짐이 행복한 명절을 만듭니다.
-            </p>
-            <div style="background:rgba(251,191,36,0.1); border:1px solid rgba(251,191,36,0.3); padding:25px; border-radius:20px; max-width:700px; margin:0 auto 50px;">
-                <h3 style="color:#FBBF24; margin-bottom:10px;">🎁 서약 이벤트 안내</h3>
-                <p style="font-size:1.1rem; margin:0;">임직원 50% 이상 참여 시, <b>추첨을 통해 50분께</b> 커피 쿠폰을 드립니다!</p>
-            </div>
-            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:25px; max-width:1200px; margin:0 auto;">
-                <div style="background:rgba(255,255,255,0.05); backdrop-filter:blur(15px); padding:30px; border-radius:30px; border:1px solid rgba(255,255,255,0.1); text-align:left;">
-                    <h3 style="color:#FBBF24;">🎯 캠페인 아젠다</h3>
-                    <ul style="color:#94a3b8; line-height:1.8;">
-                        <li>• 명절 선물/금품 수수 정중히 거절하기</li>
-                        <li>• 부적절한 향응 및 접대 금지</li>
-                        <li>• 공정한 업무 처리 및 원칙 준수</li>
-                    </ul>
+        """, unsafe_allow_html=True)
+
+        # ✅ 임직원 정보 입력창: 기존 윤리서약 입력 UI 구성 그대로 사용
+        with st.form("campaign_lny_form"):
+            c1, c2, c3, c4 = st.columns(4)
+            emp_id = c1.text_input("사번", placeholder="사번(1000*)없으면(00000000)")
+            name = c2.text_input("성명")
+            ordered_units = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
+            unit = c3.selectbox(
+                "총괄 / 본부 / 단",
+                ordered_units,
+                index=None,
+                placeholder="총괄 / 본부 / 단 선택",
+                label_visibility="collapsed",
+                key="unit_select"
+            )
+            dept = c4.text_input("상세 부서명", placeholder="현 소속부서명 입력")
+
+            st.markdown('<div class="clean-submit">', unsafe_allow_html=True)
+            submitted = st.form_submit_button("🛡️ 청렴 서약 완료 및 이벤트 응모하기")
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        if submitted:
+            if not emp_id or not name:
+                st.warning("⚠️ 사번과 성명을 입력해 주세요.")
+            else:
+                ok, msg = validate_emp_id(emp_id)
+                if not ok:
+                    st.warning(msg)
+                else:
+                    answer = f"{DISPLAY_TITLE} pledge completed"
+                    with st.spinner("제출 중..."):
+                        success, msg2 = save_audit_result(emp_id, name, unit, dept, answer, current_sheet_name)
+
+                    if success:
+                        st.session_state["lny_success"] = True
+                        st.session_state["lny_name"] = name
+
+                        # ✅ 폭죽(현재 테마 코드 유지)
+                        components.html("""
+                        <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+                        <script>
+                            confetti({particleCount:150, spread:70, origin:{y:0.6}});
+                        </script>
+                        """, height=0)
+                    else:
+                        st.error(f"❌ {msg2}")
+
+        if st.session_state.get("lny_success"):
+            st.success(f"🎊 {st.session_state.get('lny_name','')}님, 서약이 완료되었습니다!")
+
+            count = _get_participation_count(current_sheet_name)
+            rate = min(100, (count / TOTAL_STAFF) * 100) if TOTAL_STAFF else 0
+
+            st.markdown(f"""
+                <div style='background:#0F172A; padding:40px; border-radius: 25px; text-align:center; color:white; margin-top: 30px; border: 4px solid #FBBF24;'>
+                    <p style='color:#94A3B8; letter-spacing:3px; font-weight:900;'>참여율 대시보드</p>
+                    <div style='font-size: 7rem; font-weight:900; color:#FBBF24;'>{rate:.1f}%</div>
+                    <div style='width:100%; background:#1E293B; height:15px; border-radius:10px; overflow:hidden; margin: 20px 0;'>
+                        <div style='width:{rate}%; height:15px; background: linear-gradient(to right, #FBBF24, #E11D48); transition: width 2s;'></div>
+                    </div>
+                    <p>현재 {count}명의 임직원이 함께하고 있습니다.</p>
                 </div>
-                <div style="background:rgba(255,255,255,0.05); backdrop-filter:blur(15px); padding:30px; border-radius:30px; border:1px solid rgba(255,255,255,0.1); text-align:left;">
-                    <h3 style="color:#38BDF8;">🛡️ 상담 및 제보</h3>
-                    <p style="color:#94a3b8;">감사실 직통: 02-3414-1919<br>윤리제보: ethics@ktmos.com</p>
-                </div>
-            </div>
-        </div>
-    </div>
-    """
-    st.components.v1.html(premium_ui, height=950, scrolling=False)
+            """, unsafe_allow_html=True)
 
-    # 서약 폼
-    st.markdown("<br>", unsafe_allow_html=True)
-    _, col_form, _ = st.columns([1, 2, 1])
-    with col_form:
-        st.markdown("### 🖋️ 2026 설맞이 청렴 서약")
-        with st.form("clean_pledge_form"):
-            e_id = st.text_input("사번 (8자리)", placeholder="10******")
-            e_name = st.text_input("성명")
-            unit = st.selectbox("소속 선택", ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"], index=None)
-            if st.form_submit_button("🛡️ 서약 완료 및 응모"):
-                if e_id and e_name and unit:
-                    ok, v_msg = validate_emp_id(e_id)
-                    if ok:
-                        success, s_msg = save_audit_result(e_id, e_name, unit, "현소속", "2026 설맞이 서약 완료", campaign_info["sheet_name"])
-                        if success: st.success(f"🎊 {e_name}님, 서약이 완료되었습니다!")
-                        else: st.error(s_msg)
-                    else: st.warning(v_msg)
-                else: st.warning("⚠️ 모든 필드를 입력해 주세요.")
-    st.markdown('</div>', unsafe_allow_html=True)
-
-# --- [Tab 2: 법률 검토] ---
+    st.markdown("</div>", unsafe_allow_html=True)  # .clean-campaign-scope end
+    st.markdown("</div>", unsafe_allow_html=True)  # #audit-tab end
 with tab_doc:
-    st.markdown("### 📄 법률 리스크 및 감사보고서 검토")
-    cur1, cur2 = st.tabs(["⚖️ 법률 리스크 검토", "🔍 감사보고서 검증"])
-    with cur1:
-        st.file_uploader("검토할 파일 업로드", type=["pdf", "docx", "txt"])
-    with cur2:
-        st.text_area("검증할 보고서 내용")
-        
+    st.markdown("### 📄 법률 리스크(계약서)·규정 검토 / 감사보고서 작성·검증")
+
+    if "api_key" not in st.session_state:
+        st.warning("🔒 로그인 후 이용 가능합니다.")
+    else:
         # 2-레벨 메뉴: 커리큘럼 1(법률 리스크) / 커리큘럼 2(감사보고서)
         cur1, cur2 = st.tabs(["⚖️ 커리큘럼 1: 법률 리스크 심층 검토", "🔍 커리큘럼 2: 감사보고서 작성·검증"])
 
