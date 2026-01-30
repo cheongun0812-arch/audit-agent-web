@@ -1,259 +1,486 @@
-import streamlit as st
-import streamlit.components.v1 as components
-import os
-import google.generativeai as genai
-from docx import Document
-import PyPDF2
-from youtube_transcript_api import YouTubeTranscriptApi
-import requests
-from bs4 import BeautifulSoup
-import time
-import glob
-import tempfile
-import hashlib
-import base64
-import datetime
-import pytz
-import pandas as pd
-import plotly.graph_objects as go
-import plotly.express as px
-
-# Plotly: 확대/축소 후 "원점 복원" 가능하도록 모드바 항상 표시
-PLOTLY_CONFIG = {
-    "displayModeBar": True,
-    "displaylogo": False,
-    "responsive": True,
-    "scrollZoom": False,
-    "doubleClick": "reset",
-}
-
-# [필수] 구글 시트 라이브러리 체크
-try:
-    import gspread
-    from oauth2client.service_account import ServiceAccountCredentials
-except ImportError:
-    gspread = None
-    ServiceAccountCredentials = None
-    st.error("❌ 구글 시트 라이브러리가 없습니다. requirements.txt를 확인하세요.")
-
-# [필수] yt_dlp 라이브러리 체크
-try:
-    import yt_dlp
-except ImportError:
-    yt_dlp = None
-
-# ==========================================
-# 1. 페이지 설정
-# ==========================================
-st.set_page_config(
-    page_title="AUDIT AI Agent",
-    page_icon="🛡️",
-    layout="wide",
-    initial_sidebar_state="collapsed"
-)
-
-# ==========================================
-# 2. 🎨 디자인 테마 (베프님이 좋아하는 가독성 스타일 보존)
-# ==========================================
-st.markdown("""
-<style>
-/* Expander 및 텍스트 가독성 */
-details > summary { font-size: 1.15rem !important; font-weight: 900 !important; color: #1565C0 !important; }
-html { font-size: 16.2px; }
-.stApp { background-color: #F4F6F9; }
-[data-testid="stSidebar"] { background-color: #2C3E50; }
-[data-testid="stSidebar"] * { color: #FFFFFF !important; }
-
-/* 2월 캠페인 전용 스타일 */
-.clean-container { max-width: 850px; margin: 0 auto; }
-div[data-testid="stForm"] {
-    background-color: #0F172A !important;
-    border: 2px solid #334155 !important;
-    border-radius: 25px !important;
-    padding: 30px !important;
-}
-.stTextInput input {
-    background-color: #1E293B !important;
-    color: white !important;
-    border: 1px solid #475569 !important;
-    height: 55px !important;
-    text-align: center !important;
-}
-.stSelectbox div[role="combobox"] { background-color: #1E293B !important; color: white !important; height: 55px !important; }
-
-/* 버튼 스타일 */
-.stButton > button, div[data-testid="stFormSubmitButton"] > button {
-    background: linear-gradient(to right, #2980B9, #2C3E50) !important;
-    color: #FFFFFF !important;
-    font-weight: 800 !important;
-}
-
-/* 캠페인 제출 버튼 커스텀 */
-.clean-submit button {
-    background: linear-gradient(to right, #E11D48, #9F1239) !important;
-    height: 65px !important;
-    font-size: 1.3rem !important;
-    border-radius: 15px !important;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# ==========================================
-# 3. 핵심 유틸리티 함수 (구글시트 연동 로직)
-# ==========================================
-@st.cache_resource
-def init_google_sheet_connection():
-    if gspread is None: return None
-    try:
-        scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
-        return gspread.authorize(creds)
-    except: return None
-
-def _korea_now():
-    kst = pytz.timezone("Asia/Seoul")
-    return datetime.datetime.now(kst)
-
-def get_participation_stats(sheet_name):
-    client = init_google_sheet_connection()
-    if not client: return 0
-    try:
-        ss = client.open("Audit_Result_2026")
-        ws = ss.worksheet(sheet_name)
-        return len(ws.get_all_values()) - 1
-    except: return 0
-
-def save_campaign_pledge(emp_id, name, unit, dept, sheet_name):
-    client = init_google_sheet_connection()
-    if not client: return False, "구글 시트 연결 실패"
-    try:
-        ss = client.open("Audit_Result_2026")
-        try: ws = ss.worksheet(sheet_name)
-        except:
-            ws = ss.add_worksheet(title=sheet_name, rows=2000, cols=10)
-            ws.append_row(["저장시간", "사번", "성명", "소속", "부서", "상태"])
-        
-        # 중복 체크
-        records = ws.get_all_records()
-        if any(str(r.get("사번", "")).strip() == str(emp_id).strip() for r in records):
-            return False, f"이미 참여하셨습니다."
-        
-        now = _korea_now().strftime("%Y-%m-%d %H:%M:%S")
-        ws.append_row([now, emp_id, name, unit, dept, "2026 설 맞이 클린캠페인 서약완료"])
-        return True, "성공"
-    except Exception as e: return False, str(e)
-
-# ------------------------------------------
-# 기존 AI 모델 및 파일 처리 함수 (1200라인 로직 보존)
-# ------------------------------------------
-def get_model():
-    if "api_key" in st.session_state:
-        genai.configure(api_key=st.session_state["api_key"])
-    return genai.GenerativeModel("gemini-1.5-pro")
-
-# (기존의 read_file, process_media_file, get_youtube_transcript 등 모든 로직이 이 아래에 포함됨)
-
-# ==========================================
-# 4. 로그인 및 세션 관리
-# ==========================================
-with st.sidebar:
-    st.markdown("### 🏛️ Control Center")
-    if "api_key" not in st.session_state:
-        # 로그인 폼...
-        with st.form("login_form"):
-            key_in = st.text_input("Access Key", type="password")
-            if st.form_submit_button("접속"):
-                st.session_state["api_key"] = key_in
-                st.rerun()
-    else:
-        st.success("🟢 정상 가동 중")
-        if st.button("로그아웃"):
-            st.session_state.clear()
-            st.rerun()
-
-# ==========================================
-# 5. 메인 화면 및 탭 구성 (완벽 통합)
-# ==========================================
-st.markdown("<h1 style='text-align: center; color: #2C3E50;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
-
-tab_audit, tab_doc, tab_chat, tab_summary, tab_admin = st.tabs([
-    "✅ 자율점검", "📄 법률 검토", "💬 AI 에이전트(챗봇)", "📰 스마트 요약", "🔒 관리자 모드"
-])
-
-# --- [Tab 1: 자율점검 - 2월 클린 캠페인 전용] ---
-with tab_audit:
-    CAMPAIGN_SHEET = "2026_02_클린캠페인"
-    TOTAL_STAFF = 979 # 전사 정원
-
-    # 상단 비주얼 인포그래픽 렌더링
-    try:
-        with open("CleanCampaign2026_Visual.html", "r", encoding="utf-8") as f:
-            visual_html = f.read()
-        components.html(visual_html, height=2800, scrolling=False)
-    except:
-        st.error("⚠️ 캠페인 비주얼 파일을 찾을 수 없습니다.")
-
-    st.markdown("---")
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2026 ktMOS북부 설 맞이 클린캠페인</title>
+    <!-- React & Libraries -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     
-    # 서약 폼 섹션
-    _, col_mid, _ = st.columns([1, 4, 1])
-    with col_mid:
-        st.markdown(f"""
-            <div style='background: #0F172A; padding: 35px; border-radius: 25px; border-left: 10px solid #E11D48; margin-bottom: 30px; color: white;'>
-                <h2 style='color: #FBBF24; font-weight: 900; margin-top:0;'>🖋️ 청렴 서약에 동참해 주세요</h2>
-                <p style='font-size: 1.1rem; line-height: 1.8;'>
-                    스스로 청렴에 동참하겠다는 의지로 <b>"청렴 서약"</b>을 완료한 임직원이 <b>전체 50%</b>를 넘으면 <br/>
-                    참여자 중 <b>50분</b>을 추첨하여 <b>"모바일 커피 쿠폰"</b>을 쏩니다!
-                </p>
-            </div>
-        """, unsafe_allow_html=True)
+    <!-- Premium Font: Pretendard -->
+    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
 
-        with st.form("campaign_2026_feb"):
-            r1c1, r1c2 = st.columns([2, 1])
-            f_id = r1c1.text_input("사번", placeholder="사번(1000****) 없으면 (8*******)")
-            f_name = r1c2.text_input("성함", placeholder="성명")
-            
-            r2c1, r2c2 = st.columns(2)
-            f_unit = r2c1.selectbox("소속 선택", ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"], index=None, placeholder="총괄/본부/단 선택")
-            f_dept = r2c2.text_input("상세 부서명", placeholder="부서명 입력")
-            
-            st.markdown('<div class="clean-submit">', unsafe_allow_html=True)
-            submitted = st.form_submit_button("🛡️ 청렴 서약 완료 및 이벤트 응모하기")
-            st.markdown('</div>', unsafe_allow_html=True)
-            
-            if submitted:
-                if not f_id or not f_name or not f_unit:
-                    st.warning("⚠️ 필수 정보를 입력해 주세요.")
-                else:
-                    success, msg = save_campaign_pledge(f_id, f_name, f_unit, f_dept, CAMPAIGN_SHEET)
-                    if success:
-                        st.session_state["p_success"] = True
-                        st.session_state["p_name"] = f_name
-                        # 폭죽 JS
-                        components.html("<script src='https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js'></script><script>confetti({particleCount:150, spread:70, origin:{y:0.6}});</script>", height=0)
-                    else: st.error(f"❌ {msg}")
+    <style>
+        body { font-family: 'Pretendard', sans-serif; letter-spacing: -0.02em; scroll-behavior: smooth; }
+        @keyframes fade-in-up { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes scale-in { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        @keyframes scan { 0% { transform: translateY(-100%); opacity: 0; } 50% { opacity: 1; } 100% { transform: translateY(100%); opacity: 0; } }
+        @keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-10px); } 100% { transform: translateY(0px); } }
+        
+        .animate-fade-in-up { animation: fade-in-up 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
+        .animate-scale-in { animation: scale-in 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+        .animate-scan { animation: scan 2s infinite linear; }
+        .animate-float { animation: float 3s ease-in-out infinite; }
+        
+        .video-background { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
+        .counter-glitch { font-variant-numeric: tabular-nums; }
+        
+        .custom-alert {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10000;
+            animation: fade-in-up 0.3s ease-out forwards;
+        }
 
-        if st.session_state.get("p_success"):
-            st.success(f"🎊 {st.session_state['p_name']}님, 서약이 완료되었습니다!")
-            count = get_participation_stats(CAMPAIGN_SHEET)
-            rate = min(100, (count / TOTAL_STAFF) * 100)
-            st.markdown(f"""
-                <div style='background:#0F172A; padding:40px; border-radius:30px; text-align:center; color:white; margin-top: 30px; border: 4px solid #FBBF24;'>
-                    <p style='color:#94A3B8; letter-spacing:3px; font-weight:900;'>참여율 대시보드</p>
-                    <div style='font-size: 7rem; font-weight:900; color:#FBBF24;'>{rate:.1f}%</div>
-                    <div style='width:100%; background:#1E293B; height:15px; border-radius:10px; overflow:hidden; margin: 20px 0;'>
-                        <div style='width:{rate}%; height:100%; background:linear-gradient(to right, #FBBF24, #E11D48); transition: width 2s;'></div>
-                    </div>
-                    <p>현재 {count}명의 임직원이 함께하고 있습니다.</p>
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #ef4444; border-radius: 10px; }
+        
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 antialiased overflow-x-hidden">
+    <div id="root"></div>
+
+    <!-- Firebase SDK Setup -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, doc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        window.FirebaseSDK = { 
+            initializeApp, getAuth, signInAnonymously, signInWithCustomToken, 
+            onAuthStateChanged, getFirestore, collection, addDoc, onSnapshot, 
+            query, doc, setDoc 
+        };
+    </script>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useMemo } = React;
+
+        const Icon = ({ name, size = 24, className = "" }) => {
+            useEffect(() => { if (window.lucide) window.lucide.createIcons(); }, [name]);
+            return <i data-lucide={name} style={{ width: size, height: size }} className={className}></i>;
+        };
+
+        const App = () => {
+            const [user, setUser] = useState(null);
+            const [empId, setEmpId] = useState('');
+            const [empName, setEmpName] = useState('');
+            const [isPledged, setIsPledged] = useState(false);
+            const [isMuted, setIsMuted] = useState(true);
+            const [videoSrc, setVideoSrc] = useState("https://assets.mixkit.co/videos/preview/mixkit-abstract-red-and-white-flow-2336-large.mp4"); // 기본 배경 영상
+            const [pledges, setPledges] = useState([]);
+            const [displayRate, setDisplayRate] = useState(0);
+            const [isScanning, setIsScanning] = useState(false);
+            const [scanResult, setScanResult] = useState(null);
+            const [selectedGoal, setSelectedGoal] = useState('');
+            const [alertMsg, setAlertMsg] = useState('');
+            const videoRef = useRef(null);
+
+            const TOTAL_EMPLOYEES = 500; 
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'ktmos-clean-2026';
+
+            // Fortune Data
+            const fortuneDB = {
+                growth: [
+                    { slogan: "투명한 도약, 붉은 말처럼 거침없이 성장하는 한 해", fortune: "올해 당신의 청렴 에너지는 99%! 투명한 업무 처리가 곧 당신의 독보적인 커리어가 됩니다." },
+                    { slogan: "정직이라는 박차를 가해 더 높은 곳으로 질주하세요", fortune: "거짓 없는 성장이 가장 빠른 길입니다. 주변의 두터운 신뢰가 당신의 든든한 날개가 될 것입니다." },
+                    { slogan: "신뢰의 레이스, 당신의 깨끗한 실력이 승리를 결정합니다", fortune: "원칙을 지키는 힘이 ktMOS의 미래를 만드는 가장 강력한 성장 동력이 됩니다." }
+                ],
+                happiness: [
+                    { slogan: "떳떳한 마음이 선사하는 가장 따뜻한 행복의 해", fortune: "가족에게 부끄럽지 않은 당신의 정직함이 집안의 평안과 웃음꽃을 불러옵니다." },
+                    { slogan: "깨끗한 소통으로 피어나는 동료 간의 진정한 즐거움", fortune: "작은 호의보다 큰 진심이 통하는 한 해입니다. 사람 사이의 신뢰가 최고의 행운입니다." }
+                ],
+                challenge: [
+                    { slogan: "청렴의 가치를 지키며 한계를 넘어 질주하는 2026", fortune: "어려운 순간에도 원칙을 지키는 모습이 동료들에게 가장 큰 영감이 될 것입니다." },
+                    { slogan: "정직한 도전은 결코 멈추지 않는 붉은 말과 같습니다", fortune: "타협하지 않는 용기가 당신을 독보적인 전문가로 만들어주는 결정적 한 해가 됩니다." }
+                ]
+            };
+
+            // Firebase Initialize & Auth (Rule 3)
+            useEffect(() => {
+                const { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } = window.FirebaseSDK;
+                const firebaseConfig = JSON.parse(__firebase_config);
+                const app = initializeApp(firebaseConfig);
+                const auth = getAuth(app);
+
+                const initAuth = async () => {
+                    try {
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    } catch (error) {
+                        console.error("Auth Error:", error);
+                    }
+                };
+                
+                initAuth();
+                const unsubscribe = onAuthStateChanged(auth, setUser);
+                return () => unsubscribe();
+            }, []);
+
+            // Real-time Data Fetching (Rule 1 & 2)
+            useEffect(() => {
+                if (!user) return;
+                const { getFirestore, collection, onSnapshot } = window.FirebaseSDK;
+                const db = getFirestore();
+                
+                // Strict Path Rule 1
+                const pledgeCol = collection(db, 'artifacts', appId, 'public', 'data', 'pledges');
+                
+                const unsubscribe = onSnapshot(pledgeCol, (snapshot) => {
+                    setPledges(snapshot.docs.map(doc => doc.data()));
+                }, (err) => {
+                    console.error("Firestore Error:", err);
+                });
+                
+                return () => unsubscribe();
+            }, [user]);
+
+            // Progress Bar Animation
+            useEffect(() => {
+                if (isPledged || pledges.length > 0) {
+                    const targetRate = Math.min(100, (pledges.length / TOTAL_EMPLOYEES) * 100);
+                    let start = 0;
+                    const duration = 1500;
+                    const steps = 60;
+                    const increment = targetRate / steps;
+                    const timer = setInterval(() => {
+                        start += increment;
+                        if (start >= targetRate) {
+                            setDisplayRate(targetRate.toFixed(1));
+                            clearInterval(timer);
+                        } else {
+                            setDisplayRate(start.toFixed(1));
+                        }
+                    }, duration / steps);
+                    return () => clearInterval(timer);
+                }
+            }, [isPledged, pledges.length]);
+
+            const showAlert = (msg) => {
+                setAlertMsg(msg);
+                setTimeout(() => setAlertMsg(''), 4000);
+            };
+
+            const fireFireworks = () => {
+                const end = Date.now() + 3 * 1000;
+                const frame = () => {
+                    confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#ff0000', '#ffd700'] });
+                    confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#ff0000', '#ffd700'] });
+                    if (Date.now() < end) requestAnimationFrame(frame);
+                };
+                frame();
+            };
+
+            const toggleMute = () => {
+                if (videoRef.current) {
+                    videoRef.current.muted = !videoRef.current.muted;
+                    setIsMuted(videoRef.current.muted);
+                }
+            };
+
+            const handlePledgeSubmit = async (e) => {
+                e.preventDefault();
+                if (!user) { showAlert("연결 중입니다. 잠시 후 다시 시도해 주세요."); return; }
+                if (!empId || !empName) return;
+
+                // 중복 체크 (Memory level filter - Rule 2)
+                if (pledges.some(p => p.empId === empId)) {
+                    showAlert(`${empName}님은 이미 서약에 참여하셨습니다.`);
+                    setIsPledged(true);
+                    return;
+                }
+
+                const { getFirestore, collection, addDoc } = window.FirebaseSDK;
+                const db = getFirestore();
+                try {
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'pledges'), {
+                        empId, empName, timestamp: Date.now(), uid: user.uid
+                    });
+                    setIsPledged(true);
+                    fireFireworks();
+                } catch (err) {
+                    showAlert("서약 저장 중 오류가 발생했습니다.");
+                }
+            };
+
+            const runAIScan = () => {
+                if (!empName || !selectedGoal) { showAlert("성함과 목표를 먼저 입력해 주세요."); return; }
+                setIsScanning(true);
+                setScanResult(null);
+                setTimeout(() => {
+                    const options = fortuneDB[selectedGoal];
+                    setScanResult(options[Math.floor(Math.random() * options.length)]);
+                    setIsScanning(false);
+                }, 2000);
+            };
+
+            const handleVideoUpload = (e) => {
+                const file = e.target.files[0];
+                if (file) setVideoSrc(URL.createObjectURL(file));
+            };
+
+            return (
+                <div className="min-h-screen bg-slate-950">
+                    {/* Floating Alert */}
+                    {alertMsg && (
+                        <div className="custom-alert bg-red-600 text-white px-6 py-3 rounded-2xl shadow-2xl font-bold flex items-center gap-2 border border-red-400">
+                            <Icon name="alert-circle" size={20} /> {alertMsg}
+                        </div>
+                    )}
+
+                    {/* 1. Hero Section */}
+                    <section className="relative h-screen flex flex-col items-center justify-center text-center px-6 overflow-hidden">
+                        <video ref={videoRef} className="video-background opacity-40" autoPlay muted loop playsInline src={videoSrc}></video>
+                        <div className="absolute inset-0 bg-gradient-to-b from-slate-950/80 via-transparent to-slate-950 z-[1]"></div>
+                        
+                        <div className="z-10 animate-fade-in-up max-w-5xl">
+                            <div className="inline-block px-4 py-1.5 rounded-full bg-red-600/20 border border-red-600/30 text-red-500 font-bold text-sm tracking-widest mb-6 animate-pulse">
+                                2026 병오년(丙午年) : 붉은 말의 해
+                            </div>
+                            <h1 className="text-6xl md:text-9xl font-black mb-6 tracking-tighter leading-[0.9] italic">
+                                새해 복 <br/> <span className="text-red-600">많이 받으십시오</span>
+                            </h1>
+                            <p className="text-xl md:text-2xl text-slate-300 font-medium max-w-3xl mx-auto leading-relaxed mb-12">
+                                ktMOS북부 임직원 여러분, 정직과 신뢰를 바탕으로 <br className="hidden md:block"/>
+                                더 크게 도약하고 성장하는 2026년이 되시길 기원합니다.
+                            </p>
+                            <div className="flex flex-wrap justify-center gap-4">
+                                <a href="#campaign" className="px-10 py-4 bg-red-600 text-white font-black rounded-2xl hover:bg-red-500 transition-all shadow-[0_0_30px_rgba(220,38,38,0.4)] hover:scale-105">캠페인 확인하기</a>
+                                <button onClick={toggleMute} className="p-4 bg-white/10 border border-white/20 rounded-2xl backdrop-blur-md hover:bg-white/20 transition-all">
+                                    <Icon name={isMuted ? "volume-x" : "volume-2"} />
+                                </button>
+                                <label className="p-4 bg-white/10 border border-white/20 rounded-2xl backdrop-blur-md hover:bg-white/20 transition-all cursor-pointer">
+                                    <Icon name="upload" />
+                                    <input type="file" className="hidden" accept="video/*" onChange={handleVideoUpload} />
+                                </label>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* 2. AI Aura Scanner */}
+                    <section className="py-24 px-6 relative overflow-hidden">
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-red-600/10 rounded-full blur-[120px]"></div>
+                        <div className="max-w-4xl mx-auto text-center relative z-10">
+                            <h2 className="text-4xl md:text-5xl font-black mb-16 tracking-tight">2026 청렴 아우라 분석</h2>
+                            
+                            <div className="glass-panel p-8 md:p-12 rounded-[3rem] shadow-2xl">
+                                <div className="grid md:grid-cols-2 gap-4 mb-8">
+                                    <input 
+                                        type="text" 
+                                        value={empName} 
+                                        onChange={e => setEmpName(e.target.value)} 
+                                        placeholder="성함" 
+                                        className="w-full px-6 py-4 bg-slate-900/50 border border-white/10 rounded-2xl focus:ring-2 focus:ring-red-600 outline-none font-bold text-center"
+                                    />
+                                    <select 
+                                        value={selectedGoal} 
+                                        onChange={e => setSelectedGoal(e.target.value)}
+                                        className="w-full px-6 py-4 bg-slate-900/50 border border-white/10 rounded-2xl focus:ring-2 focus:ring-red-600 outline-none font-bold text-center appearance-none cursor-pointer"
+                                    >
+                                        <option value="">올해의 주요 목표</option>
+                                        <option value="growth">지속적인 성장</option>
+                                        <option value="happiness">가족의 행복</option>
+                                        <option value="challenge">새로운 도전</option>
+                                    </select>
+                                </div>
+
+                                <button 
+                                    onClick={runAIScan} 
+                                    disabled={isScanning}
+                                    className="w-full py-5 bg-gradient-to-r from-red-600 to-orange-600 rounded-2xl font-black text-xl hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-3 shadow-xl"
+                                >
+                                    {isScanning ? <Icon name="loader-2" className="animate-spin" /> : <Icon name="sparkles" />}
+                                    {isScanning ? "아우라 분석 중..." : "청렴 기운 스캔하기"}
+                                </button>
+
+                                {isScanning && (
+                                    <div className="mt-12 relative h-40 bg-slate-900/80 rounded-3xl overflow-hidden border border-red-600/30">
+                                        <div className="absolute inset-0 flex items-center justify-center text-xs font-black text-red-500 uppercase tracking-[1em] opacity-50">Analyzing Your Integrity...</div>
+                                        <div className="absolute top-0 left-0 w-full h-1.5 bg-red-600 shadow-[0_0_30px_rgba(220,38,38,1)] animate-scan"></div>
+                                    </div>
+                                )}
+
+                                {scanResult && !isScanning && (
+                                    <div className="mt-12 animate-scale-in">
+                                        <div className="p-1 bg-gradient-to-br from-red-600 via-orange-500 to-yellow-500 rounded-[2.5rem]">
+                                            <div className="bg-slate-950 p-8 md:p-10 rounded-[2.4rem]">
+                                                <h4 className="text-red-500 font-black text-sm uppercase tracking-widest mb-4">Scan Completed</h4>
+                                                <p className="text-2xl md:text-3xl font-black mb-6 leading-tight">"{scanResult.slogan}"</p>
+                                                <div className="w-12 h-1 bg-slate-800 mx-auto mb-6"></div>
+                                                <p className="text-slate-400 text-lg md:text-xl font-medium italic leading-relaxed">
+                                                    {scanResult.fortune}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* 3. Campaign Rules */}
+                    <section id="campaign" className="py-32 px-6 bg-slate-900/50">
+                        <div className="max-w-6xl mx-auto">
+                            <div className="text-center mb-20">
+                                <h2 className="text-red-600 font-black text-sm uppercase tracking-[0.4em] mb-4">Clean Festival Policy</h2>
+                                <h3 className="text-4xl md:text-6xl font-black tracking-tighter">설 명절 클린 캠페인 아젠다</h3>
+                            </div>
+                            
+                            <div className="grid md:grid-cols-3 gap-8">
+                                {[
+                                    { icon: "gift", title: "선물 안 주고 안 받기", desc: "협력사 및 이해관계자와의 명절 선물 교환은 금지됩니다. 마음만 정중히 받겠습니다.", color: "bg-red-600" },
+                                    { icon: "coffee", title: "향응 및 편의 제공 금지", desc: "부적절한 식사 대접이나 골프 등 편의 제공은 원천 차단하여 투명성을 지킵니다.", color: "bg-orange-600" },
+                                    { icon: "shield-check", title: "부득이한 경우 자진신고", desc: "택배 등으로 배송된 선물은 반송이 원칙이며, 불가피할 시 클린센터로 즉시 신고합니다.", color: "bg-amber-600" }
+                                ].map((item, idx) => (
+                                    <div key={idx} className="glass-panel p-10 rounded-[3rem] hover:border-red-600/50 transition-all group animate-float" style={{animationDelay: `${idx * 0.5}s`}}>
+                                        <div className={`w-16 h-16 ${item.color} rounded-2xl flex items-center justify-center mb-8 group-hover:scale-110 transition-transform shadow-lg`}>
+                                            <Icon name={item.icon} size={32} />
+                                        </div>
+                                        <h4 className="text-2xl font-bold mb-4">{item.title}</h4>
+                                        <p className="text-slate-400 leading-relaxed font-medium">{item.desc}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* 4. Reporting Channels */}
+                    <section className="py-32 px-6">
+                        <div className="max-w-6xl mx-auto grid md:grid-cols-3 gap-6">
+                            <div className="md:col-span-1 py-10">
+                                <h2 className="text-3xl font-black mb-4">비윤리 행위 <br/> 신고 채널</h2>
+                                <p className="text-slate-400 font-medium">부정부패 없는 ktMOS북부를 위해 <br/> 여러분의 용기 있는 목소리가 필요합니다.</p>
+                            </div>
+                            <div className="md:col-span-2 grid sm:grid-cols-2 gap-4">
+                                <div className="glass-panel p-8 rounded-3xl flex items-center gap-6 group hover:bg-white/5 transition-all">
+                                    <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center group-hover:text-red-500"><Icon name="phone" /></div>
+                                    <div>
+                                        <p className="text-xs font-bold text-slate-500 uppercase mb-1">감사실 직통</p>
+                                        <p className="text-xl font-black">02-3414-1919</p>
+                                    </div>
+                                </div>
+                                <div className="glass-panel p-8 rounded-3xl flex items-center gap-6 group hover:bg-white/5 transition-all">
+                                    <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center group-hover:text-blue-500"><Icon name="globe" /></div>
+                                    <div>
+                                        <p className="text-xs font-bold text-slate-500 uppercase mb-1">사이버 신문고</p>
+                                        <a href="#" className="text-xl font-black border-b border-white/20 pb-1">바로가기</a>
+                                    </div>
+                                </div>
+                                <div className="sm:col-span-2 glass-panel p-8 rounded-3xl flex items-center gap-6 group hover:bg-white/5 transition-all">
+                                    <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center group-hover:text-yellow-500"><Icon name="mail" /></div>
+                                    <div>
+                                        <p className="text-xs font-bold text-slate-500 uppercase mb-1">이메일 제보</p>
+                                        <p className="text-xl font-black">ethics@ktmos.com</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* 5. Pledge Section */}
+                    <section className="py-32 px-6 bg-red-600/5 relative">
+                        <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-red-600 to-transparent opacity-50"></div>
+                        <div className="max-w-4xl mx-auto text-center">
+                            {!isPledged ? (
+                                <div className="animate-scale-in">
+                                    <h2 className="text-5xl md:text-7xl font-black mb-10 tracking-tighter leading-none italic">
+                                        스스로 다짐하는 <br/> <span className="text-red-600 underline">청렴 서약</span>
+                                    </h2>
+                                    <div className="glass-panel p-10 md:p-14 rounded-[4rem] mb-12 shadow-2xl relative overflow-hidden">
+                                        <div className="absolute -top-10 -right-10 w-40 h-40 bg-red-600/20 rounded-full blur-3xl"></div>
+                                        <Icon name="award" size={80} className="mx-auto mb-8 text-red-600 animate-bounce" />
+                                        <h3 className="text-2xl md:text-3xl font-black mb-6">🎁 청렴 실천 응원 이벤트</h3>
+                                        <p className="text-lg md:text-xl text-slate-300 font-bold mb-10 leading-relaxed">
+                                            전 임직원의 <span className="text-red-500">50% 이상</span>이 서약에 참여하시면, <br/>
+                                            참여자 중 <span className="text-red-500">50분을 추첨</span>하여 새해 첫 모바일 <br className="hidden md:block"/> 
+                                            커피 쿠폰을 감사실에서 쏩니다!
+                                        </p>
+                                        <form onSubmit={handlePledgeSubmit} className="flex flex-col sm:flex-row gap-4">
+                                            <input 
+                                                type="text" 
+                                                value={empId} 
+                                                onChange={e => setEmpId(e.target.value)} 
+                                                placeholder="사번" 
+                                                className="flex-1 px-8 py-5 bg-slate-900 border border-white/10 rounded-3xl outline-none focus:ring-2 focus:ring-red-600 font-bold text-center" 
+                                                required 
+                                            />
+                                            <input 
+                                                type="text" 
+                                                value={empName} 
+                                                onChange={e => setEmpName(e.target.value)} 
+                                                placeholder="성함" 
+                                                className="sm:w-32 px-8 py-5 bg-slate-900 border border-white/10 rounded-3xl outline-none focus:ring-2 focus:ring-red-600 font-bold text-center" 
+                                                required 
+                                            />
+                                            <button type="submit" className="px-10 py-5 bg-red-600 text-white font-black rounded-3xl hover:bg-red-500 transition-all shadow-xl">서약하기</button>
+                                        </form>
+                                    </div>
+                                    <p className="text-slate-500 font-black tracking-widest uppercase">Current: {pledges.length} Signatures</p>
+                                </div>
+                            ) : (
+                                <div className="animate-scale-in">
+                                    <div className="glass-panel p-12 md:p-20 rounded-[4rem] border-b-[12px] border-red-600 shadow-2xl">
+                                        <div className="w-24 h-24 bg-green-500 text-white rounded-full flex items-center justify-center mx-auto mb-10 shadow-lg">
+                                            <Icon name="check" size={48} />
+                                        </div>
+                                        <h3 className="text-4xl md:text-6xl font-black mb-6 tracking-tighter italic">서약 완료!</h3>
+                                        <p className="text-slate-400 text-xl font-bold mb-16">
+                                            {empName}님, 청렴한 ktMOS북부 만들기에 <br/> 동참해 주셔서 대단히 감사합니다.
+                                        </p>
+                                        
+                                        <div className="relative py-16 px-6 bg-slate-950/50 rounded-[3rem] border border-white/5">
+                                            <p className="text-xs font-black text-slate-500 mb-8 tracking-[0.6em] uppercase">Participation Rate</p>
+                                            <div className="flex items-baseline justify-center gap-4 mb-6">
+                                                <span className="text-8xl md:text-[10rem] font-black counter-glitch leading-none text-red-600">{displayRate}</span>
+                                                <span className="text-4xl font-black text-slate-600">%</span>
+                                            </div>
+                                            <div className="max-w-md mx-auto h-4 bg-slate-900 rounded-full overflow-hidden mb-6 p-1">
+                                                <div 
+                                                    className="h-full bg-gradient-to-r from-red-600 to-orange-500 transition-all duration-1000 rounded-full shadow-[0_0_20px_rgba(220,38,38,0.5)]" 
+                                                    style={{ width: `${displayRate}%` }}
+                                                ></div>
+                                            </div>
+                                            <p className="text-slate-400 font-bold">현재 {pledges.length}명 참여 중 (목표: 250명)</p>
+                                        </div>
+                                    </div>
+                                    <button onClick={() => setIsPledged(false)} className="mt-12 text-slate-500 hover:text-white transition-all font-bold border-b border-slate-800 pb-1">서약 정보 수정하기</button>
+                                </div>
+                            )}
+                        </div>
+                    </section>
+
+                    {/* Footer */}
+                    <footer className="py-20 text-center border-t border-white/5">
+                        <div className="flex items-center justify-center gap-2 mb-6 opacity-40">
+                            <span className="font-black text-xl tracking-tighter">kt</span>
+                            <span className="font-light text-xl tracking-[0.3em] uppercase">MOS 북부</span>
+                        </div>
+                        <p className="text-xs text-slate-600 font-bold tracking-widest uppercase mb-2">Audit & Ethics Department</p>
+                        <p className="text-[10px] text-slate-700 font-medium">© 2026 ktMOS NORTH. ALL RIGHTS RESERVED. PREMIUM CAMPAIGN WEB.</p>
+                    </footer>
                 </div>
-            """, unsafe_allow_html=True)
+            );
+        };
 
-# --- [Tab 2~5: 법률 검토, 챗봇 등 기존 기능] ---
-# (베프님이 올려주신 app.py의 Tab 2부터 마지막 라인까지의 모든 코드를 이 아래에 그대로 붙여넣으면 됩니다.)
-with tab_doc:
-    st.info("기존 법률 검토 로직 보존됨...")
-    # (원래의 tab_doc 코드 삽입)
-
-# (tab_chat, tab_summary, tab_admin 등도 모두 동일하게 유지)
-
-st.markdown("<div style='text-align:center; padding:30px; color:#94A3B8; font-size:0.8rem;'>© 2026 ktMOS North Audit AI Agent.</div>", unsafe_allow_html=True)
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
