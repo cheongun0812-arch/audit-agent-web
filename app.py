@@ -903,12 +903,28 @@ html { font-size: 16.2px; }
     """)
 
     # ✅ 인포그래픽(형식/레이아웃 그대로) 렌더링
+   # ✅ 인포그래픽 렌더링 부분 수정
+import os
+
+visual_file_path = "CleanCampaign2026_Visual.html"
+
+if os.path.exists(visual_file_path):
     try:
-        with open("CleanCampaign2026_Visual.html", "r", encoding="utf-8") as f:
+        with open(visual_file_path, "r", encoding="utf-8") as f:
             visual_html = f.read()
-        components.html(visual_html, height=2800, scrolling=False)
-    except Exception:
-        st.error("⚠️ 캠페인 인포그래픽 파일(CleanCampaign2026_Visual.html)을 찾을 수 없습니다.")
+        
+        # HTML 내용이 비어있는지 확인
+        if not visual_html.strip():
+            st.warning("⚠️ 파일은 존재하지만 내용이 비어있습니다.")
+        else:
+            components.html(visual_html, height=2800, scrolling=False)
+            
+    except Exception as e:
+        st.error(f"❌ 파일을 읽는 중 오류가 발생했습니다: {e}")
+else:
+    # 💡 배포 환경에서 파일 위치를 찾지 못할 때 출력됨
+    st.error(f"⚠️ 파일을 찾을 수 없습니다. (파일명: {visual_file_path})")
+    st.info(f"현재 서버 경로의 파일 목록: {os.listdir('.')}") # 디버깅용: 현재 폴더 파일 목록 출력
 
     st.markdown("---")
 
