@@ -844,7 +844,11 @@ with tab_audit:
     # 2. 동영상 배경 처리 (2026년 New year.mp4)
     video_src = ""
     video_candidates = [
-        "2026년 New year.mp4"
+        "2026 New year.mp4",
+        "2026년 New year.mp4",
+        "2026_New year.mp4",
+        "2026_New_year.mp4",
+        "2026 New_year.mp4",
     ]
     video_path = next((p for p in video_candidates if os.path.exists(p)), None)
     if video_path:
