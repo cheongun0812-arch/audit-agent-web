@@ -64,7 +64,7 @@ html { font-size: 16.2px; }
 [data-testid="stSidebar"] { background-color: #2C3E50; }
 [data-testid="stSidebar"] * { color: #FFFFFF !important; }
 
-/* 설맞이 클린캠페인 전용 스타일 (자율점검 탭에만 적용) */
+/* 설맞이 캠페인 전용 스타일 (Tab 1 전용) */
 .clean-campaign-scope .clean-container { max-width: 850px; margin: 0 auto; }
 .clean-campaign-scope div[data-testid="stForm"] {
     background-color: #0F172A !important;
@@ -180,11 +180,16 @@ tab_audit, tab_doc, tab_chat, tab_summary, tab_admin = st.tabs([
     "✅ 자율점검", "📄 법률 검토", "💬 AI 에이전트(챗봇)", "📰 스마트 요약", "🔒 관리자 모드"
 ])
 
-# --- [Tab 1: 자율점검 - 2026 설맞이 클린캠페인] ---
+# --- [Tab 1: 자율점검 - 2026 설맞이 클린캠페인 전용] ---
 with tab_audit:
     CAMPAIGN_SHEET = "2026_설_클린캠페인"
     TOTAL_STAFF = 979 # 전사 정원
     st.markdown('<div class="clean-campaign-scope">', unsafe_allow_html=True)
+    st.markdown("""
+    ### 🎍 2026 설맞이 클린캠페인 (윤리경영 실천 서약)
+    - 설 명절 전·후로 발생할 수 있는 **선물/접대/금품 수수**를 예방하고,
+    - 전 임직원이 **청렴·공정 원칙**을 다시 한 번 점검하기 위한 캠페인입니다.
+    """)
 
     # 상단 비주얼 인포그래픽 렌더링
     try:
@@ -209,7 +214,7 @@ with tab_audit:
             </div>
         """, unsafe_allow_html=True)
 
-        with st.form("campaign_2026_seol"):
+        with st.form("campaign_2026_lny"):
             r1c1, r1c2 = st.columns([2, 1])
             f_id = r1c1.text_input("사번", placeholder="사번(1000****) 없으면 (8*******)")
             f_name = r1c2.text_input("성함", placeholder="성명")
