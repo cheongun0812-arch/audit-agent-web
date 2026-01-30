@@ -831,111 +831,127 @@ def _render_pledge_group(
 
 # --- [Tab 1: 자율점검] ---
 with tab_audit:
-    # ✅ (요청사항) Tab 1(자율점검)만 'Lunar New Year Clean Campaign' 테마로 교체
-    # - 법률검토/챗봇/스마트요약/관리자모드/사이드바 로그인 등 다른 영역은 변경하지 않음
-    # - 결과 저장 시트명은 기존처럼 campaign_info["sheet_name"] (월별 자동) 사용
+    # ✅ 자율점검 탭 전용(설맞이 클린캠페인) — 다른 탭/메뉴/관리자 설정값은 변경하지 않습니다.
+    st.markdown('<div id="audit-tab">', unsafe_allow_html=True)
+
     import streamlit.components.v1 as components
 
-    TOTAL_STAFF = 979  # 참여율 기준(요청대로 유지)
-    current_sheet_name = campaign_info.get("sheet_name", f"{CURRENT_YEAR}_{CURRENT_MONTH:02d}_자율점검")
+    # ✅ (표시용 고정 타이틀) 월별 타이틀 관리(campaign_info["title"])와 충돌하지 않도록,
+    #    관리자 설정값은 그대로 두고 화면 표시만 고정합니다.
+    DISPLAY_TITLE = "Lunar New Year Clean Campaign"
 
-    # ✅ Tab 1에서만 적용되는 스타일 스코프
-    st.markdown("""<style>
-    .clean-campaign-scope .clean-container { max-width: 850px; margin: 0 auto; }
+    # ✅ 결과 저장 시트명은 기존과 동일하게 월별 자동(campaign_info["sheet_name"])
+    current_sheet_name = campaign_info.get("sheet_name", "2026_윤리경영_실천서약")
 
-    .clean-campaign-scope div[data-testid="stForm"] {
-        background-color: #0F172A !important;
-        border: 2px solid #334155 !important;
-        border-radius: 25px !important;
-        padding: 30px !important;
-    }
-    .clean-campaign-scope .stTextInput input {
-        background-color: #1E293B !important;
-        color: white !important;
-        border: 1px solid #475569 !important;
-        height: 55px !important;
-        text-align: center !important;
-    }
-    .clean-campaign-scope .stSelectbox div[role="combobox"] {
-        background-color: #1E293B !important;
-        color: white !important;
-        height: 55px !important;
-    }
+    TOTAL_STAFF = 979  # 참여율 기준 전사 정원(요청값 그대로 유지)
 
-    .clean-campaign-scope .stButton > button,
-    .clean-campaign-scope div[data-testid="stFormSubmitButton"] > button {
-        background: linear-gradient(to right, #2980B9, #2C3E50) !important;
-        color: #FFFFFF !important;
-        font-weight: 800 !important;
-    }
+    # ✅ Tab 1(자율점검)에서만 스타일이 영향가도록 스코프 클래스 사용
+    st.markdown("""
+    <style>
+      .clean-campaign-scope .clean-container { max-width: 900px; margin: 0 auto; }
 
-    .clean-campaign-scope .clean-submit button {
-        background: linear-gradient(to right, #E11D48, #9F1239) !important;
-        height: 65px !important;
-        font-size: 1.3rem !important;
-        border-radius: 15px !important;
-        width: 100% !important;
-    }
-    </style>""", unsafe_allow_html=True)
+      .clean-campaign-scope div[data-testid="stForm"] {
+          background-color: #0F172A !important;
+          border: 2px solid #334155 !important;
+          border-radius: 25px !important;
+          padding: 30px !important;
+      }
+      .clean-campaign-scope .stTextInput input {
+          background-color: #1E293B !important;
+          color: white !important;
+          border: 1px solid #475569 !important;
+          height: 55px !important;
+          text-align: center !important;
+      }
+      .clean-campaign-scope .stSelectbox div[role="combobox"] {
+          background-color: #1E293B !important;
+          color: white !important;
+          height: 55px !important;
+      }
+
+      .clean-campaign-scope .stButton > button,
+      .clean-campaign-scope div[data-testid="stFormSubmitButton"] > button {
+          background: linear-gradient(to right, #2980B9, #2C3E50) !important;
+          color: #FFFFFF !important;
+          font-weight: 800 !important;
+      }
+      .clean-campaign-scope .stButton > button:hover,
+      .clean-campaign-scope div[data-testid="stFormSubmitButton"] > button:hover {
+          transform: scale(1.03);
+          transition: 0.2s;
+      }
+
+      /* 제출 버튼 크게 */
+      .clean-campaign-scope .clean-submit button {
+          background: linear-gradient(to right, #E11D48, #9F1239) !important;
+          height: 65px !important;
+          font-size: 1.3rem !important;
+          border-radius: 15px !important;
+          width: 100% !important;
+          font-weight: 900 !important;
+      }
+    </style>
+    """, unsafe_allow_html=True)
 
     st.markdown('<div class="clean-campaign-scope">', unsafe_allow_html=True)
 
-    # ✅ (요청사항) 화면 표기 제목은 'Lunar New Year Clean Campaign'으로 고정 표시
-    DISPLAY_TITLE = "Lunar New Year Clean Campaign"
-    st.markdown(f"""### 🎍 {DISPLAY_TITLE}
-- 설 명절 전·후로 발생할 수 있는 **선물/접대/금품 수수**를 예방하고,
-- 전 임직원이 **청렴·공정 원칙**을 다시 한 번 점검하기 위한 캠페인입니다.
-""")
+    st.markdown(f"""
+    ### 🎍 {DISPLAY_TITLE}
+    - 설 명절 전·후로 발생할 수 있는 **선물/접대/금품 수수**를 예방하고,
+    - 전 임직원이 **청렴·공정 원칙**을 다시 한 번 점검하기 위한 캠페인입니다.
+    """)
 
-    # -------------------------
-    # 🔧 (DEV) 인포그래픽 HTML 업로드 기능
-    # - 관리자 모드/월별 타이틀 관리와 충돌하지 않도록 Tab 1 내부에서만 제공
-    # - 일반 사용자에게 노출되지 않도록 URL에 ?dev=1 일 때만 표시
-    # -------------------------
+    # -----------------------------
+    # (DEV) 인포그래픽 파일 업로더
+    # -----------------------------
     def _get_query_param(name: str):
         try:
-            qp = st.query_params
-            v = qp.get(name)
-            if isinstance(v, list):
-                return v[0] if v else None
-            return v
+            return st.query_params.get(name)  # streamlit 최신
         except Exception:
             try:
-                qp = st.experimental_get_query_params()
-                v = qp.get(name, [None])
-                return v[0] if isinstance(v, list) and v else None
+                qp = st.experimental_get_query_params()  # 구버전 호환
+                v = qp.get(name, [None])[0]
+                return v
             except Exception:
                 return None
 
-    dev_mode = (_get_query_param("dev") == "1")
+    dev_flag = _get_query_param("dev")
+    dev_mode = str(dev_flag).strip().lower() in ("1", "true", "yes", "y", "on")
 
     if dev_mode:
-        with st.expander("🔧 (DEV) Upload infographic: CleanCampaign2026_Visual.html", expanded=False):
-            st.caption("이 영역은 URL에 ?dev=1 이 포함된 경우에만 표시됩니다. (예: ...streamlit.app/?dev=1)")
-            upl = st.file_uploader("Upload HTML file", type=["html"], key="cc_visual_upload")
-            if upl is not None:
-                raw = upl.getvalue()
-                # 세션에 저장(즉시 반영)
+        with st.expander("(DEV) Upload infographic: CleanCampaign2026_Visual.html", expanded=False):
+            up = st.file_uploader(
+                "CleanCampaign2026_Visual.html 업로드(즉시 적용)",
+                type=["html"],
+                key="cc_visual_uploader"
+            )
+            if up is not None:
                 try:
-                    st.session_state["cc_visual_html"] = raw.decode("utf-8", errors="replace")
-                except Exception:
-                    st.session_state["cc_visual_html"] = ""
+                    html_text = up.getvalue().decode("utf-8", errors="ignore")
+                    st.session_state["cc_visual_html"] = html_text
 
-                # 파일로 저장(가능한 환경에서 영구 반영)
-                target_path = os.path.join(os.getcwd(), "CleanCampaign2026_Visual.html")
-                try:
-                    with open(target_path, "wb") as f:
-                        f.write(raw)
-                    st.success(f"✅ 업로드 완료: {target_path}")
+                    # 가능한 환경이면 실제 파일로 저장(Cloud 환경은 영구 저장이 보장되지 않을 수 있음)
+                    try:
+                        with open("CleanCampaign2026_Visual.html", "w", encoding="utf-8") as f:
+                            f.write(html_text)
+                        st.success("✅ 업로드 완료: 파일로 저장 및 화면에 즉시 적용했습니다.")
+                    except Exception:
+                        st.success("✅ 업로드 완료: 화면에 즉시 적용했습니다. (파일 저장은 환경상 제한될 수 있습니다.)")
+
+                    st.download_button(
+                        "⬇️ 현재 적용 중인 HTML 다운로드",
+                        data=html_text,
+                        file_name="CleanCampaign2026_Visual.html",
+                        mime="text/html",
+                        use_container_width=True
+                    )
                 except Exception as e:
-                    st.warning(f"⚠️ 파일 저장은 실패했지만(환경 권한), 현재 세션에서는 표시됩니다. 오류: {e}")
+                    st.error(f"업로드 처리 중 오류: {e}")
 
-                if st.session_state.get("cc_visual_html"):
-                    st.markdown("**Preview**")
-                    components.html(st.session_state["cc_visual_html"], height=600, scrolling=True)
-
-    # ✅ 인포그래픽(HTML) 표시: 업로드 세션값 > 파일 순서로 로드
-    visual_html = st.session_state.get("cc_visual_html")
+    # -----------------------------
+    # 인포그래픽(형식/레이아웃 그대로) 렌더링
+    # -----------------------------
+    visual_html = st.session_state.get("cc_visual_html", None)
     if not visual_html:
         try:
             with open("CleanCampaign2026_Visual.html", "r", encoding="utf-8") as f:
@@ -946,10 +962,11 @@ with tab_audit:
     if visual_html:
         components.html(visual_html, height=2800, scrolling=False)
     else:
-        st.error("⚠️ 캠페인 인포그래픽 파일(CleanCampaign2026_Visual.html)을 찾을 수 없습니다. (같은 폴더에 두거나, ?dev=1에서 업로드하세요.)")
+        st.error("⚠️ 캠페인 인포그래픽 파일(CleanCampaign2026_Visual.html)을 찾을 수 없습니다. app.py와 같은 폴더에 파일을 두거나, ?dev=1 모드에서 업로드해 주세요.")
 
     st.markdown("---")
 
+    # ✅ 참여자 수 집계(해당 월 시트 기준)
     def _get_participation_count(sheet_name: str) -> int:
         client = init_google_sheet_connection()
         if not client:
@@ -962,26 +979,24 @@ with tab_audit:
         except Exception:
             return 0
 
-    # ✅ 서약 + 이벤트 참여 폼 (현재 캠페인 코드 레이아웃 유지)
+    # ✅ 서약 + 이벤트 참여 폼 (현재 테마 레이아웃 유지)
     _, col_mid, _ = st.columns([1, 4, 1])
     with col_mid:
-        st.markdown("""
+        st.markdown(f"""
             <div style='background: #0F172A; padding: 35px; border-radius: 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); border-left: 10px solid #E11D48; margin-bottom: 30px; color: white;'>
-                <h2 style='color: #FBBF24; font-weight: 900; margin-top:0;'>🖋️ Join the pledge</h2>
+                <h2 style='color: #FBBF24; font-weight: 900; margin-top:0;'>🖋️ {DISPLAY_TITLE} Pledge</h2>
                 <p style='font-size: 1.1rem; line-height: 1.8;'>
-                    스스로 청렴에 동참하겠다는 의지로 <b>“청렴 서약”</b>을 완료한 임직원이 <b>전체 50%</b>를 넘으면 <br/>
-                    참여자 중 <b>50분</b>을 추첨하여 <b>“모바일 커피 쿠폰”</b>을 제공합니다.
+                    스스로 청렴에 동참하겠다는 의지로 <b>"청렴 서약"</b>을 완료한 임직원이 <b>전체 50%</b>를 넘으면 <br/>
+                    참여자 중 <b>50분</b>을 추첨하여 <b>"모바일 커피 쿠폰"</b>을 제공합니다.
                 </p>
             </div>
         """, unsafe_allow_html=True)
 
-        # ✅ (요청사항) 임직원 정보 입력창은 기존 윤리경영 실천지침 입력 UI(사번/성명/총괄·본부·단/부서)와 동일 형태 사용
+        # ✅ 임직원 정보 입력창: 기존 윤리서약 입력 UI 구성 그대로 사용
         with st.form("campaign_lny_form"):
             c1, c2, c3, c4 = st.columns(4)
-
             emp_id = c1.text_input("사번", placeholder="사번(1000*)없으면(00000000)")
             name = c2.text_input("성명")
-
             ordered_units = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
             unit = c3.selectbox(
                 "총괄 / 본부 / 단",
@@ -989,32 +1004,31 @@ with tab_audit:
                 index=None,
                 placeholder="총괄 / 본부 / 단 선택",
                 label_visibility="collapsed",
-                key="unit_select_lny"
+                key="unit_select"
             )
             dept = c4.text_input("상세 부서명", placeholder="현 소속부서명 입력")
 
             st.markdown('<div class="clean-submit">', unsafe_allow_html=True)
-            submitted = st.form_submit_button("🛡️ Complete pledge & join")
-            st.markdown('</div>', unsafe_allow_html=True)
+            submitted = st.form_submit_button("🛡️ 청렴 서약 완료 및 이벤트 응모하기")
+            st.markdown("</div>", unsafe_allow_html=True)
 
         if submitted:
-            # 필수값 체크 (기존 로직 존중)
-            if not emp_id or not name or (unit is None):
-                st.warning("⚠️ 필수 정보를 입력해 주세요. (사번/성명/총괄·본부·단)")
+            if not emp_id or not name:
+                st.warning("⚠️ 사번과 성명을 입력해 주세요.")
             else:
                 ok, msg = validate_emp_id(emp_id)
                 if not ok:
                     st.warning(msg)
                 else:
-                    answer = "Lunar New Year Clean Campaign pledge completed"
+                    answer = f"{DISPLAY_TITLE} pledge completed"
                     with st.spinner("제출 중..."):
                         success, msg2 = save_audit_result(emp_id, name, unit, dept, answer, current_sheet_name)
 
                     if success:
-                        st.session_state["campaign_success"] = True
-                        st.session_state["campaign_name"] = name
+                        st.session_state["lny_success"] = True
+                        st.session_state["lny_name"] = name
 
-                        # ✅ 폭죽(현재 캠페인 코드 유지)
+                        # ✅ 폭죽(현재 테마 코드 유지)
                         components.html("""
                         <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
                         <script>
@@ -1024,15 +1038,15 @@ with tab_audit:
                     else:
                         st.error(f"❌ {msg2}")
 
-        if st.session_state.get("campaign_success"):
-            st.success(f"🎊 {st.session_state.get('campaign_name', '')}님, 서약이 완료되었습니다!")
+        if st.session_state.get("lny_success"):
+            st.success(f"🎊 {st.session_state.get('lny_name','')}님, 서약이 완료되었습니다!")
 
             count = _get_participation_count(current_sheet_name)
             rate = min(100, (count / TOTAL_STAFF) * 100) if TOTAL_STAFF else 0
 
             st.markdown(f"""
                 <div style='background:#0F172A; padding:40px; border-radius: 25px; text-align:center; color:white; margin-top: 30px; border: 4px solid #FBBF24;'>
-                    <p style='color:#94A3B8; letter-spacing:3px; font-weight:900;'>Participation Dashboard</p>
+                    <p style='color:#94A3B8; letter-spacing:3px; font-weight:900;'>참여율 대시보드</p>
                     <div style='font-size: 7rem; font-weight:900; color:#FBBF24;'>{rate:.1f}%</div>
                     <div style='width:100%; background:#1E293B; height:15px; border-radius:10px; overflow:hidden; margin: 20px 0;'>
                         <div style='width:{rate}%; height:15px; background: linear-gradient(to right, #FBBF24, #E11D48); transition: width 2s;'></div>
@@ -1041,8 +1055,8 @@ with tab_audit:
                 </div>
             """, unsafe_allow_html=True)
 
-    st.markdown('</div>', unsafe_allow_html=True)
-
+    st.markdown("</div>", unsafe_allow_html=True)  # .clean-campaign-scope end
+    st.markdown("</div>", unsafe_allow_html=True)  # #audit-tab end
 with tab_doc:
     st.markdown("### 📄 법률 리스크(계약서)·규정 검토 / 감사보고서 작성·검증")
 
