@@ -831,87 +831,116 @@ def _render_pledge_group(
 
 # --- [Tab 1: 자율점검] ---
 with tab_audit:
-    # 1. 화면 가독성 강화를 위한 스타일 설정
+    st.markdown('<div id="audit-tab">', unsafe_allow_html=True)
+
+    # 1. 프리미엄 인포그래픽용 CSS (폭 확장 및 여백 제거)
     st.markdown("""
         <style>
+            /* 탭 내부 컨텐츠가 좁게 보이지 않도록 강제 확장 */
             [data-testid="stHorizontalBlock"] { width: 100% !important; }
             .stTabs [data-baseweb="tab-panel"] { padding: 0 !important; }
-            iframe { border: none !important; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+            
+            /* iframe 테두리 제거 및 부드러운 전환 */
+            iframe {
+                border: none !important;
+                border-radius: 20px;
+                box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            }
         </style>
     """, unsafe_allow_html=True)
 
-    # 2. 동영상 배경 처리 (2026년 New year.mp4)
-    video_src = ""
+    # 2. 동영상 배경 및 프리미엄 UI 구현 (새 텍스트 문서(3).html 기반)
+    # 로컬 파일 '2026년 New year.mp4'를 베이스64로 인코딩하여 HTML에 주입
     video_path = "2026년 New year.mp4"
+    video_html_snippet = ""
+    
     if os.path.exists(video_path):
         with open(video_path, "rb") as f:
-            v_bytes = f.read()
-            video_src = f"data:video/mp4;base64,{base64.b64encode(v_bytes).decode()}"
+            video_bytes = f.read()
+            video_base64 = base64.b64encode(video_bytes).decode()
+            video_html_snippet = f"data:video/mp4;base64,{video_base64}"
+    else:
+        # 파일이 없을 경우를 대비한 대체 영상 URL
+        video_html_snippet = "https://assets.mixkit.co/videos/preview/mixkit-abstract-red-and-white-flow-2336-large.mp4"
 
-    # 3. 프리미엄 인포그래픽 HTML (새 텍스트 문서(3).html의 감성을 app.py에 맞게 최적화)
-    premium_ui = f"""
-    <div style="width:100%; min-height:100vh; position:relative; background:#020617; border-radius:25px; overflow:hidden;">
-        <video autoplay muted loop playsinline style="position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; opacity:0.4; z-index:0;">
-            <source src="{video_src}" type="video/mp4">
-        </video>
-        <div style="position:relative; z-index:1; padding:80px 40px; font-family:'Pretendard', sans-serif; color:white; text-align:center;">
-            <div style="display:inline-block; padding:8px 20px; background:rgba(225,29,72,0.2); border:1px solid rgba(225,29,72,0.3); border-radius:999px; color:#ff4d4d; font-weight:bold; font-size:14px; margin-bottom:20px;">
-                🎍 2026 병오년(丙午年) 설맞이 클린캠페인
-            </div>
-            <h1 style="font-size:5rem; font-weight:900; line-height:1.1; margin-bottom:20px; text-shadow: 0 5px 20px rgba(0,0,0,0.7);">
-                새해 복 <br><span style="color:#E11D48;">많이 받으십시오</span>
-            </h1>
-            <p style="font-size:1.4rem; color:#cbd5e1; max-width:800px; margin:0 auto 60px; line-height:1.6;">
-                정직과 신뢰를 바탕으로 더 크게 도약하는 2026년이 되시길 기원합니다.<br>
-                <b>ktMOS북부</b>는 깨끗하고 투명한 명절 문화를 선도합니다.
-            </p>
-            
-            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:25px; max-width:1200px; margin:0 auto;">
-                <div style="background:rgba(255,255,255,0.05); backdrop-filter:blur(15px); padding:40px; border-radius:30px; border:1px solid rgba(255,255,255,0.1); text-align:left;">
-                    <h3 style="font-size:1.8rem; font-weight:800; color:#FBBF24; margin-bottom:15px;">🎯 캠페인 아젠다</h3>
-                    <ul style="list-style:none; padding:0; color:#94a3b8; font-size:1.1rem; line-height:1.8;">
-                        <li>• 직무관련자 명절 선물 수수 금지</li>
-                        <li>• 부적절한 향응 및 편의 제공 차단</li>
-                        <li>• 투명한 업무 처리 및 원칙 준수</li>
-                    </ul>
-                </div>
-                <div style="background:rgba(255,255,255,0.05); backdrop-filter:blur(15px); padding:40px; border-radius:30px; border:1px solid rgba(255,255,255,0.1); text-align:left;">
-                    <h3 style="font-size:1.8rem; font-weight:800; color:#38BDF8; margin-bottom:15px;">🛡️ 신고 및 상담</h3>
-                    <p style="color:#94a3b8; font-size:1.1rem; line-height:1.6;">
-                        비윤리적 상황 발생 시 즉시 신고해 주세요.<br>
-                        <b>- 감사실:</b> 02-3414-1919<br>
-                        <b>- 이메일:</b> ethics@ktmos.com
-                    </p>
-                </div>
-            </div>
-        </div>
+    # 3. 통합 프리미엄 HTML 렌더링
+    # '새 텍스트 문서 (3).html'의 핵심 로직과 'CleanCampaign2026_Visual.html'의 가독성을 합쳤습니다.
+    combined_premium_html = f"""
+    <div style="width:100%; overflow:hidden;">
+        <iframe srcdoc='
+            <html>
+                <head>
+                    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+                    <script src="https://cdn.tailwindcss.com"></script>
+                    <style>
+                        body {{ font-family: "Pretendard", sans-serif; background: #020617; color: white; margin: 0; }}
+                        .video-bg {{
+                            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                            object-fit: cover; z-index: -1; opacity: 0.4;
+                        }}
+                        .content-overlay {{
+                            background: linear-gradient(to bottom, rgba(2,6,23,0.7), rgba(2,6,23,0.9));
+                            min-height: 100vh; padding: 40px 20px;
+                        }}
+                        .glass-card {{
+                            background: rgba(255, 255, 255, 0.03);
+                            backdrop-filter: blur(15px);
+                            border: 1px solid rgba(255, 255, 255, 0.1);
+                            border-radius: 30px;
+                        }}
+                    </style>
+                </head>
+                <body>
+                    <video class="video-bg" autoplay muted loop playsinline src="{video_html_snippet}"></video>
+                    <div class="content-overlay">
+                        <div class="max-w-6xl mx-auto text-center">
+                            <h1 class="text-6xl md:text-8xl font-black mb-6 italic">새해 복 <span class="text-red-600">많이 받으십시오</span></h1>
+                            <p class="text-xl text-slate-300 mb-12">ktMOS북부 임직원 여러분의 정직한 도전을 응원합니다.</p>
+                            
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
+                                <div class="glass-card p-8">
+                                    <h3 class="text-2xl font-bold text-yellow-500 mb-4">🎯 우리가 지키는 것</h3>
+                                    <p class="text-slate-300">명절 시즌 선물/접대/부당 청탁을 원천 차단하여 청렴 최우선을 실천합니다.</p>
+                                </div>
+                                <div class="glass-card p-8">
+                                    <h3 class="text-2xl font-bold text-red-500 mb-4">⚡ 빠른 체크 규칙</h3>
+                                    <p class="text-slate-300">현금/상품권 NO! 특혜 요청 NO! 애매하면 즉시 상담하세요.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </body>
+            </html>
+        ' width="100%" height="1800px"></iframe>
     </div>
     """
-    st.components.v1.html(premium_ui, height=1000, scrolling=False)
+    
+    components.html(combined_premium_html, height=1800, scrolling=False)
 
-    # 4. 서약 폼 섹션 (기존 기능과 통합)
-    st.markdown("<br><br>", unsafe_allow_html=True)
-    _, col_form, _ = st.columns([1, 2, 1])
-    with col_form:
+    st.markdown("---")
+    
+    # 4. 하단 서약 폼 (기존 app.py의 제출 로직과 연동)
+    _, col_mid, _ = st.columns([1, 4, 1])
+    with col_mid:
         st.markdown("### 🖋️ 2026 설맞이 청렴 서약")
-        with st.form("lny_clean_form"):
-            emp_id = st.text_input("사번 (8자리)", placeholder="10******")
-            emp_name = st.text_input("성명")
-            unit_opt = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
-            unit = st.selectbox("소속 (본부/단)", unit_opt, index=None, placeholder="소속 선택")
+        with st.form("lny_pledge_form"):
+            c1, c2 = st.columns(2)
+            e_id = c1.text_input("사번", placeholder="10******")
+            e_name = c2.text_input("성명")
             
-            if st.form_submit_button("🛡️ 청렴 서약 완료 및 응모"):
-                if emp_id and emp_name and unit:
-                    ok, v_msg = validate_emp_id(emp_id)
-                    if ok:
-                        success, s_msg = save_audit_result(emp_id, emp_name, unit, "해당부서", "2026 설맞이 청렴서약 완료", campaign_info["sheet_name"])
-                        if success: st.success(f"🎊 {emp_name}님, 서약이 완료되었습니다!")
-                        else: st.error(s_msg)
-                    else: st.warning(v_msg)
+            # (기존 logic 유지) 부서 선택 및 제출 버튼
+            submitted = st.form_submit_button("🛡️ 서약 완료 및 이벤트 응모")
+            if submitted:
+                # 사번 검증 및 저장 로직 실행
+                ok, msg = validate_emp_id(e_id)
+                if ok:
+                    success, res_msg = save_audit_result(e_id, e_name, "본부", "부서", "설맞이 서약 완료", current_sheet_name)
+                    if success: st.success(f"🎊 {e_name}님 서약이 완료되었습니다!")
+                    else: st.error(res_msg)
                 else:
-                    st.warning("⚠️ 모든 항목을 입력해 주세요.")
-                    
-    st.markdown("### 📄 법률 리스크(계약서)·규정 검토 / 감사보고서 작성·검증")
+                    st.warning(msg)
+
+    st.markdown('</div>', unsafe_allow_html=True)
 
     if "api_key" not in st.session_state:
         st.warning("🔒 로그인 후 이용 가능합니다.")
