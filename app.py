@@ -841,145 +841,176 @@ with tab_audit:
         </style>
     """, unsafe_allow_html=True)
 
-        # 2. 인포그래픽(inpor.html) 로드 + 로컬 영상(2026 New year.mp4) 주입
-    import streamlit.components.v1 as components
-    import re
-    from pathlib import Path
-
-    def _load_infographic_html() -> str | None:
-        html_path = Path("inpor.html")
-        if not html_path.exists():
-            st.error("❌ 'inpor.html' 파일이 없습니다. app.py와 같은 폴더에 업로드해 주세요.")
-            return None
-
-        html = html_path.read_text(encoding="utf-8", errors="ignore")
-
-        # ✅ 로컬 MP4를 data URI로 주입 (iframe에서도 재생되도록)
-        video_candidates = [
-            "2026 New year.mp4",
-            "2026년 New year.mp4",
-            "2026 New Year.mp4",
-            "2026_new_year.mp4",
-            "2026_New_year.mp4",
-        ]
-        video_data_uri = None
-        for vp in video_candidates:
-            p = Path(vp)
-            if p.exists():
-                try:
-                    v_bytes = p.read_bytes()
-                    video_data_uri = "data:video/mp4;base64," + base64.b64encode(v_bytes).decode("utf-8")
-                    break
-                except Exception:
-                    video_data_uri = None
-
-        # inpor.html 내부 기본 배경영상 URL을 로컬 data URI로 교체
-        # (대상: const [videoSrc, setVideoSrc] = useState("...");)
-        if video_data_uri:
-            html = re.sub(
-                r'(const\s*\[videoSrc\s*,\s*setVideoSrc\]\s*=\s*useState\(\s*")[^"]+("\s*\)\s*;)',
-                r'\1' + video_data_uri + r'\2',
-                html,
-                count=1,
-            )
-
-        # ✅ iframe 높이 자동 조절(겹침 방지) — React/Tailwind/폰트 로딩까지 고려
-        resize_js = """<script>
-    (function(){
-      function calcHeight(){
-        const de = document.documentElement;
-        const b = document.body;
-        const h = Math.max(
-          b ? b.scrollHeight : 0,
-          b ? b.offsetHeight : 0,
-          de ? de.clientHeight : 0,
-          de ? de.scrollHeight : 0,
-          de ? de.offsetHeight : 0
-        );
-        if (window.frameElement && h) {
-          window.frameElement.style.height = (h + 12) + 'px';
-        }
-      }
-
-      // 초기 펌핑(React/Tailwind/폰트 로딩 지연 대응)
-      let n = 0;
-      const pump = setInterval(function(){
-        calcHeight();
-        n += 1;
-        if (n >= 40) clearInterval(pump); // 약 8초(200ms * 40)
-      }, 200);
-
-      // resize observer (내용 변경 즉시 반영)
-      try {
-        const ro = new ResizeObserver(function(){ calcHeight(); });
-        ro.observe(document.documentElement);
-        ro.observe(document.body);
-      } catch (e) {}
-
-      // 로드/폰트 준비 이후에도 한 번 더
-      window.addEventListener('load', function(){
-        calcHeight();
-        setTimeout(calcHeight, 250);
-        setTimeout(calcHeight, 900);
-        setTimeout(calcHeight, 1600);
-      });
-
-      if (document.fonts && document.fonts.ready) {
-        document.fonts.ready.then(function(){
-          calcHeight();
-          setTimeout(calcHeight, 400);
-        }).catch(function(){});
-      }
-    })();
-    </script>"""
-        # ✅ inpor.html 내부 '서약하기' 버튼은 안내용으로만 사용하고, 실제 제출은 아래 Streamlit 폼 사용
-        guard_js = """<script>
-    (function(){
-      // ✅ inpor.html 내부 버튼(서약하기) 클릭 시: Streamlit 아래 폼 사용 안내
-      document.addEventListener('click', function(e){
-        try{
-          const btn = e.target && e.target.closest ? e.target.closest('button') : null;
-          if(!btn) return;
-          const t = (btn.textContent || '').trim();
-          if(t === '서약하기'){
-            e.preventDefault();
-            e.stopPropagation();
-            alert('서약 제출/이벤트 응모는 인포그래픽 아래의 \n\'서약 제출\' 입력창에서 진행해 주세요.');
-          }
-        }catch(err){}
-      }, true);
-    })();
-    </script>"""
-
-        inject = "\n" + resize_js + "\n" + guard_js + "\n"
-
-        if "</body>" in html:
-            html = html.replace("</body>", inject + "</body>")
-        else:
-            html += inject
-
-        return html
-
-    st.markdown("#### 🎍 설맞이 클린캠페인 인포그래픽")
-    st.caption("※ 실제 ‘서약 제출/이벤트 응모’는 아래 입력창에서 진행됩니다. (인포그래픽은 안내용)")
-
-    # ✅ 로컬 배경영상 파일 존재 여부 안내
-    _video_candidates = [
+    # 2. 동영상 배경 처리 (2026년 New year.mp4)
+    video_src = ""
+    video_candidates = [
         "2026 New year.mp4",
         "2026년 New year.mp4",
-        "2026 New Year.mp4",
-        "2026_new_year.mp4",
+        "2026_New year.mp4",
         "2026_New_year.mp4",
+        "2026 New_year.mp4",
     ]
-    if not any(Path(v).exists() for v in _video_candidates):
-        st.info("ℹ️ 로컬 배경영상('2026 New year.mp4')을 찾지 못했습니다. 현재는 inpor.html의 기본(온라인) 배경영상이 재생됩니다. 로컬 영상을 사용하려면 mp4 파일을 app.py와 같은 폴더에 업로드해 주세요.")
+    video_path = next((p for p in video_candidates if os.path.exists(p)), None)
+    if video_path:
+        with open(video_path, "rb") as f:
+            v_bytes = f.read()
+            video_src = f"data:video/mp4;base64,{base64.b64encode(v_bytes).decode()}"
+    else:
+        # 파일이 없을 경우를 대비한 샘플 영상 URL
+        video_src = "https://assets.mixkit.co/videos/preview/mixkit-abstract-red-and-white-flow-2336-large.mp4"
 
-    infographic_html = _load_infographic_html()
-    if infographic_html:
-        # 초기 height는 넉넉히(겹침 방지). 이후는 HTML 내부 JS가 자동으로 프레임 높이를 맞춥니다.
-        components.html(infographic_html, height=2400, scrolling=False)
+    # 3. 프리미엄 인포그래픽 & 이벤트 안내 UI
+    premium_ui = f"""
+    <div style="width:100%; min-height:1000px; position:relative; background:#020617; border-radius:25px; overflow:hidden;">
+        <video autoplay muted loop playsinline style="position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; opacity:0.4; z-index:0;">
+            <source src="{video_src}" type="video/mp4">
+        </video>
+        <div style="position:relative; z-index:1; padding:80px 40px; font-family:'Pretendard', sans-serif; color:white; text-align:center;">
+            <div style="display:inline-block; padding:8px 20px; background:rgba(225,29,72,0.2); border:1px solid rgba(225,29,72,0.3); border-radius:999px; color:#ff4d4d; font-weight:bold; font-size:14px; margin-bottom:20px;">
+                🎍 2026 병오년(丙午年) 설맞이 클린캠페인
+            </div>
+            <h1 style="font-size:4.5rem; font-weight:900; line-height:1.1; margin-bottom:20px; text-shadow: 0 5px 20px rgba(0,0,0,0.7);">
+                새해 복 <br><span style="color:#E11D48;">많이 받으십시오</span>
+            </h1>
+            <p style="font-size:1.3rem; color:#cbd5e1; max-width:800px; margin:0 auto 50px; line-height:1.6;">
+                정직과 신뢰를 바탕으로 더 크게 도약하는 2026년이 되시길 기원합니다.<br>
+                <b>ktMOS북부</b> 임직원의 청렴한 다짐이 행복한 명절을 만듭니다.
+            </p>
+
+            <div style="background:rgba(251,191,36,0.1); border:1px solid rgba(251,191,36,0.3); padding:25px; border-radius:20px; max-width:700px; margin:0 auto 50px;">
+                <h3 style="color:#FBBF24; margin-bottom:10px;">🎁 서약 이벤트 안내</h3>
+                <p style="font-size:1.1rem; margin:0;">임직원 50% 이상 참여 시, <b>추첨을 통해 50분께</b> 모바일 커피 쿠폰을 드립니다!</p>
+            </div>
+            
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:25px; max-width:1200px; margin:0 auto;">
+                <div style="background:rgba(255,255,255,0.05); backdrop-filter:blur(15px); padding:40px; border-radius:30px; border:1px solid rgba(255,255,255,0.1); text-align:left;">
+                    <h3 style="font-size:1.8rem; font-weight:800; color:#FBBF24; margin-bottom:15px;">🎯 캠페인 아젠다</h3>
+                    <ul style="list-style:none; padding:0; color:#94a3b8; font-size:1.1rem; line-height:1.8;">
+                        <li>• 명절 선물/금품 수수 정중히 거절하기</li>
+                        <li>• 부적절한 향응 및 접대 금지</li>
+                        <li>• 공정한 업무 처리 및 원칙 준수</li>
+                    </ul>
+                </div>
+                <div style="background:rgba(255,255,255,0.05); backdrop-filter:blur(15px); padding:40px; border-radius:30px; border:1px solid rgba(255,255,255,0.1); text-align:left;">
+                    <h3 style="font-size:1.8rem; font-weight:800; color:#38BDF8; margin-bottom:15px;">🛡️ 상담 및 제보</h3>
+                    <p style="color:#94a3b8; font-size:1.1rem; line-height:1.6;">
+                        도움이 필요하거나 비윤리 상황 발생 시<br>
+                        <b>- 감사실 직통:</b> 02-3414-1919<br>
+                        <b>- 윤리제보:</b> ethics@ktmos.com
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+    """
+    st.components.v1.html(premium_ui, height=1000, scrolling=False)
 
     # 4. 서약 폼 (인포그래픽 하단에 위치)
+    
+    # 3. 인포그래픽(inpor.html) 렌더링 (원본 그대로)
+    def _inject_iframe_autosize(_html: str) -> str:
+        """
+        components.html(iframe)에서 스크롤 없이 전체가 보이도록,
+        iframe 높이를 콘텐츠 높이에 맞춰 자동 확장하는 스크립트를 주입합니다.
+        """
+        script = r"""
+<script>
+(function(){
+  const MIN=600, MAX=20000;
+  const root = document.getElementById('root') || document.body;
+  let last=0;
+  const clamp = (n)=>Math.min(MAX, Math.max(MIN, n));
+  const measure = ()=>{
+    const rectH = Math.ceil((root.getBoundingClientRect && root.getBoundingClientRect().height) || 0);
+    const h = Math.max(
+      root.scrollHeight||0,
+      root.offsetHeight||0,
+      rectH,
+      document.body.scrollHeight||0,
+      document.documentElement.scrollHeight||0
+    );
+    return clamp(h + 16);
+  };
+  const apply = ()=>{
+    const fe = window.frameElement;
+    if(!fe) return;
+    const t = measure();
+    if(Math.abs(t-last) < 2) return;
+    fe.style.height = t + "px";
+    fe.setAttribute("height", String(t));
+    try{ fe.height = t; }catch(e){}
+    last = t;
+  };
+  const pump = (ms)=>{
+    const s = performance.now();
+    const tick = ()=>{
+      apply();
+      if(performance.now()-s < ms) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  };
+  const ready = ()=>{
+    apply();
+    pump(2500);
+    setTimeout(apply, 60);
+    setTimeout(apply, 260);
+    setTimeout(()=>{ apply(); pump(1200); }, 1200);
+  };
+  window.addEventListener("load", ready);
+  window.addEventListener("resize", ()=>{ apply(); pump(800); });
+  document.addEventListener("DOMContentLoaded", ready);
+
+  if("ResizeObserver" in window){
+    const ro = new ResizeObserver(()=>apply());
+    ro.observe(root);
+    ro.observe(document.body);
+  }
+  if(document.fonts && document.fonts.ready){
+    document.fonts.ready.then(()=>{ apply(); pump(1200); }).catch(()=>{});
+  }
+})();
+</script>
+"""
+        if "</body>" in _html:
+            return _html.replace("</body>", script + "\n</body>")
+        if "</html>" in _html:
+            return _html.replace("</html>", script + "\n</html>")
+        return _html + script
+
+    inpor_path = "inpor.html"
+    if os.path.exists(inpor_path):
+        try:
+            with open(inpor_path, "r", encoding="utf-8", errors="ignore") as f:
+                inpor_html = f.read()
+
+            # (선택) 동일 폴더의 mp4를 data-uri로 주입해 inpor.html 기본 영상 대신 사용
+            _video_candidates = [
+                "2026 New year.mp4",
+                "2026년 New year.mp4",
+                "2026_New year.mp4",
+                "2026_New_year.mp4",
+                "2026 New_year.mp4",
+            ]
+            _vp = next((p for p in _video_candidates if os.path.exists(p)), None)
+            if _vp:
+                try:
+                    with open(_vp, "rb") as vf:
+                        _vb = vf.read()
+                    _data_uri = "data:video/mp4;base64," + base64.b64encode(_vb).decode("utf-8")
+                    _default_url = "https://assets.mixkit.co/videos/preview/mixkit-abstract-red-and-white-flow-2336-large.mp4"
+                    if _default_url in inpor_html:
+                        inpor_html = inpor_html.replace(_default_url, _data_uri)
+                except Exception:
+                    pass
+
+            inpor_html = _inject_iframe_autosize(inpor_html)
+            st.components.v1.html(inpor_html, height=1200, scrolling=False)
+        except Exception as e:
+            st.warning(f"inpor.html 렌더링 중 오류가 발생했습니다: {e}")
+    else:
+        st.info("inpor.html 파일이 없습니다. app.py와 같은 폴더에 'inpor.html'을 업로드해 주세요.")
+
+
     st.markdown("<br>", unsafe_allow_html=True)
     _, col_form, _ = st.columns([1, 2, 1])
     with col_form:
