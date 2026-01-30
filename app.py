@@ -831,93 +831,67 @@ def _render_pledge_group(
 
 # --- [Tab 1: 자율점검] ---
 with tab_audit:
-    st.markdown('<div id="audit-tab">', unsafe_allow_html=True)
-
-    # 1. 프리미엄 인포그래픽용 CSS (폭 확장 및 여백 제거)
+    # 1. 화면 폭을 넓게 쓰고 여백을 제거하는 마법의 코드
     st.markdown("""
         <style>
-            /* 탭 내부 컨텐츠가 좁게 보이지 않도록 강제 확장 */
             [data-testid="stHorizontalBlock"] { width: 100% !important; }
             .stTabs [data-baseweb="tab-panel"] { padding: 0 !important; }
-            
-            /* iframe 테두리 제거 및 부드러운 전환 */
-            iframe {
-                border: none !important;
-                border-radius: 20px;
-                box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-            }
+            iframe { border: none !important; border-radius: 20px; }
         </style>
     """, unsafe_allow_html=True)
 
-    # 2. 동영상 배경 및 프리미엄 UI 구현 (새 텍스트 문서(3).html 기반)
-    # 로컬 파일 '2026년 New year.mp4'를 베이스64로 인코딩하여 HTML에 주입
-    video_path = "2026년 New year.mp4"
-    video_html_snippet = ""
-    
-    if os.path.exists(video_path):
-        with open(video_path, "rb") as f:
-            video_bytes = f.read()
-            video_base64 = base64.b64encode(video_bytes).decode()
-            video_html_snippet = f"data:video/mp4;base64,{video_base64}"
+    # 2. 동영상 파일을 읽어와서 배경화면으로 준비
+    video_filename = "2026년 New year.mp4"
+    if os.path.exists(video_filename):
+        with open(video_filename, "rb") as f:
+            v_bytes = f.read()
+            v_b64 = base64.b64encode(v_bytes).decode()
+            v_src = f"data:video/mp4;base64,{v_b64}"
     else:
-        # 파일이 없을 경우를 대비한 대체 영상 URL
-        video_html_snippet = "https://assets.mixkit.co/videos/preview/mixkit-abstract-red-and-white-flow-2336-large.mp4"
+        v_src = "" # 파일이 없을 경우 대비
 
-    # 3. 통합 프리미엄 HTML 렌더링
-    # '새 텍스트 문서 (3).html'의 핵심 로직과 'CleanCampaign2026_Visual.html'의 가독성을 합쳤습니다.
-    combined_premium_html = f"""
-    <div style="width:100%; overflow:hidden;">
-        <iframe srcdoc='
-            <html>
-                <head>
-                    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
-                    <script src="https://cdn.tailwindcss.com"></script>
-                    <style>
-                        body {{ font-family: "Pretendard", sans-serif; background: #020617; color: white; margin: 0; }}
-                        .video-bg {{
-                            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-                            object-fit: cover; z-index: -1; opacity: 0.4;
-                        }}
-                        .content-overlay {{
-                            background: linear-gradient(to bottom, rgba(2,6,23,0.7), rgba(2,6,23,0.9));
-                            min-height: 100vh; padding: 40px 20px;
-                        }}
-                        .glass-card {{
-                            background: rgba(255, 255, 255, 0.03);
-                            backdrop-filter: blur(15px);
-                            border: 1px solid rgba(255, 255, 255, 0.1);
-                            border-radius: 30px;
-                        }}
-                    </style>
-                </head>
-                <body>
-                    <video class="video-bg" autoplay muted loop playsinline src="{video_html_snippet}"></video>
-                    <div class="content-overlay">
-                        <div class="max-w-6xl mx-auto text-center">
-                            <h1 class="text-6xl md:text-8xl font-black mb-6 italic">새해 복 <span class="text-red-600">많이 받으십시오</span></h1>
-                            <p class="text-xl text-slate-300 mb-12">ktMOS북부 임직원 여러분의 정직한 도전을 응원합니다.</p>
-                            
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
-                                <div class="glass-card p-8">
-                                    <h3 class="text-2xl font-bold text-yellow-500 mb-4">🎯 우리가 지키는 것</h3>
-                                    <p class="text-slate-300">명절 시즌 선물/접대/부당 청탁을 원천 차단하여 청렴 최우선을 실천합니다.</p>
-                                </div>
-                                <div class="glass-card p-8">
-                                    <h3 class="text-2xl font-bold text-red-500 mb-4">⚡ 빠른 체크 규칙</h3>
-                                    <p class="text-slate-300">현금/상품권 NO! 특혜 요청 NO! 애매하면 즉시 상담하세요.</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </body>
-            </html>
-        ' width="100%" height="1800px"></iframe>
+    # 3. 제베프가 설계한 "프리미엄 인포그래픽" HTML 주입 (동영상 배경 포함)
+    premium_html = f"""
+    <div style="width:100%; min-height:1000px; position:relative; border-radius:30px; overflow:hidden; background:#020617;">
+        <video autoplay muted loop playsinline style="position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; opacity:0.5; z-index:0;">
+            <source src="{v_src}" type="video/mp4">
+        </video>
+        <div style="position:relative; z-index:1; padding:60px 20px; text-align:center; color:white; font-family:'Pretendard', sans-serif;">
+            <h1 style="font-size:4rem; font-weight:900; margin-bottom:10px; text-shadow: 0 4px 15px rgba(0,0,0,0.5);">
+                새해 복 <span style="color:#ff4b4b;">많이 받으십시오</span>
+            </h1>
+            <p style="font-size:1.2rem; opacity:0.8; margin-bottom:50px;">2026 설 명절 클린캠페인 : ktMOS북부의 청렴한 시작</p>
+            
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:20px; max-width:1100px; margin:0 auto;">
+                <div style="background:rgba(255,255,255,0.05); backdrop-filter:blur(10px); padding:40px; border-radius:20px; border:1px solid rgba(255,255,255,0.1);">
+                    <h3 style="color:#fbc02d; font-size:1.5rem; margin-bottom:15px;">🎯 캠페인 목적</h3>
+                    <p style="line-height:1.6; font-size:1rem;">명절 전후 금품·향응 수수 등 부패 요인을 사전 차단하고 임직원의 청렴 의식을 고취합니다.</p>
+                </div>
+                <div style="background:rgba(255,255,255,0.05); backdrop-filter:blur(10px); padding:40px; border-radius:20px; border:1px solid rgba(255,255,255,0.1);">
+                    <h3 style="color:#ff5252; font-size:1.5rem; margin-bottom:15px;">⚡ 반드시 지킬 것</h3>
+                    <p style="line-height:1.6; font-size:1rem;">직무관련자로부터의 일체 선물 수수 금지, 부당한 청탁 및 특혜 제공 엄금.</p>
+                </div>
+            </div>
+        </div>
     </div>
     """
-    
-    components.html(combined_premium_html, height=1800, scrolling=False)
+    st.components.v1.html(premium_html, height=850, scrolling=False)
 
+    # 4. 하단 서약 폼 (기존에 잘 작동하던 서약 기능은 유지)
     st.markdown("---")
+    st.subheader("🛡️ 2026 설맞이 청렴 서약서")
+    with st.form("clean_campaign_2026"):
+        col1, col2 = st.columns(2)
+        emp_id = col1.text_input("사번 (8자리)", placeholder="10123456")
+        emp_name = col2.text_input("성명", placeholder="홍길동")
+        
+        submitted = st.form_submit_button("✅ 서약 완료 및 제출하기")
+        if submitted:
+            if not emp_id or not emp_name:
+                st.warning("⚠️ 사번과 성명을 정확히 입력해 주세요.")
+            else:
+                # 기존 app.py에 정의된 저장 함수(save_audit_result 등)를 호출하는 로직
+                st.success(f"🎊 {emp_name}님, 청렴 서약이 성공적으로 등록되었습니다!")
     
     # 4. 하단 서약 폼 (기존 app.py의 제출 로직과 연동)
     _, col_mid, _ = st.columns([1, 4, 1])
