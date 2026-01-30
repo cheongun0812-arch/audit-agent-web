@@ -694,141 +694,6 @@ tab_audit, tab_doc, tab_chat, tab_summary, tab_admin = st.tabs([
     "✅ 자율점검", "📄 법률 검토", "💬 AI 에이전트(챗봇)", "📰 스마트 요약", "🔒 관리자 모드"
 ])
 
-# ---------- (아이콘) 인라인 SVG: 애니메이션 모래시계 ----------
-HOURGLASS_SVG = """
-<svg width="18" height="18" viewBox="0 0 24 24" fill="none"
-     xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-  <path d="M6 2h12v5c0 2.2-1.4 4.2-3.5 5 2.1.8 3.5 2.8 3.5 5v5H6v-5c0-2.2 1.4-4.2 3.5-5C7.4 11.2 6 9.2 6 7V2Z"
-        stroke="#0B5ED7" stroke-width="2" stroke-linejoin="round"/>
-  <path d="M8 7h8M8 17h8" stroke="#0B5ED7" stroke-width="2" stroke-linecap="round"/>
-
-  <rect x="9" y="8.2" width="6" height="3.0" rx="1.0" fill="#0B5ED7" opacity="0.95">
-    <animate attributeName="height" values="3.0;0.3;3.0" dur="1.0s" repeatCount="indefinite" />
-    <animate attributeName="y"      values="8.2;10.9;8.2" dur="1.0s" repeatCount="indefinite" />
-  </rect>
-
-  <rect x="9" y="15.8" width="6" height="0.3" rx="1.0" fill="#0B5ED7" opacity="0.95">
-    <animate attributeName="height" values="0.3;3.0;0.3" dur="1.0s" repeatCount="indefinite" />
-    <animate attributeName="y"      values="15.8;13.1;15.8" dur="1.0s" repeatCount="indefinite" />
-  </rect>
-
-  <circle cx="12" cy="12" r="0.8" fill="#0B5ED7" opacity="0.95">
-    <animate attributeName="cy" values="11.2;14.2;11.2" dur="0.6s" repeatCount="indefinite"/>
-    <animate attributeName="opacity" values="0.95;0.2;0.95" dur="0.6s" repeatCount="indefinite"/>
-  </circle>
-  <circle cx="11" cy="12" r="0.6" fill="#0B5ED7" opacity="0.80">
-    <animate attributeName="cy" values="11.0;14.0;11.0" dur="0.7s" repeatCount="indefinite"/>
-    <animate attributeName="opacity" values="0.8;0.15;0.8" dur="0.7s" repeatCount="indefinite"/>
-  </circle>
-  <circle cx="13" cy="12" r="0.6" fill="#0B5ED7" opacity="0.80">
-    <animate attributeName="cy" values="11.4;14.4;11.4" dur="0.8s" repeatCount="indefinite"/>
-    <animate attributeName="opacity" values="0.8;0.15;0.8" dur="0.8s" repeatCount="indefinite"/>
-  </circle>
-</svg>
-"""
-
-COUNTDOWN_SECONDS = 7  # ✅ 요청 확정: 7초
-
-# =========================
-# ✅ 체크 "순간" 감지 + 우측 카운트다운 렌더 유틸
-# =========================
-def _init_pledge_runtime(keys: list[str]) -> None:
-    if "pledge_prev" not in st.session_state:
-        st.session_state["pledge_prev"] = {k: False for k in keys}
-    if "pledge_done" not in st.session_state:
-        st.session_state["pledge_done"] = {k: False for k in keys}
-    if "pledge_running" not in st.session_state:
-        st.session_state["pledge_running"] = {k: False for k in keys}
-
-def _order_enforce_cb(changed_key: str, prereq_keys: list[str], message: str) -> None:
-    """체크 순서가 어긋나면 체크를 되돌리고, 경고 메시지를 세션에 기록합니다."""
-    try:
-        now_checked = bool(st.session_state.get(changed_key, False))
-        prereq_ok = all(bool(st.session_state.get(k, False)) for k in prereq_keys)
-        if now_checked and (not prereq_ok):
-            st.session_state[changed_key] = False
-            st.session_state["order_warning"] = message
-    except Exception:
-        pass
-
-def _render_pledge_group(
-    title: str,
-    items: list[tuple[str, str]],
-    all_keys: list[str],
-    order_guard: dict | None = None,   # {"keys": [...], "prereq": [...], "message": "..."}
-) -> None:
-    st.markdown(f"### ■ {title}")
-
-    guard_keys = set(order_guard.get("keys", [])) if isinstance(order_guard, dict) else set()
-    prereq_keys = list(order_guard.get("prereq", [])) if isinstance(order_guard, dict) else []
-    guard_msg = str(order_guard.get("message", "")) if isinstance(order_guard, dict) else ""
-
-    for key, text in items:
-        c1, c2, c3 = st.columns([0.06, 0.78, 0.16], vertical_alignment="center")
-
-        with c1:
-            cb_kwargs = dict(
-                key=key,
-                label_visibility="collapsed",
-                disabled=bool(st.session_state["pledge_running"].get(key, False)),
-            )
-
-            # ✅ 관리자 서약을 임직원 서약보다 먼저 체크하려 하면: 체크를 되돌리고 토스트 경고
-            if key in guard_keys:
-                cb_kwargs.update(
-                    dict(
-                        on_change=_order_enforce_cb,
-                        args=(key, prereq_keys, guard_msg),
-                    )
-                )
-
-            st.checkbox("", **cb_kwargs)
-
-        with c2:
-            checked = bool(st.session_state.get(key, False))
-            color = "#0B5ED7" if checked else "#2C3E50"
-            weight = "900" if checked else "650"
-            st.markdown(
-                f"<div style='font-size:1.02rem; font-weight:{weight}; color:{color}; line-height:1.55;'>{text}</div>",
-                unsafe_allow_html=True
-            )
-
-        with c3:
-            ph = st.empty()
-            now_checked = bool(st.session_state.get(key, False))
-            prev_checked = bool(st.session_state["pledge_prev"].get(key, False))
-            done = bool(st.session_state["pledge_done"].get(key, False))
-            running = bool(st.session_state["pledge_running"].get(key, False))
-
-            # ✅ 방금 체크된 순간에만 7초 카운트다운 실행
-            if now_checked and (not prev_checked) and (not done) and (not running):
-                st.session_state["pledge_running"][key] = True
-                for sec in range(COUNTDOWN_SECONDS, 0, -1):
-                    ph.markdown(
-                        f"<div class='pledge-right'>{HOURGLASS_SVG}<span>{sec}s</span></div>",
-                        unsafe_allow_html=True
-                    )
-                    time.sleep(1)
-                st.session_state["pledge_running"][key] = False
-                st.session_state["pledge_done"][key] = True
-                ph.markdown(
-                    "<div style='text-align:right; font-weight:900; color:#27AE60;'>✅ 완료</div>",
-                    unsafe_allow_html=True
-                )
-            else:
-                if running:
-                    ph.markdown(
-                        f"<div class='pledge-right'>{HOURGLASS_SVG}<span>...</span></div>",
-                        unsafe_allow_html=True
-                    )
-                elif done and now_checked:
-                    ph.markdown(
-                        "<div style='text-align:right; font-weight:900; color:#27AE60;'>✅ 완료</div>",
-                        unsafe_allow_html=True
-                    )
-                else:
-                    ph.markdown("", unsafe_allow_html=True)
-
 # --- [Tab 1: 자율점검] ---
 with tab_audit:
     # 1. 화면 가독성 및 레이아웃 최적화 스타일
@@ -1033,18 +898,18 @@ with tab_audit:
                     st.warning("⚠️ 모든 필드를 입력해 주세요.")
 # --- (Tab 1 끝) ---
                     
-    st.markdown("### 📄 법률 리스크(계약서)·규정 검토 / 감사보고서 작성·검증")
+        # -------------------------
+        # ⚖️ 커리큘럼 1: 법률 리스크 심층 검토
+        # -------------------------
+        with cur1:
+     st.markdown("### 📄 법률 리스크(계약서)·규정 검토 / 감사보고서 작성·검증")
 
     if "api_key" not in st.session_state:
         st.warning("🔒 로그인 후 이용 가능합니다.")
     else:
         # 2-레벨 메뉴: 커리큘럼 1(법률 리스크) / 커리큘럼 2(감사보고서)
         cur1, cur2 = st.tabs(["⚖️ 커리큘럼 1: 법률 리스크 심층 검토", "🔍 커리큘럼 2: 감사보고서 작성·검증"])
-
-        # -------------------------
-        # ⚖️ 커리큘럼 1: 법률 리스크 심층 검토
-        # -------------------------
-        with cur1:
+    
             st.markdown("#### ⚖️ 법률 리스크 정밀 검토")
             st.caption("PDF/Word/TXT 파일을 업로드하면, 핵심 쟁점·리스크·개선안을 구조적으로 정리합니다.")
 
