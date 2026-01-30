@@ -512,5 +512,36 @@
       </div>
     </section>
   </div>
+
+  <script>
+    // Auto-resize the Streamlit iframe to fit this infographic (no scrolling).
+    (function () {
+      const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
+      const setHeight = () => {
+        const h = Math.max(
+          document.body.scrollHeight,
+          document.documentElement.scrollHeight,
+          document.body.offsetHeight,
+          document.documentElement.offsetHeight
+        );
+        const target = clamp(h, 300, 8000);
+        if (window.frameElement) window.frameElement.style.height = target + "px";
+      };
+
+      window.addEventListener("load", setHeight);
+      window.addEventListener("resize", setHeight);
+
+      if ("ResizeObserver" in window) {
+        const ro = new ResizeObserver(() => setHeight());
+        ro.observe(document.body);
+      }
+
+      // Fallbacks for slower font/layout settling
+      setTimeout(setHeight, 50);
+      setTimeout(setHeight, 250);
+      setTimeout(setHeight, 1000);
+    })();
+  </script>
+
 </body>
 </html>
