@@ -1,0 +1,516 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>CleanCampaign2026 Visual</title>
+  <style>
+    :root{
+      --bg0:#070B14;
+      --bg1:#0B1220;
+      --card:#0F172A;
+      --card2:#111C33;
+      --ink:#E6EEF9;
+      --muted:rgba(230,238,249,.72);
+      --line:rgba(148,163,184,.22);
+      --gold:#FBBF24;
+      --red:#E11D48;
+      --blue:#38BDF8;
+      --green:#34D399;
+      --shadow: 0 18px 45px rgba(0,0,0,.35);
+      --radius: 22px;
+      --radius2: 16px;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+      color:var(--ink);
+      background:
+        radial-gradient(900px 600px at 15% 5%, rgba(251,191,36,.18), transparent 55%),
+        radial-gradient(700px 520px at 85% 10%, rgba(225,29,72,.18), transparent 55%),
+        radial-gradient(900px 700px at 50% 95%, rgba(56,189,248,.12), transparent 58%),
+        linear-gradient(180deg, var(--bg0), var(--bg1));
+    }
+    a{color:inherit}
+    .wrap{
+      width:min(1100px, 94vw);
+      margin:0 auto;
+      padding:34px 0 46px;
+    }
+
+    /* Top hero */
+    .hero{
+      position:relative;
+      overflow:hidden;
+      border:1px solid var(--line);
+      border-radius: var(--radius);
+      background: linear-gradient(135deg, rgba(15,23,42,.96), rgba(15,23,42,.78));
+      box-shadow: var(--shadow);
+      padding:28px 28px 24px;
+    }
+    .hero::before{
+      content:"";
+      position:absolute; inset:-2px;
+      background: radial-gradient(650px 350px at 10% 10%, rgba(251,191,36,.35), transparent 60%),
+                  radial-gradient(520px 320px at 88% 18%, rgba(225,29,72,.28), transparent 60%),
+                  radial-gradient(620px 420px at 60% 110%, rgba(56,189,248,.18), transparent 60%);
+      pointer-events:none;
+      filter:saturate(1.08);
+    }
+    .hero-inner{position:relative; display:grid; gap:18px; grid-template-columns: 1.25fr .75fr; align-items:center;}
+    .kicker{
+      display:inline-flex; align-items:center; gap:10px;
+      padding:8px 12px;
+      border-radius: 999px;
+      border:1px solid rgba(251,191,36,.35);
+      background: rgba(251,191,36,.08);
+      font-weight:800;
+      letter-spacing:.6px;
+      font-size:12.5px;
+      color: rgba(251,191,36,.95);
+      width:max-content;
+    }
+    .title{
+      font-size: 38px;
+      line-height: 1.08;
+      margin:8px 0 0;
+      font-weight: 950;
+      letter-spacing:-.7px;
+    }
+    .subtitle{
+      margin:10px 0 0;
+      font-size: 14.6px;
+      line-height: 1.65;
+      color: var(--muted);
+      max-width: 62ch;
+    }
+    .hero-badges{display:flex; flex-wrap:wrap; gap:10px; margin-top:14px;}
+    .badge{
+      padding:8px 10px;
+      border:1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(17,28,51,.55);
+      font-size: 12.5px;
+      color: rgba(230,238,249,.86);
+      display:inline-flex; align-items:center; gap:8px;
+      font-weight: 760;
+    }
+    .badge b{color: var(--gold)}
+    .orn{
+      position:relative;
+      height: 220px;
+      border-radius: 18px;
+      border:1px solid var(--line);
+      background: linear-gradient(135deg, rgba(17,28,51,.72), rgba(17,28,51,.35));
+      overflow:hidden;
+    }
+    .orn svg{position:absolute; inset:0; width:100%; height:100%;}
+    .orn .note{
+      position:absolute; inset:auto 16px 14px 16px;
+      font-size: 12.5px;
+      color: rgba(230,238,249,.78);
+      line-height:1.45;
+      background: rgba(15,23,42,.55);
+      border:1px solid rgba(148,163,184,.22);
+      border-radius: 14px;
+      padding:10px 12px;
+      backdrop-filter: blur(6px);
+    }
+
+    /* Section layout */
+    .grid{
+      margin-top: 18px;
+      display:grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 14px;
+    }
+    .card{
+      border:1px solid var(--line);
+      border-radius: var(--radius2);
+      background: linear-gradient(180deg, rgba(15,23,42,.92), rgba(15,23,42,.75));
+      box-shadow: 0 10px 25px rgba(0,0,0,.22);
+      padding: 18px 18px 16px;
+      position:relative;
+      overflow:hidden;
+    }
+    .card::after{
+      content:"";
+      position:absolute; inset:-1px;
+      background: radial-gradient(520px 280px at 10% 0%, rgba(251,191,36,.10), transparent 55%),
+                  radial-gradient(520px 280px at 95% 0%, rgba(225,29,72,.10), transparent 55%);
+      pointer-events:none;
+    }
+    .card > *{position:relative}
+    .h{
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      margin-bottom: 10px;
+    }
+    .h .label{
+      display:inline-flex; align-items:center; gap:10px;
+      font-weight: 920;
+      letter-spacing:.2px;
+    }
+    .h .label small{
+      font-weight: 800;
+      font-size: 11.5px;
+      color: rgba(230,238,249,.65);
+      border:1px solid rgba(148,163,184,.22);
+      border-radius:999px;
+      padding:5px 8px;
+      background: rgba(17,28,51,.4);
+    }
+    .p{
+      color: var(--muted);
+      font-size: 13.8px;
+      line-height: 1.65;
+      margin:0;
+    }
+    .pill{
+      display:inline-flex; align-items:center; gap:8px;
+      font-size:12.2px;
+      padding:7px 9px;
+      border-radius: 999px;
+      background: rgba(56,189,248,.10);
+      border: 1px solid rgba(56,189,248,.25);
+      color: rgba(230,238,249,.88);
+      font-weight: 800;
+    }
+    .pill.red{background: rgba(225,29,72,.10); border-color: rgba(225,29,72,.25)}
+    .pill.gold{background: rgba(251,191,36,.10); border-color: rgba(251,191,36,.30)}
+    .pill.green{background: rgba(52,211,153,.10); border-color: rgba(52,211,153,.25)}
+    .stats{
+      display:grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap:12px;
+      margin-top: 12px;
+    }
+    .stat{
+      border:1px solid rgba(148,163,184,.18);
+      border-radius: 14px;
+      background: rgba(17,28,51,.48);
+      padding: 12px;
+    }
+    .stat .k{font-size:12px; color: rgba(230,238,249,.64); font-weight: 800; letter-spacing:.3px;}
+    .stat .v{font-size: 16px; font-weight: 950; margin-top:6px;}
+    .stat .v b{color: var(--gold)}
+    .two-col{display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-top: 12px;}
+    .list{
+      margin:0; padding:0; list-style:none;
+      display:grid; gap:9px;
+      font-size:13.3px;
+      color: rgba(230,238,249,.82);
+      line-height:1.55;
+    }
+    .li{
+      display:flex; gap:10px; align-items:flex-start;
+      padding:10px 10px;
+      border:1px solid rgba(148,163,184,.16);
+      border-radius: 14px;
+      background: rgba(17,28,51,.42);
+    }
+    .dot{
+      width: 22px; height: 22px; border-radius: 50%;
+      display:grid; place-items:center;
+      flex: 0 0 auto;
+      margin-top: 1px;
+      background: rgba(251,191,36,.14);
+      border: 1px solid rgba(251,191,36,.28);
+      color: rgba(251,191,36,.95);
+      font-weight: 950;
+      font-size: 12px;
+    }
+    .dot.red{background: rgba(225,29,72,.14); border-color: rgba(225,29,72,.28); color: rgba(225,29,72,.95)}
+    .dot.blue{background: rgba(56,189,248,.14); border-color: rgba(56,189,248,.28); color: rgba(56,189,248,.95)}
+    .dot.green{background: rgba(52,211,153,.14); border-color: rgba(52,211,153,.28); color: rgba(52,211,153,.95)}
+    .li b{color: var(--ink)}
+    .li small{display:block; color: rgba(230,238,249,.64); font-weight: 650; margin-top:3px}
+
+    /* Flow */
+    .flow{
+      display:grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .step{
+      border:1px solid rgba(148,163,184,.18);
+      border-radius: 16px;
+      background: rgba(17,28,51,.50);
+      padding: 12px 12px 11px;
+      position:relative;
+      overflow:hidden;
+    }
+    .step::before{
+      content:"";
+      position:absolute; inset:-1px;
+      background: radial-gradient(320px 180px at 10% 0%, rgba(56,189,248,.12), transparent 60%);
+      pointer-events:none;
+    }
+    .step > *{position:relative}
+    .step .n{
+      display:flex; align-items:center; justify-content:space-between;
+      font-weight: 950;
+      letter-spacing:.2px;
+    }
+    .step .n span{color: rgba(230,238,249,.62); font-size: 12px; font-weight: 850}
+    .step .t{margin-top:8px; color: rgba(230,238,249,.78); font-size: 13px; line-height: 1.55;}
+    .arrow{
+      text-align:center;
+      color: rgba(148,163,184,.75);
+      font-weight: 950;
+      margin-top: 8px;
+      letter-spacing: 2px;
+      user-select:none;
+    }
+
+    /* Footer */
+    .footer{
+      margin-top: 14px;
+      border:1px dashed rgba(148,163,184,.30);
+      border-radius: 18px;
+      padding: 14px 14px 12px;
+      color: rgba(230,238,249,.70);
+      background: rgba(17,28,51,.36);
+      font-size: 12.6px;
+      line-height: 1.6;
+    }
+
+    /* Grid placement */
+    .c1{grid-column: span 12;}
+    .c2{grid-column: span 7;}
+    .c3{grid-column: span 5;}
+    .c4{grid-column: span 6;}
+    .c5{grid-column: span 6;}
+    .c6{grid-column: span 12;}
+
+    @media (max-width: 860px){
+      .hero-inner{grid-template-columns: 1fr; }
+      .orn{height: 200px;}
+      .stats{grid-template-columns: 1fr; }
+      .two-col{grid-template-columns: 1fr;}
+      .flow{grid-template-columns: 1fr;}
+      .c2,.c3,.c4,.c5{grid-column: span 12;}
+      .title{font-size: 30px;}
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <section class="hero" aria-label="Lunar New Year Clean Campaign">
+      <div class="hero-inner">
+        <div>
+          <div class="kicker">🎍 Lunar New Year Clean Campaign · 2026</div>
+          <h1 class="title">Keep it clean.<br/>Keep it fair.</h1>
+          <p class="subtitle">
+            During the Lunar New Year season, risks related to gifts, entertainment, improper solicitation,
+            and conflicts of interest tend to rise. This campaign helps everyone stay aligned with integrity,
+            transparency, and respectful workplace principles.
+          </p>
+
+          <div class="hero-badges">
+            <div class="badge">🛡️ Focus: <b>Gifts · Hospitality · Solicitation</b></div>
+            <div class="badge">⚖️ Principle: <b>Fair & Transparent</b></div>
+            <div class="badge">🤝 Culture: <b>Respect & No Pressure</b></div>
+          </div>
+        </div>
+
+        <div class="orn" aria-hidden="true">
+          <svg viewBox="0 0 520 320" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="rgba(251,191,36,.55)"/>
+                <stop offset=".55" stop-color="rgba(225,29,72,.40)"/>
+                <stop offset="1" stop-color="rgba(56,189,248,.28)"/>
+              </linearGradient>
+              <filter id="blur" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur stdDeviation="18"/>
+              </filter>
+            </defs>
+
+            <!-- soft blobs -->
+            <circle cx="130" cy="95" r="88" fill="url(#g1)" filter="url(#blur)" opacity=".85"/>
+            <circle cx="410" cy="110" r="78" fill="url(#g1)" filter="url(#blur)" opacity=".70"/>
+            <circle cx="320" cy="245" r="95" fill="url(#g1)" filter="url(#blur)" opacity=".62"/>
+
+            <!-- minimal lanterns -->
+            <g opacity=".95">
+              <path d="M120 60c0-18 14-32 32-32s32 14 32 32v62c0 18-14 32-32 32s-32-14-32-32V60Z"
+                    fill="rgba(225,29,72,.22)" stroke="rgba(225,29,72,.55)" stroke-width="2"/>
+              <path d="M152 22v12" stroke="rgba(251,191,36,.8)" stroke-width="2" stroke-linecap="round"/>
+              <path d="M138 56h28" stroke="rgba(251,191,36,.75)" stroke-width="2" stroke-linecap="round" opacity=".9"/>
+              <path d="M138 96h28" stroke="rgba(251,191,36,.60)" stroke-width="2" stroke-linecap="round" opacity=".7"/>
+              <path d="M152 156v10" stroke="rgba(251,191,36,.8)" stroke-width="2" stroke-linecap="round"/>
+            </g>
+
+            <g opacity=".95">
+              <path d="M345 78c0-18 14-32 32-32s32 14 32 32v62c0 18-14 32-32 32s-32-14-32-32V78Z"
+                    fill="rgba(251,191,36,.18)" stroke="rgba(251,191,36,.55)" stroke-width="2"/>
+              <path d="M377 40v12" stroke="rgba(56,189,248,.85)" stroke-width="2" stroke-linecap="round"/>
+              <path d="M363 74h28" stroke="rgba(56,189,248,.70)" stroke-width="2" stroke-linecap="round" opacity=".9"/>
+              <path d="M363 114h28" stroke="rgba(56,189,248,.55)" stroke-width="2" stroke-linecap="round" opacity=".7"/>
+              <path d="M377 174v10" stroke="rgba(56,189,248,.85)" stroke-width="2" stroke-linecap="round"/>
+            </g>
+
+            <!-- confetti lines -->
+            <g opacity=".45">
+              <path d="M50 250l60-40" stroke="rgba(251,191,36,.7)" stroke-width="3" stroke-linecap="round"/>
+              <path d="M80 275l35-25" stroke="rgba(225,29,72,.65)" stroke-width="3" stroke-linecap="round"/>
+              <path d="M420 250l55-35" stroke="rgba(56,189,248,.65)" stroke-width="3" stroke-linecap="round"/>
+              <path d="M435 280l30-20" stroke="rgba(52,211,153,.65)" stroke-width="3" stroke-linecap="round"/>
+            </g>
+          </svg>
+
+          <div class="note">
+            ✅ Complete your pledge in the app.<br/>
+            🎁 If participation reaches 50%, a raffle may be held (per internal policy).
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid" aria-label="Campaign content">
+      <!-- Goals -->
+      <div class="card c2">
+        <div class="h">
+          <div class="label">🎯 What we’re protecting <small>Goal</small></div>
+          <div class="pill gold">Integrity first</div>
+        </div>
+        <p class="p">
+          Keep decisions and relationships clean and fair during a season where external interactions increase.
+          Our standard is simple: <b>no benefits, no pressure, no gray areas</b>.
+        </p>
+        <div class="stats">
+          <div class="stat">
+            <div class="k">Focus area</div>
+            <div class="v"><b>Gifts</b> & hospitality</div>
+          </div>
+          <div class="stat">
+            <div class="k">Risk area</div>
+            <div class="v">Improper <b>solicitation</b></div>
+          </div>
+          <div class="stat">
+            <div class="k">Culture</div>
+            <div class="v"><b>Respect</b> & no coercion</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick rules -->
+      <div class="card c3">
+        <div class="h">
+          <div class="label">⚡ Quick rules <small>3 lines</small></div>
+          <div class="pill red">When in doubt, stop</div>
+        </div>
+        <ul class="list">
+          <li class="li"><span class="dot">1</span>
+            <div><b>No cash, gift cards, or expensive gifts</b><small>Decline politely. Avoid “token” workarounds.</small></div>
+          </li>
+          <li class="li"><span class="dot blue">2</span>
+            <div><b>No special favors / “please help me” requests</b><small>Keep process-based decisions and records.</small></div>
+          </li>
+          <li class="li"><span class="dot green">3</span>
+            <div><b>Consult early & document</b><small>Ask before acting, not after a problem.</small></div>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Do / Don't -->
+      <div class="card c4">
+        <div class="h">
+          <div class="label">✅ Do / ❌ Don’t <small>Behavior guide</small></div>
+          <div class="pill">Simple & consistent</div>
+        </div>
+        <div class="two-col">
+          <div>
+            <div class="pill green">✅ Do</div>
+            <ul class="list" style="margin-top:10px">
+              <li class="li"><span class="dot green">✓</span><div><b>Decline gifts courteously</b><small>Use “company policy” as the reason.</small></div></li>
+              <li class="li"><span class="dot green">✓</span><div><b>Stick to standard process</b><small>RFP, review, approval flows—no shortcuts.</small></div></li>
+              <li class="li"><span class="dot green">✓</span><div><b>Separate personal & business ties</b><small>Disclose potential conflicts early.</small></div></li>
+            </ul>
+          </div>
+          <div>
+            <div class="pill red">❌ Don’t</div>
+            <ul class="list" style="margin-top:10px">
+              <li class="li"><span class="dot red">×</span><div><b>Accept “small” gift cards</b><small>These create traceable risk and expectations.</small></div></li>
+              <li class="li"><span class="dot red">×</span><div><b>Attend lavish entertainment</b><small>If unavoidable, consult beforehand.</small></div></li>
+              <li class="li"><span class="dot red">×</span><div><b>Let pressure drive decisions</b><small>“Just this once” becomes a pattern.</small></div></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Common scenarios -->
+      <div class="card c5">
+        <div class="h">
+          <div class="label">🧩 Common scenarios <small>Red flags</small></div>
+          <div class="pill red">Watch-outs</div>
+        </div>
+        <ul class="list">
+          <li class="li"><span class="dot red">!</span>
+            <div><b>Vendor sends a holiday package</b><small>Decline/return and report if required by policy.</small></div>
+          </li>
+          <li class="li"><span class="dot blue">!</span>
+            <div><b>“Can you prioritize our request?”</b><small>Stick to queue/criteria. Keep written records.</small></div>
+          </li>
+          <li class="li"><span class="dot">!</span>
+            <div><b>Friend/relative’s company involved</b><small>Disclose and remove yourself from decisions.</small></div>
+          </li>
+          <li class="li"><span class="dot green">!</span>
+            <div><b>After-hours gatherings feel coercive</b><small>Respect boundaries; avoid pressured participation.</small></div>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Flowchart -->
+      <div class="card c6">
+        <div class="h">
+          <div class="label">🧭 If you’re unsure, use this flow <small>3 steps</small></div>
+          <div class="pill">Fast decision aid</div>
+        </div>
+
+        <div class="flow">
+          <div class="step">
+            <div class="n">Step 1 <span>Pause</span></div>
+            <div class="t">Would this look questionable if publicly disclosed? Is there any benefit/expectation attached?</div>
+          </div>
+          <div class="step">
+            <div class="n">Step 2 <span>Consult</span></div>
+            <div class="t">Check internal guidance or consult the Audit/Compliance channel before proceeding.</div>
+          </div>
+          <div class="step">
+            <div class="n">Step 3 <span>Document</span></div>
+            <div class="t">Keep simple written records for decisions, approvals, and communications.</div>
+          </div>
+        </div>
+
+        <div class="arrow">→ → →</div>
+
+        <div class="two-col">
+          <div class="stat">
+            <div class="k">Recommended wording</div>
+            <div class="v" style="font-size:14px; font-weight:900; color:rgba(230,238,249,.9)">
+              “Thank you, but I must decline due to company policy.”
+            </div>
+          </div>
+          <div class="stat">
+            <div class="k">Remember</div>
+            <div class="v" style="font-size:14px; font-weight:900; color:rgba(230,238,249,.9)">
+              Ask early. <span style="color:var(--gold)">Prevention</span> is easier than remediation.
+            </div>
+          </div>
+        </div>
+
+        <div class="footer">
+          <b>Note:</b> This visual is a campaign guide for awareness. Please follow your organization’s
+          official code of conduct and internal policy. For reporting/consultation, use the Audit Office or the
+          designated internal channel.
+        </div>
+      </div>
+    </section>
+  </div>
+</body>
+</html>
