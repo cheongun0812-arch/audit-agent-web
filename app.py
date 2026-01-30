@@ -64,32 +64,32 @@ html { font-size: 16.2px; }
 [data-testid="stSidebar"] { background-color: #2C3E50; }
 [data-testid="stSidebar"] * { color: #FFFFFF !important; }
 
-/* 2월 캠페인 전용 스타일 */
-.clean-container { max-width: 850px; margin: 0 auto; }
-div[data-testid="stForm"] {
+/* 설맞이 클린캠페인 전용 스타일 (자율점검 탭에만 적용) */
+.clean-campaign-scope .clean-container { max-width: 850px; margin: 0 auto; }
+.clean-campaign-scope div[data-testid="stForm"] {
     background-color: #0F172A !important;
     border: 2px solid #334155 !important;
     border-radius: 25px !important;
     padding: 30px !important;
 }
-.stTextInput input {
+.clean-campaign-scope .stTextInput input {
     background-color: #1E293B !important;
     color: white !important;
     border: 1px solid #475569 !important;
     height: 55px !important;
     text-align: center !important;
 }
-.stSelectbox div[role="combobox"] { background-color: #1E293B !important; color: white !important; height: 55px !important; }
+.clean-campaign-scope .stSelectbox div[role="combobox"] { background-color: #1E293B !important; color: white !important; height: 55px !important; }
 
 /* 버튼 스타일 */
-.stButton > button, div[data-testid="stFormSubmitButton"] > button {
+.clean-campaign-scope .stButton > button, .clean-campaign-scope div[data-testid="stFormSubmitButton"] > button {
     background: linear-gradient(to right, #2980B9, #2C3E50) !important;
     color: #FFFFFF !important;
     font-weight: 800 !important;
 }
 
 /* 캠페인 제출 버튼 커스텀 */
-.clean-submit button {
+.clean-campaign-scope .clean-submit button {
     background: linear-gradient(to right, #E11D48, #9F1239) !important;
     height: 65px !important;
     font-size: 1.3rem !important;
@@ -180,10 +180,11 @@ tab_audit, tab_doc, tab_chat, tab_summary, tab_admin = st.tabs([
     "✅ 자율점검", "📄 법률 검토", "💬 AI 에이전트(챗봇)", "📰 스마트 요약", "🔒 관리자 모드"
 ])
 
-# --- [Tab 1: 자율점검 - 2월 클린 캠페인 전용] ---
+# --- [Tab 1: 자율점검 - 2026 설맞이 클린캠페인] ---
 with tab_audit:
-    CAMPAIGN_SHEET = "2026_02_클린캠페인"
+    CAMPAIGN_SHEET = "2026_설_클린캠페인"
     TOTAL_STAFF = 979 # 전사 정원
+    st.markdown('<div class="clean-campaign-scope">', unsafe_allow_html=True)
 
     # 상단 비주얼 인포그래픽 렌더링
     try:
@@ -208,7 +209,7 @@ with tab_audit:
             </div>
         """, unsafe_allow_html=True)
 
-        with st.form("campaign_2026_feb"):
+        with st.form("campaign_2026_seol"):
             r1c1, r1c2 = st.columns([2, 1])
             f_id = r1c1.text_input("사번", placeholder="사번(1000****) 없으면 (8*******)")
             f_name = r1c2.text_input("성함", placeholder="성명")
@@ -248,6 +249,7 @@ with tab_audit:
                 </div>
             """, unsafe_allow_html=True)
 
+    st.markdown('</div>', unsafe_allow_html=True)
 # --- [Tab 2~5: 법률 검토, 챗봇 등 기존 기능] ---
 # (베프님이 올려주신 app.py의 Tab 2부터 마지막 라인까지의 모든 코드를 이 아래에 그대로 붙여넣으면 됩니다.)
 with tab_doc:
