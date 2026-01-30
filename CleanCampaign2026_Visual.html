@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="ko">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>CleanCampaign2026 Visual</title>
+  <title>2026 설맞이 클린캠페인 인포그래픽</title>
   <style>
     :root{
       --bg0:#070B14;
@@ -32,8 +32,8 @@
         radial-gradient(700px 520px at 85% 10%, rgba(225,29,72,.18), transparent 55%),
         radial-gradient(900px 700px at 50% 95%, rgba(56,189,248,.12), transparent 58%),
         linear-gradient(180deg, var(--bg0), var(--bg1));
+      overflow:hidden; /* iframe 내부 스크롤 방지 */
     }
-    a{color:inherit}
     .wrap{
       width:min(1100px, 94vw);
       margin:0 auto;
@@ -66,7 +66,7 @@
       border-radius: 999px;
       border:1px solid rgba(251,191,36,.35);
       background: rgba(251,191,36,.08);
-      font-weight:800;
+      font-weight:900;
       letter-spacing:.6px;
       font-size:12.5px;
       color: rgba(251,191,36,.95);
@@ -95,7 +95,7 @@
       font-size: 12.5px;
       color: rgba(230,238,249,.86);
       display:inline-flex; align-items:center; gap:8px;
-      font-weight: 760;
+      font-weight: 820;
     }
     .badge b{color: var(--gold)}
     .orn{
@@ -149,11 +149,11 @@
     }
     .h .label{
       display:inline-flex; align-items:center; gap:10px;
-      font-weight: 920;
+      font-weight: 950;
       letter-spacing:.2px;
     }
     .h .label small{
-      font-weight: 800;
+      font-weight: 850;
       font-size: 11.5px;
       color: rgba(230,238,249,.65);
       border:1px solid rgba(148,163,184,.22);
@@ -175,7 +175,7 @@
       background: rgba(56,189,248,.10);
       border: 1px solid rgba(56,189,248,.25);
       color: rgba(230,238,249,.88);
-      font-weight: 800;
+      font-weight: 850;
     }
     .pill.red{background: rgba(225,29,72,.10); border-color: rgba(225,29,72,.25)}
     .pill.gold{background: rgba(251,191,36,.10); border-color: rgba(251,191,36,.30)}
@@ -192,7 +192,7 @@
       background: rgba(17,28,51,.48);
       padding: 12px;
     }
-    .stat .k{font-size:12px; color: rgba(230,238,249,.64); font-weight: 800; letter-spacing:.3px;}
+    .stat .k{font-size:12px; color: rgba(230,238,249,.64); font-weight: 850; letter-spacing:.3px;}
     .stat .v{font-size: 16px; font-weight: 950; margin-top:6px;}
     .stat .v b{color: var(--gold)}
     .two-col{display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-top: 12px;}
@@ -225,7 +225,7 @@
     .dot.blue{background: rgba(56,189,248,.14); border-color: rgba(56,189,248,.28); color: rgba(56,189,248,.95)}
     .dot.green{background: rgba(52,211,153,.14); border-color: rgba(52,211,153,.28); color: rgba(52,211,153,.95)}
     .li b{color: var(--ink)}
-    .li small{display:block; color: rgba(230,238,249,.64); font-weight: 650; margin-top:3px}
+    .li small{display:block; color: rgba(230,238,249,.64); font-weight: 700; margin-top:3px}
 
     /* Flow */
     .flow{
@@ -298,22 +298,21 @@
 </head>
 
 <body>
-  <div class="wrap">
-    <section class="hero" aria-label="Lunar New Year Clean Campaign">
+  <div id="__infographic_root" class="wrap">
+    <section class="hero" aria-label="설맞이 클린캠페인">
       <div class="hero-inner">
         <div>
-          <div class="kicker">🎍 Lunar New Year Clean Campaign · 2026</div>
-          <h1 class="title">Keep it clean.<br/>Keep it fair.</h1>
+          <div class="kicker">🎍 설맞이 클린캠페인 · 2026</div>
+          <h1 class="title">깨끗하게.<br/>공정하게.</h1>
           <p class="subtitle">
-            During the Lunar New Year season, risks related to gifts, entertainment, improper solicitation,
-            and conflicts of interest tend to rise. This campaign helps everyone stay aligned with integrity,
-            transparency, and respectful workplace principles.
+            설 명절 전·후에는 대외 접촉이 늘어 <b>선물·접대·금품 수수</b> 등 리스크가 높아질 수 있습니다.
+            이번 캠페인은 모두가 <b>청렴·공정 원칙</b>을 다시 확인하고, 서로를 존중하는 문화를 지키기 위한 안내입니다.
           </p>
 
           <div class="hero-badges">
-            <div class="badge">🛡️ Focus: <b>Gifts · Hospitality · Solicitation</b></div>
-            <div class="badge">⚖️ Principle: <b>Fair & Transparent</b></div>
-            <div class="badge">🤝 Culture: <b>Respect & No Pressure</b></div>
+            <div class="badge">🛡️ 핵심: <b>선물 · 접대 · 청탁</b></div>
+            <div class="badge">⚖️ 원칙: <b>공정 · 투명</b></div>
+            <div class="badge">🤝 문화: <b>존중 · 강요 금지</b></div>
           </div>
         </div>
 
@@ -364,36 +363,36 @@
           </svg>
 
           <div class="note">
-            ✅ Complete your pledge in the app.<br/>
-            🎁 If participation reaches 50%, a raffle may be held (per internal policy).
+            ✅ 앱에서 <b>서약 완료</b> 후 참여가 집계됩니다.<br/>
+            🎁 이벤트/추첨 여부는 사내 기준에 따릅니다.
           </div>
         </div>
       </div>
     </section>
 
-    <section class="grid" aria-label="Campaign content">
+    <section class="grid" aria-label="캠페인 안내">
       <!-- Goals -->
       <div class="card c2">
         <div class="h">
-          <div class="label">🎯 What we’re protecting <small>Goal</small></div>
-          <div class="pill gold">Integrity first</div>
+          <div class="label">🎯 우리가 지키는 것 <small>목적</small></div>
+          <div class="pill gold">청렴 최우선</div>
         </div>
         <p class="p">
-          Keep decisions and relationships clean and fair during a season where external interactions increase.
-          Our standard is simple: <b>no benefits, no pressure, no gray areas</b>.
+          명절 시즌에는 외부 이해관계자와의 접촉이 늘어날 수 있습니다.
+          기준은 간단합니다: <b>받지 않기 · 부탁받지 않기 · 애매하면 멈추기</b>.
         </p>
         <div class="stats">
           <div class="stat">
-            <div class="k">Focus area</div>
-            <div class="v"><b>Gifts</b> & hospitality</div>
+            <div class="k">주요 주제</div>
+            <div class="v"><b>선물</b>·접대</div>
           </div>
           <div class="stat">
-            <div class="k">Risk area</div>
-            <div class="v">Improper <b>solicitation</b></div>
+            <div class="k">주의 영역</div>
+            <div class="v">부당 <b>청탁</b></div>
           </div>
           <div class="stat">
-            <div class="k">Culture</div>
-            <div class="v"><b>Respect</b> & no coercion</div>
+            <div class="k">조직문화</div>
+            <div class="v"><b>존중</b>·강요 금지</div>
           </div>
         </div>
       </div>
@@ -401,18 +400,18 @@
       <!-- Quick rules -->
       <div class="card c3">
         <div class="h">
-          <div class="label">⚡ Quick rules <small>3 lines</small></div>
-          <div class="pill red">When in doubt, stop</div>
+          <div class="label">⚡ 빠른 체크 <small>3줄 규칙</small></div>
+          <div class="pill red">애매하면 중단</div>
         </div>
         <ul class="list">
           <li class="li"><span class="dot">1</span>
-            <div><b>No cash, gift cards, or expensive gifts</b><small>Decline politely. Avoid “token” workarounds.</small></div>
+            <div><b>현금/상품권/고가 선물은 NO</b><small>작은 금액이라도 “관행”이 되면 위험합니다.</small></div>
           </li>
           <li class="li"><span class="dot blue">2</span>
-            <div><b>No special favors / “please help me” requests</b><small>Keep process-based decisions and records.</small></div>
+            <div><b>특혜·우선처리 요청은 NO</b><small>기준/절차에 따라 공정하게 처리합니다.</small></div>
           </li>
           <li class="li"><span class="dot green">3</span>
-            <div><b>Consult early & document</b><small>Ask before acting, not after a problem.</small></div>
+            <div><b>먼저 상담하고 기록하기</b><small>문제 발생 후가 아니라, ‘전에’ 확인하세요.</small></div>
           </li>
         </ul>
       </div>
@@ -420,24 +419,24 @@
       <!-- Do / Don't -->
       <div class="card c4">
         <div class="h">
-          <div class="label">✅ Do / ❌ Don’t <small>Behavior guide</small></div>
-          <div class="pill">Simple & consistent</div>
+          <div class="label">✅ 이렇게 / ❌ 이렇게는 <small>행동 가이드</small></div>
+          <div class="pill">단순·일관</div>
         </div>
         <div class="two-col">
           <div>
-            <div class="pill green">✅ Do</div>
+            <div class="pill green">✅ 이렇게</div>
             <ul class="list" style="margin-top:10px">
-              <li class="li"><span class="dot green">✓</span><div><b>Decline gifts courteously</b><small>Use “company policy” as the reason.</small></div></li>
-              <li class="li"><span class="dot green">✓</span><div><b>Stick to standard process</b><small>RFP, review, approval flows—no shortcuts.</small></div></li>
-              <li class="li"><span class="dot green">✓</span><div><b>Separate personal & business ties</b><small>Disclose potential conflicts early.</small></div></li>
+              <li class="li"><span class="dot green">✓</span><div><b>정중히 거절</b><small>“회사 정책상 받을 수 없습니다.”</small></div></li>
+              <li class="li"><span class="dot green">✓</span><div><b>절차 준수</b><small>심사·승인·기록 흐름을 지킵니다.</small></div></li>
+              <li class="li"><span class="dot green">✓</span><div><b>이해충돌 사전 공유</b><small>지인/가족 관련이면 즉시 알립니다.</small></div></li>
             </ul>
           </div>
           <div>
-            <div class="pill red">❌ Don’t</div>
+            <div class="pill red">❌ 이렇게는</div>
             <ul class="list" style="margin-top:10px">
-              <li class="li"><span class="dot red">×</span><div><b>Accept “small” gift cards</b><small>These create traceable risk and expectations.</small></div></li>
-              <li class="li"><span class="dot red">×</span><div><b>Attend lavish entertainment</b><small>If unavoidable, consult beforehand.</small></div></li>
-              <li class="li"><span class="dot red">×</span><div><b>Let pressure drive decisions</b><small>“Just this once” becomes a pattern.</small></div></li>
+              <li class="li"><span class="dot red">×</span><div><b>상품권·현금성 수수</b><small>명확한 리스크가 됩니다.</small></div></li>
+              <li class="li"><span class="dot red">×</span><div><b>과도한 접대 동행</b><small>피할 수 없으면 사전 상담이 필요합니다.</small></div></li>
+              <li class="li"><span class="dot red">×</span><div><b>압력에 따른 결정</b><small>“이번만”이 반복을 만듭니다.</small></div></li>
             </ul>
           </div>
         </div>
@@ -446,21 +445,21 @@
       <!-- Common scenarios -->
       <div class="card c5">
         <div class="h">
-          <div class="label">🧩 Common scenarios <small>Red flags</small></div>
-          <div class="pill red">Watch-outs</div>
+          <div class="label">🧩 자주 생기는 상황 <small>레드 플래그</small></div>
+          <div class="pill red">주의</div>
         </div>
         <ul class="list">
           <li class="li"><span class="dot red">!</span>
-            <div><b>Vendor sends a holiday package</b><small>Decline/return and report if required by policy.</small></div>
+            <div><b>업체가 명절 선물을 보냄</b><small>반송/거절 원칙. 필요 시 내부 절차에 따라 보고.</small></div>
           </li>
           <li class="li"><span class="dot blue">!</span>
-            <div><b>“Can you prioritize our request?”</b><small>Stick to queue/criteria. Keep written records.</small></div>
+            <div><b>“우리 건 먼저 해주세요” 요청</b><small>기준/순서대로 처리하고 기록을 남깁니다.</small></div>
           </li>
           <li class="li"><span class="dot">!</span>
-            <div><b>Friend/relative’s company involved</b><small>Disclose and remove yourself from decisions.</small></div>
+            <div><b>지인/친인척 업체가 관련됨</b><small>즉시 공유하고 의사결정에서 제외합니다.</small></div>
           </li>
           <li class="li"><span class="dot green">!</span>
-            <div><b>After-hours gatherings feel coercive</b><small>Respect boundaries; avoid pressured participation.</small></div>
+            <div><b>회식·모임이 강요 분위기</b><small>참여 강요 금지, 서로의 경계를 존중합니다.</small></div>
           </li>
         </ul>
       </div>
@@ -468,22 +467,22 @@
       <!-- Flowchart -->
       <div class="card c6">
         <div class="h">
-          <div class="label">🧭 If you’re unsure, use this flow <small>3 steps</small></div>
-          <div class="pill">Fast decision aid</div>
+          <div class="label">🧭 헷갈릴 때 이렇게 <small>3단계</small></div>
+          <div class="pill">즉시 판단</div>
         </div>
 
         <div class="flow">
           <div class="step">
-            <div class="n">Step 1 <span>Pause</span></div>
-            <div class="t">Would this look questionable if publicly disclosed? Is there any benefit/expectation attached?</div>
+            <div class="n">1단계 <span>멈추기</span></div>
+            <div class="t">외부에 공개돼도 떳떳한가요? 기대/대가가 붙어 있나요?</div>
           </div>
           <div class="step">
-            <div class="n">Step 2 <span>Consult</span></div>
-            <div class="t">Check internal guidance or consult the Audit/Compliance channel before proceeding.</div>
+            <div class="n">2단계 <span>상담하기</span></div>
+            <div class="t">내부 지침 확인 또는 감사/준법 채널에 사전 문의하세요.</div>
           </div>
           <div class="step">
-            <div class="n">Step 3 <span>Document</span></div>
-            <div class="t">Keep simple written records for decisions, approvals, and communications.</div>
+            <div class="n">3단계 <span>기록하기</span></div>
+            <div class="t">결정·승인·커뮤니케이션을 간단히라도 남깁니다.</div>
           </div>
         </div>
 
@@ -491,57 +490,94 @@
 
         <div class="two-col">
           <div class="stat">
-            <div class="k">Recommended wording</div>
-            <div class="v" style="font-size:14px; font-weight:900; color:rgba(230,238,249,.9)">
-              “Thank you, but I must decline due to company policy.”
+            <div class="k">권장 문구</div>
+            <div class="v" style="font-size:14px; font-weight:950; color:rgba(230,238,249,.9)">
+              “감사하지만 회사 정책상 받을 수 없습니다.”
             </div>
           </div>
           <div class="stat">
-            <div class="k">Remember</div>
-            <div class="v" style="font-size:14px; font-weight:900; color:rgba(230,238,249,.9)">
-              Ask early. <span style="color:var(--gold)">Prevention</span> is easier than remediation.
+            <div class="k">기억하세요</div>
+            <div class="v" style="font-size:14px; font-weight:950; color:rgba(230,238,249,.9)">
+              미리 확인이 가장 빠른 해결입니다. <span style="color:var(--gold)">예방</span>이 최선입니다.
             </div>
           </div>
         </div>
 
         <div class="footer">
-          <b>Note:</b> This visual is a campaign guide for awareness. Please follow your organization’s
-          official code of conduct and internal policy. For reporting/consultation, use the Audit Office or the
-          designated internal channel.
+          <b>참고:</b> 본 인포그래픽은 캠페인 안내용입니다. 최종 기준은 사내 윤리규범/지침 및 내부 절차에 따르며,
+          필요 시 감사/준법 담당 채널로 상담 또는 신고해 주세요.
         </div>
       </div>
     </section>
   </div>
 
   <script>
-    // Auto-resize the Streamlit iframe to fit this infographic (no scrolling).
+    // Streamlit components.html iframe 자동 높이 조절 (스크롤 없이)
     (function () {
-      const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
-      const setHeight = () => {
+      const MIN = 300;
+      const MAX = 12000;
+      const root = document.getElementById("__infographic_root") || document.body;
+      let last = 0;
+
+      const clamp = (n) => Math.min(MAX, Math.max(MIN, n));
+
+      const measure = () => {
+        const rectH = Math.ceil(root.getBoundingClientRect().height || 0);
         const h = Math.max(
-          document.body.scrollHeight,
-          document.documentElement.scrollHeight,
-          document.body.offsetHeight,
-          document.documentElement.offsetHeight
+          root.scrollHeight || 0,
+          root.offsetHeight || 0,
+          rectH,
+          document.body.scrollHeight || 0,
+          document.documentElement.scrollHeight || 0
         );
-        const target = clamp(h, 300, 8000);
-        if (window.frameElement) window.frameElement.style.height = target + "px";
+        return clamp(h + 12);
       };
 
-      window.addEventListener("load", setHeight);
-      window.addEventListener("resize", setHeight);
+      const apply = () => {
+        const target = measure();
+        const fe = window.frameElement;
+        if (!fe) return;
+
+        // 작은 변화는 무시 (깜빡임 방지)
+        if (Math.abs(target - last) < 2) return;
+
+        fe.style.height = target + "px";
+        fe.setAttribute("height", String(target));
+        try { fe.height = target; } catch (e) {}
+        last = target;
+      };
+
+      const pump = (ms) => {
+        const start = performance.now();
+        const tick = () => {
+          apply();
+          if (performance.now() - start < ms) requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      };
+
+      const ready = () => {
+        apply();
+        pump(2500);
+        setTimeout(apply, 50);
+        setTimeout(apply, 250);
+        setTimeout(() => { apply(); pump(1200); }, 1200);
+      };
+
+      window.addEventListener("load", ready);
+      window.addEventListener("resize", () => { apply(); pump(800); });
+      document.addEventListener("DOMContentLoaded", ready);
 
       if ("ResizeObserver" in window) {
-        const ro = new ResizeObserver(() => setHeight());
+        const ro = new ResizeObserver(() => apply());
+        ro.observe(root);
         ro.observe(document.body);
       }
 
-      // Fallbacks for slower font/layout settling
-      setTimeout(setHeight, 50);
-      setTimeout(setHeight, 250);
-      setTimeout(setHeight, 1000);
+      if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(() => { apply(); pump(1200); }).catch(() => {});
+      }
     })();
   </script>
-
 </body>
 </html>

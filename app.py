@@ -960,7 +960,7 @@ with tab_audit:
             visual_html = None
 
     if visual_html:
-        components.html(visual_html, height=120, scrolling=False)  # auto-resized by JS inside the HTML
+        components.html(visual_html, height=2200, scrolling=False)  # auto-resized by JS inside the HTML
     else:
         st.error("⚠️ 캠페인 인포그래픽 파일(CleanCampaign2026_Visual.html)을 찾을 수 없습니다. app.py와 같은 폴더에 파일을 두거나, ?dev=1 모드에서 업로드해 주세요.")
 
