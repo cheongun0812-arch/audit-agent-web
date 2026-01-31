@@ -870,6 +870,8 @@ with tab_audit:
     </div>
     """, unsafe_allow_html=True)
 
+    # ... (이후 캠페인 아젠다 및 서약 로직은 동일)
+
     # --------- 데이터(운세/슬로건) : inpor.html의 구조를 Streamlit로 포팅 ---------
     fortune_db = {
         "지속적인 성장": [
