@@ -836,522 +836,290 @@ with tab_audit:
 
     # ============================================================
     # 2026 설 명절 클린 캠페인 (Self-inspection)
-    # - 기존 "윤리경영원칙실천지침" 관련 학습/서약 UI는 전부 제거
-    # - inpor.html(첨부) 콘텐츠를 그대로 이식하여 표시
-    # - 첫 화면(히어로)에는 '말이 달리는 영상'이 반드시 재생되도록 교체
+    # - 기존 1월 자율점검(윤리경영원칙실천지침) 학습/서약 UI는 표시하지 않음
+    # - inpor.html의 문구/레이아웃 흐름(1~5)을 Streamlit UI로 이식
+    # - 1번 섹션(히어로)은 '말이 달리는 영상'이 자동 재생되도록 적용
     # ============================================================
-    import streamlit.components.v1 as components
 
-    HORSE_VIDEO_URL = "https://upload.wikimedia.org/wikipedia/commons/1/18/Muybridge_race_horse.webm"
+    import random
+    import datetime as _dt
 
-    CAMPAIGN_HTML = r"""<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>2026 ktMOS북부 설 맞이 클린캠페인</title>
-    <!-- React & Libraries -->
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-    
-    <!-- Premium Font: Pretendard -->
-    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
-
+    # --------- 스타일 (inpor.html 톤 & 글래스모피즘) ---------
+    st.markdown("""
     <style>
-        body { font-family: 'Pretendard', sans-serif; letter-spacing: -0.02em; scroll-behavior: smooth; }
-        @keyframes fade-in-up { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes scale-in { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
-        @keyframes scan { 0% { transform: translateY(-100%); opacity: 0; } 50% { opacity: 1; } 100% { transform: translateY(100%); opacity: 0; } }
-        @keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-10px); } 100% { transform: translateY(0px); } }
-        
-        .animate-fade-in-up { animation: fade-in-up 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
-        .animate-scale-in { animation: scale-in 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
-        .animate-scan { animation: scan 2s infinite linear; }
-        .animate-float { animation: float 3s ease-in-out infinite; }
-        
-        .video-background { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
-        .counter-glitch { font-variant-numeric: tabular-nums; }
-        
-        .custom-alert {
-            position: fixed;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 10000;
-            animation: fade-in-up 0.3s ease-out forwards;
-        }
-
-        /* Custom Scrollbar */
-        ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: #0f172a; }
-        ::-webkit-scrollbar-thumb { background: #ef4444; border-radius: 10px; }
-        
-        .glass-panel {
-            background: rgba(255, 255, 255, 0.03);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
+      @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css');
+      #audit-tab { font-family: 'Pretendard', sans-serif; }
+      #audit-tab .page { background: #020617; color: #f1f5f9; padding: 0; }
+      #audit-tab .video-container { position: relative; width: 100%; height: 520px; overflow: hidden; border-radius: 28px; margin: 10px 0 36px; }
+      #audit-tab .video-bg { width: 100%; height: 100%; object-fit: cover; opacity: 0.65; }
+      #audit-tab .hero-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 24px; }
+      #audit-tab .pill { display: inline-block; padding: 6px 16px; border-radius: 999px; border: 1px solid rgba(239,68,68,0.45); background: rgba(239,68,68,0.18); color: #ef4444; font-weight: 800; font-size: 0.85rem; }
+      #audit-tab .title-white { font-size: 4.0rem; font-weight: 950; letter-spacing: -0.04em; line-height: 1.0; }
+      #audit-tab .title-red { color: #ef4444; font-weight: 950; }
+      #audit-tab .sub { font-size: 1.15rem; color: #cbd5e1; margin-top: 18px; line-height: 1.6; font-weight: 600; }
+      #audit-tab .glass { background: rgba(255,255,255,0.05); backdrop-filter: blur(14px); border: 1px solid rgba(255,255,255,0.10); border-radius: 28px; padding: 28px; box-shadow: 0 20px 60px rgba(0,0,0,0.35); }
+      #audit-tab .glass:hover { border-color: rgba(239,68,68,0.65); transform: translateY(-2px); transition: 0.25s ease; }
+      #audit-tab .section-title { text-align: center; font-size: 2.3rem; font-weight: 950; margin: 28px 0 18px; letter-spacing: -0.02em; }
+      #audit-tab .section-kicker { text-align:center; color:#ef4444; letter-spacing: 0.38em; font-weight: 900; font-size: 0.82rem; margin-top: 10px; }
+      #audit-tab .muted { color: #94a3b8; font-weight: 600; }
+      #audit-tab .btn-grad button { background: linear-gradient(90deg,#ef4444,#f97316) !important; color: white !important; border: none !important; border-radius: 16px !important; font-weight: 900 !important; height: 3.2rem !important; width: 100%; }
+      #audit-tab .hero-btn { display:inline-block; width: 240px; max-width: 100%; padding: 14px 18px; border-radius: 16px; background: linear-gradient(90deg,#ef4444,#f97316); color: #fff; font-weight: 950; text-decoration: none; }\n      #audit-tab .hero-btn:hover { filter: brightness(1.05); }\n      #audit-tab .btn-ghost button { background: rgba(255,255,255,0.08) !important; color: #e2e8f0 !important; border: 1px solid rgba(255,255,255,0.14) !important; border-radius: 16px !important; font-weight: 800 !important; height: 3.2rem !important; width: 100%; }
+      #audit-tab .metric { text-align:center; font-weight: 950; font-size: 0.92rem; letter-spacing: 0.16em; opacity: 0.45; margin-top: 18px; }
+      #audit-tab .scan-wrap { margin: 10px 0 6px; }
+      @keyframes scan { 0%{transform:translateY(0); opacity:0;} 35%{opacity:1;} 100%{transform:translateY(160px); opacity:0;} }
+      #audit-tab .scan-line { width:100%; height:4px; background:#ef4444; box-shadow: 0 0 18px #ef4444; animation: scan 1.8s infinite linear; border-radius: 999px; }
     </style>
-</head>
-<body class="bg-slate-950 text-slate-100 antialiased overflow-x-hidden">
-    <div id="root"></div>
+    """, unsafe_allow_html=True)
 
-    <!-- Firebase SDK Setup -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, query, doc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    # --------- 데이터(운세/슬로건) : inpor.html의 구조를 Streamlit로 포팅 ---------
+    fortune_db = {
+        "지속적인 성장": [
+            {"slogan": "투명한 도약, 붉은 말처럼 거침없이 성장하는 한 해", "fortune": "올해 당신의 청렴 에너지는 99%! 투명한 업무 처리가 곧 당신의 독보적인 커리어가 됩니다."},
+            {"slogan": "정직이라는 박차를 가해 더 높은 곳으로 질주하세요", "fortune": "거짓 없는 성장이 가장 빠른 길입니다. 주변의 두터운 신뢰가 당신의 든든한 날개가 될 것입니다."},
+        ],
+        "가족의 행복": [
+            {"slogan": "떳떳한 마음이 선사하는 가장 따뜻한 행복의 해", "fortune": "가족에게 부끄럽지 않은 당신의 정직함이 집안의 평안과 웃음꽃을 불러옵니다."},
+            {"slogan": "깨끗한 소통으로 피어나는 동료 간의 진정한 즐거움", "fortune": "작은 호의보다 큰 진심이 통하는 한 해입니다. 사람 사이의 신뢰가 최고의 행운입니다."},
+        ],
+        "새로운 도전": [
+            {"slogan": "청렴의 가치를 지키며 한계를 넘어 질주하는 2026", "fortune": "어려운 순간에도 원칙을 지키는 모습이 동료들에게 가장 큰 영감이 될 것입니다."},
+            {"slogan": "정직한 도전은 결코 멈추지 않는 붉은 말과 같습니다", "fortune": "타협하지 않는 용기가 당신을 독보적인 전문가로 만들어주는 결정적 한 해가 됩니다."},
+        ],
+    }
 
-        window.FirebaseSDK = { 
-            initializeApp, getAuth, signInAnonymously, signInWithCustomToken, 
-            onAuthStateChanged, getFirestore, collection, addDoc, onSnapshot, 
-            query, doc, setDoc 
-        };
-    </script>
+    # --------- 0) 데이터 저장소(서약 참여): Google Sheet 사용(실시간/중복 방지) ---------
+    PLEDGE_WS_TITLE = "2026_LNY_CLEAN_PLEDGE"
+    TOTAL_EMPLOYEES = int(st.secrets.get("TOTAL_EMPLOYEES", 500)) if hasattr(st, "secrets") else 500
+    THRESHOLD_COUNT = max(1, int(TOTAL_EMPLOYEES * 0.5))  # 50% 기준
 
-    <script type="text/babel">
-        const { useState, useEffect, useRef, useMemo } = React;
+    def _get_pledge_ws():
+        try:
+            client = init_google_sheet_connection()
+            if not client:
+                return None
+            ss = client.open("Audit_Result_2026")
+            try:
+                ws = ss.worksheet(PLEDGE_WS_TITLE)
+            except Exception:
+                ws = ss.add_worksheet(title=PLEDGE_WS_TITLE, rows=2000, cols=10)
+                ws.append_row(["timestamp", "emp_id", "name"])
+            return ws
+        except Exception:
+            return None
 
-        const Icon = ({ name, size = 24, className = "" }) => {
-            useEffect(() => { if (window.lucide) window.lucide.createIcons(); }, [name]);
-            return <i data-lucide={name} style={{ width: size, height: size }} className={className}></i>;
-        };
+    def _load_pledges(ws):
+        if ws is None:
+            return []
+        try:
+            rows = ws.get_all_values()
+            if not rows or len(rows) < 2:
+                return []
+            out = []
+            for r in rows[1:]:
+                if len(r) >= 3 and r[1].strip():
+                    out.append({"emp_id": r[1].strip(), "name": r[2].strip()})
+            return out
+        except Exception:
+            return []
 
-        const App = () => {
-            const [user, setUser] = useState(null);
-            const [empId, setEmpId] = useState('');
-            const [empName, setEmpName] = useState('');
-            const [isPledged, setIsPledged] = useState(false);
-            const [isMuted, setIsMuted] = useState(true);
-            const [videoSrc, setVideoSrc] = useState("https://assets.mixkit.co/videos/preview/mixkit-abstract-red-and-white-flow-2336-large.mp4"); // 기본 배경 영상
-            const [pledges, setPledges] = useState([]);
-            const [displayRate, setDisplayRate] = useState(0);
-            const [isScanning, setIsScanning] = useState(false);
-            const [scanResult, setScanResult] = useState(null);
-            const [selectedGoal, setSelectedGoal] = useState('');
-            const [alertMsg, setAlertMsg] = useState('');
-            const videoRef = useRef(null);
+    def _append_pledge(ws, emp_id: str, name: str) -> bool:
+        if ws is None:
+            # 최소 보장: 세션 내 저장
+            st.session_state.setdefault("_pledges_local", [])
+            st.session_state["_pledges_local"].append({"emp_id": emp_id, "name": name})
+            return True
+        try:
+            now = _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            ws.append_row([now, emp_id, name])
+            return True
+        except Exception:
+            return False
 
-            const TOTAL_EMPLOYEES = 500; 
-            const appId = typeof __app_id !== 'undefined' ? __app_id : 'ktmos-clean-2026';
+    ws_pledge = _get_pledge_ws()
+    pledges = _load_pledges(ws_pledge) if ws_pledge is not None else st.session_state.get("_pledges_local", [])
+    pledge_count = len(pledges)
+    pledge_rate = (pledge_count / max(1, TOTAL_EMPLOYEES)) * 100
+    threshold_rate = (pledge_count / max(1, THRESHOLD_COUNT)) * 100
 
-            // Fortune Data
-            const fortuneDB = {
-                growth: [
-                    { slogan: "투명한 도약, 붉은 말처럼 거침없이 성장하는 한 해", fortune: "올해 당신의 청렴 에너지는 99%! 투명한 업무 처리가 곧 당신의 독보적인 커리어가 됩니다." },
-                    { slogan: "정직이라는 박차를 가해 더 높은 곳으로 질주하세요", fortune: "거짓 없는 성장이 가장 빠른 길입니다. 주변의 두터운 신뢰가 당신의 든든한 날개가 될 것입니다." },
-                    { slogan: "신뢰의 레이스, 당신의 깨끗한 실력이 승리를 결정합니다", fortune: "원칙을 지키는 힘이 ktMOS의 미래를 만드는 가장 강력한 성장 동력이 됩니다." }
-                ],
-                happiness: [
-                    { slogan: "떳떳한 마음이 선사하는 가장 따뜻한 행복의 해", fortune: "가족에게 부끄럽지 않은 당신의 정직함이 집안의 평안과 웃음꽃을 불러옵니다." },
-                    { slogan: "깨끗한 소통으로 피어나는 동료 간의 진정한 즐거움", fortune: "작은 호의보다 큰 진심이 통하는 한 해입니다. 사람 사이의 신뢰가 최고의 행운입니다." }
-                ],
-                challenge: [
-                    { slogan: "청렴의 가치를 지키며 한계를 넘어 질주하는 2026", fortune: "어려운 순간에도 원칙을 지키는 모습이 동료들에게 가장 큰 영감이 될 것입니다." },
-                    { slogan: "정직한 도전은 결코 멈추지 않는 붉은 말과 같습니다", fortune: "타협하지 않는 용기가 당신을 독보적인 전문가로 만들어주는 결정적 한 해가 됩니다." }
-                ]
-            };
+    # -------------------------
+    # 1) HERO (첨부 이미지 1 흐름)
+    # -------------------------
+    HORSE_VIDEO_URL = "https://upload.wikimedia.org/wikipedia/commons/1/18/Muybridge_race_horse.webm"
+    st.markdown("""<div class='page'>""", unsafe_allow_html=True)
+    st.markdown(f"""
+    <div class='video-container'>
+      <video class='video-bg' autoplay loop muted playsinline>
+        <source src='{HORSE_VIDEO_URL}' type='video/webm'>
+      </video>
+      <div class='hero-overlay'>
+        <div>
+          <div class='pill'>2026 병오년(丙午年) : 붉은 말의 해</div>
+          <div style='height:14px;'></div>
+          <div class='title-white'>새해 복<br/><span class='title-red'>많이 받으십시오</span></div>
+          <div class='sub'>ktMOS북부 임직원 여러분, 정직과 신뢰를 바탕으로<br/>더 크게 도약하고 성장하는 2026년이 되시길 기원합니다.</div>
+          <div style='height:20px;'></div>
+          <div style='height:8px;'></div>
+          <a href='#campaign' class='hero-btn'>캠페인 확인하기</a>
+        </div>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-            // Firebase Initialize & Auth (Rule 3)
-            useEffect(() => {
-                const { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } = window.FirebaseSDK;
-                const firebaseConfig = JSON.parse(__firebase_config);
-                const app = initializeApp(firebaseConfig);
-                const auth = getAuth(app);
+    # -------------------------
+    # 2) AI 청렴 아우라 분석 (첨부 이미지 2 흐름)
+    # -------------------------
+    st.markdown("<div id='campaign'></div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-title'>2026 청렴 아우라 분석</div>", unsafe_allow_html=True)
 
-                const initAuth = async () => {
-                    try {
-                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                            await signInWithCustomToken(auth, __initial_auth_token);
-                        } else {
-                            await signInAnonymously(auth);
-                        }
-                    } catch (error) {
-                        console.error("Auth Error:", error);
-                    }
-                };
-                
-                initAuth();
-                const unsubscribe = onAuthStateChanged(auth, setUser);
-                return () => unsubscribe();
-            }, []);
+    c1, c2 = st.columns(2)
+    with c1:
+        scan_name = st.text_input("성함", placeholder="성함을 입력하세요", key="lny_scan_name")
+    with c2:
+        scan_goal = st.selectbox("올해의 주요 목표", ["", "지속적인 성장", "가족의 행복", "새로운 도전"], key="lny_scan_goal")
 
-            // Real-time Data Fetching (Rule 1 & 2)
-            useEffect(() => {
-                if (!user) return;
-                const { getFirestore, collection, onSnapshot } = window.FirebaseSDK;
-                const db = getFirestore();
-                
-                // Strict Path Rule 1
-                const pledgeCol = collection(db, 'artifacts', appId, 'public', 'data', 'pledges');
-                
-                const unsubscribe = onSnapshot(pledgeCol, (snapshot) => {
-                    setPledges(snapshot.docs.map(doc => doc.data()));
-                }, (err) => {
-                    console.error("Firestore Error:", err);
-                });
-                
-                return () => unsubscribe();
-            }, [user]);
+    scan_btn_col = st.container()
+    with scan_btn_col:
+        st.markdown("<div class='btn-grad'>", unsafe_allow_html=True)
+        do_scan = st.button("✨ 청렴 기운 스캔하기", key="lny_scan_btn")
+        st.markdown("</div>", unsafe_allow_html=True)
 
-            // Progress Bar Animation
-            useEffect(() => {
-                if (isPledged || pledges.length > 0) {
-                    const targetRate = Math.min(100, (pledges.length / TOTAL_EMPLOYEES) * 100);
-                    let start = 0;
-                    const duration = 1500;
-                    const steps = 60;
-                    const increment = targetRate / steps;
-                    const timer = setInterval(() => {
-                        start += increment;
-                        if (start >= targetRate) {
-                            setDisplayRate(targetRate.toFixed(1));
-                            clearInterval(timer);
-                        } else {
-                            setDisplayRate(start.toFixed(1));
-                        }
-                    }, duration / steps);
-                    return () => clearInterval(timer);
-                }
-            }, [isPledged, pledges.length]);
+    if do_scan:
+        if not scan_name or not scan_goal:
+            st.error("성함과 목표를 입력/선택해 주세요.")
+        else:
+            with st.status("청렴 아우라 분석 중...", expanded=True) as status:
+                st.write("정직도 데이터 스캔 중...")
+                st.markdown("<div class='scan-wrap'><div class='scan-line'></div></div>", unsafe_allow_html=True)
+                time.sleep(1.2)
+                st.write("2026년 운세 데이터 매칭 중...")
+                time.sleep(0.8)
+                status.update(label="분석 완료!", state="complete")
+            res = random.choice(fortune_db.get(scan_goal, fortune_db["지속적인 성장"]))
+            st.markdown(f"""
+            <div class='glass' style='text-align:center; border: 2px solid rgba(239,68,68,0.75);'>
+              <div style='font-weight:900; color:#ef4444; letter-spacing:0.22em; font-size:0.8rem;'>SCAN COMPLETED</div>
+              <div style='font-size:1.85rem; font-weight:950; margin: 18px 0 10px; letter-spacing:-0.02em;'>“{res['slogan']}”</div>
+              <div class='muted' style='font-size:1.08rem; font-style:italic; line-height:1.7;'>{res['fortune']}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-            const showAlert = (msg) => {
-                setAlertMsg(msg);
-                setTimeout(() => setAlertMsg(''), 4000);
-            };
+    st.markdown("<div style='height:42px;'></div>", unsafe_allow_html=True)
 
-            const fireFireworks = () => {
-                const end = Date.now() + 3 * 1000;
-                const frame = () => {
-                    confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#ff0000', '#ffd700'] });
-                    confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#ff0000', '#ffd700'] });
-                    if (Date.now() < end) requestAnimationFrame(frame);
-                };
-                frame();
-            };
+    # -------------------------
+    # 3) 캠페인 아젠다 (첨부 이미지 3 흐름)
+    # -------------------------
+    st.markdown("<div class='section-kicker'>CLEAN FESTIVAL POLICY</div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-title'>설 명절 클린 캠페인 아젠다</div>", unsafe_allow_html=True)
 
-            const toggleMute = () => {
-                if (videoRef.current) {
-                    videoRef.current.muted = !videoRef.current.muted;
-                    setIsMuted(videoRef.current.muted);
-                }
-            };
+    a1, a2, a3 = st.columns(3)
+    with a1:
+        st.markdown("""<div class='glass'>
+            <div style='width:54px;height:54px;border-radius:16px;background:#ef4444;display:flex;align-items:center;justify-content:center;font-size:1.4rem;margin-bottom:18px;'>🎁</div>
+            <div style='font-weight:950;font-size:1.25rem;margin-bottom:8px;'>선물 안 주고 안 받기</div>
+            <div class='muted' style='font-size:0.95rem;line-height:1.6;'>협력사 및 이해관계자와의 명절 선물 교환은 금지됩니다. 마음만 정중히 받겠습니다.</div>
+        </div>""", unsafe_allow_html=True)
+    with a2:
+        st.markdown("""<div class='glass'>
+            <div style='width:54px;height:54px;border-radius:16px;background:#f97316;display:flex;align-items:center;justify-content:center;font-size:1.4rem;margin-bottom:18px;'>☕</div>
+            <div style='font-weight:950;font-size:1.25rem;margin-bottom:8px;'>향응 및 편의 제공 금지</div>
+            <div class='muted' style='font-size:0.95rem;line-height:1.6;'>부적절한 식사 대접이나 골프 등 편의 제공은 원천 차단하여 투명성을 지킵니다.</div>
+        </div>""", unsafe_allow_html=True)
+    with a3:
+        st.markdown("""<div class='glass'>
+            <div style='width:54px;height:54px;border-radius:16px;background:#f59e0b;display:flex;align-items:center;justify-content:center;font-size:1.4rem;margin-bottom:18px;'>🛡️</div>
+            <div style='font-weight:950;font-size:1.25rem;margin-bottom:8px;'>부득이한 경우 자진신고</div>
+            <div class='muted' style='font-size:0.95rem;line-height:1.6;'>택배 등으로 배송된 선물은 반송이 원칙이며, 불가피할 시 클린센터로 즉시 신고합니다.</div>
+        </div>""", unsafe_allow_html=True)
 
-            const handlePledgeSubmit = async (e) => {
-                e.preventDefault();
-                if (!user) { showAlert("연결 중입니다. 잠시 후 다시 시도해 주세요."); return; }
-                if (!empId || !empName) return;
+    st.markdown("<div style='height:46px;'></div>", unsafe_allow_html=True)
 
-                // 중복 체크 (Memory level filter - Rule 2)
-                if (pledges.some(p => p.empId === empId)) {
-                    showAlert(`${empName}님은 이미 서약에 참여하셨습니다.`);
-                    setIsPledged(true);
-                    return;
-                }
+    # -------------------------
+    # 4) 신고 채널 (첨부 이미지 4 흐름)
+    # -------------------------
+    r1, r2 = st.columns([1, 2])
+    with r1:
+        st.markdown("<div style='font-size:2.0rem;font-weight:950;line-height:1.2;'>비윤리 행위<br/><span class='title-red'>신고 채널</span></div>", unsafe_allow_html=True)
+        st.markdown("<div class='muted' style='margin-top:12px; line-height:1.7;'>부정부패 없는 ktMOS북부를 위해<br/>여러분의 용기 있는 목소리가 필요합니다.</div>", unsafe_allow_html=True)
+    with r2:
+        st.markdown("""
+        <div style='display:grid;grid-template-columns:1fr 1fr;gap:14px;'>
+          <div class='glass' style='padding:20px;'>
+            <div class='muted' style='font-size:0.78rem;letter-spacing:0.18em;text-transform:uppercase;'>감사실 직통</div>
+            <div style='font-weight:950;font-size:1.45rem;margin-top:6px;'>02-3414-1919</div>
+          </div>
+          <div class='glass' style='padding:20px;'>
+            <div class='muted' style='font-size:0.78rem;letter-spacing:0.18em;text-transform:uppercase;'>사이버 신문고</div>
+            <div style='font-weight:950;font-size:1.45rem;margin-top:6px;'>바로가기</div>
+          </div>
+          <div class='glass' style='padding:20px;grid-column: span 2;'>
+            <div class='muted' style='font-size:0.78rem;letter-spacing:0.18em;text-transform:uppercase;'>이메일 제보</div>
+            <div style='font-weight:950;font-size:1.45rem;margin-top:6px;'>ethics@ktmos.com</div>
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
 
-                const { getFirestore, collection, addDoc } = window.FirebaseSDK;
-                const db = getFirestore();
-                try {
-                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'pledges'), {
-                        empId, empName, timestamp: Date.now(), uid: user.uid
-                    });
-                    setIsPledged(true);
-                    fireFireworks();
-                } catch (err) {
-                    showAlert("서약 저장 중 오류가 발생했습니다.");
-                }
-            };
+    st.markdown("<div style='height:70px;'></div>", unsafe_allow_html=True)
 
-            const runAIScan = () => {
-                if (!empName || !selectedGoal) { showAlert("성함과 목표를 먼저 입력해 주세요."); return; }
-                setIsScanning(true);
-                setScanResult(null);
-                setTimeout(() => {
-                    const options = fortuneDB[selectedGoal];
-                    setScanResult(options[Math.floor(Math.random() * options.length)]);
-                    setIsScanning(false);
-                }, 2000);
-            };
+    # -------------------------
+    # 5) 청렴 실천 응원 이벤트/서약 (첨부 이미지 5 흐름)
+    # -------------------------
+    st.markdown("<div style='text-align:center; font-size:2.6rem; font-weight:950; letter-spacing:-0.02em;'>스스로 다짐하는<br/><span class='title-red'>청렴 서약</span></div>", unsafe_allow_html=True)
 
-            const handleVideoUpload = (e) => {
-                const file = e.target.files[0];
-                if (file) setVideoSrc(URL.createObjectURL(file));
-            };
+    st.markdown("""
+    <div class='glass' style='max-width:920px; margin: 26px auto 18px; text-align:center;'>
+      <div style='font-size:2.8rem; margin-bottom:14px;'>🏅</div>
+      <div style='font-size:1.5rem; font-weight:950; margin-bottom:8px;'>🎁 청렴 실천 응원 이벤트</div>
+      <div class='muted' style='font-size:1.02rem; line-height:1.7;'>전 임직원의 <span class='title-red'>50% 이상</span>이 서약에 참여하시면,<br/>참여자 중 <b>50분</b>을 추첨하여 새해 첫 모바일 커피 쿠폰을 드립니다!</div>
+    </div>
+    """, unsafe_allow_html=True)
 
-            return (
-                <div className="min-h-screen bg-slate-950">
-                    {/* Floating Alert */}
-                    {alertMsg && (
-                        <div className="custom-alert bg-red-600 text-white px-6 py-3 rounded-2xl shadow-2xl font-bold flex items-center gap-2 border border-red-400">
-                            <Icon name="alert-circle" size={20} /> {alertMsg}
-                        </div>
-                    )}
+    # 실시간 참여율 (전체 대비) + 50% 기준 Progress
+    st.markdown("<div style='max-width:920px; margin: 0 auto;'>", unsafe_allow_html=True)
+    m1, m2, m3 = st.columns(3)
+    m1.metric("현재 참여 인원", f"{pledge_count}명")
+    m2.metric("현재 참여율(전체)", f"{pledge_rate:.1f}%")
+    m3.metric("50% 달성률", f"{threshold_rate:.1f}%")
+    st.progress(min(1.0, pledge_count / max(1, THRESHOLD_COUNT)))
+    st.markdown(f"<div class='metric'>CURRENT : {pledge_count} SIGNATURES</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
-                    {/* 1. Hero Section */}
-                    <section className="relative h-screen flex flex-col items-center justify-center text-center px-6 overflow-hidden">
-                        <video ref={videoRef} className="video-background opacity-40" autoPlay muted loop playsInline src={videoSrc}></video>
-                        <div className="absolute inset-0 bg-gradient-to-b from-slate-950/80 via-transparent to-slate-950 z-[1]"></div>
-                        
-                        <div className="z-10 animate-fade-in-up max-w-5xl">
-                            <div className="inline-block px-4 py-1.5 rounded-full bg-red-600/20 border border-red-600/30 text-red-500 font-bold text-sm tracking-widest mb-6 animate-pulse">
-                                2026 병오년(丙午年) : 붉은 말의 해
-                            </div>
-                            <h1 className="text-6xl md:text-9xl font-black mb-6 tracking-tighter leading-[0.9] italic">
-                                새해 복 <br/> <span className="text-red-600">많이 받으십시오</span>
-                            </h1>
-                            <p className="text-xl md:text-2xl text-slate-300 font-medium max-w-3xl mx-auto leading-relaxed mb-12">
-                                ktMOS북부 임직원 여러분, 정직과 신뢰를 바탕으로 <br className="hidden md:block"/>
-                                더 크게 도약하고 성장하는 2026년이 되시길 기원합니다.
-                            </p>
-                            <div className="flex flex-wrap justify-center gap-4">
-                                <a href="#campaign" className="px-10 py-4 bg-red-600 text-white font-black rounded-2xl hover:bg-red-500 transition-all shadow-[0_0_30px_rgba(220,38,38,0.4)] hover:scale-105">캠페인 확인하기</a>
-                                <button onClick={toggleMute} className="p-4 bg-white/10 border border-white/20 rounded-2xl backdrop-blur-md hover:bg-white/20 transition-all">
-                                    <Icon name={isMuted ? "volume-x" : "volume-2"} />
-                                </button>
-                                <label className="p-4 bg-white/10 border border-white/20 rounded-2xl backdrop-blur-md hover:bg-white/20 transition-all cursor-pointer">
-                                    <Icon name="upload" />
-                                    <input type="file" className="hidden" accept="video/*" onChange={handleVideoUpload} />
-                                </label>
-                            </div>
-                        </div>
-                    </section>
+    st.markdown("<div style='height:14px;'></div>", unsafe_allow_html=True)
 
-                    {/* 2. AI Aura Scanner */}
-                    <section className="py-24 px-6 relative overflow-hidden">
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-red-600/10 rounded-full blur-[120px]"></div>
-                        <div className="max-w-4xl mx-auto text-center relative z-10">
-                            <h2 className="text-4xl md:text-5xl font-black mb-16 tracking-tight">2026 청렴 아우라 분석</h2>
-                            
-                            <div className="glass-panel p-8 md:p-12 rounded-[3rem] shadow-2xl">
-                                <div className="grid md:grid-cols-2 gap-4 mb-8">
-                                    <input 
-                                        type="text" 
-                                        value={empName} 
-                                        onChange={e => setEmpName(e.target.value)} 
-                                        placeholder="성함" 
-                                        className="w-full px-6 py-4 bg-slate-900/50 border border-white/10 rounded-2xl focus:ring-2 focus:ring-red-600 outline-none font-bold text-center"
-                                    />
-                                    <select 
-                                        value={selectedGoal} 
-                                        onChange={e => setSelectedGoal(e.target.value)}
-                                        className="w-full px-6 py-4 bg-slate-900/50 border border-white/10 rounded-2xl focus:ring-2 focus:ring-red-600 outline-none font-bold text-center appearance-none cursor-pointer"
-                                    >
-                                        <option value="">올해의 주요 목표</option>
-                                        <option value="growth">지속적인 성장</option>
-                                        <option value="happiness">가족의 행복</option>
-                                        <option value="challenge">새로운 도전</option>
-                                    </select>
-                                </div>
+    with st.form("lny_pledge_form", clear_on_submit=False):
+        p1, p2, p3 = st.columns([2, 1, 1])
+        emp_id = p1.text_input("사번", placeholder="10******", key="lny_emp_id")
+        emp_name = p2.text_input("성명", placeholder="홍길동", key="lny_emp_name")
+        submitted = p3.form_submit_button("서약하기")
 
-                                <button 
-                                    onClick={runAIScan} 
-                                    disabled={isScanning}
-                                    className="w-full py-5 bg-gradient-to-r from-red-600 to-orange-600 rounded-2xl font-black text-xl hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-3 shadow-xl"
-                                >
-                                    {isScanning ? <Icon name="loader-2" className="animate-spin" /> : <Icon name="sparkles" />}
-                                    {isScanning ? "아우라 분석 중..." : "청렴 기운 스캔하기"}
-                                </button>
+        if submitted:
+            emp_id_clean = (emp_id or "").strip()
+            emp_name_clean = (emp_name or "").strip()
+            if len(emp_id_clean) < 5 or not emp_name_clean:
+                st.error("사번과 성명을 정확히 입력해 주세요.")
+            else:
+                # 중복 체크: (사번, 성명) 우선 / 사번만 중복도 차단
+                dup_pair = any(p.get("emp_id") == emp_id_clean and p.get("name") == emp_name_clean for p in pledges)
+                dup_id = any(p.get("emp_id") == emp_id_clean for p in pledges)
+                if dup_pair or dup_id:
+                    st.warning(f"이미 서약이 등록된 사번입니다. (사번: {emp_id_clean})")
+                else:
+                    ok = _append_pledge(ws_pledge, emp_id_clean, emp_name_clean)
+                    if ok:
+                        st.success(f"감사합니다, {emp_name_clean}님! 서약이 완료되었습니다.")
+                        st.balloons()
+                        st.rerun()
+                    else:
+                        st.error("서약 저장에 실패했습니다. (시트 연결/권한을 확인해 주세요)")
 
-                                {isScanning && (
-                                    <div className="mt-12 relative h-40 bg-slate-900/80 rounded-3xl overflow-hidden border border-red-600/30">
-                                        <div className="absolute inset-0 flex items-center justify-center text-xs font-black text-red-500 uppercase tracking-[1em] opacity-50">Analyzing Your Integrity...</div>
-                                        <div className="absolute top-0 left-0 w-full h-1.5 bg-red-600 shadow-[0_0_30px_rgba(220,38,38,1)] animate-scan"></div>
-                                    </div>
-                                )}
-
-                                {scanResult && !isScanning && (
-                                    <div className="mt-12 animate-scale-in">
-                                        <div className="p-1 bg-gradient-to-br from-red-600 via-orange-500 to-yellow-500 rounded-[2.5rem]">
-                                            <div className="bg-slate-950 p-8 md:p-10 rounded-[2.4rem]">
-                                                <h4 className="text-red-500 font-black text-sm uppercase tracking-widest mb-4">Scan Completed</h4>
-                                                <p className="text-2xl md:text-3xl font-black mb-6 leading-tight">"{scanResult.slogan}"</p>
-                                                <div className="w-12 h-1 bg-slate-800 mx-auto mb-6"></div>
-                                                <p className="text-slate-400 text-lg md:text-xl font-medium italic leading-relaxed">
-                                                    {scanResult.fortune}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </section>
-
-                    {/* 3. Campaign Rules */}
-                    <section id="campaign" className="py-32 px-6 bg-slate-900/50">
-                        <div className="max-w-6xl mx-auto">
-                            <div className="text-center mb-20">
-                                <h2 className="text-red-600 font-black text-sm uppercase tracking-[0.4em] mb-4">Clean Festival Policy</h2>
-                                <h3 className="text-4xl md:text-6xl font-black tracking-tighter">설 명절 클린 캠페인 아젠다</h3>
-                            </div>
-                            
-                            <div className="grid md:grid-cols-3 gap-8">
-                                {[
-                                    { icon: "gift", title: "선물 안 주고 안 받기", desc: "협력사 및 이해관계자와의 명절 선물 교환은 금지됩니다. 마음만 정중히 받겠습니다.", color: "bg-red-600" },
-                                    { icon: "coffee", title: "향응 및 편의 제공 금지", desc: "부적절한 식사 대접이나 골프 등 편의 제공은 원천 차단하여 투명성을 지킵니다.", color: "bg-orange-600" },
-                                    { icon: "shield-check", title: "부득이한 경우 자진신고", desc: "택배 등으로 배송된 선물은 반송이 원칙이며, 불가피할 시 클린센터로 즉시 신고합니다.", color: "bg-amber-600" }
-                                ].map((item, idx) => (
-                                    <div key={idx} className="glass-panel p-10 rounded-[3rem] hover:border-red-600/50 transition-all group animate-float" style={{animationDelay: `${idx * 0.5}s`}}>
-                                        <div className={`w-16 h-16 ${item.color} rounded-2xl flex items-center justify-center mb-8 group-hover:scale-110 transition-transform shadow-lg`}>
-                                            <Icon name={item.icon} size={32} />
-                                        </div>
-                                        <h4 className="text-2xl font-bold mb-4">{item.title}</h4>
-                                        <p className="text-slate-400 leading-relaxed font-medium">{item.desc}</p>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </section>
-
-                    {/* 4. Reporting Channels */}
-                    <section className="py-32 px-6">
-                        <div className="max-w-6xl mx-auto grid md:grid-cols-3 gap-6">
-                            <div className="md:col-span-1 py-10">
-                                <h2 className="text-3xl font-black mb-4">비윤리 행위 <br/> 신고 채널</h2>
-                                <p className="text-slate-400 font-medium">부정부패 없는 ktMOS북부를 위해 <br/> 여러분의 용기 있는 목소리가 필요합니다.</p>
-                            </div>
-                            <div className="md:col-span-2 grid sm:grid-cols-2 gap-4">
-                                <div className="glass-panel p-8 rounded-3xl flex items-center gap-6 group hover:bg-white/5 transition-all">
-                                    <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center group-hover:text-red-500"><Icon name="phone" /></div>
-                                    <div>
-                                        <p className="text-xs font-bold text-slate-500 uppercase mb-1">감사실 직통</p>
-                                        <p className="text-xl font-black">02-3414-1919</p>
-                                    </div>
-                                </div>
-                                <div className="glass-panel p-8 rounded-3xl flex items-center gap-6 group hover:bg-white/5 transition-all">
-                                    <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center group-hover:text-blue-500"><Icon name="globe" /></div>
-                                    <div>
-                                        <p className="text-xs font-bold text-slate-500 uppercase mb-1">사이버 신문고</p>
-                                        <a href="#" className="text-xl font-black border-b border-white/20 pb-1">바로가기</a>
-                                    </div>
-                                </div>
-                                <div className="sm:col-span-2 glass-panel p-8 rounded-3xl flex items-center gap-6 group hover:bg-white/5 transition-all">
-                                    <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center group-hover:text-yellow-500"><Icon name="mail" /></div>
-                                    <div>
-                                        <p className="text-xs font-bold text-slate-500 uppercase mb-1">이메일 제보</p>
-                                        <p className="text-xl font-black">ethics@ktmos.com</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
-
-                    {/* 5. Pledge Section */}
-                    <section className="py-32 px-6 bg-red-600/5 relative">
-                        <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-red-600 to-transparent opacity-50"></div>
-                        <div className="max-w-4xl mx-auto text-center">
-                            {!isPledged ? (
-                                <div className="animate-scale-in">
-                                    <h2 className="text-5xl md:text-7xl font-black mb-10 tracking-tighter leading-none italic">
-                                        스스로 다짐하는 <br/> <span className="text-red-600 underline">청렴 서약</span>
-                                    </h2>
-                                    <div className="glass-panel p-10 md:p-14 rounded-[4rem] mb-12 shadow-2xl relative overflow-hidden">
-                                        <div className="absolute -top-10 -right-10 w-40 h-40 bg-red-600/20 rounded-full blur-3xl"></div>
-                                        <Icon name="award" size={80} className="mx-auto mb-8 text-red-600 animate-bounce" />
-                                        <h3 className="text-2xl md:text-3xl font-black mb-6">🎁 청렴 실천 응원 이벤트</h3>
-                                        <p className="text-lg md:text-xl text-slate-300 font-bold mb-10 leading-relaxed">
-                                            전 임직원의 <span className="text-red-500">50% 이상</span>이 서약에 참여하시면, <br/>
-                                            참여자 중 <span className="text-red-500">50분을 추첨</span>하여 새해 첫 모바일 <br className="hidden md:block"/> 
-                                            커피 쿠폰을 감사실에서 쏩니다!
-                                        </p>
-                                        <form onSubmit={handlePledgeSubmit} className="flex flex-col sm:flex-row gap-4">
-                                            <input 
-                                                type="text" 
-                                                value={empId} 
-                                                onChange={e => setEmpId(e.target.value)} 
-                                                placeholder="사번" 
-                                                className="flex-1 px-8 py-5 bg-slate-900 border border-white/10 rounded-3xl outline-none focus:ring-2 focus:ring-red-600 font-bold text-center" 
-                                                required 
-                                            />
-                                            <input 
-                                                type="text" 
-                                                value={empName} 
-                                                onChange={e => setEmpName(e.target.value)} 
-                                                placeholder="성함" 
-                                                className="sm:w-32 px-8 py-5 bg-slate-900 border border-white/10 rounded-3xl outline-none focus:ring-2 focus:ring-red-600 font-bold text-center" 
-                                                required 
-                                            />
-                                            <button type="submit" className="px-10 py-5 bg-red-600 text-white font-black rounded-3xl hover:bg-red-500 transition-all shadow-xl">서약하기</button>
-                                        </form>
-                                    </div>
-                                    <p className="text-slate-500 font-black tracking-widest uppercase">Current: {pledges.length} Signatures</p>
-                                </div>
-                            ) : (
-                                <div className="animate-scale-in">
-                                    <div className="glass-panel p-12 md:p-20 rounded-[4rem] border-b-[12px] border-red-600 shadow-2xl">
-                                        <div className="w-24 h-24 bg-green-500 text-white rounded-full flex items-center justify-center mx-auto mb-10 shadow-lg">
-                                            <Icon name="check" size={48} />
-                                        </div>
-                                        <h3 className="text-4xl md:text-6xl font-black mb-6 tracking-tighter italic">서약 완료!</h3>
-                                        <p className="text-slate-400 text-xl font-bold mb-16">
-                                            {empName}님, 청렴한 ktMOS북부 만들기에 <br/> 동참해 주셔서 대단히 감사합니다.
-                                        </p>
-                                        
-                                        <div className="relative py-16 px-6 bg-slate-950/50 rounded-[3rem] border border-white/5">
-                                            <p className="text-xs font-black text-slate-500 mb-8 tracking-[0.6em] uppercase">Participation Rate</p>
-                                            <div className="flex items-baseline justify-center gap-4 mb-6">
-                                                <span className="text-8xl md:text-[10rem] font-black counter-glitch leading-none text-red-600">{displayRate}</span>
-                                                <span className="text-4xl font-black text-slate-600">%</span>
-                                            </div>
-                                            <div className="max-w-md mx-auto h-4 bg-slate-900 rounded-full overflow-hidden mb-6 p-1">
-                                                <div 
-                                                    className="h-full bg-gradient-to-r from-red-600 to-orange-500 transition-all duration-1000 rounded-full shadow-[0_0_20px_rgba(220,38,38,0.5)]" 
-                                                    style={{ width: `${displayRate}%` }}
-                                                ></div>
-                                            </div>
-                                            <p className="text-slate-400 font-bold">현재 {pledges.length}명 참여 중 (목표: 250명)</p>
-                                        </div>
-                                    </div>
-                                    <button onClick={() => setIsPledged(false)} className="mt-12 text-slate-500 hover:text-white transition-all font-bold border-b border-slate-800 pb-1">서약 정보 수정하기</button>
-                                </div>
-                            )}
-                        </div>
-                    </section>
-
-                    {/* Footer */}
-                    <footer className="py-20 text-center border-t border-white/5">
-                        <div className="flex items-center justify-center gap-2 mb-6 opacity-40">
-                            <span className="font-black text-xl tracking-tighter">kt</span>
-                            <span className="font-light text-xl tracking-[0.3em] uppercase">MOS 북부</span>
-                        </div>
-                        <p className="text-xs text-slate-600 font-bold tracking-widest uppercase mb-2">Audit & Ethics Department</p>
-                        <p className="text-[10px] text-slate-700 font-medium">© 2026 ktMOS NORTH. ALL RIGHTS RESERVED. PREMIUM CAMPAIGN WEB.</p>
-                    </footer>
-                </div>
-            );
-        };
-
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-    </script>
-</body>
-</html>"""
-
-    # inpor.html 내 기본 배경영상 URL이 잘려 있어(… 포함) 실제 재생이 불가하므로,
-    # 요구사항에 따라 '말이 달리는 영상'으로 교체합니다.
-    _html = (
-        CAMPAIGN_HTML
-        .replace(
-            "https://assets.mixkit.co/vide...mixkit-abstract-red-and-white-flow-2336-large.mp4",
-            HORSE_VIDEO_URL,
-        )
-        # Pretendard 링크가 축약되어 있으면(https...orioncactus) 정상 링크로 보정
-        .replace(
-            'href="https...orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css"',
-            'href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css"',
-        )
-    )
-
-    # iFrame 내부 스크롤로 전체 콘텐츠가 순서대로(1~5) 보이도록 높이를 넉넉히 설정
-    components.html(_html, height=3200, scrolling=True)
+    st.markdown("""
+      <div style='margin-top:80px; text-align:center; opacity:0.32; font-size:0.85rem; padding-bottom:40px;'>
+        <div style='font-weight:900;'>ktMOS북부 감사실 | Audit & Ethics Department</div>
+        <div>© 2026 ktMOS NORTH. ALL RIGHTS RESERVED.</div>
+      </div>
+    </div>""", unsafe_allow_html=True)
 
     # ✅ 자율점검 탭 전용 스타일 범위 종료
     st.markdown("</div>", unsafe_allow_html=True)
-
 # --- [Tab 2: 법률 리스크/규정/계약 검토 & 감사보고서 작성] ---
 with tab_doc:
     st.markdown("### 📄 법률 리스크(계약서)·규정 검토 / 감사보고서 작성·검증")
