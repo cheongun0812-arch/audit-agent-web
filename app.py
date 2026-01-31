@@ -849,53 +849,38 @@ with tab_audit:
         </div>
     """, unsafe_allow_html=True)
 
-    # 2) 실천지침 주요내용
-    with st.expander("※ 윤리경영원칙 실천지침 주요내용", expanded=True):
-        st.markdown(
-            """
-            <div style='background-color:#FFFDE7; padding: 18px; border-radius: 10px; border-left: 5px solid #FBC02D; margin-bottom: 12px;'>
-                <div style='font-weight: 900; color:#6D4C41; font-size: 1.10rem; margin-bottom: 6px;'>📌 윤리경영 위반 주요 유형</div>
-                <div style='color:#444; font-size: 0.97rem; line-height: 1.55;'>
-                    아래 항목은 <b>윤리경영원칙 실천지침</b>의 주요 위반 유형을 정리한 내용입니다.
-                    업무 수행 시 유사 사례가 발생하지 않도록 참고해 주세요.
+    # 2) 🎞️ 캠페인 홍보 영상 (자동 재생)
+    video_filename = "2026 new yearf.mp4"  # app.py 폴더에 업로드된 파일명
+    _base_dir = os.path.dirname(__file__) if "__file__" in globals() else os.getcwd()
+    video_path = os.path.join(_base_dir, video_filename)
+
+    @st.cache_data(show_spinner=False)
+    def _load_mp4_base64(_path: str) -> str:
+        with open(_path, "rb") as f:
+            return base64.b64encode(f.read()).decode("utf-8")
+
+    def _render_autoplay_video(_path: str) -> None:
+        try:
+            b64 = _load_mp4_base64(_path)
+            st.markdown(
+                f"""
+                <div style="background:#0B1B2B; padding:14px; border-radius:16px; border:1px solid rgba(255,255,255,0.12); margin: 8px 0 18px 0;">
+                  <video autoplay muted loop playsinline preload="auto" controls
+                         style="width:100%; border-radius:12px; outline:none;">
+                    <source src="data:video/mp4;base64,{{b64}}" type="video/mp4">
+                    이 브라우저에서는 영상을 재생할 수 없습니다.
+                  </video>
                 </div>
-            </div>
+                """.replace("{b64}", b64),
+                unsafe_allow_html=True
+            )
+        except Exception as e:
+            st.error(f"❌ 캠페인 영상 로드 실패: {e}")
 
-            <div style='overflow-x:auto;'>
-                <table style='width:100%; border-collapse: collapse; background:#FFFFFF; border:1px solid #E0E0E0; border-radius: 10px; overflow:hidden;'>
-                    <thead>
-                        <tr style='background:#FFF8E1;'>
-                            <th style='text-align:center; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037; width:28%;'>구분</th>
-                            <th style='text-align:center; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037;'>윤리경영 위반사항</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; font-weight:900; color:#2C3E50;'>고객과의 관계</td>
-                            <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>고객으로부터 금품 등 이익 수수, 고객만족 저해, 고객정보 유출</td>
-                        </tr>
-                        <tr>
-                            <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; font-weight:900; color:#2C3E50;'>임직원과 회사의 관계</td>
-                            <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>공금 유용 및 횡령, 회사재산의 사적 사용, 기업정보 유출, 경영왜곡</td>
-                        </tr>
-                        <tr>
-                            <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; font-weight:900; color:#2C3E50;'>임직원 상호간의 관계</td>
-                            <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>직장 내 괴롭힘, 성희롱, 조직질서 문란행위</td>
-                        </tr>
-                        <tr>
-                            <td style='text-align:center; padding:12px; font-weight:900; color:#2C3E50;'>이해관계자와의 관계</td>
-                            <td style='text-align:center; padding:12px; color:#333;'>이해관계자로부터 금품 등 이익 수수, 이해관계자에게 부당한 요구</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <div style='margin-top:10px; color:#666; font-size:0.88rem;'>
-                ※ 위 내용은 안내 목적이며, 세부 기준은 사내 <b>윤리경영원칙 실천지침</b>을 따릅니다.
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+    if os.path.exists(video_path):
+        _render_autoplay_video(video_path)
+    else:
+        st.warning(f"⚠️ 캠페인 영상 파일을 찾을 수 없습니다: {video_filename}\n(app.py와 동일 폴더에 업로드해 주세요.)")
 
     # ✅ 서약 항목
     exec_pledges = [
