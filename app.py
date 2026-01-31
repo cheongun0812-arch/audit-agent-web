@@ -609,6 +609,7 @@ def _build_pledge_popup_html(name: str, rank: int, total: int) -> str:
     backdrop-filter: blur(14px);
     box-shadow: 0 30px 90px rgba(0,0,0,0.45);
     overflow: hidden;
+            position: relative;
     position: relative;
     animation: fadeUp 0.32s ease-out both;
   }
@@ -1168,7 +1169,7 @@ with tab_audit:
     """, unsafe_allow_html=True)
 
     # --- 📐 캠페인 콘텐츠 정렬(영상 폭 기준) ---
-    cc_l, cc_mid, cc_r = st.columns([1, 10, 1])
+    cc_l, cc_mid, cc_r = st.columns([1, 16, 1])
     with cc_mid:
         # 2) 🎞️ 캠페인 홍보 영상 (자동 재생)
         video_filename = "2026 new yearf.mp4"  # app.py 폴더에 업로드된 파일명
@@ -1185,7 +1186,7 @@ with tab_audit:
                 b64 = _load_mp4_base64(_path)
                 st.markdown(
                     f"""
-                    <div style="background:#0B1B2B; padding:14px; border-radius:18px; box-shadow:0 18px 40px rgba(0,0,0,0.35); border:1px solid rgba(255,255,255,0.12); margin: 8px auto 18px auto; max-width:1150px;">
+                    <div style="background:#0B1B2B; padding:14px; border-radius:18px; box-shadow:0 18px 40px rgba(0,0,0,0.35); border:1px solid rgba(255,255,255,0.12); margin: 8px auto 18px auto; max-width:1500px;">
                       <video autoplay muted loop playsinline preload="auto" controls
                              style="width:100%; border-radius:12px; outline:none;">
                         <source src="data:video/mp4;base64,{{b64}}" type="video/mp4">
@@ -1218,7 +1219,7 @@ with tab_audit:
           <script src="https://cdn.tailwindcss.com"></script>
           <style>
             :root{
-              --maxw: 1150px;
+              --maxw: 1500px;
               --title: clamp(34px, 3.6vw, 54px);
               --kicker: 12px;
               --radius: 30px;
@@ -1231,7 +1232,7 @@ with tab_audit:
               --red: #ef4444;
               --orange: #f97316;
               --amber: #f59e0b;
-              --gap: 48px;
+              --gap: 70px;
             }
             html,body{margin:0;padding:0;background:transparent;color:var(--txt);
               font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans KR", sans-serif;}
@@ -1239,7 +1240,7 @@ with tab_audit:
             .cc-card{
               width: min(100%, var(--maxw));
               margin: 0 auto;
-              padding: 32px 20px 64px 20px;
+              padding: 38px 24px 110px 24px;
               border-radius: var(--radius);
               background:
                 radial-gradient(circle at 16% 18%, rgba(239,68,68,0.14), transparent 40%),
@@ -1250,8 +1251,47 @@ with tab_audit:
               box-shadow: 0 26px 72px rgba(0,0,0,0.45);
               overflow:hidden;
             }
-            .cc-section{margin-top: var(--gap); padding: 26px 18px; border-radius: 30px; border:1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.03);}  .cc-section.aura{border-color: rgba(249,115,22,0.28); background: radial-gradient(circle at 18% 10%, rgba(249,115,22,0.12), transparent 50%), rgba(255,255,255,0.03);} .cc-section.agenda{border-color: rgba(239,68,68,0.20); background: radial-gradient(circle at 82% 20%, rgba(239,68,68,0.12), transparent 54%), rgba(255,255,255,0.03);} .cc-section.report{border-color: rgba(148,163,184,0.22); background: radial-gradient(circle at 20% 30%, rgba(148,163,184,0.10), transparent 52%), rgba(255,255,255,0.03);} 
-            
+                        .cc-section{
+              margin-top: var(--gap);
+              padding: 34px 22px;
+              border-radius: 30px;
+              border: 1px solid rgba(255,255,255,0.12);
+              background: rgba(255,255,255,0.03);
+              box-shadow: 0 16px 46px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.06);
+              position: relative;
+            }
+            .cc-section:before{
+              content:"";
+              position:absolute;
+              left: 18px;
+              top: 18px;
+              width: 6px;
+              height: 52px;
+              border-radius: 999px;
+              background: linear-gradient(180deg,
+                        rgba(239,68,68,0.92),
+                        rgba(249,115,22,0.78),
+                        rgba(245,158,11,0.70));
+              opacity: 0.45;
+            }
+            .cc-section.aura{
+              border-color: rgba(249,115,22,0.30);
+              background:
+                radial-gradient(circle at 18% 10%, rgba(249,115,22,0.12), transparent 50%),
+                rgba(255,255,255,0.03);
+            }
+            .cc-section.agenda{
+              border-color: rgba(239,68,68,0.22);
+              background:
+                radial-gradient(circle at 82% 20%, rgba(239,68,68,0.12), transparent 54%),
+                rgba(255,255,255,0.03);
+            }
+            .cc-section.report{
+              border-color: rgba(148,163,184,0.26);
+              background:
+                radial-gradient(circle at 20% 30%, rgba(148,163,184,0.10), transparent 52%),
+                rgba(255,255,255,0.03);
+            }
             .cc-kicker{
               text-align:center;
               font-size: var(--kicker);
@@ -1619,10 +1659,23 @@ with tab_audit:
     
         components.html(
             CLEAN_CAMPAIGN_BUNDLE_HTML,
-            height=1700,
+            height=2400,
             scrolling=False,
         )
-        st.markdown('<div style="height:72px"></div>', unsafe_allow_html=True)
+        st.markdown(
+            '''
+            <div style="max-width:1500px; margin: 44px auto 18px auto; height: 1px;
+                        background: linear-gradient(90deg,
+                          transparent,
+                          rgba(239,68,68,0.55),
+                          rgba(249,115,22,0.45),
+                          rgba(245,158,11,0.35),
+                          transparent);
+                        opacity: 0.95;"></div>
+            <div style="height:42px"></div>
+            ''',
+            unsafe_allow_html=True
+        )
 
     
 
@@ -1638,7 +1691,7 @@ with tab_audit:
         st.markdown("""
         <style>
           :root{
-            --cc-maxw: 1120px;
+            --cc-maxw: 1500px;
             --cc-title: clamp(34px, 3.6vw, 54px);
             --cc-red: #ef4444;
             --cc-orange: #f97316;
@@ -1658,7 +1711,17 @@ with tab_audit:
             border: 1px solid rgba(255,255,255,0.10);
             box-shadow: 0 26px 72px rgba(0,0,0,0.45);
             overflow: hidden;
+            position: relative;
           }
+          div[data-testid="stVerticalBlock"]:has(.cc-pledge-anchor)::before{
+            content:"";
+            position:absolute;
+            left:0; right:0; top:0;
+            height:2px;
+            background: linear-gradient(90deg, rgba(239,68,68,0.90), rgba(249,115,22,0.80), rgba(245,158,11,0.70));
+            opacity: 0.95;
+          }
+
           div[data-testid="stVerticalBlock"]:has(.cc-pledge-anchor) > div{ padding-top: 0 !important; }
 
           .cc-pledge-title{
@@ -1677,7 +1740,7 @@ with tab_audit:
             text-underline-offset: 10px;
           }
           .cc-pledge-panel{
-            max-width: 1120px;
+            max-width: 1500px;
             margin: 0 auto;
             padding: 28px 26px 20px 26px;
             border-radius: 30px;
