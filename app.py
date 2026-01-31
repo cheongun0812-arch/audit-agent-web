@@ -835,42 +835,40 @@ with tab_audit:
 
     # 로컬 비디오 파일을 읽어서 HTML에 삽입하기 위한 Base64 처리
     import base64
-    import os
+import os
 
-    video_html = ""
-    video_file_path = "2026년 New year.mp4" # 파일이 app.py와 같은 폴더에 있어야 합니다.
+# 1. 비디오 파일 경로 설정 (app.py와 같은 폴더)
+video_file_path = "2026년 New year.mp4"
 
-    if os.path.exists(video_file_path):
-        with open(video_file_path, "rb") as f:
-            video_bytes = f.read()
-        video_base64 = base64.b64encode(video_bytes).decode()
-        # 로컬 파일을 base64로 변환하여 video 태그에 직접 주입
-        video_src = f"data:video/mp4;base64,{video_base64}"
-    else:
-        # 파일이 없을 경우를 대비한 대체(Fallback) 링크
-        video_src = "https://upload.wikimedia.org/wikipedia/commons/1/18/Muybridge_race_horse.webm"
+# 2. 로컬 파일을 Base64로 인코딩하여 직접 삽입하는 로직
+def get_video_base64(path):
+    if os.path.exists(path):
+        with open(path, "rb") as f:
+            data = f.read()
+        return base64.b64encode(data).decode()
+    return None
 
-    # --------- HERO (비디오 연동 부분 수정) ---------
-    st.markdown("""<div class='page'>""", unsafe_allow_html=True)
-    st.markdown(f"""
-    <div class='video-container'>
-      <video class='video-bg' autoplay loop muted playsinline>
-        <source src='{video_src}' type='video/mp4'>
-      </video>
-      <div class='hero-overlay'>
-        <div>
-          <div class='pill'>2026 병오년(丙午年) : 붉은 말의 해</div>
-          <div style='height:14px;'></div>
-          <div class='title-white'>새해 복<br/><span class='title-red'>많이 받으십시오</span></div>
-          <div class='sub'>ktMOS북부 임직원 여러분, 정직과 신뢰를 바탕으로<br/>더 크게 도약하고 성장하는 2026년이 되시길 기원합니다.</div>
-          <div style='height:20px;'></div>
-          <a href='#campaign' class='hero-btn' style='text-align:center;'>캠페인 확인하기</a>
-        </div>
-      </div>
-    </div>
-    """, unsafe_allow_html=True)
+video_base64 = get_video_base64(video_file_path)
 
-    # ... (이후 캠페인 아젠다 및 서약 로직은 동일)
+# 3. HTML 내 비디오 소스 수정
+if video_base64:
+    # 로컬 파일이 있을 경우 Base64 데이터 사용
+    video_src = f"data:video/mp4;base64,{video_base64}"
+else:
+    # 파일이 없을 경우에만 기존 외부 링크를 백업으로 사용
+    video_src = "https://upload.wikimedia.org/wikipedia/commons/1/18/Muybridge_race_horse.webm"
+
+# --- [중략] ---
+
+# st.markdown 내의 <source> 태그 부분에 video_src 적용
+st.markdown(f"""
+<div class='video-container'>
+  <video class='video-bg' autoplay loop muted playsinline>
+    <source src='{video_src}' type='video/mp4'>
+  </video>
+  ... (나머지 HTML 코드)
+</div>
+""", unsafe_allow_html=True)
 
     # --------- 데이터(운세/슬로건) : inpor.html의 구조를 Streamlit로 포팅 ---------
     fortune_db = {
