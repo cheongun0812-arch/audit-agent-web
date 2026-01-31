@@ -685,7 +685,7 @@ def _build_pledge_popup_html(name: str, rank: int, total: int) -> str:
     <div class="glow"></div>
     <div class="inner">
       <div class="badge">🎊</div>
-      <h3 class="title">청렴 실천에 함께해 주셔서 감사합니다</h3>
+      <h3 class="title"><span class="hot">청렴 서약</span> 완료!</h3>
       <div class="line"></div>
       <p class="msg"><span class="hot">__NAME__</span>님은 <span class="hot">__RANK__</span>번째 참여자입니다!</p>
       <p class="sub">현재 누적 <b>__TOTAL__</b>명 참여 · 여러분의 한 번의 선택이 ktMOS북부의 신뢰가 됩니다.</p>
@@ -695,6 +695,17 @@ def _build_pledge_popup_html(name: str, rank: int, total: int) -> str:
 
 <script>
 (function(){
+  // --- Expand this component to full viewport (center popup) ---
+  function setFrame(h){
+    try{ window.parent.postMessage({isStreamlitMessage:true, type:"streamlit:setFrameHeight", height: h},"*"); }catch(e){}
+  }
+  function fit(){
+    const h = Math.max(window.innerHeight || 0, 560);
+    setFrame(h+8);
+  }
+  fit();
+  window.addEventListener('resize', ()=>{ setTimeout(fit, 80); });
+
   // Pollen particles
   const overlay = document.getElementById('overlay');
   for(let i=0;i<22;i++){
@@ -721,7 +732,7 @@ def _build_pledge_popup_html(name: str, rank: int, total: int) -> str:
   // Auto close
   setTimeout(() => {
     overlay.style.animation = "fadeOut 0.30s ease-in forwards";
-    setTimeout(() => { overlay.remove(); }, 360);
+    setTimeout(() => { overlay.remove(); setFrame(1); }, 360);
   }, 3100);
 })();
 </script>
@@ -1152,6 +1163,10 @@ def _render_pledge_group(
 with tab_audit:
     # ✅ 자율점검 탭 전용 스타일 범위 시작(#audit-tab)
     st.markdown('<div id="audit-tab">', unsafe_allow_html=True)
+
+    # ✅ (팝업) 서약 완료 축하/감사 오버레이는 화면 상단에 렌더링
+    __pledge_popup_slot = st.empty()
+
 
     current_sheet_name = campaign_info.get("sheet_name", "2026_윤리경영_실천서약")
 
@@ -1638,33 +1653,54 @@ with tab_audit:
 
             scanBtn.addEventListener("click", doScan);
 
-            // --- Streamlit iframe height auto-fit ---
-            function sendHeight(){
-              try{
-                const h = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
-                window.parent.postMessage({isStreamlitMessage:true, type:"streamlit:setFrameHeight", height: h+8},"*");
-              }catch(e){}
-            }
+                        // --- Streamlit iframe height auto-fit ---
+                        function sendHeight(){
+                          try{
+                            const h = Math.max(
+                              document.body.scrollHeight,
+                              document.documentElement.scrollHeight,
+                              document.body.offsetHeight,
+                              document.documentElement.offsetHeight
+                            );
+                            window.parent.postMessage({isStreamlitMessage:true, type:"streamlit:setFrameHeight", height: Math.ceil(h)+16},"*");
+                          }catch(e){}
+                        }
 
-            const ro = new ResizeObserver(()=>{ sendHeight(); });
-            try{ ro.observe(document.body); }catch(e){}
+                        function scheduleHeight(){
+                          sendHeight();
+                          setTimeout(sendHeight, 80);
+                          setTimeout(sendHeight, 260);
+                          setTimeout(sendHeight, 820);
+                          setTimeout(sendHeight, 1500);
+                        }
 
-            window.addEventListener("load", ()=>{ setTimeout(sendHeight, 50); setTimeout(sendHeight, 220); setTimeout(sendHeight, 820); });
-            window.addEventListener("resize", ()=>{ setTimeout(sendHeight, 80); });
-          })();
-          </script>
+                        try{
+                          const ro = new ResizeObserver(()=>{ sendHeight(); });
+                          ro.observe(document.documentElement);
+                          ro.observe(document.body);
+                        }catch(e){}
+
+                        try{
+                          const mo = new MutationObserver(()=>{ sendHeight(); });
+                          mo.observe(document.body, {subtree:true, childList:true, attributes:true, characterData:true});
+                        }catch(e){}
+
+                        window.addEventListener("load", scheduleHeight);
+                        window.addEventListener("resize", ()=>{ setTimeout(sendHeight, 120); });
+                        scheduleHeight();
+</script>
         </body>
         </html>
         """
     
         components.html(
             CLEAN_CAMPAIGN_BUNDLE_HTML,
-            height=2400,
+            height=1700,
             scrolling=False,
         )
         st.markdown(
             '''
-            <div style="max-width:1500px; margin: 44px auto 18px auto; height: 1px;
+            <div style="max-width:1500px; margin: 18px auto 14px auto; height: 1px;
                         background: linear-gradient(90deg,
                           transparent,
                           rgba(239,68,68,0.55),
@@ -1700,7 +1736,7 @@ with tab_audit:
           /* ✅ 청렴 서약 블록(세로 블록) 자체를 카드화: Streamlit 위젯도 포함해서 한 덩어리로 스타일 적용 */
           div[data-testid="stVerticalBlock"]:has(.cc-pledge-anchor){
             width: min(100%, var(--cc-maxw));
-            margin: 26px auto 14px auto;
+            margin: 16px auto 14px auto;
             padding: 44px 22px 34px 22px;
             border-radius: 34px;
             background:
@@ -1713,6 +1749,8 @@ with tab_audit:
             overflow: hidden;
             position: relative;
           }
+          
+
           div[data-testid="stVerticalBlock"]:has(.cc-pledge-anchor)::before{
             content:"";
             position:absolute;
@@ -1895,11 +1933,16 @@ with tab_audit:
             )
             st.markdown('<div class="cc-pledge-note">※ 참여 정보는 사번/성함이 저장되며, 클린캠페인 운영 목적 외에는 사용되지 않습니다.</div>', unsafe_allow_html=True)
 
-            # ✅ 감사 팝업 렌더(1회)
+            # ✅ 감사 팝업 렌더(1회) — 화면 상단(__pledge_popup_slot)에 띄워서 항상 보이도록
             if st.session_state.get("__pledge_popup_payload__"):
                 _p = st.session_state.pop("__pledge_popup_payload__", None)
                 if _p:
-                    components.html(_build_pledge_popup_html(_p.get("name",""), _p.get("rank",0), _p.get("total",0)), height=1)
+                    with __pledge_popup_slot.container():
+                        components.html(
+                            _build_pledge_popup_html(_p.get("name",""), _p.get("rank",0), _p.get("total",0)),
+                            height=1,
+                            scrolling=False,
+                        )
 st.markdown("</div>", unsafe_allow_html=True)
 
 # --- [Tab 2: 법률 리스크/규정/계약 검토 & 감사보고서 작성] ---
