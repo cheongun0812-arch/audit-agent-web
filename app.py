@@ -451,15 +451,15 @@ def _ensure_campaign_config_sheet(spreadsheet):
         return ws
 
 def _default_campaign_title(dt: datetime.datetime) -> str:
-    if dt.month == 1:
-        return "1월 자율점검(윤리경영원칙 실천지침 실천 서약)"
-    return f"{dt.month}월 자율점검(윤리경영원칙 실천지침 실천서약)"
+    if dt.month == 2:
+        return "2월 자율점검"
+    return f"{dt.month}월 자율점검"
 
 def _default_campaign_sheet_name(dt: datetime.datetime, spreadsheet=None) -> str:
     if spreadsheet is not None and dt.year == 2026 and dt.month == 1:
         try:
-            spreadsheet.worksheet("2026_윤리경영_실천서약")
-            return "2026_윤리경영_실천서약"
+            spreadsheet.worksheet("2026_병오년 ktMOS북부 설 명절 클린캠페인")
+            return "2026_병오년 KTMOS북부 설 명절 클린캠페인"
         except Exception:
             pass
     return f"{dt.year}_{dt.month:02d}_자율점검"
