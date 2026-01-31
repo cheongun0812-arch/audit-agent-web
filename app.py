@@ -687,6 +687,7 @@ def _build_pledge_popup_html(name: str, rank: int, total: int) -> str:
       <div class="badge">🎊</div>
       <h3 class="title"><span class="hot">청렴 서약</span> 완료!</h3>
       <div class="line"></div>
+      <div class="big">청렴 서약</div>
       <p class="msg"><span class="hot">__NAME__</span>님은 <span class="hot">__RANK__</span>번째 참여자입니다!</p>
       <p class="sub">현재 누적 <b>__TOTAL__</b>명 참여 · 여러분의 한 번의 선택이 ktMOS북부의 신뢰가 됩니다.</p>
     </div>
@@ -850,13 +851,14 @@ def save_clean_campaign_pledge(emp_id: str, name: str) -> tuple[bool, str, int, 
         if not raw_name:
             return False, "성함을 입력해 주세요.", 0, total_now
 
-        # ✅ 중복 체크(사번 기준)
-        emp_col = pledge_ws.col_values(2)[1:]  # header 제외
-        for i, v in enumerate(emp_col, start=1):
-            if _norm_emp(v) == norm_emp:
-                # i는 header 제외한 데이터 행 기준 참여순번(1부터)
+        # ✅ 중복 체크(사번+성함 기준) — 동일 사번(예: 00000000) 예외를 고려
+        norm_name = _normalize_kor_name(raw_name)
+        emp_col = pledge_ws.col_values(2)[1:]   # header 제외
+        name_col = pledge_ws.col_values(3)[1:]  # header 제외
+        for i, (e, n) in enumerate(zip(emp_col, name_col), start=1):
+            if _norm_emp(e) == norm_emp and _normalize_kor_name(n) == norm_name:
                 total_now = _pledge_count(pledge_ws)
-                return False, f"사번 {raw_emp}은(는) 이미 청렴 서약에 참여하셨습니다.", i, total_now
+                return False, f"사번/성함({raw_emp} / {raw_name})은(는) 이미 청렴 서약에 참여하셨습니다.", i, total_now
 
         # ✅ 저장
         kst = pytz.timezone("Asia/Seoul")
@@ -1255,7 +1257,7 @@ with tab_audit:
             .cc-card{
               width: min(100%, var(--maxw));
               margin: 0 auto;
-              padding: 38px 24px 110px 24px;
+              padding: 38px 24px 56px 24px;
               border-radius: var(--radius);
               background:
                 radial-gradient(circle at 16% 18%, rgba(239,68,68,0.14), transparent 40%),
@@ -1695,7 +1697,7 @@ with tab_audit:
     
         components.html(
             CLEAN_CAMPAIGN_BUNDLE_HTML,
-            height=1700,
+            height=1500,
             scrolling=False,
         )
         st.markdown(
@@ -1873,7 +1875,7 @@ with tab_audit:
             _client = init_google_sheet_connection()
             if _client:
                 _ss = _client.open("Audit_Result_2026")
-                _ws = _get_or_create_ws(_ss, PLEDGE_SHEET_TITLE, ["저장시간", "성함"])
+                _ws = _get_or_create_ws(_ss, PLEDGE_SHEET_TITLE, ["저장시간", "사번", "성함"])
                 pledge_total = _pledge_count(_ws)
             else:
                 pledge_sheet_ready = False
@@ -1906,6 +1908,7 @@ with tab_audit:
             if not pledge_sheet_ready:
                 st.warning("⚠️ 현재 서약 저장 기능이 준비되지 않았습니다. (Google Sheet 연결 확인 필요)")
             else:
+                pledge_popup_slot = st.empty()  # 청렴서약 완료 팝업(현재 위치에서 노출)
                 with st.form("clean_campaign_pledge_form", clear_on_submit=True):
                     c1, c2, c3 = st.columns([0.38, 0.38, 0.24], vertical_alignment="center")
                     with c1:
@@ -1918,11 +1921,15 @@ with tab_audit:
                     ok, msg, rank, total = save_clean_campaign_pledge(pledge_emp_id, pledge_name)
                     if ok:
                         pledge_total = max(int(total or 0), pledge_total)
-                        st.session_state["__pledge_popup_payload__"] = {
-                            "name": (pledge_name or "").strip(),
-                            "rank": int(rank or 0),
-                            "total": int(total or 0),
-                        }
+
+                        # ✅ 현재 화면 위치에서 즉시 팝업(가이드/꽃가루/폭죽 효과)
+                        with pledge_popup_slot.container():
+                            components.html(
+                                _build_pledge_popup_html((pledge_name or "").strip(), int(rank or 0), int(total or 0)),
+                                height=1,
+                                scrolling=False,
+                            )
+                        st.toast(f"🎉 {(pledge_name or '').strip()}님, 청렴 서약에 참여해 주셔서 감사합니다!", icon="✅")
                     else:
                         st.warning(msg)
 
@@ -1933,16 +1940,6 @@ with tab_audit:
             )
             st.markdown('<div class="cc-pledge-note">※ 참여 정보는 사번/성함이 저장되며, 클린캠페인 운영 목적 외에는 사용되지 않습니다.</div>', unsafe_allow_html=True)
 
-            # ✅ 감사 팝업 렌더(1회) — 화면 상단(__pledge_popup_slot)에 띄워서 항상 보이도록
-            if st.session_state.get("__pledge_popup_payload__"):
-                _p = st.session_state.pop("__pledge_popup_payload__", None)
-                if _p:
-                    with __pledge_popup_slot.container():
-                        components.html(
-                            _build_pledge_popup_html(_p.get("name",""), _p.get("rank",0), _p.get("total",0)),
-                            height=1,
-                            scrolling=False,
-                        )
 st.markdown("</div>", unsafe_allow_html=True)
 
 # --- [Tab 2: 법률 리스크/규정/계약 검토 & 감사보고서 작성] ---
