@@ -1145,253 +1145,673 @@ with tab_audit:
         </div>
     """, unsafe_allow_html=True)
 
-    # 2) 🎞️ 캠페인 홍보 영상 (자동 재생)
-    video_filename = "2026 new yearf.mp4"  # app.py 폴더에 업로드된 파일명
-    _base_dir = os.path.dirname(__file__) if "__file__" in globals() else os.getcwd()
-    video_path = os.path.join(_base_dir, video_filename)
+    # --- 📐 캠페인 콘텐츠 정렬(영상 폭 기준) ---
+    cc_l, cc_mid, cc_r = st.columns([1, 7, 1])
+    with cc_mid:
+        # 2) 🎞️ 캠페인 홍보 영상 (자동 재생)
+        video_filename = "2026 new yearf.mp4"  # app.py 폴더에 업로드된 파일명
+        _base_dir = os.path.dirname(__file__) if "__file__" in globals() else os.getcwd()
+        video_path = os.path.join(_base_dir, video_filename)
 
-    @st.cache_data(show_spinner=False)
-    def _load_mp4_base64(_path: str) -> str:
-        with open(_path, "rb") as f:
-            return base64.b64encode(f.read()).decode("utf-8")
+        @st.cache_data(show_spinner=False)
+        def _load_mp4_base64(_path: str) -> str:
+            with open(_path, "rb") as f:
+                return base64.b64encode(f.read()).decode("utf-8")
 
-    def _render_autoplay_video(_path: str) -> None:
-        try:
-            b64 = _load_mp4_base64(_path)
-            st.markdown(
-                f"""
-                <div style="background:#0B1B2B; padding:14px; border-radius:16px; border:1px solid rgba(255,255,255,0.12); margin: 8px 0 18px 0;">
-                  <video autoplay muted loop playsinline preload="auto" controls
-                         style="width:100%; border-radius:12px; outline:none;">
-                    <source src="data:video/mp4;base64,{{b64}}" type="video/mp4">
-                    이 브라우저에서는 영상을 재생할 수 없습니다.
-                  </video>
+        def _render_autoplay_video(_path: str) -> None:
+            try:
+                b64 = _load_mp4_base64(_path)
+                st.markdown(
+                    f"""
+                    <div style="background:#0B1B2B; padding:14px; border-radius:18px; box-shadow:0 18px 40px rgba(0,0,0,0.35); border:1px solid rgba(255,255,255,0.12); margin: 8px auto 18px auto; max-width:980px;">
+                      <video autoplay muted loop playsinline preload="auto" controls
+                             style="width:100%; border-radius:12px; outline:none;">
+                        <source src="data:video/mp4;base64,{{b64}}" type="video/mp4">
+                        이 브라우저에서는 영상을 재생할 수 없습니다.
+                      </video>
+                    </div>
+                    """.replace("{b64}", b64),
+                    unsafe_allow_html=True
+                )
+            except Exception as e:
+                st.error(f"❌ 캠페인 영상 로드 실패: {e}")
+
+        if os.path.exists(video_path):
+            _render_autoplay_video(video_path)
+            st.markdown('<div style="height:24px"></div>', unsafe_allow_html=True)
+        else:
+            st.warning(f"⚠️ 캠페인 영상 파일을 찾을 수 없습니다: {video_filename}\n(app.py와 동일 폴더에 업로드해 주세요.)")
+
+        # 3) 🎯 영상 아래 3대 테마(청렴 아우라 → 아젠다 → 신고 채널) 한 블록 정렬
+        #    - 영상 폭 기준으로 동일한 폭/간격/정렬감을 유지하도록 하나의 HTML 컴포넌트로 묶었습니다.
+        import streamlit.components.v1 as components
+    
+        CLEAN_CAMPAIGN_BUNDLE_HTML = r"""
+        <!DOCTYPE html>
+        <html lang="ko">
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <link rel="preconnect" href="https://cdn.tailwindcss.com" />
+          <script src="https://cdn.tailwindcss.com"></script>
+          <style>
+            :root{
+              --maxw: 980px;
+              --title: clamp(34px, 3.6vw, 54px);
+              --kicker: 12px;
+              --radius: 30px;
+              --bg: rgba(2,6,23,0.74);
+              --glass: rgba(255,255,255,0.04);
+              --stroke: rgba(255,255,255,0.10);
+              --txt: rgba(255,255,255,0.94);
+              --muted: rgba(226,232,240,0.64);
+              --muted2: rgba(226,232,240,0.52);
+              --red: #ef4444;
+              --orange: #f97316;
+              --amber: #f59e0b;
+              --gap: 30px;
+            }
+            html,body{margin:0;padding:0;background:transparent;color:var(--txt);
+              font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans KR", sans-serif;}
+            *{box-sizing:border-box;}
+            .cc-card{
+              width: min(100%, var(--maxw));
+              margin: 0 auto;
+              padding: 26px 18px 28px 18px;
+              border-radius: var(--radius);
+              background:
+                radial-gradient(circle at 16% 18%, rgba(239,68,68,0.14), transparent 40%),
+                radial-gradient(circle at 78% 26%, rgba(249,115,22,0.12), transparent 40%),
+                radial-gradient(circle at 36% 92%, rgba(245,158,11,0.10), transparent 48%),
+                var(--bg);
+              border: 1px solid rgba(255,255,255,0.08);
+              box-shadow: 0 26px 72px rgba(0,0,0,0.45);
+              overflow:hidden;
+            }
+            .cc-section{margin-top: var(--gap);}
+            .cc-section:first-child{margin-top: 0;}
+            .cc-kicker{
+              text-align:center;
+              font-size: var(--kicker);
+              font-weight: 900;
+              color: rgba(239,68,68,0.85);
+              letter-spacing: .42em;
+              text-transform: uppercase;
+            }
+            .cc-title{
+              text-align:center;
+              font-weight: 900;
+              font-size: var(--title);
+              line-height: 1.08;
+              margin-top: 10px;
+            }
+            .cc-sub{
+              text-align:center;
+              margin-top: 10px;
+              color: var(--muted);
+              font-weight: 700;
+            }
+            .glass{
+              background: var(--glass);
+              border: 1px solid var(--stroke);
+              backdrop-filter: blur(18px);
+              -webkit-backdrop-filter: blur(18px);
+              box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+            }
+            .pill-input,.pill-select{
+              width:100%;
+              border-radius: 18px;
+              padding: 14px 16px;
+              border: 1px solid rgba(255,255,255,0.12);
+              background: rgba(15,23,42,0.55);
+              color: rgba(255,255,255,0.94);
+              outline: none;
+              font-weight: 900;
+              text-align: center;
+            }
+            .pill-input::placeholder{color: rgba(226,232,240,0.42);}
+            .scan-btn{
+              width: 100%;
+              border: 0;
+              border-radius: 18px;
+              padding: 16px 16px;
+              font-weight: 900;
+              color: rgba(255,255,255,0.96);
+              background: linear-gradient(90deg, rgba(239,68,68,0.95), rgba(249,115,22,0.92));
+              cursor:pointer;
+              display:flex;
+              align-items:center;
+              justify-content:center;
+              gap:10px;
+              box-shadow: 0 18px 40px rgba(0,0,0,0.35);
+            }
+            .scan-btn:active{transform: translateY(1px);}
+            .grad-border{
+              padding: 2px;
+              border-radius: 26px;
+              background: linear-gradient(90deg, rgba(239,68,68,0.95), rgba(249,115,22,0.92), rgba(245,158,11,0.90));
+            }
+            .result{
+              border-radius: 24px;
+              padding: 26px 18px;
+              background: rgba(2,6,23,0.72);
+              border: 1px solid rgba(255,255,255,0.10);
+              text-align:center;
+            }
+            .result .ok{
+              color: rgba(239,68,68,0.85);
+              font-weight: 900;
+              letter-spacing: .20em;
+              font-size: 12px;
+            }
+            .result .slogan{
+              margin-top: 10px;
+              font-size: clamp(20px, 2.2vw, 30px);
+              font-weight: 900;
+              line-height: 1.25;
+            }
+            .result .fortune{
+              margin-top: 12px;
+              color: rgba(203,213,225,0.74);
+              font-weight: 700;
+              line-height: 1.55;
+            }
+            .sep{
+              height:1px; width:100%;
+              margin: var(--gap) 0 0 0;
+              background: linear-gradient(90deg, transparent, rgba(239,68,68,0.45), rgba(249,115,22,0.35), transparent);
+              opacity:0.55;
+            }
+            .agenda-grid{
+              display:grid;
+              grid-template-columns: repeat(3, minmax(0,1fr));
+              gap: 16px;
+              margin-top: 18px;
+            }
+            @media (max-width: 860px){
+              .agenda-grid{grid-template-columns: 1fr; gap: 14px;}
+            }
+            .agenda-card{
+              border-radius: 26px;
+              padding: 22px 18px;
+              min-height: 168px;
+              display:flex;
+              flex-direction:column;
+              gap: 10px;
+            }
+            .ico{
+              width: 54px; height: 54px;
+              border-radius: 18px;
+              display:flex; align-items:center; justify-content:center;
+              font-size: 22px;
+              border: 1px solid rgba(255,255,255,0.10);
+              background: rgba(255,255,255,0.05);
+            }
+            .agenda-card h4{
+              margin:0;
+              font-size: 18px;
+              font-weight: 900;
+            }
+            .agenda-card p{
+              margin:0;
+              color: rgba(203,213,225,0.72);
+              font-weight: 700;
+              line-height: 1.5;
+              font-size: 13.5px;
+            }
+
+            .report-grid{
+              display:grid;
+              grid-template-columns: 1.15fr 1fr;
+              gap: 16px;
+              margin-top: 18px;
+              align-items: start;
+            }
+            @media (max-width: 860px){
+              .report-grid{grid-template-columns: 1fr;}
+            }
+            .report-left h4{
+              margin:0;
+              font-size: 22px;
+              font-weight: 900;
+              line-height:1.15;
+            }
+            .report-left p{
+              margin: 10px 0 0 0;
+              color: rgba(203,213,225,0.72);
+              font-weight: 700;
+              line-height: 1.6;
+            }
+            .report-cards{
+              display:grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 12px;
+            }
+            @media (max-width: 860px){
+              .report-cards{grid-template-columns: 1fr;}
+            }
+            .report-card{
+              border-radius: 24px;
+              padding: 16px 16px;
+              display:flex;
+              align-items:center;
+              gap: 12px;
+              text-decoration:none;
+              color: var(--txt);
+              transition: transform .15s ease, background .15s ease;
+            }
+            .report-card:hover{transform: translateY(-1px); background: rgba(255,255,255,0.05);}
+            .report-card .label{
+              font-size: 12px;
+              font-weight: 900;
+              letter-spacing: .22em;
+              color: rgba(148,163,184,0.82);
+              text-transform: uppercase;
+            }
+            .report-card .value{
+              font-size: 18px;
+              font-weight: 900;
+              margin-top: 2px;
+            }
+            .fade-in{animation: fadeIn .25s ease both;}
+            @keyframes fadeIn{from{opacity:0; transform: translateY(10px) scale(.99);}to{opacity:1; transform: translateY(0) scale(1);}}
+          </style>
+        </head>
+        <body>
+          <div class="cc-card">
+            <!-- 1) Integrity Aura -->
+            <section class="cc-section">
+              <div class="cc-kicker">2026 integrity aura</div>
+              <div class="cc-title">2026 청렴 아우라 분석</div>
+              <div class="cc-sub">성함과 올해의 목표를 선택하고 <b>“청렴 기운 스캔하기”</b>를 눌러보세요.</div>
+
+              <div class="glass" style="border-radius:28px; padding:22px 18px; margin-top: 18px;">
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                  <input id="empName" class="pill-input" placeholder="성함" maxlength="12" />
+                  <select id="goal" class="pill-select">
+                    <option value="가족의 행복">올해의 주요 목표</option>
+                    <option value="가족의 행복">가족의 행복</option>
+                    <option value="업무의 성장">업무의 성장</option>
+                    <option value="건강한 생활">건강한 생활</option>
+                    <option value="관계의 회복">관계의 회복</option>
+                    <option value="새로운 도전">새로운 도전</option>
+                  </select>
                 </div>
-                """.replace("{b64}", b64),
+
+                <div style="margin-top:12px;">
+                  <button id="scanBtn" class="scan-btn"><span style="font-size:18px;">✨</span>청렴 기운 스캔하기</button>
+                </div>
+
+                <div id="resultWrap" class="grad-border" style="margin-top:16px; display:none;">
+                  <div class="result fade-in">
+                    <div class="ok">SCAN COMPLETED</div>
+                    <div id="slogan" class="slogan"></div>
+                    <div id="fortune" class="fortune"></div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <div class="sep"></div>
+
+            <!-- 2) Agenda -->
+            <section class="cc-section">
+              <div class="cc-kicker">clean festival policy</div>
+              <div class="cc-title">설 명절 클린 캠페인 아젠다</div>
+              <div class="cc-sub">명절 기간에도 청렴은 최고의 선물입니다. 아래 3대 원칙을 꼭 지켜주세요.</div>
+
+              <div class="agenda-grid">
+                <div class="agenda-card glass">
+                  <div class="ico" style="color: rgba(239,68,68,0.95);">🎁</div>
+                  <h4>선물 안 주고 안 받기</h4>
+                  <p>협력사 및 이해관계자와의 명절 선물 교환은 금지됩니다. 마음만 정중히 받겠습니다.</p>
+                </div>
+                <div class="agenda-card glass">
+                  <div class="ico" style="color: rgba(249,115,22,0.95);">☕</div>
+                  <h4>향응 및 편의 제공 금지</h4>
+                  <p>부적절한 식사 대접이나 골프 등 편의 제공은 원천 차단하여 투명성을 지킵니다.</p>
+                </div>
+                <div class="agenda-card glass">
+                  <div class="ico" style="color: rgba(245,158,11,0.95);">🛡️</div>
+                  <h4>부득이한 경우 자진신고</h4>
+                  <p>택배 등으로 배송된 선물은 반송이 원칙이며, 불가피할 시 클린센터로 즉시 신고합니다.</p>
+                </div>
+              </div>
+            </section>
+
+            <div class="sep"></div>
+
+            <!-- 3) Reporting Channel -->
+            <section class="cc-section">
+              <div class="cc-title">비윤리 행위 신고 채널</div>
+              <div class="report-grid">
+                <div class="report-left">
+                  <h4>부정부패 없는 ktMOS북부를 위해<br>여러분의 용기 있는 목소리가 필요합니다.</h4>
+                  <p>‘혹시’라는 작은 의심도 괜찮습니다. 빠르게 공유해 주시면 감사실이 즉시 확인하고 필요한 조치를 안내하겠습니다.</p>
+                </div>
+
+                <div class="report-cards">
+                  <div class="report-card glass" style="grid-column: span 1;">
+                    <div class="ico" style="font-size:20px;">📞</div>
+                    <div>
+                      <div class="label">감사실 직통</div>
+                      <div class="value">02-3414-1919</div>
+                    </div>
+                  </div>
+
+                  <a class="report-card glass" href="http://ktmos.com/management/management" target="_blank" rel="noopener noreferrer" style="grid-column: span 1;">
+                    <div class="ico" style="font-size:20px;">🌐</div>
+                    <div>
+                      <div class="label">사이버 신문고</div>
+                      <div class="value">바로가기</div>
+                    </div>
+                  </a>
+
+                  <div class="report-card glass" style="grid-column: span 2;">
+                    <div class="ico" style="font-size:20px;">✉️</div>
+                    <div>
+                      <div class="label">이메일 제보</div>
+                      <div class="value">ethics@ktmos.com</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <script>
+          (function(){
+            const AURA = [
+              {goal:"가족의 행복", slogan:"깨끗한 소통으로 피어나는 동료 간의 진정한 즐거움", fortune:"작은 호의보다 큰 진심이 통하는 한 해입니다. 사람 사이의 신뢰가 최고의 행운입니다."},
+              {goal:"가족의 행복", slogan:"따뜻한 배려가 만드는 가장 큰 행운", fortune:"오늘의 작은 친절이 집안의 분위기를 환하게 바꿉니다. 말 한마디가 복이 됩니다."},
+              {goal:"업무의 성장", slogan:"원칙 위에 세워지는 성과", fortune:"규정을 지키는 것이 오히려 속도를 만듭니다. 리스크가 줄며 추진력이 커집니다."},
+              {goal:"업무의 성장", slogan:"투명한 과정이 부르는 인정", fortune:"과정이 깨끗하면 결과가 빛납니다. 평판이 성과를 돕습니다."},
+              {goal:"건강한 생활", slogan:"균형 잡힌 습관이 부르는 맑은 기운", fortune:"무리보다 꾸준함이 정답입니다. 작은 루틴이 큰 변화를 이끕니다."},
+              {goal:"건강한 생활", slogan:"정직한 선택이 만드는 가벼운 하루", fortune:"과식·과음을 줄이는 선택이 컨디션을 살립니다. 가벼워진 몸이 자신감을 줍니다."},
+              {goal:"관계의 회복", slogan:"솔직함이 여는 관계의 문", fortune:"한 번의 진심 어린 대화가 관계를 회복시킵니다. 오해를 풀 기회가 찾아옵니다."},
+              {goal:"관계의 회복", slogan:"공정함이 만드는 오래가는 인연", fortune:"공정한 태도는 관계를 오래가게 합니다. 상대가 당신을 더 신뢰하게 됩니다."},
+              {goal:"새로운 도전", slogan:"정직한 출발이 만드는 큰 도약", fortune:"출발이 깨끗하면 끝이 편합니다. 도전의 성공 확률이 올라갑니다."},
+              {goal:"새로운 도전", slogan:"원칙 있는 도전, 안전한 혁신", fortune:"무리한 모험 대신, 안전한 혁신이 가능합니다. ‘현명한 도전자’가 됩니다."},
+            ];
+
+            const pick = (arr)=> arr[Math.floor(Math.random()*arr.length)];
+            const scanBtn = document.getElementById("scanBtn");
+            const emp = document.getElementById("empName");
+            const goal = document.getElementById("goal");
+            const resultWrap = document.getElementById("resultWrap");
+            const sloganEl = document.getElementById("slogan");
+            const fortuneEl = document.getElementById("fortune");
+
+            let scanning = false;
+
+            function pickByGoal(g){
+              const filtered = AURA.filter(x=>x.goal===g);
+              return pick(filtered.length?filtered:AURA);
+            }
+
+            function doScan(){
+              if(scanning) return;
+              const name = (emp.value||"").trim();
+              const g = goal.value || "가족의 행복";
+              if(!name){
+                emp.focus();
+                emp.style.boxShadow="0 0 0 4px rgba(239,68,68,0.25)";
+                setTimeout(()=>emp.style.boxShadow="", 800);
+                return;
+              }
+              scanning = true;
+              scanBtn.style.filter="brightness(0.92)";
+              scanBtn.innerHTML = '⏳ 스캔 중...';
+              setTimeout(()=>{
+                const picked = pickByGoal(g);
+                sloganEl.textContent = "“" + picked.slogan + "”";
+                fortuneEl.textContent = picked.fortune;
+                resultWrap.style.display = "block";
+                scanBtn.style.filter="";
+                scanBtn.innerHTML = '✨ 청렴 기운 스캔하기';
+                scanning = false;
+                sendHeight();
+              }, 650);
+            }
+
+            scanBtn.addEventListener("click", doScan);
+
+            // --- Streamlit iframe height auto-fit ---
+            function sendHeight(){
+              try{
+                const h = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
+                window.parent.postMessage({isStreamlitMessage:true, type:"streamlit:setFrameHeight", height: h+8},"*");
+              }catch(e){}
+            }
+
+            const ro = new ResizeObserver(()=>{ sendHeight(); });
+            try{ ro.observe(document.body); }catch(e){}
+
+            window.addEventListener("load", ()=>{ setTimeout(sendHeight, 50); setTimeout(sendHeight, 220); setTimeout(sendHeight, 820); });
+            window.addEventListener("resize", ()=>{ setTimeout(sendHeight, 80); });
+          })();
+          </script>
+        </body>
+        </html>
+        """
+    
+        components.html(
+            CLEAN_CAMPAIGN_BUNDLE_HTML,
+            height=420,
+            scrolling=False,
+        )
+    
+
+
+    # ✅ 자율점검 탭 전용 스타일 범위 종료
+    
+
+        # 5) ✍️ 스스로 다짐하는 청렴 서약 (자율 참여 이벤트)
+        #    - 이름만 수집하여 Google Sheet에 저장
+        #    - 참여 순번/누적 참여자 수 표시
+        #    - 참여 시 3초 감사 팝업 + 꽃가루(Confetti) 효과
+
+        st.markdown("""
+        <style>
+          :root{
+            --cc-maxw: 980px;
+            --cc-title: clamp(34px, 3.6vw, 54px);
+            --cc-red: #ef4444;
+            --cc-orange: #f97316;
+            --cc-amber: #f59e0b;
+          }
+          /* ✅ 청렴 서약 블록(세로 블록) 자체를 카드화: Streamlit 위젯도 포함해서 한 덩어리로 스타일 적용 */
+          div[data-testid="stVerticalBlock"]:has(.cc-pledge-anchor){
+            width: min(100%, var(--cc-maxw));
+            margin: 26px auto 14px auto;
+            padding: 44px 22px 34px 22px;
+            border-radius: 34px;
+            background:
+              radial-gradient(circle at 18% 22%, rgba(239,68,68,0.18), transparent 45%),
+              radial-gradient(circle at 82% 26%, rgba(249,115,22,0.14), transparent 46%),
+              radial-gradient(circle at 40% 90%, rgba(245,158,11,0.10), transparent 52%),
+              rgba(2,6,23,0.74);
+            border: 1px solid rgba(255,255,255,0.10);
+            box-shadow: 0 26px 72px rgba(0,0,0,0.45);
+            overflow: hidden;
+          }
+          div[data-testid="stVerticalBlock"]:has(.cc-pledge-anchor) > div{ padding-top: 0 !important; }
+
+          .cc-pledge-title{
+            text-align:center;
+            font-weight: 900;
+            font-size: var(--cc-title);
+            line-height: 1.06;
+            letter-spacing: -0.02em;
+            color: rgba(255,255,255,0.96);
+            margin: 6px 0 18px 0;
+          }
+          .cc-pledge-title .em{
+            color: var(--cc-red);
+            text-decoration: underline;
+            text-decoration-thickness: 10px;
+            text-underline-offset: 10px;
+          }
+          .cc-pledge-panel{
+            max-width: 980px;
+            margin: 0 auto;
+            padding: 28px 26px 20px 26px;
+            border-radius: 30px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.10);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            text-align:center;
+          }
+          .cc-pledge-badge{
+            width: 74px;
+            height: 74px;
+            margin: 0 auto 12px auto;
+            border-radius: 22px;
+            background: rgba(239,68,68,0.10);
+            border: 1px solid rgba(239,68,68,0.22);
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            box-shadow: 0 18px 40px rgba(0,0,0,0.30);
+          }
+          .cc-pledge-badge svg{ width: 42px; height: 42px; }
+          .cc-pledge-event-title{
+            margin-top: 6px;
+            font-weight: 900;
+            font-size: 18px;
+            color: rgba(255,255,255,0.94);
+          }
+          .cc-pledge-desc{
+            margin-top: 10px;
+            color: rgba(203,213,225,0.74);
+            font-weight: 700;
+            line-height: 1.6;
+            font-size: 13.5px;
+          }
+          .cc-pledge-desc .hot{
+            color: rgba(239,68,68,0.92);
+            font-weight: 900;
+          }
+          .cc-pledge-count{
+            text-align:center;
+            margin-top: 14px;
+            color: rgba(148,163,184,0.90);
+            font-weight: 900;
+            letter-spacing: 0.08em;
+          }
+          .cc-pledge-count .num{
+            color: rgba(255,255,255,0.96);
+            font-variant-numeric: tabular-nums;
+          }
+          .cc-pledge-note{
+            text-align:center;
+            font-size: 13px;
+            font-weight: 700;
+            color: rgba(229,231,235,0.60);
+            margin-top: 8px;
+          }
+
+          /* ✅ Streamlit 위젯(이름 입력/버튼)도 동일 톤으로 */
+          div[data-testid="stVerticalBlock"]:has(.cc-pledge-anchor) div[data-testid="stTextInput"] input{
+            background: rgba(15,23,42,0.65) !important;
+            border: 1px solid rgba(255,255,255,0.12) !important;
+            border-radius: 18px !important;
+            height: 52px !important;
+            color: rgba(255,255,255,0.96) !important;
+            -webkit-text-fill-color: rgba(255,255,255,0.96) !important;
+            text-align: center !important;
+            font-weight: 900 !important;
+          }
+          div[data-testid="stVerticalBlock"]:has(.cc-pledge-anchor) div[data-testid="stTextInput"] input::placeholder{
+            color: rgba(226,232,240,0.42) !important;
+          }
+          div[data-testid="stVerticalBlock"]:has(.cc-pledge-anchor) button[kind="primary"],
+          div[data-testid="stVerticalBlock"]:has(.cc-pledge-anchor) button{
+            border-radius: 18px !important;
+            height: 52px !important;
+            font-weight: 900 !important;
+            background: linear-gradient(90deg, rgba(239,68,68,0.95), rgba(249,115,22,0.92)) !important;
+            border: 0 !important;
+            color: rgba(255,255,255,0.96) !important;
+            box-shadow: 0 18px 40px rgba(0,0,0,0.35) !important;
+          }
+        </style>
+        """, unsafe_allow_html=True)
+
+        # ✅ 블록 간 간격(영상/3테마/서약이 ‘정렬감’ 있게 보이도록 고정 간격)
+        st.markdown('<div style="height:24px"></div>', unsafe_allow_html=True)
+
+        pledge_total = 0
+        pledge_sheet_ready = True
+        try:
+            _client = init_google_sheet_connection()
+            if _client:
+                _ss = _client.open("Audit_Result_2026")
+                _ws = _get_or_create_ws(_ss, PLEDGE_SHEET_TITLE, ["저장시간", "성함"])
+                pledge_total = _pledge_count(_ws)
+            else:
+                pledge_sheet_ready = False
+        except Exception:
+            pledge_sheet_ready = False
+
+        with st.container():
+            st.markdown('<div class="cc-pledge-anchor"></div>', unsafe_allow_html=True)
+
+            st.markdown('<div class="cc-pledge-title">스스로 다짐하는<br><span class="em">청렴 서약</span></div>', unsafe_allow_html=True)
+
+            st.markdown("""
+            <div class="cc-pledge-panel">
+              <div class="cc-pledge-badge">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 14.2c3.75 0 6.8-3.05 6.8-6.8S15.75.6 12 .6 5.2 3.65 5.2 7.4s3.05 6.8 6.8 6.8Z" stroke="rgba(239,68,68,0.95)" stroke-width="1.8"/>
+                  <path d="M8.6 13.7 7.6 23l4.4-2.4 4.4 2.4-1.0-9.3" stroke="rgba(239,68,68,0.85)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M9.1 7.7 10.9 9.5l4-4" stroke="rgba(249,115,22,0.92)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+              <div class="cc-pledge-event-title">🎁 청렴 실천 응원 이벤트</div>
+              <div class="cc-pledge-desc">
+                본 서약은 <b>자율 참여</b>입니다.<br>
+                임직원 <span class="hot">{threshold}명 이상</span>이 서약에 참여하시면,<br>
+                참여자 중 <span class="hot">{winners}명</span>을 추첨하여 새해 모바일 커피 쿠폰을 감사실에서 드립니다.
+              </div>
+            </div>
+            """.format(threshold=PLEDGE_THRESHOLD, winners=PLEDGE_WINNERS), unsafe_allow_html=True)
+
+            if not pledge_sheet_ready:
+                st.warning("⚠️ 현재 서약 저장 기능이 준비되지 않았습니다. (Google Sheet 연결 확인 필요)")
+            else:
+                with st.form("clean_campaign_pledge_form", clear_on_submit=True):
+                    c1, c2 = st.columns([0.72, 0.28], vertical_alignment="center")
+                    with c1:
+                        pledge_name = st.text_input("성함", placeholder="성함", label_visibility="collapsed")
+                    with c2:
+                        submit_pledge = st.form_submit_button("서약하기")
+
+                if submit_pledge:
+                    ok, msg, rank, total = save_clean_campaign_pledge(pledge_name)
+                    if ok:
+                        pledge_total = max(int(total or 0), pledge_total)
+                        st.session_state["__pledge_popup_payload__"] = {
+                            "name": (pledge_name or "").strip(),
+                            "rank": int(rank or 0),
+                            "total": int(total or 0),
+                        }
+                    else:
+                        st.warning(msg)
+
+            st.markdown(
+                f'<div class="cc-pledge-count">CURRENT: <span class="num">{pledge_total}</span> SIGNATURES<br>'
+                f'현재 총 <span class="num">{pledge_total}</span>명의 임직원이 서약에 참여했습니다.</div>',
                 unsafe_allow_html=True
             )
-        except Exception as e:
-            st.error(f"❌ 캠페인 영상 로드 실패: {e}")
+            st.markdown('<div class="cc-pledge-note">※ 참여 정보는 성함만 저장되며, 클린캠페인 운영 목적 외에는 사용되지 않습니다.</div>', unsafe_allow_html=True)
 
-    if os.path.exists(video_path):
-        _render_autoplay_video(video_path)
-    else:
-        st.warning(f"⚠️ 캠페인 영상 파일을 찾을 수 없습니다: {video_filename}\n(app.py와 동일 폴더에 업로드해 주세요.)")
-
-        # ✨ 2026 청렴 아우라 분석 (Fun)
-    # - 기존 "✅ 서약 확인 및 임직원 정보 입력" 영역을 정리하고, 재미 요소(아우라 스캔)를 노출합니다.
-    # - 디자인/애니메이션은 inpor.html의 핵심 요소(Glass panel, scan, scale-in)만 최소 이식했습니다.
-    import streamlit.components.v1 as components
-
-    components.html(
-        "\n<!DOCTYPE html>\n<html lang=\"ko\">\n<head>\n<meta charset=\"UTF-8\" />\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n<link rel=\"stylesheet\" as=\"style\" crossorigin href=\"https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css\" />\n<style>\n  :root {\n    --bg:#0b1220;\n    --panel: rgba(255,255,255,0.03);\n    --border: rgba(255,255,255,0.10);\n    --text:#e5e7eb;\n    --muted: rgba(229,231,235,0.70);\n    --red:#ef4444;\n    --orange:#f97316;\n    --yellow:#f59e0b;\n  }\n  *{ box-sizing:border-box; }\n  body {\n    margin:0;\n    font-family: Pretendard, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, \"Noto Sans KR\", \"Apple SD Gothic Neo\", sans-serif;\n    background: transparent;\n    color: var(--text);\n  }\n  @keyframes fade-in-up { from { opacity:0; transform: translateY(18px); } to { opacity:1; transform: translateY(0); } }\n  @keyframes scale-in { from { opacity:0; transform: scale(0.97); } to { opacity:1; transform: scale(1); } }\n  @keyframes scan { 0% { transform: translateY(-100%); opacity:0; } 50% { opacity:1; } 100% { transform: translateY(100%); opacity:0; } }\n\n  .wrap {\n    padding: 22px 18px 26px;\n  }\n  .stage {\n    max-width: 980px;\n    margin: 0 auto;\n    position: relative;\n  }\n  .halo {\n    position:absolute;\n    top: 50%;\n    left: 50%;\n    transform: translate(-50%, -50%);\n    width: 560px;\n    height: 560px;\n    border-radius: 999px;\n    background: radial-gradient(circle at 30% 30%, rgba(239,68,68,0.15), rgba(249,115,22,0.08), rgba(245,158,11,0.04), transparent 60%);\n    filter: blur(26px);\n    pointer-events:none;\n  }\n  .title {\n    text-align:center;\n    font-size: 42px;\n    font-weight: 900;\n    letter-spacing:-0.03em;\n    margin: 0 0 18px 0;\n    animation: fade-in-up 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) both;\n  }\n  .glass {\n    background: var(--panel);\n    backdrop-filter: blur(12px);\n    border: 1px solid var(--border);\n    border-radius: 34px;\n    padding: 26px 22px 24px;\n    box-shadow: 0 18px 60px rgba(0,0,0,0.35);\n    animation: fade-in-up 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both;\n  }\n  .grid {\n    display:grid;\n    grid-template-columns: 1fr 1fr;\n    gap: 14px;\n    margin-bottom: 14px;\n  }\n  .field {\n    width:100%;\n    padding: 16px 18px;\n    background: rgba(15,23,42,0.55);\n    border: 1px solid rgba(255,255,255,0.10);\n    border-radius: 18px;\n    color: var(--text);\n    font-weight: 800;\n    text-align:center;\n    outline:none;\n    font-size: 16px;\n  }\n  .field::placeholder {\n    color: rgba(229,231,235,0.45);\n    font-weight: 700;\n  }\n  select.field {\n    appearance:none;\n    cursor:pointer;\n  }\n  .btn {\n    width:100%;\n    border:none;\n    border-radius: 18px;\n    padding: 18px 18px;\n    background: linear-gradient(90deg, var(--red), var(--orange));\n    color: white;\n    font-size: 18px;\n    font-weight: 900;\n    cursor:pointer;\n    box-shadow: 0 18px 40px rgba(239,68,68,0.18);\n    display:flex;\n    align-items:center;\n    justify-content:center;\n    gap:10px;\n    transition: transform 0.12s ease, filter 0.12s ease, opacity 0.12s ease;\n  }\n  .btn:hover { transform: translateY(-1px); filter: brightness(1.03); }\n  .btn:active { transform: translateY(0px); opacity:0.95; }\n  .btn[disabled] { opacity:0.55; cursor:not-allowed; transform:none; }\n\n  .spark {\n    width: 22px; height: 22px;\n    display:inline-block;\n  }\n\n  .scanbox {\n    margin-top: 18px;\n    position: relative;\n    height: 150px;\n    border-radius: 22px;\n    overflow:hidden;\n    background: rgba(2,6,23,0.65);\n    border: 1px solid rgba(239,68,68,0.25);\n  }\n  .scantext {\n    position:absolute;\n    inset:0;\n    display:flex;\n    align-items:center;\n    justify-content:center;\n    font-size: 11px;\n    font-weight: 900;\n    color: rgba(239,68,68,0.55);\n    text-transform: uppercase;\n    letter-spacing: 0.28em;\n    text-align:center;\n    padding: 0 14px;\n  }\n  .scanbar {\n    position:absolute;\n    top:0;\n    left:0;\n    width:100%;\n    height: 6px;\n    background: var(--red);\n    box-shadow: 0 0 34px rgba(239,68,68,0.95);\n    animation: scan 1.6s infinite linear;\n  }\n\n  .result {\n    margin-top: 18px;\n    animation: scale-in 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both;\n  }\n  .result-border {\n    padding: 3px;\n    border-radius: 30px;\n    background: linear-gradient(135deg, var(--red), var(--orange), var(--yellow));\n  }\n  .result-inner {\n    border-radius: 28px;\n    background: rgba(2,6,23,0.86);\n    padding: 22px 22px 20px;\n    border: 1px solid rgba(255,255,255,0.10);\n  }\n  .tag {\n    text-align:center;\n    font-size: 12px;\n    font-weight: 900;\n    letter-spacing: 0.22em;\n    color: rgba(239,68,68,0.85);\n    margin-bottom: 8px;\n  }\n  .slogan {\n    text-align:center;\n    font-size: 26px;\n    font-weight: 900;\n    letter-spacing:-0.03em;\n    line-height: 1.28;\n    margin: 0 0 12px 0;\n  }\n  .divider {\n    width: 46px;\n    height: 3px;\n    background: rgba(148,163,184,0.25);\n    border-radius: 99px;\n    margin: 0 auto 12px auto;\n  }\n  .fortune {\n    text-align:center;\n    font-size: 16px;\n    font-weight: 700;\n    color: rgba(226,232,240,0.70);\n    line-height: 1.65;\n    font-style: italic;\n    margin:0;\n  }\n\n  .alert {\n    position: fixed;\n    top: 16px;\n    left: 50%;\n    transform: translateX(-50%);\n    z-index: 99999;\n    padding: 12px 16px;\n    border-radius: 18px;\n    background: rgba(239,68,68,0.92);\n    border: 1px solid rgba(255,255,255,0.18);\n    color: white;\n    font-weight: 900;\n    box-shadow: 0 18px 60px rgba(0,0,0,0.45);\n    animation: fade-in-up 0.25s ease-out both;\n    display:none;\n    max-width: 90vw;\n    text-align:center;\n  }\n\n  /* Component background shell */\n  .shell {\n    border-radius: 26px;\n    padding: 18px;\n    background: radial-gradient(1200px 320px at 50% 0%, rgba(239,68,68,0.14), transparent 55%),\n                linear-gradient(180deg, rgba(2,6,23,0.85), rgba(2,6,23,0.65));\n    border: 1px solid rgba(255,255,255,0.09);\n  }\n\n  @media (max-width: 640px){\n    .title{ font-size: 32px; }\n    .grid{ grid-template-columns: 1fr; }\n    .slogan{ font-size: 22px; }\n    .glass{ border-radius: 28px; }\n  }\n</style>\n</head>\n<body>\n  <div class=\"wrap\">\n    <div class=\"stage shell\">\n      <div class=\"halo\"></div>\n\n      <div id=\"alert\" class=\"alert\"></div>\n\n      <h2 class=\"title\">2026 청렴 아우라 분석</h2>\n\n      <div class=\"glass\">\n        <div class=\"grid\">\n          <input id=\"empName\" class=\"field\" type=\"text\" placeholder=\"성함\" maxlength=\"12\" />\n          <select id=\"goal\" class=\"field\">\n            <option value=\"\">올해의 주요 목표</option>\n            <option value=\"growth\">지속적인 성장</option>\n            <option value=\"happiness\">가족의 행복</option>\n            <option value=\"challenge\">새로운 도전</option>\n          </select>\n        </div>\n\n        <button id=\"scanBtn\" class=\"btn\">\n          <span class=\"spark\">✨</span>\n          <span id=\"btnText\">청렴 기운 스캔하기</span>\n        </button>\n\n        <div id=\"scanBox\" class=\"scanbox\" style=\"display:none;\">\n          <div class=\"scantext\">ANALYZING YOUR INTEGRITY...</div>\n          <div class=\"scanbar\"></div>\n        </div>\n\n        <div id=\"result\" class=\"result\" style=\"display:none;\">\n          <div class=\"result-border\">\n            <div class=\"result-inner\">\n              <div class=\"tag\">SCAN COMPLETED</div>\n              <p id=\"slogan\" class=\"slogan\">\"\"</p>\n              <div class=\"divider\"></div>\n              <p id=\"fortune\" class=\"fortune\"></p>\n            </div>\n          </div>\n        </div>\n\n      </div>\n    </div>\n  </div>\n\n<script>\n  const FORTUNE_DB = {\"growth\": [{\"slogan\": \"투명한 도약, 붉은 말처럼 거침없이 성장하는 한 해\", \"fortune\": \"원칙을 지키는 선택이 가장 빠른 성장의 지름길입니다. 작은 정직이 큰 신뢰로 돌아옵니다.\"}, {\"slogan\": \"정직이라는 박차로 더 높은 곳을 향해 질주하세요\", \"fortune\": \"업무의 기본을 지키는 당신의 태도가 팀의 기준이 됩니다. 올해는 성과와 평판이 함께 올라갑니다.\"}, {\"slogan\": \"신뢰의 레이스, 깨끗한 실력이 승리를 결정합니다\", \"fortune\": \"과정이 깔끔하면 결과는 더 빛납니다. 협업 요청이 자연스럽게 모이는 흐름입니다.\"}, {\"slogan\": \"정면승부가 가장 우아한 전략이 되는 2026\", \"fortune\": \"불필요한 우회 대신 정공법이 통합니다. 결정이 빠르고 후회가 적습니다.\"}, {\"slogan\": \"원칙 위에 쌓는 성과, 흔들림 없는 커리어의 해\", \"fortune\": \"기준을 지키는 사람이 결국 인정받습니다. 리더십 기회가 열릴 수 있어요.\"}, {\"slogan\": \"작은 투명성이 큰 프로젝트를 끌어당깁니다\", \"fortune\": \"공유와 기록을 잘할수록 일이 쉬워집니다. 당신의 정돈된 방식이 확산됩니다.\"}, {\"slogan\": \"명확한 보고, 단단한 신뢰, 빠른 성장\", \"fortune\": \"선명한 커뮤니케이션이 당신의 무기입니다. 올해는 ‘믿고 맡긴다’가 따라옵니다.\"}, {\"slogan\": \"정직한 기준이 팀의 속도를 올리는 해\", \"fortune\": \"규정 준수는 제약이 아니라 가속 페달입니다. 리스크가 줄며 추진력이 커집니다.\"}, {\"slogan\": \"정리정돈처럼 깔끔한 업무가 복을 부릅니다\", \"fortune\": \"작은 누수(실수/오해)를 미리 막아줍니다. 평가와 추천에서 좋은 흐름이 있어요.\"}, {\"slogan\": \"선명한 원칙, 선명한 성과\", \"fortune\": \"애매함을 줄일수록 결과가 좋아집니다. ‘확실한 사람’이라는 평을 듣습니다.\"}, {\"slogan\": \"투명한 협업이 곧 경쟁력\", \"fortune\": \"관계에서 신뢰가 쌓이면 협업이 즐거워집니다. 성과는 자연히 따라옵니다.\"}, {\"slogan\": \"정직한 성장 곡선이 가장 아름답습니다\", \"fortune\": \"급하게 가기보다 바르게 가는 한 해. 결국 더 멀리 갑니다.\"}, {\"slogan\": \"규정 준수가 ‘프로의 디테일’로 빛나는 해\", \"fortune\": \"디테일을 지키는 당신의 습관이 인정받습니다. 실수가 줄고 성과가 늘어요.\"}, {\"slogan\": \"공정한 기준이 팀을 편안하게 합니다\", \"fortune\": \"불필요한 오해가 사라집니다. 주변에서 ‘함께 일하고 싶다’는 말이 늘어요.\"}, {\"slogan\": \"오늘의 정직이 내일의 기회를 엽니다\", \"fortune\": \"신뢰가 쌓이면 기회는 자동으로 찾아옵니다. 올해는 새로운 역할이 주어질 수 있어요.\"}], \"happiness\": [{\"slogan\": \"떳떳한 마음이 선사하는 가장 따뜻한 행복\", \"fortune\": \"가족에게 부끄럽지 않은 선택이 마음의 평안을 줍니다. 집안에 웃음이 늘어납니다.\"}, {\"slogan\": \"깨끗한 소통으로 피어나는 동료 간의 진정한 즐거움\", \"fortune\": \"작은 호의보다 큰 진심이 통합니다. 신뢰가 최고의 행운입니다.\"}, {\"slogan\": \"정직한 하루가 모여 편안한 일상이 됩니다\", \"fortune\": \"일과 생활의 균형이 좋아집니다. 마음이 가벼워지는 한 해입니다.\"}, {\"slogan\": \"투명한 마음이 관계를 더 단단하게 합니다\", \"fortune\": \"말과 행동이 같을수록 관계가 깊어집니다. 좋은 인연이 늘어납니다.\"}, {\"slogan\": \"깨끗한 선택이 운을 부른다\", \"fortune\": \"불필요한 고민이 줄어듭니다. ‘잘 풀린다’는 느낌이 자주 옵니다.\"}, {\"slogan\": \"서로를 존중하는 청렴한 팀워크\", \"fortune\": \"나를 존중하는 태도가 곧 상대의 존중을 부릅니다. 분위기가 한결 부드러워집니다.\"}, {\"slogan\": \"정직한 배려가 가장 큰 선물\", \"fortune\": \"과한 것보다 ‘딱 필요한’ 배려가 통합니다. 동료와 가족 모두 편안해집니다.\"}, {\"slogan\": \"깔끔한 원칙, 따뜻한 관계\", \"fortune\": \"원칙이 분명하면 오해가 줄어듭니다. 관계가 더 오래갑니다.\"}, {\"slogan\": \"선명한 기준이 마음의 평정을 만듭니다\", \"fortune\": \"흔들릴 일이 줄어듭니다. 안정감이 행복으로 이어집니다.\"}, {\"slogan\": \"진심이 통하는 자리엔 행운이 앉습니다\", \"fortune\": \"말을 아끼기보다 정확히 전하는 한 해. 덕분에 분위기가 좋아집니다.\"}, {\"slogan\": \"청렴은 마음의 방역\", \"fortune\": \"찝찝함을 남기지 않으니 스트레스가 줄어요. 컨디션이 좋아집니다.\"}, {\"slogan\": \"가족에게 자랑스러운 당신의 한 해\", \"fortune\": \"당신의 꾸준함이 주변을 따뜻하게 만듭니다. 작은 축하가 자주 생깁니다.\"}, {\"slogan\": \"좋은 사람들과 오래 가는 해\", \"fortune\": \"선 긋기와 배려가 균형을 이룹니다. 관계가 건강해집니다.\"}, {\"slogan\": \"깨끗한 습관이 삶을 가볍게 합니다\", \"fortune\": \"정리·정돈·정직—세 가지가 복을 부릅니다. 일도 생활도 편해져요.\"}, {\"slogan\": \"정직한 웃음이 가장 오래 갑니다\", \"fortune\": \"관계에서 신뢰가 쌓이고, 그 신뢰가 행복의 기반이 됩니다.\"}], \"challenge\": [{\"slogan\": \"청렴의 가치를 지키며 한계를 넘어 질주하는 2026\", \"fortune\": \"어려운 순간에도 원칙을 지키는 모습이 가장 큰 영감이 됩니다.\"}, {\"slogan\": \"정직한 도전은 멈추지 않는 붉은 말과 같습니다\", \"fortune\": \"타협하지 않는 용기가 당신을 전문가로 만듭니다. 결국 가장 빛납니다.\"}, {\"slogan\": \"원칙을 지키는 사람이 가장 대담합니다\", \"fortune\": \"정면승부가 통하는 해입니다. 결정이 선명할수록 결과도 선명해집니다.\"}, {\"slogan\": \"리스크를 줄이는 용기, 그것이 진짜 도전\", \"fortune\": \"무리한 모험 대신, 안전한 혁신이 가능합니다. ‘현명한 도전자’가 됩니다.\"}, {\"slogan\": \"투명한 기준이 새로운 길을 엽니다\", \"fortune\": \"새로운 업무도 기준만 선명하면 두렵지 않습니다. 기회가 문을 두드립니다.\"}, {\"slogan\": \"정직한 질문이 혁신의 시작\", \"fortune\": \"모르면 묻는 것이 용기입니다. 질문이 팀의 문제를 빨리 해결합니다.\"}, {\"slogan\": \"규정을 아는 사람이 가장 빠르게 움직입니다\", \"fortune\": \"룰을 알면 우회가 줄어듭니다. 추진 속도가 확 달라집니다.\"}, {\"slogan\": \"어려운 결정일수록 원칙이 당신을 지켜줍니다\", \"fortune\": \"나중에 설명 가능한 선택이 가장 강합니다. 마음도 결과도 편안해집니다.\"}, {\"slogan\": \"깨끗한 도전은 팀을 더 강하게 합니다\", \"fortune\": \"당신의 기준이 팀의 기준이 됩니다. 자연스럽게 리더십이 생깁니다.\"}, {\"slogan\": \"정직한 피드백이 성장을 부릅니다\", \"fortune\": \"불편한 진실을 부드럽게 말하는 능력이 빛납니다. 신뢰가 깊어집니다.\"}, {\"slogan\": \"한 번 더 확인하는 습관이 영웅을 만듭니다\", \"fortune\": \"사소한 점검이 큰 사고를 막습니다. 당신의 디테일이 빛납니다.\"}, {\"slogan\": \"‘안 된다’보다 ‘이렇게 하자’가 통하는 해\", \"fortune\": \"대안을 제시하는 정직이 강합니다. 사람들이 당신을 찾습니다.\"}, {\"slogan\": \"원칙 위의 창의성, 가장 안전한 혁신\", \"fortune\": \"창의력은 규정을 어길 필요가 없습니다. ‘클린 아이디어’가 성공합니다.\"}, {\"slogan\": \"신뢰를 지키는 도전은 반드시 기억됩니다\", \"fortune\": \"성과뿐 아니라 과정이 남습니다. 당신의 평판이 단단해집니다.\"}, {\"slogan\": \"정직한 용기가 운을 바꿉니다\", \"fortune\": \"이번 도전은 성공 확률을 높입니다. 기본을 지키는 사람에게 기회가 옵니다.\"}]};\n\n  const $ = (id) => document.getElementById(id);\n  const alertEl = $(\"alert\");\n  const scanBtn = $(\"scanBtn\");\n  const btnText = $(\"btnText\");\n  const scanBox = $(\"scanBox\");\n  const resultBox = $(\"result\");\n  const sloganEl = $(\"slogan\");\n  const fortuneEl = $(\"fortune\");\n\n  function showAlert(msg) {\n    alertEl.textContent = msg;\n    alertEl.style.display = \"block\";\n    clearTimeout(window.__auraAlertTimer);\n    window.__auraAlertTimer = setTimeout(() => {\n      alertEl.style.display = \"none\";\n    }, 2400);\n  }\n\n  function pickRandom(arr) {\n    return arr[Math.floor(Math.random() * arr.length)];\n  }\n\n  let scanning = false;\n\n  scanBtn.addEventListener(\"click\", () => {\n    if (scanning) return;\n\n    const name = $(\"empName\").value.trim();\n    const goal = $(\"goal\").value;\n\n    if (!name || !goal) {\n      showAlert(\"성함과 목표를 먼저 입력해 주세요.\");\n      return;\n    }\n\n    const options = FORTUNE_DB[goal] || [];\n    if (options.length === 0) {\n      showAlert(\"데이터를 불러올 수 없습니다. 관리자에게 문의해 주세요.\");\n      return;\n    }\n\n    scanning = true;\n    scanBtn.setAttribute(\"disabled\", \"disabled\");\n    btnText.textContent = \"아우라 분석 중...\";\n\n    resultBox.style.display = \"none\";\n    scanBox.style.display = \"block\";\n\n    setTimeout(() => {\n      const picked = pickRandom(options);\n      sloganEl.textContent = `“${picked.slogan}”`;\n      fortuneEl.textContent = picked.fortune;\n\n      scanBox.style.display = \"none\";\n      resultBox.style.display = \"block\";\n\n      scanning = false;\n      scanBtn.removeAttribute(\"disabled\");\n      btnText.textContent = \"청렴 기운 스캔하기\";\n    }, 2000);\n  });\n</script>\n<script>(function(){const sendHeight=()=>{const h=document.documentElement.scrollHeight||document.body.scrollHeight||800;const msg={isStreamlitMessage:true,type:'setFrameHeight',height:h};window.parent.postMessage(msg,'*');};window.addEventListener('load',sendHeight);window.addEventListener('resize',()=>setTimeout(sendHeight,60));setInterval(sendHeight,1200);})();</script>\n\n</body>\n</html>\n",
-        height=640,
-        scrolling=False,
-    )
-
-    # ==========================================
-    # 🧧 설 명절 클린 캠페인 아젠다 (Campaign Rules)
-    #    - '2026 청렴 아우라 분석' 다음 위치에 배치
-    #    - inpor.html의 핵심 스타일(.glass-panel / float) + 캠페인 카드 구성만 최소 이식
-    # ==========================================
-    CLEAN_CAMPAIGN_AGENDA_HTML = '\n<!DOCTYPE html>\n<html lang="ko">\n<head>\n  <meta charset="UTF-8" />\n  <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n  <script src="https://cdn.tailwindcss.com"></script>\n  <script src="https://unpkg.com/lucide@latest"></script>\n  <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />\n  <style>\n    body { margin:0; background: transparent; font-family: Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans KR", "Apple SD Gothic Neo", sans-serif; letter-spacing: -0.02em; }\n    /* from inpor.html (minimal) */\n    .glass-panel { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.10); }\n    @keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-10px); } 100% { transform: translateY(0px); } }\n    .animate-float { animation: float 3s ease-in-out infinite; }\n  </style>\n</head>\n<body>\n  <section class="px-4 sm:px-6 py-8">\n    <div class="max-w-6xl mx-auto rounded-[34px] border border-white/10 overflow-hidden shadow-2xl"\n         style="background: radial-gradient(1200px 420px at 50% 0%, rgba(239,68,68,0.14), transparent 58%),\n                         linear-gradient(180deg, rgba(2,6,23,0.92), rgba(2,6,23,0.70));">\n      <div class="px-6 sm:px-10 py-14">\n        <div class="text-center mb-14">\n          <div class="text-red-600 font-bold text-xs sm:text-sm uppercase tracking-[0.4em] mb-4">Clean Festival Policy</div>\n          <div class="text-white text-4xl sm:text-5xl lg:text-6xl font-black tracking-tighter">설 명절 클린 캠페인 아젠다</div>\n          <p class="mt-5 text-slate-300 font-medium leading-relaxed">\n            명절 기간에도 <span class="text-white font-extrabold">청렴은 최고의 선물</span>입니다. 아래 3대 원칙을 꼭 지켜주세요.\n          </p>\n        </div>\n\n        <div class="grid md:grid-cols-3 gap-8">\n          <!-- Card 1 -->\n          <div class="glass-panel rounded-3xl p-10 border border-white/10 hover:border-red-500/30 transition-all duration-300 group animate-float" style="animation-delay:0s;">\n            <div class="w-16 h-16 bg-red-600 rounded-2xl flex items-center justify-center mb-8 group-hover:scale-110 transition-transform shadow-lg">\n              <i data-lucide="gift" class="w-8 h-8 text-white"></i>\n            </div>\n            <h4 class="text-white text-2xl font-black mb-4 tracking-tight">선물 안 주고 안 받기</h4>\n            <p class="text-slate-300 leading-relaxed font-medium">협력사 및 이해관계자와의 명절 선물 교환은 금지됩니다. 마음만 정중히 받겠습니다.</p>\n          </div>\n\n          <!-- Card 2 -->\n          <div class="glass-panel rounded-3xl p-10 border border-white/10 hover:border-orange-500/30 transition-all duration-300 group animate-float" style="animation-delay:0.5s;">\n            <div class="w-16 h-16 bg-orange-600 rounded-2xl flex items-center justify-center mb-8 group-hover:scale-110 transition-transform shadow-lg">\n              <i data-lucide="coffee" class="w-8 h-8 text-white"></i>\n            </div>\n            <h4 class="text-white text-2xl font-black mb-4 tracking-tight">향응 및 편의 제공 금지</h4>\n            <p class="text-slate-300 leading-relaxed font-medium">부적절한 식사 대접이나 골프 등 편의 제공은 원천 차단하여 투명성을 지킵니다.</p>\n          </div>\n\n          <!-- Card 3 -->\n          <div class="glass-panel rounded-3xl p-10 border border-white/10 hover:border-amber-500/30 transition-all duration-300 group animate-float" style="animation-delay:1s;">\n            <div class="w-16 h-16 bg-amber-600 rounded-2xl flex items-center justify-center mb-8 group-hover:scale-110 transition-transform shadow-lg">\n              <i data-lucide="shield-check" class="w-8 h-8 text-white"></i>\n            </div>\n            <h4 class="text-white text-2xl font-black mb-4 tracking-tight">부득이한 경우 자진신고</h4>\n            <p class="text-slate-300 leading-relaxed font-medium">택배 등으로 배송된 선물은 반송이 원칙이며, 불가피할 시 클린센터로 즉시 신고합니다.</p>\n          </div>\n        </div>\n\n        <div class="mt-12 glass-panel rounded-3xl p-8 border border-white/10">\n          <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3">\n            <div class="shrink-0 w-10 h-10 rounded-2xl flex items-center justify-center bg-white/10 border border-white/10">\n              <i data-lucide="sparkles" class="w-6 h-6 text-white"></i>\n            </div>\n            <div class="text-slate-200 font-semibold leading-relaxed">\n              <span class="text-white font-extrabold">원칙을 지키는 선택</span>이 나와 동료를 보호합니다. 애매하면 <span class="text-white font-extrabold">하지 않는 것</span>이 정답입니다.\n            </div>\n          </div>\n        </div>\n\n      </div>\n    </div>\n  </section>\n\n\n  <!-- 4. 비윤리 행위 신고 채널 (Reporting Channels) -->\n  <section class="px-4 sm:px-6 pb-10">\n    <div class="max-w-6xl mx-auto rounded-[34px] border border-white/10 overflow-hidden shadow-2xl"\n         style="background: radial-gradient(1200px 420px at 50% 0%, rgba(239,68,68,0.10), transparent 58%),\n                         linear-gradient(180deg, rgba(2,6,23,0.88), rgba(2,6,23,0.70));">\n      <div class="px-6 sm:px-10 py-12">\n        <div class="grid md:grid-cols-3 gap-6">\n          <div class="md:col-span-1 py-2">\n            <div class="text-red-500 font-bold text-xs sm:text-sm uppercase tracking-[0.35em] mb-3">Reporting Channel</div>\n            <h2 class="text-white text-3xl sm:text-4xl font-black mb-4 leading-tight tracking-tight">비윤리 행위<br/>신고 채널</h2>\n            <p class="text-slate-300 font-medium leading-relaxed">\n              부정부패 없는 ktMOS북부를 위해<br/>\n              여러분의 용기 있는 목소리가 필요합니다.\n            </p>\n          </div>\n\n          <div class="md:col-span-2 grid sm:grid-cols-2 gap-4">\n            <!-- Phone -->\n            <div class="glass-panel p-8 rounded-3xl flex items-center gap-6 group hover:bg-white/5 transition-all border border-white/10">\n              <div class="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center border border-white/10 group-hover:border-red-500/40">\n                <i data-lucide="phone" class="w-7 h-7 text-white group-hover:text-red-400"></i>\n              </div>\n              <div>\n                <p class="text-xs font-bold text-slate-400 uppercase mb-1 tracking-widest">감사실 직통</p>\n                <p class="text-xl sm:text-2xl font-black text-white">02-3414-1919</p>\n              </div>\n            </div>\n\n            <!-- Cyber -->\n            <a href="#" target="_blank" rel="noopener"\n               class="glass-panel p-8 rounded-3xl flex items-center gap-6 group hover:bg-white/5 transition-all border border-white/10">\n              <div class="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center border border-white/10 group-hover:border-blue-500/40">\n                <i data-lucide="globe" class="w-7 h-7 text-white group-hover:text-blue-400"></i>\n              </div>\n              <div class="flex-1">\n                <p class="text-xs font-bold text-slate-400 uppercase mb-1 tracking-widest">사이버 신문고</p>\n                <div class="flex items-center justify-between gap-3">\n                  <span class="text-xl sm:text-2xl font-black text-white border-b border-white/20 pb-1">바로가기</span>\n                  <i data-lucide="arrow-right" class="w-6 h-6 text-slate-300 group-hover:text-white transition-colors"></i>\n                </div>\n              </div>\n            </a>\n\n            <!-- Email (full width) -->\n            <div class="sm:col-span-2 glass-panel p-8 rounded-3xl flex items-center gap-6 group hover:bg-white/5 transition-all border border-white/10">\n              <div class="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center border border-white/10 group-hover:border-amber-500/40">\n                <i data-lucide="mail" class="w-7 h-7 text-white group-hover:text-amber-300"></i>\n              </div>\n              <div>\n                <p class="text-xs font-bold text-slate-400 uppercase mb-1 tracking-widest">이메일 제보</p>\n                <p class="text-xl sm:text-2xl font-black text-white">ethics@ktmos.com</p>\n              </div>\n            </div>\n\n            <div class="sm:col-span-2 text-slate-400 text-xs leading-relaxed">\n              ※ ‘사이버 신문고’ 링크는 회사 내부 URL로 교체해 주세요. (현재는 # 처리)\n            </div>\n          </div>\n        </div>\n      </div>\n    </div>\n  </section>\n\n\n  <script>\n    (function() {\n      try { if (window.lucide) window.lucide.createIcons(); } catch(e) {}\n\n      // Auto-resize iframe height in Streamlit\n      function sendHeight() {\n        const h = document.documentElement.scrollHeight;\n        const msg = { isStreamlitMessage: true, type: "setFrameHeight", height: h };\n        window.parent.postMessage(msg, "*");\n      }\n      window.addEventListener("load", sendHeight);\n      window.addEventListener("resize", () => setTimeout(sendHeight, 50));\n      try {\n        const ro = new ResizeObserver(() => sendHeight());\n        ro.observe(document.body);\n      } catch(e) {}\n      setTimeout(sendHeight, 120);\n      setTimeout(sendHeight, 600);\n      setTimeout(sendHeight, 1200);\n    })();\n  </script>\n</body>\n</html>\n'
-
-    components.html(
-        CLEAN_CAMPAIGN_AGENDA_HTML,
-        height=1200,         # 충분한 고정 높이(신고 채널까지 노출) — 내부 JS가 동작하면 자동 보정
-        scrolling=False,
-    )
-
-
-# ✅ 자율점검 탭 전용 스타일 범위 종료
-    
-    # 5) ✍️ 스스로 다짐하는 청렴 서약 (자율 참여 이벤트)
-    #    - 이름만 수집하여 Google Sheet에 저장
-    #    - 참여 순번/누적 참여자 수 표시
-    #    - 참여 시 3초 감사 팝업 + 꽃가루(Confetti) 효과
-    st.markdown("""
-    <style>
-      .cc-pledge-wrap{
-        margin: 26px 0 14px 0;
-        padding: 44px 22px 34px 22px;
-        border-radius: 28px;
-        background:
-          radial-gradient(circle at 18% 22%, rgba(239,68,68,0.16), transparent 44%),
-          radial-gradient(circle at 78% 34%, rgba(249,115,22,0.12), transparent 46%),
-          radial-gradient(circle at 50% 88%, rgba(245,158,11,0.10), transparent 55%),
-          linear-gradient(180deg, #050813 0%, #070B1B 100%);
-        border: 1px solid rgba(255,255,255,0.10);
-        box-shadow: 0 20px 80px rgba(0,0,0,0.38);
-      }
-      .cc-pledge-title{
-        text-align:center;
-        font-size: 56px;
-        font-weight: 900;
-        letter-spacing: -0.04em;
-        line-height: 1.02;
-        margin: 0 0 18px 0;
-        color: rgba(255,255,255,0.98);
-      }
-      .cc-pledge-title .em{
-        color: #ef4444;
-        text-decoration: underline;
-        text-decoration-thickness: 10px;
-        text-underline-offset: 10px;
-      }
-      .cc-pledge-panel{
-        max-width: 980px;
-        margin: 0 auto;
-        padding: 30px 28px 22px 28px;
-        border-radius: 34px;
-        background: rgba(255,255,255,0.04);
-        border: 1px solid rgba(255,255,255,0.10);
-        backdrop-filter: blur(12px);
-      }
-      .cc-pledge-icon{
-        width: 84px; height: 84px;
-        margin: 10px auto 10px auto;
-        border-radius: 22px;
-        display:flex; align-items:center; justify-content:center;
-        background: rgba(239,68,68,0.10);
-        border: 1px solid rgba(239,68,68,0.22);
-        box-shadow: 0 12px 30px rgba(239,68,68,0.10);
-        font-size: 40px;
-      }
-      .cc-pledge-event-title{
-        text-align:center;
-        font-size: 26px;
-        font-weight: 900;
-        letter-spacing: -0.03em;
-        margin: 10px 0 8px 0;
-        color: rgba(255,255,255,0.98);
-      }
-      .cc-pledge-desc{
-        text-align:center;
-        font-size: 16px;
-        font-weight: 700;
-        line-height: 1.6;
-        color: rgba(229,231,235,0.78);
-        margin: 0 0 18px 0;
-      }
-      .cc-pledge-desc .hot{ color:#ef4444; font-weight:900; }
-      .cc-pledge-note{
-        text-align:center;
-        font-size: 13px;
-        font-weight: 700;
-        color: rgba(229,231,235,0.60);
-        margin-top: 8px;
-      }
-      .cc-pledge-count{
-        text-align:center;
-        margin-top: 16px;
-        color: rgba(148,163,184,0.90);
-        font-weight: 900;
-        letter-spacing: 0.08em;
-      }
-      .cc-pledge-count .num{
-        color: rgba(255,255,255,0.95);
-        font-variant-numeric: tabular-nums;
-      }
-
-      /* Streamlit 위젯 스타일: pledge 영역에서만 강제 */
-      .cc-pledge-wrap div[data-testid="stTextInput"] input{
-        background: rgba(15,23,42,0.65) !important;
-        border: 1px solid rgba(255,255,255,0.12) !important;
-        border-radius: 18px !important;
-        height: 52px !important;
-        color: rgba(255,255,255,0.96) !important;
-        -webkit-text-fill-color: rgba(255,255,255,0.96) !important;
-        text-align: center !important;
-        font-weight: 900 !important;
-      }
-      .cc-pledge-wrap div[data-testid="stTextInput"] input::placeholder{
-        color: rgba(229,231,235,0.45) !important;
-        font-weight: 800 !important;
-      }
-      .cc-pledge-wrap .stButton>button, 
-      .cc-pledge-wrap div[data-testid="stFormSubmitButton"]>button{
-        background: linear-gradient(90deg, #ef4444, #f97316) !important;
-        border: none !important;
-        border-radius: 18px !important;
-        height: 52px !important;
-        color: white !important;
-        font-weight: 950 !important;
-        box-shadow: 0 18px 40px rgba(239,68,68,0.18) !important;
-      }
-      .cc-pledge-wrap .stButton>button:hover,
-      .cc-pledge-wrap div[data-testid="stFormSubmitButton"]>button:hover{
-        filter: brightness(1.02) !important;
-        transform: translateY(-1px);
-      }
-    </style>
-    """, unsafe_allow_html=True)
-
-    # 현재 참여자 수(표시용)
-    pledge_total = 0
-    pledge_sheet_ready = True
-    try:
-        _client = init_google_sheet_connection()
-        if _client:
-            _ss = _client.open("Audit_Result_2026")
-            _ws = _get_or_create_ws(_ss, PLEDGE_SHEET_TITLE, ["저장시간", "성함"])
-            pledge_total = _pledge_count(_ws)
-        else:
-            pledge_sheet_ready = False
-    except Exception:
-        pledge_sheet_ready = False
-
-    st.markdown('<div class="cc-pledge-wrap">', unsafe_allow_html=True)
-    st.markdown('<div class="cc-pledge-title">스스로 다짐하는<br><span class="em">청렴 서약</span></div>', unsafe_allow_html=True)
-
-    st.markdown('<div class="cc-pledge-panel">', unsafe_allow_html=True)
-    st.markdown('<div class="cc-pledge-icon">🎖️</div>', unsafe_allow_html=True)
-    st.markdown('<div class="cc-pledge-event-title">🎁 청렴 실천 응원 이벤트</div>', unsafe_allow_html=True)
-    st.markdown(
-        '<div class="cc-pledge-desc">본 서약은 <b>자율 참여</b>입니다.<br>'
-        f'임직원 <span class="hot">{PLEDGE_THRESHOLD}명 이상</span>이 서약에 참여하시면,<br>'
-        f'참여자 중 <span class="hot">{PLEDGE_WINNERS}명</span>을 추첨하여 새해 모바일 커피 쿠폰을 감사실에서 드립니다.</div>',
-        unsafe_allow_html=True
-    )
-
-    if not pledge_sheet_ready:
-        st.warning("⚠️ 현재 서약 저장 기능이 준비되지 않았습니다. (Google Sheet 연결 확인 필요)")
-    else:
-        with st.form("clean_campaign_pledge_form", clear_on_submit=True):
-            c1, c2 = st.columns([0.72, 0.28], vertical_alignment="center")
-            with c1:
-                pledge_name = st.text_input("성함", placeholder="성함", label_visibility="collapsed")
-            with c2:
-                submit_pledge = st.form_submit_button("서약하기")
-
-        if submit_pledge:
-            ok, msg, rank, total = save_clean_campaign_pledge(pledge_name)
-            if ok:
-                pledge_total = total
-                # ✅ 3초 감사 팝업(꽃가루/컨페티)
-                st.session_state["__pledge_popup_payload__"] = {
-                    "name": str(pledge_name or "").strip(),
-                    "rank": int(rank or 0),
-                    "total": int(total or 0),
-                }
-            else:
-                # 중복 참여 안내 등은 경고로만 표시(UX 유지)
-                st.warning(msg)
-
-    st.markdown(
-        f'<div class="cc-pledge-count">CURRENT: <span class="num">{pledge_total}</span> SIGNATURES<br>'
-        f'현재 총 <span class="num">{pledge_total}</span>명의 임직원이 서약에 참여했습니다.</div>',
-        unsafe_allow_html=True
-    )
-    st.markdown('<div class="cc-pledge-note">※ 참여 정보는 성함만 저장되며, 클린캠페인 운영 목적 외에는 사용되지 않습니다.</div>', unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)  # panel close
-    st.markdown('</div>', unsafe_allow_html=True)  # wrap close
-
-    # ✅ 감사 팝업 렌더(1회)
-    if st.session_state.get("__pledge_popup_payload__"):
-        _p = st.session_state.pop("__pledge_popup_payload__", None)
-        if _p:
-            components.html(_build_pledge_popup_html(_p.get("name",""), _p.get("rank",0), _p.get("total",0)), height=1)
-
+            # ✅ 감사 팝업 렌더(1회)
+            if st.session_state.get("__pledge_popup_payload__"):
+                _p = st.session_state.pop("__pledge_popup_payload__", None)
+                if _p:
+                    components.html(_build_pledge_popup_html(_p.get("name",""), _p.get("rank",0), _p.get("total",0)), height=1)
 st.markdown("</div>", unsafe_allow_html=True)
 
 # --- [Tab 2: 법률 리스크/규정/계약 검토 & 감사보고서 작성] ---
