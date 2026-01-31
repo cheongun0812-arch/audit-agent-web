@@ -1672,7 +1672,7 @@ with tab_audit:
                           rgba(245,158,11,0.35),
                           transparent);
                         opacity: 0.95;"></div>
-            <div style="height:42px"></div>
+            <div style="height:35px"></div>
             ''',
             unsafe_allow_html=True
         )
