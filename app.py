@@ -763,8 +763,9 @@ def _maybe_draw_winners(spreadsheet, pledge_ws):
         winners_ws = _get_or_create_ws(
             spreadsheet,
             PLEDGE_WINNERS_SHEET_TITLE,
-            ["추첨시간", "성함", "참여순번"]
+            ["추첨시간", "사번", "성함", "참여순번"]
         )
+
         # 이미 추첨이 진행되었는지 체크(헤더 제외 1행 이상이면 스킵)
         existing = winners_ws.get_all_values()
         if len(existing) > 1:
@@ -774,71 +775,92 @@ def _maybe_draw_winners(spreadsheet, pledge_ws):
         if total < PLEDGE_THRESHOLD:
             return
 
-        # 참여자 목록(이름/순번) 확보
-        names = pledge_ws.col_values(2)[1:]  # header 제외
-        # 빈값 제거
-        names = [n for n in names if str(n).strip()]
-        if not names:
+        # 참여자 목록 확보 (시트 구조: [저장시간, 사번, 성함])
+        all_rows = pledge_ws.get_all_values()[1:]  # header 제외
+        entries = []
+        for idx, row in enumerate(all_rows, start=1):  # idx = 참여순번(1-based)
+            emp = row[1].strip() if len(row) > 1 else ""
+            name = row[2].strip() if len(row) > 2 else (row[1].strip() if len(row) > 1 else "")
+            norm_emp = "".join(emp.split()).replace("-", "")
+            # 사번이 비어있거나 숫자 성분이 전혀 없으면(과거 '성함-only' 데이터 등) 추첨 대상에서 제외
+            if not norm_emp or not any(ch.isdigit() for ch in norm_emp):
+                continue
+            entries.append((idx, emp, name))
+
+        if not entries:
             return
 
-        # 추첨 대상: 전체 참여자(500명 이상)
-        pool = list(range(1, len(names) + 1))  # 참여순번(1-based)
+        pool = [e[0] for e in entries]  # 참여순번(실제 행 기준)
         pick = min(PLEDGE_WINNERS, len(pool))
         rng = random.SystemRandom()
         picked_ranks = sorted(rng.sample(pool, pick))
 
+        entry_map = {e[0]: e for e in entries}
+
         kst = pytz.timezone("Asia/Seoul")
         now = datetime.datetime.now(kst).strftime("%Y-%m-%d %H:%M:%S")
-        rows = [[now, names[r-1], r] for r in picked_ranks]
+        rows = [[now, entry_map[r][1], entry_map[r][2], r] for r in picked_ranks]
         winners_ws.append_rows(rows, value_input_option="USER_ENTERED")
     except Exception:
         # 추첨 실패는 사용자 UX를 막지 않도록 무시(관리자가 시트에서 확인 가능)
         return
 
-def save_clean_campaign_pledge(name: str) -> tuple[bool, str, int, int]:
+def save_clean_campaign_pledge(emp_id: str, name: str) -> tuple[bool, str, int, int]:
     """
+    자율 참여 '청렴 서약' 정보를 Google Sheet에 저장합니다.
+
     Returns:
       (ok, message, rank, total_count)
+        - rank: 참여순번(1부터)
+        - total_count: 누적 참여자 수
     """
     client = init_google_sheet_connection()
     if not client:
         return False, "구글 시트 연결 실패 (Secrets 확인)", 0, 0
 
+    def _norm_emp(v: str) -> str:
+        # 공백/하이픈 제거(사번은 문자열로 유지)
+        return "".join(str(v or "").strip().split()).replace("-", "")
+
     try:
         spreadsheet = client.open("Audit_Result_2026")
-        pledge_ws = _get_or_create_ws(spreadsheet, PLEDGE_SHEET_TITLE, ["저장시간", "성함"])
+        pledge_ws = _get_or_create_ws(spreadsheet, PLEDGE_SHEET_TITLE, ["저장시간", "사번", "성함"])
 
+        raw_emp = str(emp_id or "").strip()
         raw_name = str(name or "").strip()
-        norm = _normalize_kor_name(raw_name)
-        if not norm:
-            return False, "성함을 입력해 주세요.", 0, _pledge_count(pledge_ws)
+        norm_emp = _norm_emp(raw_emp)
 
-        # 중복 체크(이름 기준) + 참여순번 계산
-        name_col = pledge_ws.col_values(2)  # [header, n1, n2, ...]
-        existing_names = name_col[1:]
-        existing_norms = [_normalize_kor_name(n) for n in existing_names]
+        total_now = _pledge_count(pledge_ws)
 
-        if norm in existing_norms:
-            rank = existing_norms.index(norm) + 1
-            total = len(existing_norms)
-            return False, f"'{raw_name}'님은 이미 청렴 서약에 참여하셨습니다.", rank, total
+        # ✅ 입력값 검증
+        if not norm_emp:
+            return False, "사번을 입력해 주세요.", 0, total_now
+        if not raw_name:
+            return False, "성함을 입력해 주세요.", 0, total_now
 
-        # 저장
+        # ✅ 중복 체크(사번 기준)
+        emp_col = pledge_ws.col_values(2)[1:]  # header 제외
+        for i, v in enumerate(emp_col, start=1):
+            if _norm_emp(v) == norm_emp:
+                # i는 header 제외한 데이터 행 기준 참여순번(1부터)
+                total_now = _pledge_count(pledge_ws)
+                return False, f"사번 {raw_emp}은(는) 이미 청렴 서약에 참여하셨습니다.", i, total_now
+
+        # ✅ 저장
         kst = pytz.timezone("Asia/Seoul")
         now = datetime.datetime.now(kst).strftime("%Y-%m-%d %H:%M:%S")
-        pledge_ws.append_row([now, raw_name], value_input_option="USER_ENTERED")
+        pledge_ws.append_row([now, raw_emp, raw_name], value_input_option="USER_ENTERED")
 
-        total = len(existing_norms) + 1
-        rank = total
+        total_after = total_now + 1
+        rank = total_after
 
-        # 500명 이상 시 50명 추첨(최초 1회)
-        if total >= PLEDGE_THRESHOLD:
+        # ✅ 500명 이상 시 50명 추첨(최초 1회)
+        if total_after >= PLEDGE_THRESHOLD:
             _maybe_draw_winners(spreadsheet, pledge_ws)
 
-        return True, "성공", rank, total
+        return True, "성공", rank, total_after
     except Exception as e:
         return False, f"저장 중 오류: {e}", 0, 0
-
 
 def get_model():
     if "api_key" in st.session_state:
@@ -1146,7 +1168,7 @@ with tab_audit:
     """, unsafe_allow_html=True)
 
     # --- 📐 캠페인 콘텐츠 정렬(영상 폭 기준) ---
-    cc_l, cc_mid, cc_r = st.columns([1, 7, 1])
+    cc_l, cc_mid, cc_r = st.columns([1, 10, 1])
     with cc_mid:
         # 2) 🎞️ 캠페인 홍보 영상 (자동 재생)
         video_filename = "2026 new yearf.mp4"  # app.py 폴더에 업로드된 파일명
@@ -1163,7 +1185,7 @@ with tab_audit:
                 b64 = _load_mp4_base64(_path)
                 st.markdown(
                     f"""
-                    <div style="background:#0B1B2B; padding:14px; border-radius:18px; box-shadow:0 18px 40px rgba(0,0,0,0.35); border:1px solid rgba(255,255,255,0.12); margin: 8px auto 18px auto; max-width:980px;">
+                    <div style="background:#0B1B2B; padding:14px; border-radius:18px; box-shadow:0 18px 40px rgba(0,0,0,0.35); border:1px solid rgba(255,255,255,0.12); margin: 8px auto 18px auto; max-width:1120px;">
                       <video autoplay muted loop playsinline preload="auto" controls
                              style="width:100%; border-radius:12px; outline:none;">
                         <source src="data:video/mp4;base64,{{b64}}" type="video/mp4">
@@ -1196,7 +1218,7 @@ with tab_audit:
           <script src="https://cdn.tailwindcss.com"></script>
           <style>
             :root{
-              --maxw: 980px;
+              --maxw: 1120px;
               --title: clamp(34px, 3.6vw, 54px);
               --kicker: 12px;
               --radius: 30px;
@@ -1597,7 +1619,7 @@ with tab_audit:
     
         components.html(
             CLEAN_CAMPAIGN_BUNDLE_HTML,
-            height=420,
+            height=1400,
             scrolling=False,
         )
     
@@ -1614,7 +1636,7 @@ with tab_audit:
         st.markdown("""
         <style>
           :root{
-            --cc-maxw: 980px;
+            --cc-maxw: 1120px;
             --cc-title: clamp(34px, 3.6vw, 54px);
             --cc-red: #ef4444;
             --cc-orange: #f97316;
@@ -1653,7 +1675,7 @@ with tab_audit:
             text-underline-offset: 10px;
           }
           .cc-pledge-panel{
-            max-width: 980px;
+            max-width: 1120px;
             margin: 0 auto;
             padding: 28px 26px 20px 26px;
             border-radius: 30px;
@@ -1782,14 +1804,15 @@ with tab_audit:
                 st.warning("⚠️ 현재 서약 저장 기능이 준비되지 않았습니다. (Google Sheet 연결 확인 필요)")
             else:
                 with st.form("clean_campaign_pledge_form", clear_on_submit=True):
-                    c1, c2 = st.columns([0.72, 0.28], vertical_alignment="center")
+                    c1, c2, c3 = st.columns([0.38, 0.38, 0.24], vertical_alignment="center")
                     with c1:
-                        pledge_name = st.text_input("성함", placeholder="성함", label_visibility="collapsed")
+                        pledge_emp_id = st.text_input("사번", placeholder="사번", label_visibility="collapsed")
                     with c2:
+                        pledge_name = st.text_input("성함", placeholder="성함", label_visibility="collapsed")
+                    with c3:
                         submit_pledge = st.form_submit_button("서약하기")
-
                 if submit_pledge:
-                    ok, msg, rank, total = save_clean_campaign_pledge(pledge_name)
+                    ok, msg, rank, total = save_clean_campaign_pledge(pledge_emp_id, pledge_name)
                     if ok:
                         pledge_total = max(int(total or 0), pledge_total)
                         st.session_state["__pledge_popup_payload__"] = {
@@ -1805,7 +1828,7 @@ with tab_audit:
                 f'현재 총 <span class="num">{pledge_total}</span>명의 임직원이 서약에 참여했습니다.</div>',
                 unsafe_allow_html=True
             )
-            st.markdown('<div class="cc-pledge-note">※ 참여 정보는 성함만 저장되며, 클린캠페인 운영 목적 외에는 사용되지 않습니다.</div>', unsafe_allow_html=True)
+            st.markdown('<div class="cc-pledge-note">※ 참여 정보는 사번/성함이 저장되며, 클린캠페인 운영 목적 외에는 사용되지 않습니다.</div>', unsafe_allow_html=True)
 
             # ✅ 감사 팝업 렌더(1회)
             if st.session_state.get("__pledge_popup_payload__"):
