@@ -1185,7 +1185,7 @@ with tab_audit:
                 b64 = _load_mp4_base64(_path)
                 st.markdown(
                     f"""
-                    <div style="background:#0B1B2B; padding:14px; border-radius:18px; box-shadow:0 18px 40px rgba(0,0,0,0.35); border:1px solid rgba(255,255,255,0.12); margin: 8px auto 18px auto; max-width:1120px;">
+                    <div style="background:#0B1B2B; padding:14px; border-radius:18px; box-shadow:0 18px 40px rgba(0,0,0,0.35); border:1px solid rgba(255,255,255,0.12); margin: 8px auto 18px auto; max-width:1150px;">
                       <video autoplay muted loop playsinline preload="auto" controls
                              style="width:100%; border-radius:12px; outline:none;">
                         <source src="data:video/mp4;base64,{{b64}}" type="video/mp4">
@@ -1218,7 +1218,7 @@ with tab_audit:
           <script src="https://cdn.tailwindcss.com"></script>
           <style>
             :root{
-              --maxw: 1120px;
+              --maxw: 1150px;
               --title: clamp(34px, 3.6vw, 54px);
               --kicker: 12px;
               --radius: 30px;
@@ -1231,7 +1231,7 @@ with tab_audit:
               --red: #ef4444;
               --orange: #f97316;
               --amber: #f59e0b;
-              --gap: 30px;
+              --gap: 48px;
             }
             html,body{margin:0;padding:0;background:transparent;color:var(--txt);
               font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans KR", sans-serif;}
@@ -1239,19 +1239,19 @@ with tab_audit:
             .cc-card{
               width: min(100%, var(--maxw));
               margin: 0 auto;
-              padding: 26px 18px 28px 18px;
+              padding: 32px 20px 64px 20px;
               border-radius: var(--radius);
               background:
                 radial-gradient(circle at 16% 18%, rgba(239,68,68,0.14), transparent 40%),
                 radial-gradient(circle at 78% 26%, rgba(249,115,22,0.12), transparent 40%),
                 radial-gradient(circle at 36% 92%, rgba(245,158,11,0.10), transparent 48%),
                 var(--bg);
-              border: 1px solid rgba(255,255,255,0.08);
+              border: 1px solid rgba(255,255,255,0.10);
               box-shadow: 0 26px 72px rgba(0,0,0,0.45);
               overflow:hidden;
             }
-            .cc-section{margin-top: var(--gap);}
-            .cc-section:first-child{margin-top: 0;}
+            .cc-section{margin-top: var(--gap); padding: 26px 18px; border-radius: 30px; border:1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.03);}  .cc-section.aura{border-color: rgba(249,115,22,0.28); background: radial-gradient(circle at 18% 10%, rgba(249,115,22,0.12), transparent 50%), rgba(255,255,255,0.03);} .cc-section.agenda{border-color: rgba(239,68,68,0.20); background: radial-gradient(circle at 82% 20%, rgba(239,68,68,0.12), transparent 54%), rgba(255,255,255,0.03);} .cc-section.report{border-color: rgba(148,163,184,0.22); background: radial-gradient(circle at 20% 30%, rgba(148,163,184,0.10), transparent 52%), rgba(255,255,255,0.03);} 
+            
             .cc-kicker{
               text-align:center;
               font-size: var(--kicker);
@@ -1340,7 +1340,7 @@ with tab_audit:
             }
             .sep{
               height:1px; width:100%;
-              margin: var(--gap) 0 0 0;
+              margin: calc(var(--gap) - 10px) 0 0 0;
               background: linear-gradient(90deg, transparent, rgba(239,68,68,0.45), rgba(249,115,22,0.35), transparent);
               opacity:0.55;
             }
@@ -1442,7 +1442,7 @@ with tab_audit:
         <body>
           <div class="cc-card">
             <!-- 1) Integrity Aura -->
-            <section class="cc-section">
+            <section class="cc-section aura">
               <div class="cc-kicker">2026 integrity aura</div>
               <div class="cc-title">2026 청렴 아우라 분석</div>
               <div class="cc-sub">성함과 올해의 목표를 선택하고 <b>“청렴 기운 스캔하기”</b>를 눌러보세요.</div>
@@ -1477,7 +1477,7 @@ with tab_audit:
             <div class="sep"></div>
 
             <!-- 2) Agenda -->
-            <section class="cc-section">
+            <section class="cc-section agenda">
               <div class="cc-kicker">clean festival policy</div>
               <div class="cc-title">설 명절 클린 캠페인 아젠다</div>
               <div class="cc-sub">명절 기간에도 청렴은 최고의 선물입니다. 아래 3대 원칙을 꼭 지켜주세요.</div>
@@ -1504,7 +1504,7 @@ with tab_audit:
             <div class="sep"></div>
 
             <!-- 3) Reporting Channel -->
-            <section class="cc-section">
+            <section class="cc-section report">
               <div class="cc-title">비윤리 행위 신고 채널</div>
               <div class="report-grid">
                 <div class="report-left">
@@ -1619,9 +1619,11 @@ with tab_audit:
     
         components.html(
             CLEAN_CAMPAIGN_BUNDLE_HTML,
-            height=1400,
+            height=1700,
             scrolling=False,
         )
+        st.markdown('<div style="height:72px"></div>', unsafe_allow_html=True)
+
     
 
 
