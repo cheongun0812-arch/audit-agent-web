@@ -14,6 +14,8 @@ import base64
 import datetime
 import pytz
 import pandas as pd
+import random
+import html
 
 import plotly.graph_objects as go
 import plotly.express as px
@@ -544,6 +546,300 @@ def save_audit_result(emp_id, name, unit, dept, answer, sheet_name):
     except Exception as e:
         return False, str(e)
 
+
+# ==========================================
+# ✅ (클린캠페인) 자율 참여 '청렴 서약' 저장/집계
+# - 요청사항: 이름만 수집, Google Sheet에 저장
+# - 500명 이상 참여 시 50명 추첨(1회)하여 별도 시트에 기록
+# ==========================================
+PLEDGE_SHEET_TITLE = "2026_청렴서약_참여자"
+PLEDGE_WINNERS_SHEET_TITLE = "2026_청렴서약_추첨자"
+PLEDGE_THRESHOLD = 500
+PLEDGE_WINNERS = 50
+
+def _build_pledge_popup_html(name: str, rank: int, total: int) -> str:
+    safe_name = html.escape(str(name or "")).strip()
+    rank = int(rank or 0)
+    total = int(total or 0)
+
+    template = """
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+<style>
+  :root {
+    --bg: rgba(2, 6, 23, 0.74);
+    --panel: rgba(255, 255, 255, 0.06);
+    --border: rgba(255, 255, 255, 0.14);
+    --txt: rgba(255, 255, 255, 0.94);
+    --muted: rgba(229, 231, 235, 0.76);
+    --red: #ef4444;
+    --orange: #f97316;
+    --yellow: #f59e0b;
+  }
+  html, body { margin:0; padding:0; background:transparent; font-family: Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, "Noto Sans KR", sans-serif; }
+  @keyframes fadeUp {
+    from { opacity:0; transform: translateY(18px) scale(0.985); }
+    to   { opacity:1; transform: translateY(0) scale(1); }
+  }
+  @keyframes fadeOut {
+    from { opacity:1; }
+    to   { opacity:0; }
+  }
+  @keyframes floatPollen {
+    0%   { transform: translateY(0) translateX(0) scale(0.9); opacity:0; }
+    12%  { opacity:0.85; }
+    100% { transform: translateY(-140px) translateX(18px) scale(1.2); opacity:0; }
+  }
+  .overlay {
+    position: fixed; inset: 0;
+    display:flex; align-items:center; justify-content:center;
+    background: var(--bg);
+    z-index: 999999;
+  }
+  .card {
+    width: min(720px, 92vw);
+    border-radius: 30px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    backdrop-filter: blur(14px);
+    box-shadow: 0 30px 90px rgba(0,0,0,0.45);
+    overflow: hidden;
+    position: relative;
+    animation: fadeUp 0.32s ease-out both;
+  }
+  .glow {
+    position:absolute; inset:-2px;
+    background:
+      radial-gradient(circle at 20% 18%, rgba(239,68,68,0.28), transparent 52%),
+      radial-gradient(circle at 80% 28%, rgba(249,115,22,0.22), transparent 55%),
+      radial-gradient(circle at 52% 92%, rgba(245,158,11,0.18), transparent 60%);
+    filter: blur(22px);
+    pointer-events:none;
+  }
+  .inner { position:relative; padding: 26px 26px 22px 26px; text-align:center; }
+  .badge {
+    display:inline-flex; align-items:center; justify-content:center;
+    width: 72px; height: 72px;
+    margin: 6px auto 10px auto;
+    border-radius: 22px;
+    background: rgba(239,68,68,0.12);
+    border: 1px solid rgba(239,68,68,0.25);
+    box-shadow: 0 16px 40px rgba(239,68,68,0.14);
+    font-size: 36px;
+  }
+  .title {
+    margin: 0;
+    font-weight: 950;
+    letter-spacing: -0.03em;
+    font-size: 22px;
+    color: var(--txt);
+  }
+  .line {
+    margin: 12px auto 14px auto;
+    width: 56px; height: 4px;
+    background: rgba(148,163,184,0.32);
+    border-radius: 999px;
+  }
+  .msg {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    color: var(--txt);
+  }
+  .msg .hot {
+    color: var(--red);
+    text-decoration: underline;
+    text-decoration-thickness: 6px;
+    text-underline-offset: 8px;
+  }
+  .sub {
+    margin: 10px 0 0 0;
+    font-size: 14px;
+    font-weight: 800;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  .sub b { color: rgba(255,255,255,0.95); }
+  .pollen {
+    position:absolute;
+    width: 10px; height: 10px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.18);
+    box-shadow: 0 0 14px rgba(239,68,68,0.18);
+    filter: blur(0.3px);
+    animation: floatPollen 2.6s ease-out forwards;
+    pointer-events:none;
+  }
+</style>
+</head>
+<body>
+<div class="overlay" id="overlay">
+  <div class="card" id="card">
+    <div class="glow"></div>
+    <div class="inner">
+      <div class="badge">🎊</div>
+      <h3 class="title">청렴 실천에 함께해 주셔서 감사합니다</h3>
+      <div class="line"></div>
+      <p class="msg"><span class="hot">__NAME__</span>님은 <span class="hot">__RANK__</span>번째 참여자입니다!</p>
+      <p class="sub">현재 누적 <b>__TOTAL__</b>명 참여 · 여러분의 한 번의 선택이 ktMOS북부의 신뢰가 됩니다.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  // Pollen particles
+  const overlay = document.getElementById('overlay');
+  for(let i=0;i<22;i++){
+    const s = document.createElement('div');
+    s.className = 'pollen';
+    s.style.left = (Math.random()*100).toFixed(2) + 'vw';
+    s.style.bottom = (Math.random()*20).toFixed(2) + 'vh';
+    s.style.opacity = (0.4 + Math.random()*0.5).toFixed(2);
+    s.style.animationDelay = (Math.random()*0.35).toFixed(2) + 's';
+    const tx = (Math.random()*-10).toFixed(2);
+    const sc = (0.7 + Math.random()*0.9).toFixed(2);
+    s.style.transform = "translateY(0) translateX(" + tx + "px) scale(" + sc + ")";
+    overlay.appendChild(s);
+  }
+
+  // Confetti for ~3s
+  const end = Date.now() + 3000;
+  (function frame(){
+    confetti({ particleCount: 7, angle: 60,  spread: 62, origin: { x: 0 }, colors: ['#ef4444','#f97316','#f59e0b']});
+    confetti({ particleCount: 7, angle: 120, spread: 62, origin: { x: 1 }, colors: ['#ef4444','#f97316','#f59e0b']});
+    if(Date.now() < end) requestAnimationFrame(frame);
+  })();
+
+  // Auto close
+  setTimeout(() => {
+    overlay.style.animation = "fadeOut 0.30s ease-in forwards";
+    setTimeout(() => { overlay.remove(); }, 360);
+  }, 3100);
+})();
+</script>
+</body>
+</html>
+"""
+    return (
+        template.replace("__NAME__", safe_name)
+                .replace("__RANK__", str(rank))
+                .replace("__TOTAL__", str(total))
+    )
+
+def _normalize_kor_name(name: str) -> str:
+    # 공백 제거 + 양끝 정리 (동명이인 리스크는 존재하나, "이름만" 수집 요청에 맞춰 최소한으로 처리)
+    return "".join(str(name or "").strip().split())
+
+def _get_or_create_ws(spreadsheet, title: str, headers: list[str]):
+    try:
+        ws = spreadsheet.worksheet(title)
+        return ws
+    except Exception:
+        ws = spreadsheet.add_worksheet(title=title, rows=5000, cols=max(8, len(headers) + 2))
+        ws.append_row(headers)
+        return ws
+
+def _pledge_count(ws) -> int:
+    # A열(저장시간) 기준으로 비어있지 않은 행 수를 빠르게 계산
+    try:
+        col = ws.col_values(1)
+        return max(0, len(col) - 1)  # header 제외
+    except Exception:
+        try:
+            return max(0, len(ws.get_all_values()) - 1)
+        except Exception:
+            return 0
+
+def _maybe_draw_winners(spreadsheet, pledge_ws):
+    # 500명 이상이 되었을 때 '최초 1회'만 추첨하여 Winners 시트에 저장
+    try:
+        winners_ws = _get_or_create_ws(
+            spreadsheet,
+            PLEDGE_WINNERS_SHEET_TITLE,
+            ["추첨시간", "성함", "참여순번"]
+        )
+        # 이미 추첨이 진행되었는지 체크(헤더 제외 1행 이상이면 스킵)
+        existing = winners_ws.get_all_values()
+        if len(existing) > 1:
+            return
+
+        total = _pledge_count(pledge_ws)
+        if total < PLEDGE_THRESHOLD:
+            return
+
+        # 참여자 목록(이름/순번) 확보
+        names = pledge_ws.col_values(2)[1:]  # header 제외
+        # 빈값 제거
+        names = [n for n in names if str(n).strip()]
+        if not names:
+            return
+
+        # 추첨 대상: 전체 참여자(500명 이상)
+        pool = list(range(1, len(names) + 1))  # 참여순번(1-based)
+        pick = min(PLEDGE_WINNERS, len(pool))
+        rng = random.SystemRandom()
+        picked_ranks = sorted(rng.sample(pool, pick))
+
+        kst = pytz.timezone("Asia/Seoul")
+        now = datetime.datetime.now(kst).strftime("%Y-%m-%d %H:%M:%S")
+        rows = [[now, names[r-1], r] for r in picked_ranks]
+        winners_ws.append_rows(rows, value_input_option="USER_ENTERED")
+    except Exception:
+        # 추첨 실패는 사용자 UX를 막지 않도록 무시(관리자가 시트에서 확인 가능)
+        return
+
+def save_clean_campaign_pledge(name: str) -> tuple[bool, str, int, int]:
+    """
+    Returns:
+      (ok, message, rank, total_count)
+    """
+    client = init_google_sheet_connection()
+    if not client:
+        return False, "구글 시트 연결 실패 (Secrets 확인)", 0, 0
+
+    try:
+        spreadsheet = client.open("Audit_Result_2026")
+        pledge_ws = _get_or_create_ws(spreadsheet, PLEDGE_SHEET_TITLE, ["저장시간", "성함"])
+
+        raw_name = str(name or "").strip()
+        norm = _normalize_kor_name(raw_name)
+        if not norm:
+            return False, "성함을 입력해 주세요.", 0, _pledge_count(pledge_ws)
+
+        # 중복 체크(이름 기준) + 참여순번 계산
+        name_col = pledge_ws.col_values(2)  # [header, n1, n2, ...]
+        existing_names = name_col[1:]
+        existing_norms = [_normalize_kor_name(n) for n in existing_names]
+
+        if norm in existing_norms:
+            rank = existing_norms.index(norm) + 1
+            total = len(existing_norms)
+            return False, f"'{raw_name}'님은 이미 청렴 서약에 참여하셨습니다.", rank, total
+
+        # 저장
+        kst = pytz.timezone("Asia/Seoul")
+        now = datetime.datetime.now(kst).strftime("%Y-%m-%d %H:%M:%S")
+        pledge_ws.append_row([now, raw_name], value_input_option="USER_ENTERED")
+
+        total = len(existing_norms) + 1
+        rank = total
+
+        # 500명 이상 시 50명 추첨(최초 1회)
+        if total >= PLEDGE_THRESHOLD:
+            _maybe_draw_winners(spreadsheet, pledge_ws)
+
+        return True, "성공", rank, total
+    except Exception as e:
+        return False, f"저장 중 오류: {e}", 0, 0
+
+
 def get_model():
     if "api_key" in st.session_state:
         genai.configure(api_key=st.session_state["api_key"])
@@ -908,7 +1204,195 @@ with tab_audit:
 
 
 # ✅ 자율점검 탭 전용 스타일 범위 종료
-    st.markdown("</div>", unsafe_allow_html=True)
+    
+    # 5) ✍️ 스스로 다짐하는 청렴 서약 (자율 참여 이벤트)
+    #    - 이름만 수집하여 Google Sheet에 저장
+    #    - 참여 순번/누적 참여자 수 표시
+    #    - 참여 시 3초 감사 팝업 + 꽃가루(Confetti) 효과
+    st.markdown("""
+    <style>
+      .cc-pledge-wrap{
+        margin: 26px 0 14px 0;
+        padding: 44px 22px 34px 22px;
+        border-radius: 28px;
+        background:
+          radial-gradient(circle at 18% 22%, rgba(239,68,68,0.16), transparent 44%),
+          radial-gradient(circle at 78% 34%, rgba(249,115,22,0.12), transparent 46%),
+          radial-gradient(circle at 50% 88%, rgba(245,158,11,0.10), transparent 55%),
+          linear-gradient(180deg, #050813 0%, #070B1B 100%);
+        border: 1px solid rgba(255,255,255,0.10);
+        box-shadow: 0 20px 80px rgba(0,0,0,0.38);
+      }
+      .cc-pledge-title{
+        text-align:center;
+        font-size: 56px;
+        font-weight: 900;
+        letter-spacing: -0.04em;
+        line-height: 1.02;
+        margin: 0 0 18px 0;
+        color: rgba(255,255,255,0.98);
+      }
+      .cc-pledge-title .em{
+        color: #ef4444;
+        text-decoration: underline;
+        text-decoration-thickness: 10px;
+        text-underline-offset: 10px;
+      }
+      .cc-pledge-panel{
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 30px 28px 22px 28px;
+        border-radius: 34px;
+        background: rgba(255,255,255,0.04);
+        border: 1px solid rgba(255,255,255,0.10);
+        backdrop-filter: blur(12px);
+      }
+      .cc-pledge-icon{
+        width: 84px; height: 84px;
+        margin: 10px auto 10px auto;
+        border-radius: 22px;
+        display:flex; align-items:center; justify-content:center;
+        background: rgba(239,68,68,0.10);
+        border: 1px solid rgba(239,68,68,0.22);
+        box-shadow: 0 12px 30px rgba(239,68,68,0.10);
+        font-size: 40px;
+      }
+      .cc-pledge-event-title{
+        text-align:center;
+        font-size: 26px;
+        font-weight: 900;
+        letter-spacing: -0.03em;
+        margin: 10px 0 8px 0;
+        color: rgba(255,255,255,0.98);
+      }
+      .cc-pledge-desc{
+        text-align:center;
+        font-size: 16px;
+        font-weight: 700;
+        line-height: 1.6;
+        color: rgba(229,231,235,0.78);
+        margin: 0 0 18px 0;
+      }
+      .cc-pledge-desc .hot{ color:#ef4444; font-weight:900; }
+      .cc-pledge-note{
+        text-align:center;
+        font-size: 13px;
+        font-weight: 700;
+        color: rgba(229,231,235,0.60);
+        margin-top: 8px;
+      }
+      .cc-pledge-count{
+        text-align:center;
+        margin-top: 16px;
+        color: rgba(148,163,184,0.90);
+        font-weight: 900;
+        letter-spacing: 0.08em;
+      }
+      .cc-pledge-count .num{
+        color: rgba(255,255,255,0.95);
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* Streamlit 위젯 스타일: pledge 영역에서만 강제 */
+      .cc-pledge-wrap div[data-testid="stTextInput"] input{
+        background: rgba(15,23,42,0.65) !important;
+        border: 1px solid rgba(255,255,255,0.12) !important;
+        border-radius: 18px !important;
+        height: 52px !important;
+        color: rgba(255,255,255,0.96) !important;
+        -webkit-text-fill-color: rgba(255,255,255,0.96) !important;
+        text-align: center !important;
+        font-weight: 900 !important;
+      }
+      .cc-pledge-wrap div[data-testid="stTextInput"] input::placeholder{
+        color: rgba(229,231,235,0.45) !important;
+        font-weight: 800 !important;
+      }
+      .cc-pledge-wrap .stButton>button, 
+      .cc-pledge-wrap div[data-testid="stFormSubmitButton"]>button{
+        background: linear-gradient(90deg, #ef4444, #f97316) !important;
+        border: none !important;
+        border-radius: 18px !important;
+        height: 52px !important;
+        color: white !important;
+        font-weight: 950 !important;
+        box-shadow: 0 18px 40px rgba(239,68,68,0.18) !important;
+      }
+      .cc-pledge-wrap .stButton>button:hover,
+      .cc-pledge-wrap div[data-testid="stFormSubmitButton"]>button:hover{
+        filter: brightness(1.02) !important;
+        transform: translateY(-1px);
+      }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # 현재 참여자 수(표시용)
+    pledge_total = 0
+    pledge_sheet_ready = True
+    try:
+        _client = init_google_sheet_connection()
+        if _client:
+            _ss = _client.open("Audit_Result_2026")
+            _ws = _get_or_create_ws(_ss, PLEDGE_SHEET_TITLE, ["저장시간", "성함"])
+            pledge_total = _pledge_count(_ws)
+        else:
+            pledge_sheet_ready = False
+    except Exception:
+        pledge_sheet_ready = False
+
+    st.markdown('<div class="cc-pledge-wrap">', unsafe_allow_html=True)
+    st.markdown('<div class="cc-pledge-title">스스로 다짐하는<br><span class="em">청렴 서약</span></div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="cc-pledge-panel">', unsafe_allow_html=True)
+    st.markdown('<div class="cc-pledge-icon">🎖️</div>', unsafe_allow_html=True)
+    st.markdown('<div class="cc-pledge-event-title">🎁 청렴 실천 응원 이벤트</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="cc-pledge-desc">본 서약은 <b>자율 참여</b>입니다.<br>'
+        f'임직원 <span class="hot">{PLEDGE_THRESHOLD}명 이상</span>이 서약에 참여하시면,<br>'
+        f'참여자 중 <span class="hot">{PLEDGE_WINNERS}명</span>을 추첨하여 새해 모바일 커피 쿠폰을 감사실에서 드립니다.</div>',
+        unsafe_allow_html=True
+    )
+
+    if not pledge_sheet_ready:
+        st.warning("⚠️ 현재 서약 저장 기능이 준비되지 않았습니다. (Google Sheet 연결 확인 필요)")
+    else:
+        with st.form("clean_campaign_pledge_form", clear_on_submit=True):
+            c1, c2 = st.columns([0.72, 0.28], vertical_alignment="center")
+            with c1:
+                pledge_name = st.text_input("성함", placeholder="성함", label_visibility="collapsed")
+            with c2:
+                submit_pledge = st.form_submit_button("서약하기")
+
+        if submit_pledge:
+            ok, msg, rank, total = save_clean_campaign_pledge(pledge_name)
+            if ok:
+                pledge_total = total
+                # ✅ 3초 감사 팝업(꽃가루/컨페티)
+                st.session_state["__pledge_popup_payload__"] = {
+                    "name": str(pledge_name or "").strip(),
+                    "rank": int(rank or 0),
+                    "total": int(total or 0),
+                }
+            else:
+                # 중복 참여 안내 등은 경고로만 표시(UX 유지)
+                st.warning(msg)
+
+    st.markdown(
+        f'<div class="cc-pledge-count">CURRENT: <span class="num">{pledge_total}</span> SIGNATURES<br>'
+        f'현재 총 <span class="num">{pledge_total}</span>명의 임직원이 서약에 참여했습니다.</div>',
+        unsafe_allow_html=True
+    )
+    st.markdown('<div class="cc-pledge-note">※ 참여 정보는 성함만 저장되며, 클린캠페인 운영 목적 외에는 사용되지 않습니다.</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)  # panel close
+    st.markdown('</div>', unsafe_allow_html=True)  # wrap close
+
+    # ✅ 감사 팝업 렌더(1회)
+    if st.session_state.get("__pledge_popup_payload__"):
+        _p = st.session_state.pop("__pledge_popup_payload__", None)
+        if _p:
+            components.html(_build_pledge_popup_html(_p.get("name",""), _p.get("rank",0), _p.get("total",0)), height=1)
+
+st.markdown("</div>", unsafe_allow_html=True)
 
 # --- [Tab 2: 법률 리스크/규정/계약 검토 & 감사보고서 작성] ---
 with tab_doc:
