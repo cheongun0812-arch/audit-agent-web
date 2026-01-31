@@ -902,7 +902,7 @@ with tab_audit:
 
     components.html(
         CLEAN_CAMPAIGN_AGENDA_HTML,
-        height=720,          # 초기값 (내부 JS가 실제 높이로 자동 보정)
+        height=1200,         # 충분한 고정 높이(신고 채널까지 노출) — 내부 JS가 동작하면 자동 보정
         scrolling=False,
     )
 
