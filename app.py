@@ -831,44 +831,43 @@ def _render_pledge_group(
 
 # --- [Tab 1: 자율점검] ---
 with tab_audit:
-    # ✅ 자율점검 탭 전용 스타일 범위 시작(#audit-tab)
     st.markdown('<div id="audit-tab">', unsafe_allow_html=True)
 
-    # ============================================================
-    # 2026 설 명절 클린 캠페인 (Self-inspection)
-    # - 기존 1월 자율점검(윤리경영원칙실천지침) 학습/서약 UI는 표시하지 않음
-    # - inpor.html의 문구/레이아웃 흐름(1~5)을 Streamlit UI로 이식
-    # - 1번 섹션(히어로)은 '말이 달리는 영상'이 자동 재생되도록 적용
-    # ============================================================
+    # 로컬 비디오 파일을 읽어서 HTML에 삽입하기 위한 Base64 처리
+    import base64
+    import os
 
-    import random
-    import datetime as _dt
+    video_html = ""
+    video_file_path = "2026년 New year.mp4" # 파일이 app.py와 같은 폴더에 있어야 합니다.
 
-    # --------- 스타일 (inpor.html 톤 & 글래스모피즘) ---------
-    st.markdown("""
-    <style>
-      @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css');
-      #audit-tab { font-family: 'Pretendard', sans-serif; }
-      #audit-tab .page { background: #020617; color: #f1f5f9; padding: 0; }
-      #audit-tab .video-container { position: relative; width: 100%; height: 520px; overflow: hidden; border-radius: 28px; margin: 10px 0 36px; }
-      #audit-tab .video-bg { width: 100%; height: 100%; object-fit: cover; opacity: 0.65; }
-      #audit-tab .hero-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 24px; }
-      #audit-tab .pill { display: inline-block; padding: 6px 16px; border-radius: 999px; border: 1px solid rgba(239,68,68,0.45); background: rgba(239,68,68,0.18); color: #ef4444; font-weight: 800; font-size: 0.85rem; }
-      #audit-tab .title-white { font-size: 4.0rem; font-weight: 950; letter-spacing: -0.04em; line-height: 1.0; }
-      #audit-tab .title-red { color: #ef4444; font-weight: 950; }
-      #audit-tab .sub { font-size: 1.15rem; color: #cbd5e1; margin-top: 18px; line-height: 1.6; font-weight: 600; }
-      #audit-tab .glass { background: rgba(255,255,255,0.05); backdrop-filter: blur(14px); border: 1px solid rgba(255,255,255,0.10); border-radius: 28px; padding: 28px; box-shadow: 0 20px 60px rgba(0,0,0,0.35); }
-      #audit-tab .glass:hover { border-color: rgba(239,68,68,0.65); transform: translateY(-2px); transition: 0.25s ease; }
-      #audit-tab .section-title { text-align: center; font-size: 2.3rem; font-weight: 950; margin: 28px 0 18px; letter-spacing: -0.02em; }
-      #audit-tab .section-kicker { text-align:center; color:#ef4444; letter-spacing: 0.38em; font-weight: 900; font-size: 0.82rem; margin-top: 10px; }
-      #audit-tab .muted { color: #94a3b8; font-weight: 600; }
-      #audit-tab .btn-grad button { background: linear-gradient(90deg,#ef4444,#f97316) !important; color: white !important; border: none !important; border-radius: 16px !important; font-weight: 900 !important; height: 3.2rem !important; width: 100%; }
-      #audit-tab .hero-btn { display:inline-block; width: 240px; max-width: 100%; padding: 14px 18px; border-radius: 16px; background: linear-gradient(90deg,#ef4444,#f97316); color: #fff; font-weight: 950; text-decoration: none; }\n      #audit-tab .hero-btn:hover { filter: brightness(1.05); }\n      #audit-tab .btn-ghost button { background: rgba(255,255,255,0.08) !important; color: #e2e8f0 !important; border: 1px solid rgba(255,255,255,0.14) !important; border-radius: 16px !important; font-weight: 800 !important; height: 3.2rem !important; width: 100%; }
-      #audit-tab .metric { text-align:center; font-weight: 950; font-size: 0.92rem; letter-spacing: 0.16em; opacity: 0.45; margin-top: 18px; }
-      #audit-tab .scan-wrap { margin: 10px 0 6px; }
-      @keyframes scan { 0%{transform:translateY(0); opacity:0;} 35%{opacity:1;} 100%{transform:translateY(160px); opacity:0;} }
-      #audit-tab .scan-line { width:100%; height:4px; background:#ef4444; box-shadow: 0 0 18px #ef4444; animation: scan 1.8s infinite linear; border-radius: 999px; }
-    </style>
+    if os.path.exists(video_file_path):
+        with open(video_file_path, "rb") as f:
+            video_bytes = f.read()
+        video_base64 = base64.b64encode(video_bytes).decode()
+        # 로컬 파일을 base64로 변환하여 video 태그에 직접 주입
+        video_src = f"data:video/mp4;base64,{video_base64}"
+    else:
+        # 파일이 없을 경우를 대비한 대체(Fallback) 링크
+        video_src = "https://upload.wikimedia.org/wikipedia/commons/1/18/Muybridge_race_horse.webm"
+
+    # --------- HERO (비디오 연동 부분 수정) ---------
+    st.markdown("""<div class='page'>""", unsafe_allow_html=True)
+    st.markdown(f"""
+    <div class='video-container'>
+      <video class='video-bg' autoplay loop muted playsinline>
+        <source src='{video_src}' type='video/mp4'>
+      </video>
+      <div class='hero-overlay'>
+        <div>
+          <div class='pill'>2026 병오년(丙午年) : 붉은 말의 해</div>
+          <div style='height:14px;'></div>
+          <div class='title-white'>새해 복<br/><span class='title-red'>많이 받으십시오</span></div>
+          <div class='sub'>ktMOS북부 임직원 여러분, 정직과 신뢰를 바탕으로<br/>더 크게 도약하고 성장하는 2026년이 되시길 기원합니다.</div>
+          <div style='height:20px;'></div>
+          <a href='#campaign' class='hero-btn' style='text-align:center;'>캠페인 확인하기</a>
+        </div>
+      </div>
+    </div>
     """, unsafe_allow_html=True)
 
     # --------- 데이터(운세/슬로건) : inpor.html의 구조를 Streamlit로 포팅 ---------
