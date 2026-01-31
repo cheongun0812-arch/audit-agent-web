@@ -1665,7 +1665,7 @@ with tab_audit:
         st.markdown(
             '''
             <div style="max-width:1500px; margin: 44px auto 18px auto; height: 1px;
-                        background: linear-gradient(70deg,
+                        background: linear-gradient(90deg,
                           transparent,
                           rgba(239,68,68,0.55),
                           rgba(249,115,22,0.45),
