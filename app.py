@@ -14,7 +14,6 @@ import base64
 import datetime
 import pytz
 import pandas as pd
-import random
 
 import plotly.graph_objects as go
 import plotly.express as px
@@ -47,94 +46,11 @@ except ImportError:
 # 1. 페이지 설정
 # ==========================================
 st.set_page_config(
-    page_title="2026 ktMOS북부 설 명절 클린 캠페인",
+    page_title="AUDIT AI Agent",
     page_icon="🛡️",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
-
-# 로컬 비디오 파일을 base64로 인코딩하여 배경 자동 재생에 사용
-def get_video_base64(video_path):
-    if os.path.exists(video_path):
-        with open(video_path, "rb") as f:
-            data = f.read()
-        return base64.b64encode(data).decode()
-    return ""
-
-video_b64 = get_video_base64("1.mp4") # 업로드하신 영상 파일명 확인 필요
-
-st.markdown(f"""
-<style>
-    @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css');
-    
-    html, body, [data-testid="stAppViewContainer"] {{
-        font-family: 'Pretendard', sans-serif;
-        background-color: #070B14 !important;
-        color: #E6EEF9;
-    }}
-    
-    /* 히어로 비디오 섹션 */
-    .video-hero {{
-        position: relative;
-        width: 100%;
-        height: 520px;
-        overflow: hidden;
-        border-radius: 28px;
-        margin-bottom: 40px;
-        border: 1px solid rgba(148,163,184,.22);
-    }}
-    .video-bg {{
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        opacity: 0.6;
-    }}
-    .hero-text {{
-        position: absolute;
-        inset: 0;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        text-align: center;
-        z-index: 2;
-        background: radial-gradient(circle, transparent, rgba(7,11,20,0.8));
-    }}
-    
-    /* 글래스모피즘 카드 */
-    .glass-card {{
-        background: linear-gradient(180deg, rgba(15,23,42,.92), rgba(15,23,42,.75));
-        border: 1px solid rgba(148,163,184,.22);
-        border-radius: 22px;
-        padding: 24px;
-        box-shadow: 0 18px 45px rgba(0,0,0,.35);
-        margin-bottom: 20px;
-    }}
-    
-    .title-red {{ color: #E11D48; font-weight: 950; }}
-    .scan-line {{
-        width: 100%;
-        height: 4px;
-        background: #E11D48;
-        box-shadow: 0 0 15px #E11D48;
-        border-radius: 10px;
-        animation: scan 2s infinite linear;
-    }}
-    @keyframes scan {{
-        0% {{ transform: translateY(0); opacity: 0; }}
-        50% {{ opacity: 1; }}
-        100% {{ transform: translateY(150px); opacity: 0; }}
-    }}
-
-    .stButton > button {{
-        background: linear-gradient(90deg, #E11D48, #FBBF24) !important;
-        color: white !important;
-        border: none !important;
-        border-radius: 14px !important;
-        font-weight: 900 !important;
-    }}
-</style>
-""", unsafe_allow_html=True)
 
 # ==========================================
 # 2. 🎨 디자인 테마 (사이드바/토글 강제 표시 포함)
@@ -778,6 +694,41 @@ tab_audit, tab_doc, tab_chat, tab_summary, tab_admin = st.tabs([
     "✅ 자율점검", "📄 법률 검토", "💬 AI 에이전트(챗봇)", "📰 스마트 요약", "🔒 관리자 모드"
 ])
 
+# ---------- (아이콘) 인라인 SVG: 애니메이션 모래시계 ----------
+HOURGLASS_SVG = """
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+     xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <path d="M6 2h12v5c0 2.2-1.4 4.2-3.5 5 2.1.8 3.5 2.8 3.5 5v5H6v-5c0-2.2 1.4-4.2 3.5-5C7.4 11.2 6 9.2 6 7V2Z"
+        stroke="#0B5ED7" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M8 7h8M8 17h8" stroke="#0B5ED7" stroke-width="2" stroke-linecap="round"/>
+
+  <rect x="9" y="8.2" width="6" height="3.0" rx="1.0" fill="#0B5ED7" opacity="0.95">
+    <animate attributeName="height" values="3.0;0.3;3.0" dur="1.0s" repeatCount="indefinite" />
+    <animate attributeName="y"      values="8.2;10.9;8.2" dur="1.0s" repeatCount="indefinite" />
+  </rect>
+
+  <rect x="9" y="15.8" width="6" height="0.3" rx="1.0" fill="#0B5ED7" opacity="0.95">
+    <animate attributeName="height" values="0.3;3.0;0.3" dur="1.0s" repeatCount="indefinite" />
+    <animate attributeName="y"      values="15.8;13.1;15.8" dur="1.0s" repeatCount="indefinite" />
+  </rect>
+
+  <circle cx="12" cy="12" r="0.8" fill="#0B5ED7" opacity="0.95">
+    <animate attributeName="cy" values="11.2;14.2;11.2" dur="0.6s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.95;0.2;0.95" dur="0.6s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="11" cy="12" r="0.6" fill="#0B5ED7" opacity="0.80">
+    <animate attributeName="cy" values="11.0;14.0;11.0" dur="0.7s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.8;0.15;0.8" dur="0.7s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="13" cy="12" r="0.6" fill="#0B5ED7" opacity="0.80">
+    <animate attributeName="cy" values="11.4;14.4;11.4" dur="0.8s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.8;0.15;0.8" dur="0.8s" repeatCount="indefinite"/>
+  </circle>
+</svg>
+"""
+
+COUNTDOWN_SECONDS = 7  # ✅ 요청 확정: 7초
+
 # =========================
 # ✅ 체크 "순간" 감지 + 우측 카운트다운 렌더 유틸
 # =========================
@@ -878,93 +829,295 @@ def _render_pledge_group(
                 else:
                     ph.markdown("", unsafe_allow_html=True)
 
-# --- [Tab 1: 자율점검 (2026 설 캠페인)] ---
-tab_audit, tab_admin = st.tabs(["✅ 2026 설 명절 클린 캠페인", "🔒 관리자 모드"])
-
+# --- [Tab 1: 자율점검] ---
 with tab_audit:
-    # 1. 다이내믹 히어로 섹션
+    # ✅ 자율점검 탭 전용 스타일 범위 시작(#audit-tab)
+    st.markdown('<div id="audit-tab">', unsafe_allow_html=True)
+
+    # ============================================================
+    # 2026 설 명절 클린 캠페인 (Self-inspection)
+    # - 기존 1월 자율점검(윤리경영원칙실천지침) 학습/서약 UI는 표시하지 않음
+    # - inpor.html의 문구/레이아웃 흐름(1~5)을 Streamlit UI로 이식
+    # - 1번 섹션(히어로)은 '말이 달리는 영상'이 자동 재생되도록 적용
+    # ============================================================
+
+    import random
+    import datetime as _dt
+
+    # --------- 스타일 (inpor.html 톤 & 글래스모피즘) ---------
+    st.markdown("""
+    <style>
+      @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css');
+      #audit-tab { font-family: 'Pretendard', sans-serif; }
+      #audit-tab .page { background: #020617; color: #f1f5f9; padding: 0; }
+      #audit-tab .video-container { position: relative; width: 100%; height: 520px; overflow: hidden; border-radius: 28px; margin: 10px 0 36px; }
+      #audit-tab .video-bg { width: 100%; height: 100%; object-fit: cover; opacity: 0.65; }
+      #audit-tab .hero-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 24px; }
+      #audit-tab .pill { display: inline-block; padding: 6px 16px; border-radius: 999px; border: 1px solid rgba(239,68,68,0.45); background: rgba(239,68,68,0.18); color: #ef4444; font-weight: 800; font-size: 0.85rem; }
+      #audit-tab .title-white { font-size: 4.0rem; font-weight: 950; letter-spacing: -0.04em; line-height: 1.0; }
+      #audit-tab .title-red { color: #ef4444; font-weight: 950; }
+      #audit-tab .sub { font-size: 1.15rem; color: #cbd5e1; margin-top: 18px; line-height: 1.6; font-weight: 600; }
+      #audit-tab .glass { background: rgba(255,255,255,0.05); backdrop-filter: blur(14px); border: 1px solid rgba(255,255,255,0.10); border-radius: 28px; padding: 28px; box-shadow: 0 20px 60px rgba(0,0,0,0.35); }
+      #audit-tab .glass:hover { border-color: rgba(239,68,68,0.65); transform: translateY(-2px); transition: 0.25s ease; }
+      #audit-tab .section-title { text-align: center; font-size: 2.3rem; font-weight: 950; margin: 28px 0 18px; letter-spacing: -0.02em; }
+      #audit-tab .section-kicker { text-align:center; color:#ef4444; letter-spacing: 0.38em; font-weight: 900; font-size: 0.82rem; margin-top: 10px; }
+      #audit-tab .muted { color: #94a3b8; font-weight: 600; }
+      #audit-tab .btn-grad button { background: linear-gradient(90deg,#ef4444,#f97316) !important; color: white !important; border: none !important; border-radius: 16px !important; font-weight: 900 !important; height: 3.2rem !important; width: 100%; }
+      #audit-tab .hero-btn { display:inline-block; width: 240px; max-width: 100%; padding: 14px 18px; border-radius: 16px; background: linear-gradient(90deg,#ef4444,#f97316); color: #fff; font-weight: 950; text-decoration: none; }\n      #audit-tab .hero-btn:hover { filter: brightness(1.05); }\n      #audit-tab .btn-ghost button { background: rgba(255,255,255,0.08) !important; color: #e2e8f0 !important; border: 1px solid rgba(255,255,255,0.14) !important; border-radius: 16px !important; font-weight: 800 !important; height: 3.2rem !important; width: 100%; }
+      #audit-tab .metric { text-align:center; font-weight: 950; font-size: 0.92rem; letter-spacing: 0.16em; opacity: 0.45; margin-top: 18px; }
+      #audit-tab .scan-wrap { margin: 10px 0 6px; }
+      @keyframes scan { 0%{transform:translateY(0); opacity:0;} 35%{opacity:1;} 100%{transform:translateY(160px); opacity:0;} }
+      #audit-tab .scan-line { width:100%; height:4px; background:#ef4444; box-shadow: 0 0 18px #ef4444; animation: scan 1.8s infinite linear; border-radius: 999px; }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # --------- 데이터(운세/슬로건) : inpor.html의 구조를 Streamlit로 포팅 ---------
+    fortune_db = {
+        "지속적인 성장": [
+            {"slogan": "투명한 도약, 붉은 말처럼 거침없이 성장하는 한 해", "fortune": "올해 당신의 청렴 에너지는 99%! 투명한 업무 처리가 곧 당신의 독보적인 커리어가 됩니다."},
+            {"slogan": "정직이라는 박차를 가해 더 높은 곳으로 질주하세요", "fortune": "거짓 없는 성장이 가장 빠른 길입니다. 주변의 두터운 신뢰가 당신의 든든한 날개가 될 것입니다."},
+        ],
+        "가족의 행복": [
+            {"slogan": "떳떳한 마음이 선사하는 가장 따뜻한 행복의 해", "fortune": "가족에게 부끄럽지 않은 당신의 정직함이 집안의 평안과 웃음꽃을 불러옵니다."},
+            {"slogan": "깨끗한 소통으로 피어나는 동료 간의 진정한 즐거움", "fortune": "작은 호의보다 큰 진심이 통하는 한 해입니다. 사람 사이의 신뢰가 최고의 행운입니다."},
+        ],
+        "새로운 도전": [
+            {"slogan": "청렴의 가치를 지키며 한계를 넘어 질주하는 2026", "fortune": "어려운 순간에도 원칙을 지키는 모습이 동료들에게 가장 큰 영감이 될 것입니다."},
+            {"slogan": "정직한 도전은 결코 멈추지 않는 붉은 말과 같습니다", "fortune": "타협하지 않는 용기가 당신을 독보적인 전문가로 만들어주는 결정적 한 해가 됩니다."},
+        ],
+    }
+
+    # --------- 0) 데이터 저장소(서약 참여): Google Sheet 사용(실시간/중복 방지) ---------
+    PLEDGE_WS_TITLE = "2026_LNY_CLEAN_PLEDGE"
+    TOTAL_EMPLOYEES = int(st.secrets.get("TOTAL_EMPLOYEES", 500)) if hasattr(st, "secrets") else 500
+    THRESHOLD_COUNT = max(1, int(TOTAL_EMPLOYEES * 0.5))  # 50% 기준
+
+    def _get_pledge_ws():
+        try:
+            client = init_google_sheet_connection()
+            if not client:
+                return None
+            ss = client.open("Audit_Result_2026")
+            try:
+                ws = ss.worksheet(PLEDGE_WS_TITLE)
+            except Exception:
+                ws = ss.add_worksheet(title=PLEDGE_WS_TITLE, rows=2000, cols=10)
+                ws.append_row(["timestamp", "emp_id", "name"])
+            return ws
+        except Exception:
+            return None
+
+    def _load_pledges(ws):
+        if ws is None:
+            return []
+        try:
+            rows = ws.get_all_values()
+            if not rows or len(rows) < 2:
+                return []
+            out = []
+            for r in rows[1:]:
+                if len(r) >= 3 and r[1].strip():
+                    out.append({"emp_id": r[1].strip(), "name": r[2].strip()})
+            return out
+        except Exception:
+            return []
+
+    def _append_pledge(ws, emp_id: str, name: str) -> bool:
+        if ws is None:
+            # 최소 보장: 세션 내 저장
+            st.session_state.setdefault("_pledges_local", [])
+            st.session_state["_pledges_local"].append({"emp_id": emp_id, "name": name})
+            return True
+        try:
+            now = _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            ws.append_row([now, emp_id, name])
+            return True
+        except Exception:
+            return False
+
+    ws_pledge = _get_pledge_ws()
+    pledges = _load_pledges(ws_pledge) if ws_pledge is not None else st.session_state.get("_pledges_local", [])
+    pledge_count = len(pledges)
+    pledge_rate = (pledge_count / max(1, TOTAL_EMPLOYEES)) * 100
+    threshold_rate = (pledge_count / max(1, THRESHOLD_COUNT)) * 100
+
+    # -------------------------
+    # 1) HERO (첨부 이미지 1 흐름)
+    # -------------------------
+    HORSE_VIDEO_URL = "https://upload.wikimedia.org/wikipedia/commons/1/18/Muybridge_race_horse.webm"
+    st.markdown("""<div class='page'>""", unsafe_allow_html=True)
     st.markdown(f"""
-    <div class="video-hero">
-        <video class="video-bg" autoplay loop muted playsinline>
-            <source src="data:video/mp4;base64,{video_b64}" type="video/mp4">
-        </video>
-        <div class="hero-text">
-            <div style="padding: 8px 16px; background: rgba(225,29,72,0.15); border: 1px solid #E11D48; border-radius: 50px; color: #E11D48; font-weight: 800; font-size: 0.9rem; margin-bottom: 20px;">2026 병오년(丙午年) : 붉은 말의 해</div>
-            <h1 style="font-size: 4rem; font-weight: 950; margin: 0; line-height: 1.1;">깨끗하게.<br/><span class="title-red">공정하게.</span></h1>
-            <p style="font-size: 1.2rem; color: #94A3B8; margin-top: 20px; max-width: 800px;">정직과 신뢰를 바탕으로 더 크게 도약하는 2026년이 되시길 기원하며,<br/>설 명절 클린 캠페인을 시행합니다.</p>
+    <div class='video-container'>
+      <video class='video-bg' autoplay loop muted playsinline>
+        <source src='{HORSE_VIDEO_URL}' type='video/webm'>
+      </video>
+      <div class='hero-overlay'>
+        <div>
+          <div class='pill'>2026 병오년(丙午年) : 붉은 말의 해</div>
+          <div style='height:14px;'></div>
+          <div class='title-white'>새해 복<br/><span class='title-red'>많이 받으십시오</span></div>
+          <div class='sub'>ktMOS북부 임직원 여러분, 정직과 신뢰를 바탕으로<br/>더 크게 도약하고 성장하는 2026년이 되시길 기원합니다.</div>
+          <div style='height:20px;'></div>
+          <div style='height:8px;'></div>
+          <a href='#campaign' class='hero-btn'>캠페인 확인하기</a>
         </div>
+      </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # 2. AI 청렴 아우라 분석
-    st.markdown("### ✨ 2026 청렴 아우라 분석")
-    col1, col2 = st.columns(2)
-    with col1:
-        u_name = st.text_input("성함", placeholder="성함을 입력하세요", key="lny_name")
-    with col2:
-        u_goal = st.selectbox("올해의 주요 목표", ["", "지속적인 성장", "가족의 행복", "새로운 도전"], key="lny_goal")
-    
-    if st.button("청렴 기운 스캔하기"):
-        if not u_name or not u_goal:
-            st.warning("성함과 목표를 모두 입력해주세요.")
+    # -------------------------
+    # 2) AI 청렴 아우라 분석 (첨부 이미지 2 흐름)
+    # -------------------------
+    st.markdown("<div id='campaign'></div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-title'>2026 청렴 아우라 분석</div>", unsafe_allow_html=True)
+
+    c1, c2 = st.columns(2)
+    with c1:
+        scan_name = st.text_input("성함", placeholder="성함을 입력하세요", key="lny_scan_name")
+    with c2:
+        scan_goal = st.selectbox("올해의 주요 목표", ["", "지속적인 성장", "가족의 행복", "새로운 도전"], key="lny_scan_goal")
+
+    scan_btn_col = st.container()
+    with scan_btn_col:
+        st.markdown("<div class='btn-grad'>", unsafe_allow_html=True)
+        do_scan = st.button("✨ 청렴 기운 스캔하기", key="lny_scan_btn")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    if do_scan:
+        if not scan_name or not scan_goal:
+            st.error("성함과 목표를 입력/선택해 주세요.")
         else:
-            with st.status("아우라 스캔 중...", expanded=True) as status:
-                st.markdown('<div class="scan-line"></div>', unsafe_allow_html=True)
-                time.sleep(2)
+            with st.status("청렴 아우라 분석 중...", expanded=True) as status:
+                st.write("정직도 데이터 스캔 중...")
+                st.markdown("<div class='scan-wrap'><div class='scan-line'></div></div>", unsafe_allow_html=True)
+                time.sleep(1.2)
+                st.write("2026년 운세 데이터 매칭 중...")
+                time.sleep(0.8)
                 status.update(label="분석 완료!", state="complete")
-            
-            # (운세 결과 표시 - inpor.html 기반 로직)
+            res = random.choice(fortune_db.get(scan_goal, fortune_db["지속적인 성장"]))
             st.markdown(f"""
-            <div class="glass-card" style="text-align: center; border: 2px solid #E11D48;">
-                <h4 style="color: #E11D48; margin-bottom: 10px;">SCAN COMPLETED</h4>
-                <h2 style="font-weight: 950;">"{u_name}님의 2026년 청렴 아우라는 '매우 맑음'입니다."</h2>
-                <p style="color: #94A3B8;">붉은 말처럼 거침없이 성장하며 원칙을 지키는 한 해가 될 것입니다.</p>
+            <div class='glass' style='text-align:center; border: 2px solid rgba(239,68,68,0.75);'>
+              <div style='font-weight:900; color:#ef4444; letter-spacing:0.22em; font-size:0.8rem;'>SCAN COMPLETED</div>
+              <div style='font-size:1.85rem; font-weight:950; margin: 18px 0 10px; letter-spacing:-0.02em;'>“{res['slogan']}”</div>
+              <div class='muted' style='font-size:1.08rem; font-style:italic; line-height:1.7;'>{res['fortune']}</div>
             </div>
             """, unsafe_allow_html=True)
 
-    st.divider()
+    st.markdown("<div style='height:42px;'></div>", unsafe_allow_html=True)
 
-    # 3. 캠페인 아젠다 & 인포그래픽 (Visual.html 통합)
-    # iframe을 통해 CleanCampaign2026_Visual.html의 시각적 요소를 이식
-    with open("CleanCampaign2026_Visual.html", "r", encoding="utf-8") as f:
-        infographic_html = f.read()
-    st.components.v1.html(infographic_html, height=1200, scrolling=True)
+    # -------------------------
+    # 3) 캠페인 아젠다 (첨부 이미지 3 흐름)
+    # -------------------------
+    st.markdown("<div class='section-kicker'>CLEAN FESTIVAL POLICY</div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-title'>설 명절 클린 캠페인 아젠다</div>", unsafe_allow_html=True)
 
-    # 4. 청렴 실천 응원 이벤트 및 서약 (이미지 5 흐름)
-    st.markdown("<h2 style='text-align:center;'>스스로 다짐하는 <span class='title-red'>청렴 서약</span></h2>", unsafe_allow_html=True)
-    
-    # 가상의 참여 데이터 (실제 연동 시 gspread 사용)
-    current_pledges = 214 
-    target_pledges = 500
-    progress = current_pledges / target_pledges
+    a1, a2, a3 = st.columns(3)
+    with a1:
+        st.markdown("""<div class='glass'>
+            <div style='width:54px;height:54px;border-radius:16px;background:#ef4444;display:flex;align-items:center;justify-content:center;font-size:1.4rem;margin-bottom:18px;'>🎁</div>
+            <div style='font-weight:950;font-size:1.25rem;margin-bottom:8px;'>선물 안 주고 안 받기</div>
+            <div class='muted' style='font-size:0.95rem;line-height:1.6;'>협력사 및 이해관계자와의 명절 선물 교환은 금지됩니다. 마음만 정중히 받겠습니다.</div>
+        </div>""", unsafe_allow_html=True)
+    with a2:
+        st.markdown("""<div class='glass'>
+            <div style='width:54px;height:54px;border-radius:16px;background:#f97316;display:flex;align-items:center;justify-content:center;font-size:1.4rem;margin-bottom:18px;'>☕</div>
+            <div style='font-weight:950;font-size:1.25rem;margin-bottom:8px;'>향응 및 편의 제공 금지</div>
+            <div class='muted' style='font-size:0.95rem;line-height:1.6;'>부적절한 식사 대접이나 골프 등 편의 제공은 원천 차단하여 투명성을 지킵니다.</div>
+        </div>""", unsafe_allow_html=True)
+    with a3:
+        st.markdown("""<div class='glass'>
+            <div style='width:54px;height:54px;border-radius:16px;background:#f59e0b;display:flex;align-items:center;justify-content:center;font-size:1.4rem;margin-bottom:18px;'>🛡️</div>
+            <div style='font-weight:950;font-size:1.25rem;margin-bottom:8px;'>부득이한 경우 자진신고</div>
+            <div class='muted' style='font-size:0.95rem;line-height:1.6;'>택배 등으로 배송된 선물은 반송이 원칙이며, 불가피할 시 클린센터로 즉시 신고합니다.</div>
+        </div>""", unsafe_allow_html=True)
 
-    st.markdown(f"""
-    <div class="glass-card" style="text-align: center; max-width: 800px; margin: 0 auto;">
-        <div style="font-size: 3rem; margin-bottom: 15px;">🏅</div>
-        <h3 style="margin-top: 0;">🎁 청렴 실천 응원 이벤트</h3>
-        <p style="color: #94A3B8;">전 임직원의 <span class="title-red">50% 이상</span> 참여 시,<br/>50분을 추첨하여 커피 쿠폰을 드립니다!</p>
-        <div style="margin: 20px 0;">
-            <div style="display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 5px;">
-                <span>현재 참여: {current_pledges}명</span>
-                <span>목표: {target_pledges}명</span>
-            </div>
+    st.markdown("<div style='height:46px;'></div>", unsafe_allow_html=True)
+
+    # -------------------------
+    # 4) 신고 채널 (첨부 이미지 4 흐름)
+    # -------------------------
+    r1, r2 = st.columns([1, 2])
+    with r1:
+        st.markdown("<div style='font-size:2.0rem;font-weight:950;line-height:1.2;'>비윤리 행위<br/><span class='title-red'>신고 채널</span></div>", unsafe_allow_html=True)
+        st.markdown("<div class='muted' style='margin-top:12px; line-height:1.7;'>부정부패 없는 ktMOS북부를 위해<br/>여러분의 용기 있는 목소리가 필요합니다.</div>", unsafe_allow_html=True)
+    with r2:
+        st.markdown("""
+        <div style='display:grid;grid-template-columns:1fr 1fr;gap:14px;'>
+          <div class='glass' style='padding:20px;'>
+            <div class='muted' style='font-size:0.78rem;letter-spacing:0.18em;text-transform:uppercase;'>감사실 직통</div>
+            <div style='font-weight:950;font-size:1.45rem;margin-top:6px;'>02-3414-1919</div>
+          </div>
+          <div class='glass' style='padding:20px;'>
+            <div class='muted' style='font-size:0.78rem;letter-spacing:0.18em;text-transform:uppercase;'>사이버 신문고</div>
+            <div style='font-weight:950;font-size:1.45rem;margin-top:6px;'>바로가기</div>
+          </div>
+          <div class='glass' style='padding:20px;grid-column: span 2;'>
+            <div class='muted' style='font-size:0.78rem;letter-spacing:0.18em;text-transform:uppercase;'>이메일 제보</div>
+            <div style='font-weight:950;font-size:1.45rem;margin-top:6px;'>ethics@ktmos.com</div>
+          </div>
         </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("<div style='height:70px;'></div>", unsafe_allow_html=True)
+
+    # -------------------------
+    # 5) 청렴 실천 응원 이벤트/서약 (첨부 이미지 5 흐름)
+    # -------------------------
+    st.markdown("<div style='text-align:center; font-size:2.6rem; font-weight:950; letter-spacing:-0.02em;'>스스로 다짐하는<br/><span class='title-red'>청렴 서약</span></div>", unsafe_allow_html=True)
+
+    st.markdown("""
+    <div class='glass' style='max-width:920px; margin: 26px auto 18px; text-align:center;'>
+      <div style='font-size:2.8rem; margin-bottom:14px;'>🏅</div>
+      <div style='font-size:1.5rem; font-weight:950; margin-bottom:8px;'>🎁 청렴 실천 응원 이벤트</div>
+      <div class='muted' style='font-size:1.02rem; line-height:1.7;'>전 임직원의 <span class='title-red'>50% 이상</span>이 서약에 참여하시면,<br/>참여자 중 <b>50분</b>을 추첨하여 새해 첫 모바일 커피 쿠폰을 드립니다!</div>
     </div>
     """, unsafe_allow_html=True)
-    st.progress(progress)
 
-    with st.form("clean_pledge"):
-        f_col1, f_col2, f_col3 = st.columns([2, 1, 1])
-        f_id = f_col1.text_input("사번", placeholder="10******")
-        f_name = f_col2.text_input("성명", placeholder="홍길동")
-        f_btn = f_col3.form_submit_button("서약하기")
-        
-        if f_btn:
-            if not f_id or not f_name:
-                st.error("정보를 모두 입력해주세요.")
+    # 실시간 참여율 (전체 대비) + 50% 기준 Progress
+    st.markdown("<div style='max-width:920px; margin: 0 auto;'>", unsafe_allow_html=True)
+    m1, m2, m3 = st.columns(3)
+    m1.metric("현재 참여 인원", f"{pledge_count}명")
+    m2.metric("현재 참여율(전체)", f"{pledge_rate:.1f}%")
+    m3.metric("50% 달성률", f"{threshold_rate:.1f}%")
+    st.progress(min(1.0, pledge_count / max(1, THRESHOLD_COUNT)))
+    st.markdown(f"<div class='metric'>CURRENT : {pledge_count} SIGNATURES</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown("<div style='height:14px;'></div>", unsafe_allow_html=True)
+
+    with st.form("lny_pledge_form", clear_on_submit=False):
+        p1, p2, p3 = st.columns([2, 1, 1])
+        emp_id = p1.text_input("사번", placeholder="10******", key="lny_emp_id")
+        emp_name = p2.text_input("성명", placeholder="홍길동", key="lny_emp_name")
+        submitted = p3.form_submit_button("서약하기")
+
+        if submitted:
+            emp_id_clean = (emp_id or "").strip()
+            emp_name_clean = (emp_name or "").strip()
+            if len(emp_id_clean) < 5 or not emp_name_clean:
+                st.error("사번과 성명을 정확히 입력해 주세요.")
             else:
-                st.success(f"{f_name}님, 청렴 서약이 완료되었습니다!")
-                st.balloons()
+                # 중복 체크: (사번, 성명) 우선 / 사번만 중복도 차단
+                dup_pair = any(p.get("emp_id") == emp_id_clean and p.get("name") == emp_name_clean for p in pledges)
+                dup_id = any(p.get("emp_id") == emp_id_clean for p in pledges)
+                if dup_pair or dup_id:
+                    st.warning(f"이미 서약이 등록된 사번입니다. (사번: {emp_id_clean})")
+                else:
+                    ok = _append_pledge(ws_pledge, emp_id_clean, emp_name_clean)
+                    if ok:
+                        st.success(f"감사합니다, {emp_name_clean}님! 서약이 완료되었습니다.")
+                        st.balloons()
+                        st.rerun()
+                    else:
+                        st.error("서약 저장에 실패했습니다. (시트 연결/권한을 확인해 주세요)")
+
+    st.markdown("""
+      <div style='margin-top:80px; text-align:center; opacity:0.32; font-size:0.85rem; padding-bottom:40px;'>
+        <div style='font-weight:900;'>ktMOS북부 감사실 | Audit & Ethics Department</div>
+        <div>© 2026 ktMOS NORTH. ALL RIGHTS RESERVED.</div>
+      </div>
+    </div>""", unsafe_allow_html=True)
+
     # ✅ 자율점검 탭 전용 스타일 범위 종료
     st.markdown("</div>", unsafe_allow_html=True)
 # --- [Tab 2: 법률 리스크/규정/계약 검토 & 감사보고서 작성] ---
