@@ -700,49 +700,10 @@ def _build_pledge_popup_html(name: str, rank: int, total: int) -> str:
   function setFrame(h){
     try{ window.parent.postMessage({isStreamlitMessage:true, type:"streamlit:setFrameHeight", height: h},"*"); }catch(e){}
   }
-  // --- ✅ 이 컴포넌트 iframe을 화면 최상단(전면) 오버레이로 고정 ---
-  const fe = window.frameElement;
-  const __prev = {};
-  if (fe) {
-    __prev.position = fe.style.position;
-    __prev.top = fe.style.top;
-    __prev.left = fe.style.left;
-    __prev.width = fe.style.width;
-    __prev.height = fe.style.height;
-    __prev.zIndex = fe.style.zIndex;
-    __prev.pointerEvents = fe.style.pointerEvents;
-    __prev.background = fe.style.background;
+    // ✅ Streamlit 레이아웃 여백 최소화 (전체화면 오버레이는 iframe fixed로 처리)
+  setFrame(1);
 
-    fe.style.position = "fixed";
-    fe.style.top = "0";
-    fe.style.left = "0";
-    fe.style.width = "100vw";
-    fe.style.height = "100vh";
-    fe.style.zIndex = "2147483647";
-    fe.style.pointerEvents = "auto";
-    fe.style.background = "transparent";
-  }
-
-  function restoreFrame(){
-    if (!fe) return;
-    fe.style.position = __prev.position || "";
-    fe.style.top = __prev.top || "";
-    fe.style.left = __prev.left || "";
-    fe.style.width = __prev.width || "";
-    fe.style.height = __prev.height || "";
-    fe.style.zIndex = __prev.zIndex || "";
-    fe.style.pointerEvents = __prev.pointerEvents || "";
-    fe.style.background = __prev.background || "";
-  }
-
-  function fit(){
-    const h = Math.max(window.innerHeight || 0, 560);
-    setFrame(h+8);
-  }
-  fit();
-  window.addEventListener('resize', ()=>{ setTimeout(fit, 80); });
-
-  // Pollen particles
+// Pollen particles
   const overlay = document.getElementById('overlay');
   for(let i=0;i<22;i++){
     const s = document.createElement('div');
@@ -768,7 +729,7 @@ def _build_pledge_popup_html(name: str, rank: int, total: int) -> str:
   // Auto close
   setTimeout(() => {
     overlay.style.animation = "fadeOut 0.30s ease-in forwards";
-    setTimeout(() => { overlay.remove(); restoreFrame(); setFrame(1); }, 360);
+    setTimeout(() => { overlay.remove(); setFrame(1); }, 360);
   }, 3100);
 })();
 </script>
@@ -1961,7 +1922,7 @@ with tab_audit:
                         with pledge_popup_slot.container():
                             components.html(
                                 _build_pledge_popup_html((pledge_name or "").strip(), int(rank or 0), int(total or 0)),
-                                height=600,
+                                height=1,
                                 scrolling=False,
                             )
                         st.toast(f"🎉 {(pledge_name or '').strip()}님, 청렴 서약에 참여해 주셔서 감사합니다!", icon="✅")
