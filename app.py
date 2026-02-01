@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components  # ✅ for DOM/CSS patch injection
 import os
 import google.generativeai as genai
 from docx import Document
@@ -61,7 +62,7 @@ st.set_page_config(
 # ==========================================
 st.markdown("""
 <style>
-* 🔥 Expander 제목 가독성 강제 개선 */
+/* 🔥 Expander 제목 가독성 강제 개선 */
 details > summary {
     font-size: 1.15rem !important;
     font-weight: 900 !important;
@@ -298,94 +299,63 @@ div[data-testid="stTabs"] [data-baseweb="tab"] svg *{
 }
 
 
+
 /* =========================================================
-   ✅ 비자율점검 탭(법률 검토/AI 챗봇/스마트 요약/관리자 모드)
-      모든 텍스트를 밝은 WHITE로 강제
+   ✅ (NEW) 자율점검 탭(1번) 제외: 나머지 4개 탭(법률/챗봇/요약/관리자)
+   본문 텍스트를 "완전 WHITE"로 강제 + 위젯 배경도 어둡게 보정
+   (JS가 메인 탭의 패널에 .bright-tab 클래스를 붙입니다)
    ========================================================= */
-#doc-tab, #chat-tab, #summary-tab, #admin-tab { color: #FFFFFF !important; }
-
-#doc-tab [data-testid="stMarkdownContainer"] *,
-#chat-tab [data-testid="stMarkdownContainer"] *,
-#summary-tab [data-testid="stMarkdownContainer"] *,
-#admin-tab [data-testid="stMarkdownContainer"] *{
+.bright-tab,
+.bright-tab *{
   color: #FFFFFF !important;
+  opacity: 1 !important;
 }
 
-/* caption/label/help 텍스트 */
-#doc-tab .stCaption, #chat-tab .stCaption, #summary-tab .stCaption, #admin-tab .stCaption,
-#doc-tab label, #chat-tab label, #summary-tab label, #admin-tab label{
+/* 링크도 흰색으로 */
+.bright-tab a{
+  color: #FFFFFF !important;
+  text-decoration-color: rgba(255,255,255,0.65) !important;
+}
+
+/* 캡션/설명 텍스트 */
+.bright-tab [data-testid="stCaptionContainer"] *{
   color: rgba(255,255,255,0.92) !important;
-  opacity: 1 !important;
 }
 
-/* 입력/텍스트 영역 */
-#doc-tab .stTextInput input, #doc-tab .stTextArea textarea,
-#chat-tab .stTextInput input, #chat-tab .stTextArea textarea,
-#summary-tab .stTextInput input, #summary-tab .stTextArea textarea,
-#admin-tab .stTextInput input, #admin-tab .stTextArea textarea{
-  background: rgba(255,255,255,0.06) !important;
-  border: 1px solid rgba(255,255,255,0.18) !important;
+/* 입력/텍스트영역 */
+.bright-tab input,
+.bright-tab textarea{
   color: #FFFFFF !important;
-  -webkit-text-fill-color: #FFFFFF !important;
+  background: rgba(255,255,255,0.08) !important;
+  border: 1px solid rgba(255,255,255,0.28) !important;
 }
 
-/* 셀렉트박스(선택값/화살표 포함) */
-#doc-tab div[data-testid="stSelectbox"] div[role="combobox"],
-#chat-tab div[data-testid="stSelectbox"] div[role="combobox"],
-#summary-tab div[data-testid="stSelectbox"] div[role="combobox"],
-#admin-tab div[data-testid="stSelectbox"] div[role="combobox"]{
-  background: rgba(255,255,255,0.06) !important;
-  border: 1px solid rgba(255,255,255,0.18) !important;
-  box-shadow: none !important;
+/* 셀렉트/콤보박스 */
+.bright-tab div[data-baseweb="select"] > div,
+.bright-tab div[role="combobox"]{
+  background: rgba(255,255,255,0.08) !important;
+  border: 1px solid rgba(255,255,255,0.28) !important;
 }
-
-#doc-tab div[data-testid="stSelectbox"] div[role="combobox"] span,
-#chat-tab div[data-testid="stSelectbox"] div[role="combobox"] span,
-#summary-tab div[data-testid="stSelectbox"] div[role="combobox"] span,
-#admin-tab div[data-testid="stSelectbox"] div[role="combobox"] span{
-  color: #FFFFFF !important;
-  font-weight: 850 !important;
-  opacity: 1 !important;
-}
-
-#doc-tab div[data-testid="stSelectbox"] div[role="combobox"] input,
-#chat-tab div[data-testid="stSelectbox"] div[role="combobox"] input,
-#summary-tab div[data-testid="stSelectbox"] div[role="combobox"] input,
-#admin-tab div[data-testid="stSelectbox"] div[role="combobox"] input{
-  color: #FFFFFF !important;
-  -webkit-text-fill-color: #FFFFFF !important;
-  font-weight: 850 !important;
-  opacity: 1 !important;
-}
-
-#doc-tab div[data-testid="stSelectbox"] svg, #doc-tab div[data-testid="stSelectbox"] svg *,
-#chat-tab div[data-testid="stSelectbox"] svg, #chat-tab div[data-testid="stSelectbox"] svg *,
-#summary-tab div[data-testid="stSelectbox"] svg, #summary-tab div[data-testid="stSelectbox"] svg *,
-#admin-tab div[data-testid="stSelectbox"] svg, #admin-tab div[data-testid="stSelectbox"] svg *{
+.bright-tab div[data-baseweb="select"] svg,
+.bright-tab div[data-baseweb="select"] svg *{
   fill: #FFFFFF !important;
   stroke: #FFFFFF !important;
-  opacity: 1 !important;
 }
 
-/* 파일 업로더 */
-#doc-tab div[data-testid="stFileUploader"] *,
-#chat-tab div[data-testid="stFileUploader"] *,
-#summary-tab div[data-testid="stFileUploader"] *,
-#admin-tab div[data-testid="stFileUploader"] *{
-  color: #FFFFFF !important;
-}
-
-#doc-tab div[data-testid="stFileUploader"] section,
-#chat-tab div[data-testid="stFileUploader"] section,
-#summary-tab div[data-testid="stFileUploader"] section,
-#admin-tab div[data-testid="stFileUploader"] section{
+/* 파일업로더 드롭존(기본 흰 배경 → 어둡게) */
+.bright-tab [data-testid="stFileUploaderDropzone"]{
   background: rgba(255,255,255,0.06) !important;
-  border: 1px dashed rgba(255,255,255,0.22) !important;
+  border: 1px dashed rgba(255,255,255,0.35) !important;
+}
+.bright-tab [data-testid="stFileUploaderDropzone"] *{
+  color: #FFFFFF !important;
 }
 
-/* info/warning/error 박스 안 텍스트 */
-#doc-tab .stAlert *, #chat-tab .stAlert *, #summary-tab .stAlert *, #admin-tab .stAlert *{
-  color: #FFFFFF !important;
+/* 아이콘/벡터도 흰색 */
+.bright-tab svg,
+.bright-tab svg *{
+  fill: #FFFFFF !important;
+  stroke: #FFFFFF !important;
 }
 
 </style>
@@ -1191,6 +1161,64 @@ tab_audit, tab_doc, tab_chat, tab_summary, tab_admin = st.tabs([
     "✅ 자율점검", "📄 법률 검토", "💬 AI 에이전트(챗봇)", "📰 스마트 요약", "🔒 관리자 모드"
 ])
 
+
+# ✅ 메인 탭(자율점검 제외) 본문을 WHITE로 강제하기 위해: 메인 탭 패널에 .bright-tab 클래스 부여
+components.html(r'''
+<script>
+(function () {
+  // 이 컴포넌트 iframe 자체는 화면에 보일 필요 없으니 높이를 0으로 축소
+  try {
+    const fe = window.frameElement;
+    if (fe) {
+      fe.style.height = "0px";
+      fe.style.minHeight = "0px";
+      fe.style.border = "0";
+      fe.style.margin = "0";
+      fe.style.padding = "0";
+    }
+    // Streamlit이 높이를 강제로 잡는 경우도 있어 메시지로도 한번 축소 요청
+    window.parent.postMessage({type: "streamlit:setFrameHeight", height: 0}, "*");
+  } catch (e) {}
+
+  function apply() {
+    const doc = window.parent.document;
+    const tabs = doc.querySelectorAll('div[data-testid="stTabs"]');
+    if (!tabs || !tabs.length) return false;
+
+    // 첫 번째 stTabs가 상단 메인 메뉴 탭
+    const main = tabs[0];
+    if (!main.classList.contains("main-menu-tabs")) main.classList.add("main-menu-tabs");
+
+    // 메인 탭 패널들에 클래스 부여 (0: 자율점검 / 1~: 나머지)
+    const panels = main.querySelectorAll('[role="tabpanel"], div[data-baseweb="tab-panel"]');
+    if (!panels || !panels.length) return false;
+
+    panels.forEach((p, i) => {
+      if (i === 0) {
+        p.classList.remove("bright-tab");
+        p.classList.add("selfcheck-tab");
+      } else {
+        p.classList.add("bright-tab");
+        p.classList.remove("selfcheck-tab");
+      }
+    });
+    return true;
+  }
+
+  let tries = 0;
+  const t = setInterval(() => {
+    tries += 1;
+    const ok = apply();
+    if (ok || tries > 40) clearInterval(t);
+  }, 250);
+
+  // 탭 전환 시에도 재적용
+  try {
+    window.parent.document.addEventListener("click", () => setTimeout(apply, 80), true);
+  } catch (e) {}
+})();
+</script>
+''', height=1, scrolling=False)
 # ---------- (아이콘) 인라인 SVG: 애니메이션 모래시계 ----------
 HOURGLASS_SVG = """
 <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
@@ -2109,7 +2137,6 @@ st.markdown("</div>", unsafe_allow_html=True)
 
 # --- [Tab 2: 법률 리스크/규정/계약 검토 & 감사보고서 작성] ---
 with tab_doc:
-    st.markdown('<div id=\"doc-tab\">', unsafe_allow_html=True)
     st.markdown("### 📄 법률 리스크(계약서)·규정 검토 / 감사보고서 작성·검증")
 
     if "api_key" not in st.session_state:
@@ -2282,11 +2309,8 @@ with tab_doc:
             # (이하 기존 코드 그대로 유지: 사용자가 올려준 파일의 원문 로직이 이어짐)
             st.info("※ 이하(감사보고서 생성/검증 로직)는 기존 코드 흐름을 그대로 유지합니다. (이번 요청 범위: 자율점검 UI/검증만)")
 
-    st.markdown("</div>", unsafe_allow_html=True)
-
 # --- [Tab 3: AI 에이전트] ---
 with tab_chat:
-    st.markdown('<div id=\"chat-tab\">', unsafe_allow_html=True)
     st.markdown("### 💬 AI 법률/챗봇")
     if "api_key" not in st.session_state:
         render_login_required()
@@ -2311,11 +2335,8 @@ with tab_chat:
             with st.chat_message(msg["role"]):
                 st.write(msg["content"])
 
-    st.markdown("</div>", unsafe_allow_html=True)
-
 # --- [Tab 4: 스마트 요약] ---
 with tab_summary:
-    st.markdown('<div id=\"summary-tab\">', unsafe_allow_html=True)
     st.markdown("### 📰 스마트 요약")
     if "api_key" not in st.session_state:
         render_login_required()
@@ -2359,7 +2380,6 @@ with tab_summary:
 
 # --- [Tab 5: 관리자 대시보드 최종 버전] ---
 with tab_admin:
-    st.markdown('<div id=\"admin-tab\">', unsafe_allow_html=True)
     st.markdown("### 🔒 관리자 전용 대시보드")
     st.caption("실시간 참여율 분석 및 제출 데이터 통합 관리")
 
@@ -2479,5 +2499,3 @@ with tab_admin:
             st.download_button("📥 Excel 다운로드", output.getvalue(), f"{selected_sheet}.xlsx", use_container_width=True)
         except Exception:
             st.info("Excel 엔진 미설치로 CSV 이용을 권장합니다.")
-
-    st.markdown("</div>", unsafe_allow_html=True)
