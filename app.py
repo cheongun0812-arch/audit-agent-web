@@ -61,7 +61,7 @@ st.set_page_config(
 # ==========================================
 st.markdown("""
 <style>
-/* 🔥 Expander 제목 가독성 강제 개선 */
+* 🔥 Expander 제목 가독성 강제 개선 */
 details > summary {
     font-size: 1.15rem !important;
     font-weight: 900 !important;
@@ -261,66 +261,44 @@ section.main div[data-testid="stSelectbox"] svg *{
   stroke:#64748B !important;
   opacity:1 !important;
 }
-</style>
-""", unsafe_allow_html=True)
 
-
-# ==========================================
-# ✅ 상단 메뉴/본문 가독성(어두운 배경) 보강 스타일
-# ==========================================
-st.markdown("""
-<style>
-/* 상단 탭(메뉴) 간격 + 글자/아이콘 밝게 */
-div[data-testid="stTabs"] [data-baseweb="tab-list"]{ gap: 14px !important; }
-div[data-testid="stTabs"] [data-baseweb="tab"]{ color: rgba(255,255,255,0.95) !important; }
+/* =========================================================
+   ✅ 상단 메인 메뉴(탭) 간격/가독성 개선
+   - 탭 간격 확대(gap)
+   - 탭 텍스트/아이콘을 흰색으로 고정(어두운 배경에서도 선명)
+   ========================================================= */
+div[data-testid="stTabs"] [data-baseweb="tab-list"]{
+  gap: 12px !important;                 /* ← 메뉴 간격 */
+}
+div[data-testid="stTabs"] [data-baseweb="tab"]{
+  padding: 10px 16px !important;        /* ← 버튼 여백 */
+  border-radius: 999px !important;
+}
+div[data-testid="stTabs"] [data-baseweb="tab"] *{
+  color: #FFFFFF !important;
+  font-weight: 850 !important;
+  opacity: 1 !important;
+}
 div[data-testid="stTabs"] [data-baseweb="tab"] svg,
 div[data-testid="stTabs"] [data-baseweb="tab"] svg *{
-  fill: rgba(255,255,255,0.95) !important;
-  stroke: rgba(255,255,255,0.95) !important;
+  fill: #FFFFFF !important;
+  stroke: #FFFFFF !important;
+  opacity: 1 !important;
 }
 
-/* 요청하신 문구(제목/설명) 밝은 톤 */
-.section-title{
-  color: rgba(255,255,255,0.95) !important;
-  font-weight: 900 !important;
-  margin: 0 0 6px 0 !important;
-}
-.section-caption{
-  color: rgba(255,255,255,0.70) !important;
-  font-weight: 700 !important;
-  margin: 0 0 12px 0 !important;
-}
-
-/* 관리자 비밀번호 라벨 */
-.input-label{
-  color: rgba(255,255,255,0.86) !important;
-  font-weight: 800 !important;
-  margin: 4px 0 6px 0 !important;
-}
-
-/* 로그인 필요/안내 배너(노란색 경고 대신) */
+/* ✅ '로그인 후 이용 가능합니다.' 안내: 노란 경고 대신 화이트 텍스트 배너 */
 .login-required{
-  margin-top: 10px;
-  padding: 12px 14px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.16);
+  color: #FFFFFF;
+  padding: 14px 16px;
   border-radius: 12px;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.14);
-  color: rgba(255,255,255,0.92);
-  font-weight: 800;
+  font-weight: 900;
+  letter-spacing: -0.01em;
 }
 
-/* 캡션(기본이 너무 어두울 때) */
-div[data-testid="stCaptionContainer"] p{
-  color: rgba(255,255,255,0.70) !important;
-}
-
-/* 텍스트 입력의 글자 색(관리자 비밀번호 포함) */
-div[data-testid="stTextInput"] input{
-  color: rgba(255,255,255,0.92) !important;
-}
 </style>
 """, unsafe_allow_html=True)
-
 
 # ✅ PC에서는 사이드바 기본 펼침, 모바일에서는 기본 접힘
 st.markdown("""
@@ -732,7 +710,7 @@ def _build_pledge_popup_html(name: str, rank: int, total: int) -> str:
     background: rgba(255,255,255,0.18);
     box-shadow: 0 0 14px rgba(239,68,68,0.18);
     filter: blur(0.3px);
-    animation: floatPollen 2.6s ease-out forwards;
+    animation: floatPollen 4.8s ease-out forwards;
     pointer-events:none;
   }
 </style>
@@ -758,14 +736,45 @@ def _build_pledge_popup_html(name: str, rank: int, total: int) -> str:
   function setFrame(h){
     try{ window.parent.postMessage({isStreamlitMessage:true, type:"streamlit:setFrameHeight", height: h},"*"); }catch(e){}
   }
-  function fit(){
-    const h = Math.max(window.innerHeight || 0, 560);
-    setFrame(h+8);
-  }
-  fit();
-  window.addEventListener('resize', ()=>{ setTimeout(fit, 80); });
+    // ✅ Streamlit 레이아웃 여백 최소화 (전체화면 오버레이는 iframe fixed로 처리)
+  setFrame(1);
 
-  // Pollen particles
+  // --- ✅ Make THIS iframe itself an overlay (so even with height=1, visuals show full-screen) ---
+  const fe = window.frameElement;
+  const __prev = {};
+  if (fe) {
+    __prev.position = fe.style.position;
+    __prev.top = fe.style.top;
+    __prev.left = fe.style.left;
+    __prev.width = fe.style.width;
+    __prev.height = fe.style.height;
+    __prev.zIndex = fe.style.zIndex;
+    __prev.pointerEvents = fe.style.pointerEvents;
+    __prev.background = fe.style.background;
+
+    fe.style.position = "fixed";
+    fe.style.top = "0";
+    fe.style.left = "0";
+    fe.style.width = "100vw";
+    fe.style.height = "100vh";
+    fe.style.zIndex = "2147483647";
+    fe.style.pointerEvents = "auto";
+    fe.style.background = "transparent";
+  }
+  function restoreFrame(){
+    if (!fe) return;
+    fe.style.position = __prev.position || "";
+    fe.style.top = __prev.top || "";
+    fe.style.left = __prev.left || "";
+    fe.style.width = __prev.width || "";
+    fe.style.height = __prev.height || "";
+    fe.style.zIndex = __prev.zIndex || "";
+    fe.style.pointerEvents = __prev.pointerEvents || "";
+    fe.style.background = __prev.background || "";
+  }
+
+
+// Pollen particles
   const overlay = document.getElementById('overlay');
   for(let i=0;i<22;i++){
     const s = document.createElement('div');
@@ -781,7 +790,7 @@ def _build_pledge_popup_html(name: str, rank: int, total: int) -> str:
   }
 
   // Confetti for ~3s
-  const end = Date.now() + 3000;
+  const end = Date.now() + 5000;
   (function frame(){
     confetti({ particleCount: 7, angle: 60,  spread: 62, origin: { x: 0 }, colors: ['#ef4444','#f97316','#f59e0b']});
     confetti({ particleCount: 7, angle: 120, spread: 62, origin: { x: 1 }, colors: ['#ef4444','#f97316','#f59e0b']});
@@ -791,8 +800,8 @@ def _build_pledge_popup_html(name: str, rank: int, total: int) -> str:
   // Auto close
   setTimeout(() => {
     overlay.style.animation = "fadeOut 0.30s ease-in forwards";
-    setTimeout(() => { overlay.remove(); setFrame(1); }, 360);
-  }, 3100);
+    setTimeout(() => { overlay.remove(); restoreFrame(); setFrame(1); }, 360);
+  }, 5200);
 })();
 </script>
 </body>
@@ -1057,9 +1066,13 @@ def validate_emp_id(emp_id: str) -> tuple[bool, str]:
 
 # ==========================================
 # 9. 메인 화면 및 탭 구성
+
+def render_login_required():
+    st.markdown('<div class="login-required">🔒 로그인 후 이용 가능합니다.</div>', unsafe_allow_html=True)
+
 # ==========================================
-st.markdown("<h1 style='text-align: center; color: #EAF2FF; letter-spacing: 0.6px;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
-st.markdown("<div style='text-align: center; color: #555; margin-bottom: 20px;'>Professional Legal & Audit Assistant System</div>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center; color: #F8FAFC; text-shadow: 0 6px 24px rgba(0,0,0,0.35);'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
+st.markdown("<div style='text-align: center; color: rgba(248,250,252,0.78); margin-bottom: 20px; text-shadow: 0 4px 16px rgba(0,0,0,0.25);'>Professional Legal & Audit Assistant System</div>", unsafe_allow_html=True)
 
 _now_kst = _korea_now()
 CURRENT_YEAR = _now_kst.year
@@ -2002,10 +2015,10 @@ st.markdown("</div>", unsafe_allow_html=True)
 
 # --- [Tab 2: 법률 리스크/규정/계약 검토 & 감사보고서 작성] ---
 with tab_doc:
-    st.markdown("<h3 class=\"section-title\">📄 법률 리스크(계약서)·규정 검토 / 감사보고서 작성·검증</h3>", unsafe_allow_html=True)
+    st.markdown("### 📄 법률 리스크(계약서)·규정 검토 / 감사보고서 작성·검증")
 
     if "api_key" not in st.session_state:
-        st.markdown("<div class=\"login-required\">🔒 로그인 후 이용 가능합니다.</div>", unsafe_allow_html=True)
+        render_login_required()
     else:
         # 2-레벨 메뉴: 커리큘럼 1(법률 리스크) / 커리큘럼 2(감사보고서)
         cur1, cur2 = st.tabs(["⚖️ 커리큘럼 1: 법률 리스크 심층 검토", "🔍 커리큘럼 2: 감사보고서 작성·검증"])
@@ -2176,9 +2189,9 @@ with tab_doc:
 
 # --- [Tab 3: AI 에이전트] ---
 with tab_chat:
-    st.markdown("<h3 class=\"section-title\">💬 AI 법률/챗봇</h3>", unsafe_allow_html=True)
+    st.markdown("### 💬 AI 법률/챗봇")
     if "api_key" not in st.session_state:
-        st.markdown("<div class=\"login-required\">🔒 로그인 후 이용 가능합니다.</div>", unsafe_allow_html=True)
+        render_login_required()
     else:
         if "messages" not in st.session_state:
             st.session_state.messages = []
@@ -2202,9 +2215,9 @@ with tab_chat:
 
 # --- [Tab 4: 스마트 요약] ---
 with tab_summary:
-    st.markdown("<h3 class=\"section-title\">📰 스마트 요약</h3>", unsafe_allow_html=True)
+    st.markdown("### 📰 스마트 요약")
     if "api_key" not in st.session_state:
-        st.markdown("<div class=\"login-required\">🔒 로그인 후 이용 가능합니다.</div>", unsafe_allow_html=True)
+        render_login_required()
     else:
         st_type = st.radio("입력 방식", ["URL (유튜브/웹)", "미디어 파일", "텍스트"])
         final_input = None
@@ -2245,14 +2258,13 @@ with tab_summary:
 
 # --- [Tab 5: 관리자 대시보드 최종 버전] ---
 with tab_admin:
-    st.markdown("<h3 class=\"section-title\">🔒 관리자 전용 대시보드</h3>", unsafe_allow_html=True)
-    st.markdown("<div class=\"section-caption\">실시간 참여율 분석 및 제출 데이터 통합 관리</div>", unsafe_allow_html=True)
+    st.markdown("### 🔒 관리자 전용 대시보드")
+    st.caption("실시간 참여율 분석 및 제출 데이터 통합 관리")
 
     # 1. 관리자 비밀번호 검증
-    st.markdown("<div class=\"input-label\">관리자 비밀번호</div>", unsafe_allow_html=True)
-    admin_pw = st.text_input("", type="password", key="admin_dash_pw", label_visibility="collapsed")
+    admin_pw = st.text_input("관리자 비밀번호", type="password", key="admin_dash_pw")
     if admin_pw.strip() != "ktmos0402!":
-        st.markdown("<div class=\"login-required\">관리자 비밀번호를 입력하세요.</div>", unsafe_allow_html=True)
+        st.info("관리자 비밀번호를 입력하세요.")
         st.stop()
 
     st.success("✅ 접속 성공")
