@@ -1926,7 +1926,7 @@ with tab_audit:
                         with pledge_popup_slot.container():
                             components.html(
                                 _build_pledge_popup_html((pledge_name or "").strip(), int(rank or 0), int(total or 0)),
-                                height=1,
+                                height=700,
                                 scrolling=False,
                             )
                         st.toast(f"🎉 {(pledge_name or '').strip()}님, 청렴 서약에 참여해 주셔서 감사합니다!", icon="✅")
