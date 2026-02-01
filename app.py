@@ -197,6 +197,21 @@ section.main div[data-testid="stSelectbox"] div[data-baseweb="select"] {
     font-weight: 900 !important;
 }
 
+
+/* ✅ (속도/UX) 자율점검 홍보영상(st.video) 스타일 + 자동재생 대응 */
+#audit-tab div[data-testid="stVideo"]{
+    background: #0B1B2B;
+    padding: 14px;
+    border-radius: 18px;
+    box-shadow: 0 18px 40px rgba(0,0,0,0.35);
+    border: 1px solid rgba(255,255,255,0.12);
+    margin: 8px auto 18px auto;
+    max-width: 1500px;
+}
+#audit-tab div[data-testid="stVideo"] video{
+    border-radius: 12px;
+}
+
 /* 선택값이 들어있는 실제 박스(콤보박스) */
 section.main div[data-testid="stSelectbox"] div[role="combobox"] {
     background: #FFFFFF !important;
@@ -358,6 +373,12 @@ div[data-testid="stTabs"] [data-baseweb="tab"] svg *{
   stroke: #FFFFFF !important;
 }
 
+
+
+/* ✅ 타이틀 ↔ 메뉴(탭) 간격: 약 1.5cm */
+.main-menu-tabs [data-baseweb="tab-list"]{
+  margin-top:56px !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -420,8 +441,9 @@ def _clear_query_params() -> None:
         st.experimental_set_query_params()
 
 def _validate_and_store_key(clean_key: str) -> None:
+    # ✅ 속도 개선: 로그인/세션복구 시 list_models() 호출은 초기 로딩을 크게 지연시킬 수 있어 생략합니다.
+    #    (키가 잘못된 경우에는 실제 AI 호출 시 예외가 발생하며, 그때 사용자에게 안내됩니다.)
     genai.configure(api_key=clean_key)
-    list(genai.list_models())
     st.session_state["api_key"] = clean_key
     st.session_state["login_error"] = None
     _set_query_param_key(clean_key)
@@ -451,7 +473,6 @@ if "api_key" not in st.session_state:
             restored_key = base64.b64decode(k_val).decode("utf-8")
             _validate_and_store_key(restored_key)
             st.toast("🔄 세션이 복구되었습니다.", icon="✨")
-            st.rerun()
     except Exception:
         pass
 
@@ -486,7 +507,6 @@ with st.sidebar:
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("로그아웃 (Logout)", type="primary", use_container_width=True):
             perform_logout()
-            st.rerun()
 
     st.markdown("---")
     st.markdown(
@@ -1134,9 +1154,11 @@ def render_login_required():
 # ==========================================
 st.markdown("<h1 style='text-align: center; color: #F8FAFC; text-shadow: 0 6px 24px rgba(0,0,0,0.35);'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
 st.markdown(
-    "<div style='text-align: center; color: rgba(234,242,255,0.78); text-shadow: 0 1px 10px rgba(0,0,0,0.25); margin-top: -10px; ...'>Professional Legal & Audit Assistant System</div>",
+    "<div style='text-align:center; color: rgba(234,242,255,0.78); text-shadow: 0 1px 10px rgba(0,0,0,0.25); margin-top:-10px; margin-bottom:0; font-size:14px;'>Professional Legal & Audit Assistant System</div>",
     unsafe_allow_html=True
 )
+
+st.markdown('<div style="height:56px"></div>', unsafe_allow_html=True)
 
 _now_kst = _korea_now()
 CURRENT_YEAR = _now_kst.year
@@ -1166,21 +1188,14 @@ tab_audit, tab_doc, tab_chat, tab_summary, tab_admin = st.tabs([
 components.html(r'''
 <script>
 (function () {
-  // 이 컴포넌트 iframe 자체는 화면에 보일 필요 없으니 높이를 0으로 축소
+  // 이 컴포넌트 iframe 자체는 화면에 보일 필요가 없어 높이를 0으로 축소
   try {
     const fe = window.frameElement;
-    if (fe) {
-      fe.style.height = "0px";
-      fe.style.minHeight = "0px";
-      fe.style.border = "0";
-      fe.style.margin = "0";
-      fe.style.padding = "0";
-    }
-    // Streamlit이 높이를 강제로 잡는 경우도 있어 메시지로도 한번 축소 요청
-    window.parent.postMessage({type: "streamlit:setFrameHeight", height: 0}, "*");
+    if (fe) { fe.style.height="0px"; fe.style.minHeight="0px"; fe.style.border="0"; fe.style.margin="0"; fe.style.padding="0"; }
+    window.parent.postMessage({type:"streamlit:setFrameHeight", height:0}, "*");
   } catch (e) {}
 
-  function apply() {
+  function apply(){
     const doc = window.parent.document;
     const tabs = doc.querySelectorAll('div[data-testid="stTabs"]');
     if (!tabs || !tabs.length) return false;
@@ -1205,20 +1220,23 @@ components.html(r'''
     return true;
   }
 
-  let tries = 0;
-  const t = setInterval(() => {
-    tries += 1;
-    const ok = apply();
-    if (ok || tries > 40) clearInterval(t);
-  }, 250);
+  // 즉시 1회 적용
+  apply();
 
-  // 탭 전환 시에도 재적용
+  // DOM이 붙는 순간 바로 적용되도록 관찰자 사용(플래시/지연 최소화)
+  let obs = null;
   try {
-    window.parent.document.addEventListener("click", () => setTimeout(apply, 80), true);
+    const doc = window.parent.document;
+    obs = new MutationObserver(() => { apply(); });
+    obs.observe(doc.body, { childList: true, subtree: true });
+    setTimeout(() => { try { obs && obs.disconnect(); } catch(e) {} }, 8000);
   } catch (e) {}
+
+  // 탭/클릭으로 DOM이 다시 그려질 때도 재적용
+  try { window.parent.document.addEventListener("click", () => setTimeout(apply, 60), true); } catch (e) {}
 })();
 </script>
-''', height=1, scrolling=False)
+''', height=0, scrolling=False)
 # ---------- (아이콘) 인라인 SVG: 애니메이션 모래시계 ----------
 HOURGLASS_SVG = """
 <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
@@ -1371,12 +1389,17 @@ with tab_audit:
 
     # ✅ (요청 1) 제목: Google Sheet 값과 무관하게 강제 고정
     title_for_box = "2026 병오년 ktMOS북부 설 명절 클린캠페인"
+    period_for_box = "Period: 2026. 2.9. (Mon) ~ 2.27. (Fri.)"
 
-    st.markdown(f"""
-        <div style='background-color: #E3F2FD; padding: 20px; border-radius: 10px; border-left: 5px solid #2196F3; margin-bottom: 20px;'>
-            <h3 style='margin-top:0; color: #1565C0; font-weight:900;'>📜 {title_for_box}</h3>
+    st.markdown(
+        f"""
+        <div style="background-color:#E3F2FD; padding:20px; border-radius:10px; border-left:5px solid #2196F3; margin-bottom:20px;">
+            <div style="margin-top:0; color:#1565C0; font-weight:900; font-size:clamp(34px, 3.6vw, 54px); line-height:1.08;">📜 {title_for_box}</div>
+            <div style="margin-top:6px; color:#1565C0; font-weight:900; font-size:clamp(34px, 3.6vw, 54px); line-height:1.08;">{period_for_box}</div>
         </div>
-    """, unsafe_allow_html=True)
+        """,
+        unsafe_allow_html=True
+    )
 
     # --- 📐 캠페인 콘텐츠 정렬(영상 폭 기준) ---
     cc_l, cc_mid, cc_r = st.columns([1, 16, 1])
@@ -1387,25 +1410,56 @@ with tab_audit:
         video_path = os.path.join(_base_dir, video_filename)
 
         @st.cache_data(show_spinner=False)
-        def _load_mp4_base64(_path: str) -> str:
+        def _load_mp4_bytes(_path: str) -> bytes:
             with open(_path, "rb") as f:
-                return base64.b64encode(f.read()).decode("utf-8")
+                return f.read()
 
         def _render_autoplay_video(_path: str) -> None:
             try:
-                b64 = _load_mp4_base64(_path)
-                st.markdown(
-                    f"""
-                    <div style="background:#0B1B2B; padding:14px; border-radius:18px; box-shadow:0 18px 40px rgba(0,0,0,0.35); border:1px solid rgba(255,255,255,0.12); margin: 8px auto 18px auto; max-width:1500px;">
-                      <video autoplay muted loop playsinline preload="auto" controls
-                             style="width:100%; border-radius:12px; outline:none;">
-                        <source src="data:video/mp4;base64,{{b64}}" type="video/mp4">
-                        이 브라우저에서는 영상을 재생할 수 없습니다.
-                      </video>
-                    </div>
-                    """.replace("{b64}", b64),
-                    unsafe_allow_html=True
-                )
+                # ✅ 속도 개선: base64 인라인(video/mp4;base64, ...) 방식은 HTML 전송량이 커서
+                #    첫 로딩 시 '잠깐 예전 화면이 보였다가' 갱신되는 현상이 생길 수 있습니다.
+                #    Streamlit의 st.video()로 출력하고, JS로 autoplay/muted/loop를 적용합니다.
+                video_bytes = _load_mp4_bytes(_path)
+                st.video(video_bytes, format="video/mp4")
+
+                components.html(r'''
+<script>
+(function () {
+  // iframe(components.html) 자체는 보일 필요가 없어 높이를 0으로 축소
+  try {
+    const fe = window.frameElement;
+    if (fe) { fe.style.height="0px"; fe.style.minHeight="0px"; fe.style.border="0"; fe.style.margin="0"; fe.style.padding="0"; }
+    window.parent.postMessage({type:"streamlit:setFrameHeight", height:0}, "*");
+  } catch (e) {}
+
+  function apply(){
+    const doc = window.parent.document;
+    const vids = doc.querySelectorAll('#audit-tab div[data-testid="stVideo"] video');
+    if (!vids || !vids.length) return false;
+    const v = vids[vids.length - 1]; // 가장 마지막 video에 적용
+    try {
+      v.muted = true;
+      v.loop = true;
+      v.autoplay = true;
+      v.playsInline = true;
+      const p = v.play();
+      if (p && p.catch) p.catch(()=>{});
+    } catch (e) {}
+    return true;
+  }
+
+  let tries = 0;
+  const t = setInterval(() => {
+    tries += 1;
+    const ok = apply();
+    if (ok || tries > 40) clearInterval(t);
+  }, 250);
+
+  // 탭/클릭으로 DOM이 다시 그려질 때도 재적용
+  try { window.parent.document.addEventListener("click", () => setTimeout(apply, 80), true); } catch (e) {}
+})();
+</script>
+''', height=0, scrolling=False)
             except Exception as e:
                 st.error(f"❌ 캠페인 영상 로드 실패: {e}")
 
