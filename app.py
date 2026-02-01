@@ -451,9 +451,9 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown(
-        "<div style='color:white; text-align:center; font-size:12px; opacity:0.8;'>ktMOS북부 Audit AI Solution © 2026<br>Engine: Gemini 1.5 Pro</div>",
-        unsafe_allow_html=True,
-    )
+    "<div style='text-align: center; color: rgba(234,242,255,0.78); text-shadow: 0 1px 10px rgba(0,0,0,0.25); margin-top: -10px; ...'>Professional Legal & Audit Assistant System</div>",
+    unsafe_allow_html=True
+)
 
 # ==========================================
 # 7. 로그아웃 애니메이션
