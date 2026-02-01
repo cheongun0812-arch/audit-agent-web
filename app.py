@@ -1388,7 +1388,8 @@ with tab_audit:
         st.session_state["pledge_box_open"] = False
 
     # ✅ (요청 1) 제목: Google Sheet 값과 무관하게 강제 고정
-    title_for_box = "2026 병오년 ktMOS북부 설 명절 클린캠페인", period_for_box = "기간: 2026. 2.9.(월) ~ 2.27.(금)"
+    title_for_box = "2026 병오년 ktMOS북부 설 명절 클린캠페인"
+    period_for_box = "기간: 2026. 2.9.(월) ~ 2.27.(금)"
 
     st.markdown(
         f"""
