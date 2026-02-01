@@ -1434,7 +1434,7 @@ with tab_audit:
 
   function apply(){
     const doc = window.parent.document;
-    const vids = doc.querySelectorAll('#audit-tab div[data-testid="stVideo"] video');
+    const vids = doc.querySelectorAll('div[data-testid="stVideo"] video');
     if (!vids || !vids.length) return false;
     const v = vids[vids.length - 1]; // 가장 마지막 video에 적용
     try {
@@ -1442,7 +1442,16 @@ with tab_audit:
       v.loop = true;
       v.autoplay = true;
       v.playsInline = true;
-      const p = v.play();
+      
+      // ✅ loop 속성이 무시되는 환경(일부 브라우저/재렌더링) 대비: ended 이벤트로 강제 반복
+      v.setAttribute("loop", "");
+      v.setAttribute("muted", "");
+      v.setAttribute("playsinline", "");
+      if (!v.__loopBound) {
+        v.__loopBound = true;
+        v.addEventListener("ended", () => { try { v.currentTime = 0; v.play(); } catch(e){} });
+      }
+const p = v.play();
       if (p && p.catch) p.catch(()=>{});
     } catch (e) {}
     return true;
