@@ -297,6 +297,97 @@ div[data-testid="stTabs"] [data-baseweb="tab"] svg *{
   letter-spacing: -0.01em;
 }
 
+
+/* =========================================================
+   ✅ 비자율점검 탭(법률 검토/AI 챗봇/스마트 요약/관리자 모드)
+      모든 텍스트를 밝은 WHITE로 강제
+   ========================================================= */
+#doc-tab, #chat-tab, #summary-tab, #admin-tab { color: #FFFFFF !important; }
+
+#doc-tab [data-testid="stMarkdownContainer"] *,
+#chat-tab [data-testid="stMarkdownContainer"] *,
+#summary-tab [data-testid="stMarkdownContainer"] *,
+#admin-tab [data-testid="stMarkdownContainer"] *{
+  color: #FFFFFF !important;
+}
+
+/* caption/label/help 텍스트 */
+#doc-tab .stCaption, #chat-tab .stCaption, #summary-tab .stCaption, #admin-tab .stCaption,
+#doc-tab label, #chat-tab label, #summary-tab label, #admin-tab label{
+  color: rgba(255,255,255,0.92) !important;
+  opacity: 1 !important;
+}
+
+/* 입력/텍스트 영역 */
+#doc-tab .stTextInput input, #doc-tab .stTextArea textarea,
+#chat-tab .stTextInput input, #chat-tab .stTextArea textarea,
+#summary-tab .stTextInput input, #summary-tab .stTextArea textarea,
+#admin-tab .stTextInput input, #admin-tab .stTextArea textarea{
+  background: rgba(255,255,255,0.06) !important;
+  border: 1px solid rgba(255,255,255,0.18) !important;
+  color: #FFFFFF !important;
+  -webkit-text-fill-color: #FFFFFF !important;
+}
+
+/* 셀렉트박스(선택값/화살표 포함) */
+#doc-tab div[data-testid="stSelectbox"] div[role="combobox"],
+#chat-tab div[data-testid="stSelectbox"] div[role="combobox"],
+#summary-tab div[data-testid="stSelectbox"] div[role="combobox"],
+#admin-tab div[data-testid="stSelectbox"] div[role="combobox"]{
+  background: rgba(255,255,255,0.06) !important;
+  border: 1px solid rgba(255,255,255,0.18) !important;
+  box-shadow: none !important;
+}
+
+#doc-tab div[data-testid="stSelectbox"] div[role="combobox"] span,
+#chat-tab div[data-testid="stSelectbox"] div[role="combobox"] span,
+#summary-tab div[data-testid="stSelectbox"] div[role="combobox"] span,
+#admin-tab div[data-testid="stSelectbox"] div[role="combobox"] span{
+  color: #FFFFFF !important;
+  font-weight: 850 !important;
+  opacity: 1 !important;
+}
+
+#doc-tab div[data-testid="stSelectbox"] div[role="combobox"] input,
+#chat-tab div[data-testid="stSelectbox"] div[role="combobox"] input,
+#summary-tab div[data-testid="stSelectbox"] div[role="combobox"] input,
+#admin-tab div[data-testid="stSelectbox"] div[role="combobox"] input{
+  color: #FFFFFF !important;
+  -webkit-text-fill-color: #FFFFFF !important;
+  font-weight: 850 !important;
+  opacity: 1 !important;
+}
+
+#doc-tab div[data-testid="stSelectbox"] svg, #doc-tab div[data-testid="stSelectbox"] svg *,
+#chat-tab div[data-testid="stSelectbox"] svg, #chat-tab div[data-testid="stSelectbox"] svg *,
+#summary-tab div[data-testid="stSelectbox"] svg, #summary-tab div[data-testid="stSelectbox"] svg *,
+#admin-tab div[data-testid="stSelectbox"] svg, #admin-tab div[data-testid="stSelectbox"] svg *{
+  fill: #FFFFFF !important;
+  stroke: #FFFFFF !important;
+  opacity: 1 !important;
+}
+
+/* 파일 업로더 */
+#doc-tab div[data-testid="stFileUploader"] *,
+#chat-tab div[data-testid="stFileUploader"] *,
+#summary-tab div[data-testid="stFileUploader"] *,
+#admin-tab div[data-testid="stFileUploader"] *{
+  color: #FFFFFF !important;
+}
+
+#doc-tab div[data-testid="stFileUploader"] section,
+#chat-tab div[data-testid="stFileUploader"] section,
+#summary-tab div[data-testid="stFileUploader"] section,
+#admin-tab div[data-testid="stFileUploader"] section{
+  background: rgba(255,255,255,0.06) !important;
+  border: 1px dashed rgba(255,255,255,0.22) !important;
+}
+
+/* info/warning/error 박스 안 텍스트 */
+#doc-tab .stAlert *, #chat-tab .stAlert *, #summary-tab .stAlert *, #admin-tab .stAlert *{
+  color: #FFFFFF !important;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -2018,6 +2109,7 @@ st.markdown("</div>", unsafe_allow_html=True)
 
 # --- [Tab 2: 법률 리스크/규정/계약 검토 & 감사보고서 작성] ---
 with tab_doc:
+    st.markdown('<div id=\"doc-tab\">', unsafe_allow_html=True)
     st.markdown("### 📄 법률 리스크(계약서)·규정 검토 / 감사보고서 작성·검증")
 
     if "api_key" not in st.session_state:
@@ -2190,8 +2282,11 @@ with tab_doc:
             # (이하 기존 코드 그대로 유지: 사용자가 올려준 파일의 원문 로직이 이어짐)
             st.info("※ 이하(감사보고서 생성/검증 로직)는 기존 코드 흐름을 그대로 유지합니다. (이번 요청 범위: 자율점검 UI/검증만)")
 
+    st.markdown("</div>", unsafe_allow_html=True)
+
 # --- [Tab 3: AI 에이전트] ---
 with tab_chat:
+    st.markdown('<div id=\"chat-tab\">', unsafe_allow_html=True)
     st.markdown("### 💬 AI 법률/챗봇")
     if "api_key" not in st.session_state:
         render_login_required()
@@ -2216,8 +2311,11 @@ with tab_chat:
             with st.chat_message(msg["role"]):
                 st.write(msg["content"])
 
+    st.markdown("</div>", unsafe_allow_html=True)
+
 # --- [Tab 4: 스마트 요약] ---
 with tab_summary:
+    st.markdown('<div id=\"summary-tab\">', unsafe_allow_html=True)
     st.markdown("### 📰 스마트 요약")
     if "api_key" not in st.session_state:
         render_login_required()
@@ -2261,6 +2359,7 @@ with tab_summary:
 
 # --- [Tab 5: 관리자 대시보드 최종 버전] ---
 with tab_admin:
+    st.markdown('<div id=\"admin-tab\">', unsafe_allow_html=True)
     st.markdown("### 🔒 관리자 전용 대시보드")
     st.caption("실시간 참여율 분석 및 제출 데이터 통합 관리")
 
@@ -2380,3 +2479,5 @@ with tab_admin:
             st.download_button("📥 Excel 다운로드", output.getvalue(), f"{selected_sheet}.xlsx", use_container_width=True)
         except Exception:
             st.info("Excel 엔진 미설치로 CSV 이용을 권장합니다.")
+
+    st.markdown("</div>", unsafe_allow_html=True)
