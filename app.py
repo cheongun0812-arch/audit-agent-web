@@ -1072,7 +1072,10 @@ def render_login_required():
 
 # ==========================================
 st.markdown("<h1 style='text-align: center; color: #F8FAFC; text-shadow: 0 6px 24px rgba(0,0,0,0.35);'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
-st.markdown("<div style='text-align: center; color: rgba(248,250,252,0.78); margin-bottom: 20px; text-shadow: 0 4px 16px rgba(0,0,0,0.25);'>Professional Legal & Audit Assistant System</div>", unsafe_allow_html=True)
+st.markdown(
+    "<div style='text-align: center; color: rgba(234,242,255,0.78); text-shadow: 0 1px 10px rgba(0,0,0,0.25); margin-top: -10px; ...'>Professional Legal & Audit Assistant System</div>",
+    unsafe_allow_html=True
+)
 
 _now_kst = _korea_now()
 CURRENT_YEAR = _now_kst.year
