@@ -674,7 +674,7 @@ def _build_pledge_popup_html(name: str, rank: int, total: int) -> str:
     background: rgba(255,255,255,0.18);
     box-shadow: 0 0 14px rgba(239,68,68,0.18);
     filter: blur(0.3px);
-    animation: floatPollen 5.5s ease-out forwards;
+    animation: floatPollen 4.8s ease-out forwards;
     pointer-events:none;
   }
 </style>
@@ -765,7 +765,7 @@ def _build_pledge_popup_html(name: str, rank: int, total: int) -> str:
   setTimeout(() => {
     overlay.style.animation = "fadeOut 0.30s ease-in forwards";
     setTimeout(() => { overlay.remove(); restoreFrame(); setFrame(1); }, 360);
-  }, 5100);
+  }, 5200);
 })();
 </script>
 </body>
