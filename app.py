@@ -261,6 +261,42 @@ section.main div[data-testid="stSelectbox"] svg *{
   stroke:#64748B !important;
   opacity:1 !important;
 }
+
+/* =========================================================
+   ✅ 상단 메인 메뉴(탭) 간격/가독성 개선
+   - 탭 간격 확대(gap)
+   - 탭 텍스트/아이콘을 흰색으로 고정(어두운 배경에서도 선명)
+   ========================================================= */
+div[data-testid="stTabs"] [data-baseweb="tab-list"]{
+  gap: 12px !important;                 /* ← 메뉴 간격 */
+}
+div[data-testid="stTabs"] [data-baseweb="tab"]{
+  padding: 10px 16px !important;        /* ← 버튼 여백 */
+  border-radius: 999px !important;
+}
+div[data-testid="stTabs"] [data-baseweb="tab"] *{
+  color: #FFFFFF !important;
+  font-weight: 850 !important;
+  opacity: 1 !important;
+}
+div[data-testid="stTabs"] [data-baseweb="tab"] svg,
+div[data-testid="stTabs"] [data-baseweb="tab"] svg *{
+  fill: #FFFFFF !important;
+  stroke: #FFFFFF !important;
+  opacity: 1 !important;
+}
+
+/* ✅ '로그인 후 이용 가능합니다.' 안내: 노란 경고 대신 화이트 텍스트 배너 */
+.login-required{
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.16);
+  color: #FFFFFF;
+  padding: 14px 16px;
+  border-radius: 12px;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -1030,9 +1066,13 @@ def validate_emp_id(emp_id: str) -> tuple[bool, str]:
 
 # ==========================================
 # 9. 메인 화면 및 탭 구성
+
+def render_login_required():
+    st.markdown('<div class="login-required">🔒 로그인 후 이용 가능합니다.</div>', unsafe_allow_html=True)
+
 # ==========================================
-st.markdown("<h1 style='text-align: center; color: #2C3E50;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
-st.markdown("<div style='text-align: center; color: #555; margin-bottom: 20px;'>Professional Legal & Audit Assistant System</div>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center; color: #F8FAFC; text-shadow: 0 6px 24px rgba(0,0,0,0.35);'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
+st.markdown("<div style='text-align: center; color: rgba(248,250,252,0.78); margin-bottom: 20px; text-shadow: 0 4px 16px rgba(0,0,0,0.25);'>Professional Legal & Audit Assistant System</div>", unsafe_allow_html=True)
 
 _now_kst = _korea_now()
 CURRENT_YEAR = _now_kst.year
@@ -1978,7 +2018,7 @@ with tab_doc:
     st.markdown("### 📄 법률 리스크(계약서)·규정 검토 / 감사보고서 작성·검증")
 
     if "api_key" not in st.session_state:
-        st.warning("🔒 로그인 후 이용 가능합니다.")
+        render_login_required()
     else:
         # 2-레벨 메뉴: 커리큘럼 1(법률 리스크) / 커리큘럼 2(감사보고서)
         cur1, cur2 = st.tabs(["⚖️ 커리큘럼 1: 법률 리스크 심층 검토", "🔍 커리큘럼 2: 감사보고서 작성·검증"])
@@ -2151,7 +2191,7 @@ with tab_doc:
 with tab_chat:
     st.markdown("### 💬 AI 법률/챗봇")
     if "api_key" not in st.session_state:
-        st.warning("🔒 로그인 후 이용 가능합니다.")
+        render_login_required()
     else:
         if "messages" not in st.session_state:
             st.session_state.messages = []
@@ -2177,7 +2217,7 @@ with tab_chat:
 with tab_summary:
     st.markdown("### 📰 스마트 요약")
     if "api_key" not in st.session_state:
-        st.warning("🔒 로그인 후 이용 가능합니다.")
+        render_login_required()
     else:
         st_type = st.radio("입력 방식", ["URL (유튜브/웹)", "미디어 파일", "텍스트"])
         final_input = None
