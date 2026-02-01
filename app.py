@@ -1395,7 +1395,7 @@ with tab_audit:
         f"""
         <div style="background-color:#E3F2FD; padding:20px; border-radius:10px; border-left:5px solid #2196F3; margin-bottom:20px;">
             <div style="margin-top:0; color:#1565C0; font-weight:900; font-size:clamp(28px, 3.0vw, 46px); line-height:1.08;">📜 {title_for_box}</div>
-            <div style='margin-top:6px; padding-left:44px; color:#1565C0; font-weight:900; font-size: clamp(34px, 3.6vw, 54px); line-height:1.08;'>{period_for_box}</div>
+            <div style='margin-top:6px; padding-left:50px; color:#1565C0; font-weight:900; font-size: clamp(22px, 2.0vw, 30px); line-height:1.08;'>{period_for_box}</div>
         </div>
         """,
         unsafe_allow_html=True
