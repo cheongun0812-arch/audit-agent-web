@@ -451,6 +451,7 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown(
+    st.markdown(
     "<div style='text-align: center; color: rgba(234,242,255,0.78); text-shadow: 0 1px 10px rgba(0,0,0,0.25); margin-top: -10px; ...'>Professional Legal & Audit Assistant System</div>",
     unsafe_allow_html=True
 )
@@ -1235,7 +1236,7 @@ with tab_audit:
         st.session_state["pledge_box_open"] = False
 
     # ✅ (요청 1) 제목: Google Sheet 값과 무관하게 강제 고정
-    title_for_box = "2026 병오년 ktMOS북부 설 명절 클린캠페인"
+    title_for_box = "2026 병오년 ktMOS북부 설 명절 클린캠페인 [기간: 2026.2.9. ~ 2.27. 까지] "
 
     st.markdown(f"""
         <div style='background-color: #E3F2FD; padding: 20px; border-radius: 10px; border-left: 5px solid #2196F3; margin-bottom: 20px;'>
