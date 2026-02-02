@@ -1391,8 +1391,8 @@ with tab_audit:
 
     st.markdown(f"""
         <div style='background-color: #E3F2FD; padding: 20px; border-radius: 10px; border-left: 5px solid #2196F3; margin-bottom: 20px;'>
-            <div style='margin-top:0; color:#1565C0; font-weight:900; font-size: clamp(34px, 3.6vw, 54px); line-height:1.08;'>📜 {title_for_box}</div>
-            <div style='margin-top:6px; color:#1565C0; font-weight:900; font-size: clamp(34px, 3.6vw, 54px); line-height:1.08;'>{period_for_box}</div>
+            <div style='margin-top:0; color:#1565C0; font-weight:900; font-size: clamp(26px, 2.6vw, 44px); line-height:1.08;'>📜 {title_for_box}</div>
+            <div style='margin-top:6px; padding-left:52px; color:#1565C0; font-weight:900; font-size: clamp(22px, 2.2vw, 36px); line-height:1.08;'>{period_for_box}</div>
         </div>
     """, unsafe_allow_html=True)
 
@@ -1419,7 +1419,7 @@ with tab_audit:
                     <div style="background:#0B1B2B; padding:14px; border-radius:18px; box-shadow:0 18px 40px rgba(0,0,0,0.35); border:1px solid rgba(255,255,255,0.12); margin: 8px auto 18px auto; max-width:1500px;">
                       <video autoplay muted loop playsinline preload="auto"
                              style="width:100%; border-radius:12px; outline:none;">
-                        <source src="data:video/mp4;base64,{{b64}}" type="video/mp4">
+                        <source src="data:video/mp4;base64,{b64}" type="video/mp4">
                         이 브라우저에서는 영상을 재생할 수 없습니다.
                       </video>
                     </div>
@@ -2074,6 +2074,7 @@ function doScan(){
                         window.addEventListener("load", scheduleHeight);
                         window.addEventListener("resize", ()=>{ setTimeout(sendHeight, 120); });
                         scheduleHeight();
+          })();
 </script>
         </body>
         </html>
