@@ -1552,7 +1552,7 @@ with tab_audit:
           <style>
             :root{
               --maxw: 1500;
-              --title: clamp(34px, 3.6vw, 54px);
+              --title: clamp(34, 3.6vw, 54);
               --kicker: 12px;
               --radius: 30px;
               --bg: rgba(2,6,23,0.74);
