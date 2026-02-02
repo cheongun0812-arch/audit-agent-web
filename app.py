@@ -684,7 +684,7 @@ def _build_pledge_popup_html(name: str, rank: int, total: int) -> str:
 <style>
   :root {
     --bg: rgba(2, 6, 23, 0.00);
-    --panel: rgba(15, 23, 42, 0.86);
+    --panel: rgba(255, 255, 255, 0.06);
     --border: rgba(255, 255, 255, 0.14);
     --txt: rgba(255, 255, 255, 0.94);
     --muted: rgba(229, 231, 235, 0.76);
@@ -712,19 +712,13 @@ def _build_pledge_popup_html(name: str, rank: int, total: int) -> str:
     background: var(--bg);
     z-index: 999999;
   }
-  #confetti-canvas{
-    position: fixed; inset: 0;
-    width: 100vw; height: 100vh;
-    pointer-events:none;
-    z-index: 2;
-  }
-  .pollen{ z-index: 3; }
-  .card { z-index: 10;
+  .card {
     width: min(720px, 92vw);
     border-radius: 30px;
     background: var(--panel);
     border: 1px solid var(--border);
-    backdrop-filter: blur(14px);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
     box-shadow: 0 30px 90px rgba(0,0,0,0.45);
     overflow: hidden;
             position: relative;
@@ -789,9 +783,10 @@ def _build_pledge_popup_html(name: str, rank: int, total: int) -> str:
     position:absolute;
     width: 10px; height: 10px;
     border-radius: 999px;
-    background: rgba(255,255,255,0.18);
-    box-shadow: 0 0 14px rgba(239,68,68,0.18);
-    filter: blur(0.3px);
+    /* brighter base; actual color is randomized in JS */
+    background: rgba(255,255,255,0.65);
+    box-shadow: 0 0 18px rgba(255,255,255,0.35);
+    filter: none;
     animation: floatPollen 4.8s ease-out forwards;
     pointer-events:none;
   }
@@ -799,7 +794,6 @@ def _build_pledge_popup_html(name: str, rank: int, total: int) -> str:
 </head>
 <body>
 <div class="overlay" id="overlay">
-  <canvas id="confetti-canvas"></canvas>
   <div class="card" id="card">
     <div class="glow"></div>
     <div class="inner">
@@ -844,7 +838,23 @@ def _build_pledge_popup_html(name: str, rank: int, total: int) -> str:
     fe.style.pointerEvents = "auto";
     fe.style.background = "transparent";
   }
+
+  // ✅ Hide Streamlit toast while overlay is active (prevents overlap with confetti)
+  let __toastEl = null;
+  let __toastDisplay = "";
+  try{
+    const pd = window.parent && window.parent.document;
+    if (pd){
+      __toastEl = pd.querySelector('[data-testid="stToastContainer"]') || pd.querySelector('.stToast') || null;
+      if (__toastEl){
+        __toastDisplay = __toastEl.style.display;
+        __toastEl.style.display = "none";
+      }
+    }
+  }catch(e){}
+
   function restoreFrame(){
+
     if (!fe) return;
     fe.style.position = __prev.position || "";
     fe.style.top = __prev.top || "";
@@ -854,29 +864,45 @@ def _build_pledge_popup_html(name: str, rank: int, total: int) -> str:
     fe.style.zIndex = __prev.zIndex || "";
     fe.style.pointerEvents = __prev.pointerEvents || "";
     fe.style.background = __prev.background || "";
+
+    // restore toast
+    try{ if(__toastEl){ __toastEl.style.display = __toastDisplay || ""; } }catch(e){}
   }
 
 
 // Pollen particles
   const overlay = document.getElementById('overlay');
-  for(let i=0;i<22;i++){
+  const pollenColors = ['#ef4444','#f97316','#f59e0b','#22c55e','#06b6d4','#3b82f6','#a855f7','#ec4899'];
+  for(let i=0;i<26;i++){
     const s = document.createElement('div');
     s.className = 'pollen';
+
+    // random position / size
     s.style.left = (Math.random()*100).toFixed(2) + 'vw';
-    s.style.bottom = (Math.random()*20).toFixed(2) + 'vh';
-    s.style.opacity = (0.4 + Math.random()*0.5).toFixed(2);
+    s.style.bottom = (Math.random()*22).toFixed(2) + 'vh';
+    const size = (8 + Math.random()*8).toFixed(1);
+    s.style.width = size + 'px';
+    s.style.height = size + 'px';
+
+    // vivid color + glow
+    const c = pollenColors[Math.floor(Math.random()*pollenColors.length)];
+    s.style.background = `radial-gradient(circle at 30% 30%, rgba(255,255,255,0.95) 0%, ${c} 55%, rgba(255,255,255,0.15) 100%)`;
+    s.style.boxShadow = `0 0 16px ${c}, 0 0 42px rgba(255,255,255,0.20)`;
+
+    s.style.opacity = (0.75 + Math.random()*0.25).toFixed(2);
     s.style.animationDelay = (Math.random()*0.35).toFixed(2) + 's';
-    const tx = (Math.random()*-10).toFixed(2);
-    const sc = (0.7 + Math.random()*0.9).toFixed(2);
+
+    const tx = (Math.random()*-14).toFixed(2);
+    const sc = (0.85 + Math.random()*0.9).toFixed(2);
     s.style.transform = "translateY(0) translateX(" + tx + "px) scale(" + sc + ")";
     overlay.appendChild(s);
   }
 
-  // Confetti for ~3s
+// Confetti for ~3s
   const end = Date.now() + 5000;
   (function frame(){
-    confetti({ particleCount: 7, angle: 60,  spread: 62, origin: { x: 0 }, colors: ['#ef4444','#f97316','#f59e0b']});
-    confetti({ particleCount: 7, angle: 120, spread: 62, origin: { x: 1 }, colors: ['#ef4444','#f97316','#f59e0b']});
+    confetti({ particleCount: 7, angle: 60,  spread: 62, origin: { x: 0 }, colors: ['#ef4444','#f97316','#f59e0b','#22c55e','#06b6d4','#3b82f6','#a855f7','#ec4899']});
+    confetti({ particleCount: 7, angle: 120, spread: 62, origin: { x: 1 }, colors: ['#ef4444','#f97316','#f59e0b','#22c55e','#06b6d4','#3b82f6','#a855f7','#ec4899']});
     if(Date.now() < end) requestAnimationFrame(frame);
   })();
 
@@ -1419,38 +1445,69 @@ with tab_audit:
 
         def _render_autoplay_video(_path: str) -> None:
             try:
-                # ✅ 확실한 반복재생/자동재생: 브라우저 정책을 만족시키기 위해 muted + playsinline + loop + autoplay
-                #    st.video()는 loop 보장이 약해, <video> 태그를 직접 렌더링합니다.
-                b64 = base64.b64encode(_load_mp4_bytes(_path)).decode("ascii")
-                video_html = f'''
-<div style="width:100%; max-width: 1100px; margin: 0 auto;">
-  <video id="ccHeroVideo"
-         autoplay muted loop playsinline
-         preload="auto"
-         controls
-         style="
-           width:100%;
-           border-radius: 24px;
-           box-shadow: 0 18px 54px rgba(0,0,0,0.38);
-           outline: 1px solid rgba(255,255,255,0.10);
-           background: rgba(0,0,0,0.18);
-         ">
-    <source src="data:video/mp4;base64,{b64}" type="video/mp4">
-  </video>
-</div>
+                # ✅ 속도 개선: base64 인라인(video/mp4;base64, ...) 방식은 HTML 전송량이 커서
+                #    첫 로딩 시 '잠깐 예전 화면이 보였다가' 갱신되는 현상이 생길 수 있습니다.
+                #    Streamlit의 st.video()로 출력하고, JS로 autoplay/muted/loop를 적용합니다.
+                video_bytes = _load_mp4_bytes(_path)
+                st.video(video_bytes, format="video/mp4")
+
+                components.html(r'''
 <script>
-  (function(){
-    const v = document.getElementById("ccHeroVideo");
-    if(!v) return;
-    // 일부 모바일에서 autoplay가 지연될 수 있어, 로드 직후 재시도
-    const tryPlay = () => { try { const p=v.play(); if(p&&p.catch) p.catch(()=>{}); } catch(e){} };
-    tryPlay();
-    setTimeout(tryPlay, 200);
-    setTimeout(tryPlay, 800);
-  })();
+(function () {
+  // iframe(components.html) 자체는 보일 필요가 없어 높이를 0으로 축소
+  try {
+    const fe = window.frameElement;
+    if (fe) { fe.style.height="0px"; fe.style.minHeight="0px"; fe.style.border="0"; fe.style.margin="0"; fe.style.padding="0"; }
+    window.parent.postMessage({type:"streamlit:setFrameHeight", height:0}, "*");
+  } catch (e) {}
+
+  function apply(){
+    const doc = window.parent.document;
+    const vids = doc.querySelectorAll('div[data-testid=\"stVideo\"] video');
+    if (!vids || !vids.length) return false;
+    const v = vids[vids.length - 1]; // 가장 마지막 video에 적용
+    try {
+      v.muted = true;
+      v.loop = true;
+      v.autoplay = true;
+      v.playsInline = true;
+
+      // ✅ 속성도 함께 강제(일부 환경에서 property만으로는 loop가 풀리는 문제 방지)
+      v.setAttribute("muted", "");
+      v.setAttribute("loop", "");
+      v.setAttribute("autoplay", "");
+      v.setAttribute("playsinline", "");
+
+      // ✅ ended 이벤트로 강제 루프(브라우저가 loop 속성을 무시하는 경우 대비)
+      if (!v.__loopBound) {
+        v.__loopBound = true;
+        v.addEventListener("ended", () => {
+          try { v.currentTime = 0; } catch (e) {}
+          try {
+            const pp = v.play();
+            if (pp && pp.catch) pp.catch(()=>{});
+          } catch (e) {}
+        });
+      }
+
+      const p = v.play();
+      if (p && p.catch) p.catch(()=>{});
+    } catch (e) {}
+    return true;
+  }
+
+  let tries = 0;
+  const t = setInterval(() => {
+    tries += 1;
+    const ok = apply();
+    if (ok || tries > 40) clearInterval(t);
+  }, 250);
+
+  // 탭/클릭으로 DOM이 다시 그려질 때도 재적용
+  try { window.parent.document.addEventListener("click", () => setTimeout(apply, 80), true); } catch (e) {}
+})();
 </script>
-'''
-                components.html(video_html, height=420, scrolling=False)
+''', height=0, scrolling=False)
             except Exception as e:
                 st.error(f"❌ 캠페인 영상 로드 실패: {e}")
 
@@ -1487,7 +1544,7 @@ with tab_audit:
               --red: #ef4444;
               --orange: #f97316;
               --amber: #f59e0b;
-              --gap: 70px;
+              --gap: 46px;
             }
             html,body{margin:0;padding:0;background:transparent;color:var(--txt);
               font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans KR", sans-serif;}
@@ -1602,49 +1659,7 @@ with tab_audit:
               gap:10px;
               box-shadow: 0 18px 40px rgba(0,0,0,0.35);
             }
-            
-            .scan-wrap{
-              position: relative;
-              height: 240px;
-              border-radius: 28px;
-              border: 1px solid rgba(239,68,68,0.18);
-              background: rgba(148,163,184,0.06);
-              overflow:hidden;
-              display:flex;
-              align-items:center;
-              justify-content:center;
-              flex-direction:column;
-              gap: 14px;
-            }
-            .scan-label{
-              font-size: 12px;
-              letter-spacing: 0.14em;
-              font-weight: 900;
-              color: rgba(239,68,68,0.92);
-              text-transform: uppercase;
-              opacity: 0.95;
-              animation: pulse 1.2s ease-in-out infinite;
-            }
-            .scan-ring{
-              position:absolute;
-              width: 220px; height: 220px;
-              border-radius: 999px;
-              border: 4px solid rgba(239,68,68,0.18);
-              animation: ping 1.8s ease-out infinite;
-            }
-            .scan-line{
-              position:absolute;
-              top: 0; left: 0;
-              width: 100%;
-              height: 3px;
-              background: linear-gradient(90deg, transparent, rgba(239,68,68,0.0), rgba(239,68,68,1), rgba(245,158,11,1), rgba(239,68,68,0.0), transparent);
-              box-shadow: 0 0 18px rgba(239,68,68,0.65);
-              animation: scanline 2.0s linear infinite;
-            }
-            @keyframes scanline{ 0%{ transform: translateY(0);} 100%{ transform: translateY(240px);} }
-            @keyframes ping{ 0%{ transform: scale(0.86); opacity:0.0;} 35%{ opacity: 0.9;} 100%{ transform: scale(1.18); opacity:0;} }
-            @keyframes pulse{ 0%,100%{ transform: scale(1); opacity:0.75;} 50%{ transform: scale(1.02); opacity:1;} }
-.scan-btn:active{transform: translateY(1px);}
+            .scan-btn:active{transform: translateY(1px);}
             .grad-border{
               padding: 2px;
               border-radius: 26px;
@@ -1788,7 +1803,7 @@ with tab_audit:
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
                   <input id="empName" class="pill-input" placeholder="성함" maxlength="12" />
                   <select id="goal" class="pill-select">
-                    <option value="" selected disabled>올해의 주요 목표</option>
+                    <option value="가족의 행복">올해의 주요 목표</option>
                     <option value="가족의 행복">가족의 행복</option>
                     <option value="업무의 성장">업무의 성장</option>
                     <option value="건강한 생활">건강한 생활</option>
@@ -1799,13 +1814,6 @@ with tab_audit:
 
                 <div style="margin-top:12px;">
                   <button id="scanBtn" class="scan-btn"><span style="font-size:18px;">✨</span>청렴 기운 스캔하기</button>
-                </div>
-
-                <!-- scanning animation (HTML ported vibe) -->
-                <div id="scanWrap" class="scan-wrap" style="margin-top:16px; display:none;">
-                  <div class="scan-label">Scanning Soul Frequency...</div>
-                  <div class="scan-ring"></div>
-                  <div class="scan-line"></div>
                 </div>
 
                 <div id="resultWrap" class="grad-border" style="margin-top:16px; display:none;">
@@ -1917,92 +1925,41 @@ with tab_audit:
 
             function doScan(){
               if(scanning) return;
-
               const name = (emp.value||"").trim();
-              const g = (goal.value||"").trim();
-
-              // validations (match the original UX but sturdier)
+              const g = goal.value || "가족의 행복";
               if(!name){
                 emp.focus();
-                emp.style.boxShadow="0 0 0 3px rgba(239,68,68,0.28)";
-                setTimeout(()=>emp.style.boxShadow="", 900);
+                emp.style.boxShadow="0 0 0 4px rgba(239,68,68,0.25)";
+                setTimeout(()=>emp.style.boxShadow="", 800);
                 return;
               }
-              if(!g){
-                goal.focus();
-                goal.style.boxShadow="0 0 0 3px rgba(245,158,11,0.26)";
-                setTimeout(()=>goal.style.boxShadow="", 900);
-                return;
-              }
-
               scanning = true;
-              resultWrap.style.display = "none";
-              const scanWrap = document.getElementById("scanWrap");
-              if (scanWrap) scanWrap.style.display = "flex";
-
               scanBtn.style.filter="brightness(0.92)";
               scanBtn.innerHTML = '⏳ 스캔 중...';
-
-              // cool scan duration (HTML reference vibe)
               setTimeout(()=>{
                 const picked = pickByGoal(g);
                 sloganEl.textContent = "“" + picked.slogan + "”";
                 fortuneEl.textContent = picked.fortune;
-
-                if (scanWrap) scanWrap.style.display = "none";
                 resultWrap.style.display = "block";
-
                 scanBtn.style.filter="";
                 scanBtn.innerHTML = '✨ 청렴 기운 스캔하기';
                 scanning = false;
-
-                // height re-fit after content change
-                try{ sendHeight(); }catch(e){}
-              }, 2000);
+                sendHeight();
+              }, 650);
             }
 
-            // robust bindings (desktop + mobile)
-            if (scanBtn){
-              scanBtn.addEventListener("click", doScan);
-              scanBtn.addEventListener("touchend", function(e){
-                try{ e.preventDefault(); }catch(_){}
-                doScan();
-              }, {passive:false});
-            }
-            if (emp){
-              emp.addEventListener("keydown", function(e){
-                if(e.key==="Enter"){ e.preventDefault(); doScan(); }
-              });
-            }
-
+            scanBtn.addEventListener("click", doScan);
 
                         // --- Streamlit iframe height auto-fit ---
                         function sendHeight(){
                           try{
-                            const raw = Math.max(
+                            const h = Math.max(
                               document.body.scrollHeight,
                               document.documentElement.scrollHeight,
                               document.body.offsetHeight,
                               document.documentElement.offsetHeight
                             );
-                            // ✅ avoid excessive blank space (cap) while ensuring full visibility
-                            const target = Math.min(Math.ceil(raw)+16, 1900);
-
-                            // 1) direct style (most reliable)
-                            try{
-                              const fe = window.frameElement;
-                              if (fe){
-                                fe.style.height = target + "px";
-                                fe.style.minHeight = target + "px";
-                              }
-                            }catch(_){}
-
-                            // 2) Streamlit message (official)
-                            try{
-                              window.parent.postMessage({isStreamlitMessage:true, type:"streamlit:setFrameHeight", height: target},"*");
-                              // fallback message format
-                              window.parent.postMessage({type:"streamlit:setFrameHeight", height: target},"*");
-                            }catch(_){}
+                            window.parent.postMessage({isStreamlitMessage:true, type:"streamlit:setFrameHeight", height: Math.ceil(h)+16},"*");
                           }catch(e){}
                         }
 
@@ -2035,7 +1992,7 @@ with tab_audit:
     
         components.html(
             CLEAN_CAMPAIGN_BUNDLE_HTML,
-            height=1180,
+            height=820,
             scrolling=False,
         )
         st.markdown(
@@ -2124,8 +2081,10 @@ with tab_audit:
             border-radius: 30px;
             background: rgba(255,255,255,0.04);
             border: 1px solid rgba(255,255,255,0.10);
-            backdrop-filter: blur(14px);
-            -webkit-backdrop-filter: blur(14px);
+            backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+            -webkit-backdrop-filter: none;
+    -webkit-backdrop-filter: none;
             text-align:center;
           }
           .cc-pledge-badge{
@@ -2267,8 +2226,8 @@ with tab_audit:
                                 height=1,
                                 scrolling=False,
                             )
-                        # (UX) 팝업 오버레이 내부 안내로 충분하므로 별도 toast는 표시하지 않습니다.
-else:
+                        st.toast(f"🎉 {(pledge_name or '').strip()}님, 청렴 서약에 참여해 주셔서 감사합니다!", icon="✅")
+                    else:
                         st.warning(msg)
 
             st.markdown(
