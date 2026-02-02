@@ -1551,7 +1551,7 @@ with tab_audit:
           <script src="https://cdn.tailwindcss.com"></script>
           <style>
             :root{
-              --maxw: 1500px;
+              --maxw: 1500;
               --title: clamp(34px, 3.6vw, 54px);
               --kicker: 12px;
               --radius: 30px;
