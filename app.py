@@ -1435,38 +1435,73 @@ with tab_audit:
                 components.html(r'''
 <script>
 (function () {
-  // iframe(components.html) 자체는 보일 필요가 없어 높이를 0으로 축소
+  // 이 컴포넌트 iframe 자체는 화면에 보일 필요 없으니 높이를 0으로 축소
   try {
     const fe = window.frameElement;
-    if (fe) { fe.style.height="0px"; fe.style.minHeight="0px"; fe.style.border="0"; fe.style.margin="0"; fe.style.padding="0"; }
-    window.parent.postMessage({type:"streamlit:setFrameHeight", height:0}, "*");
+    if (fe) {
+      fe.style.height = "0px";
+      fe.style.minHeight = "0px";
+      fe.style.border = "0";
+      fe.style.margin = "0";
+      fe.style.padding = "0";
+    }
+    window.parent.postMessage({isStreamlitMessage:true, type:"streamlit:setFrameHeight", height: 0}, "*");
   } catch (e) {}
 
-  function apply(){
-    const doc = window.parent.document;
-    const vids = doc.querySelectorAll('#audit-tab div[data-testid="stVideo"] video');
-    if (!vids || !vids.length) return false;
-    const v = vids[vids.length - 1]; // 가장 마지막 video에 적용
-    try {
+  function hardenVideo(v){
+    if (!v) return;
+    try{
       v.muted = true;
-      v.loop = true;
       v.autoplay = true;
+      v.loop = true;
       v.playsInline = true;
+
+      v.setAttribute("muted", "");
+      v.setAttribute("autoplay", "");
+      v.setAttribute("loop", "");
+      v.setAttribute("playsinline", "");
+      v.setAttribute("webkit-playsinline", "");
+
+      // 혹시 loop가 적용되지 않는 환경 대비: ended 시 재시작
+      try {
+        v.addEventListener("ended", () => {
+          try { v.currentTime = 0; } catch(e){}
+          try { v.play(); } catch(e){}
+        }, { once: false });
+      } catch(e){}
+
       const p = v.play();
       if (p && p.catch) p.catch(()=>{});
-    } catch (e) {}
+    } catch(e){}
+  }
+
+  function apply(){
+    let doc = null;
+    try { doc = window.parent.document; } catch(e){ return false; }
+    if (!doc) return false;
+
+    const scope = doc.querySelector("#audit-tab") || doc;
+    const vids = scope.querySelectorAll("video");
+    if (!vids || !vids.length) return false;
+
+    vids.forEach(hardenVideo);
     return true;
   }
 
-  let tries = 0;
-  const t = setInterval(() => {
-    tries += 1;
-    const ok = apply();
-    if (ok || tries > 40) clearInterval(t);
-  }, 250);
+  // 즉시 1회 적용
+  apply();
+
+  // DOM이 갱신되며 video element가 교체되는 경우까지 대비 (Streamlit rerun)
+  let obs = null;
+  try {
+    const doc = window.parent.document;
+    obs = new MutationObserver(() => { apply(); });
+    obs.observe(doc.body, { childList: true, subtree: true });
+    setTimeout(() => { try { obs && obs.disconnect(); } catch(e){} }, 12000);
+  } catch(e){}
 
   // 탭/클릭으로 DOM이 다시 그려질 때도 재적용
-  try { window.parent.document.addEventListener("click", () => setTimeout(apply, 80), true); } catch (e) {}
+  try { window.parent.document.addEventListener("click", () => setTimeout(apply, 60), true); } catch(e){}
 })();
 </script>
 ''', height=0, scrolling=False)
@@ -1910,7 +1945,10 @@ with tab_audit:
               }, 650);
             }
 
-            scanBtn.addEventListener("click", doScan);
+            try{
+              if (scanBtn) scanBtn.addEventListener("click", doScan);
+              if (emp) emp.addEventListener("keydown", (e)=>{ if(e.key==="Enter"){ doScan(); } });
+            }catch(e){}
 
                         // --- Streamlit iframe height auto-fit ---
                         function sendHeight(){
@@ -1954,7 +1992,7 @@ with tab_audit:
     
         components.html(
             CLEAN_CAMPAIGN_BUNDLE_HTML,
-            height=1500,
+            height=2600,
             scrolling=False,
         )
         st.markdown(
