@@ -1426,7 +1426,7 @@ with tab_audit:
     st.markdown(f"""
         <div style='background-color: #E3F2FD; padding: 20px; border-radius: 10px; border-left: 5px solid #2196F3; margin-bottom: 20px;'>
             <div style='margin-top:0; color:#1565C0; font-weight:900; font-size: clamp(34px, 3.6vw, 54px); line-height:1.08;'>📜 {title_for_box}</div>
-            <div style='margin-top:70px; color:#1565C0; font-weight:900; font-size: clamp(25px, 2.5vw, 54px); line-height:1.08;'>{period_for_box}</div>
+            <div style='margin-top:10px; color:#1565C0; font-weight:600; font-size: clamp(24px, 2.5vw, 35px); line-height:1.08;'>{period_for_box}</div>
         </div>
     """, unsafe_allow_html=True)
 
