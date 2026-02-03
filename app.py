@@ -2,34 +2,40 @@ import streamlit as st
 import streamlit.components.v1 as components
 import json
 
-# 1. 페이지 설정 (넓게 보기)
-st.set_page_config(page_title="2026 ktMOS북부 클린캠페인", layout="wide", initial_sidebar_state="collapsed")
+# 1. 페이지 기본 설정 (전체 화면 사용)
+st.set_page_config(
+    page_title="2026 ktMOS북부 설 맞이 클린캠페인",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
 
-# ==========================================
-# [필수 설정] Firebase 설정값을 여기에 넣으세요
-# ==========================================
-# Firebase 콘솔 -> 프로젝트 설정 -> 일반 -> 내 앱 -> SDK 설정 및 구성(Config) 에서 복사
+# ==============================================================================
+# [필수 수정] 여기에 본인의 Firebase 설정값을 복사해서 붙여넣으세요.
+# (Firebase 콘솔 -> 프로젝트 설정 -> 일반 -> 내 앱 -> SDK 설정 및 구성 에서 복사)
+# ==============================================================================
 firebase_config = {
-    "apiKey": "YOUR_API_KEY",
+    "apiKey": "여기에_API_KEY_를_넣으세요",
     "authDomain": "your-project.firebaseapp.com",
     "projectId": "your-project-id",
     "storageBucket": "your-project.appspot.com",
     "messagingSenderId": "123456789",
-    "appId": "1:123456:web:abcdef"
+    "appId": "1:123456789:web:abcdef"
 }
-# ==========================================
+# ==============================================================================
 
-# JSON 문자열로 변환 (HTML에 주입하기 위함)
+# Python 딕셔너리를 JSON 문자열로 변환 (HTML에 주입하기 위함)
 firebase_config_str = json.dumps(firebase_config)
 
-# 2. React HTML 코드 (주신 코드 + 변수 주입용 수정)
+# 2. 리액트(React) 웹페이지 코드 (HTML/JS)
+# 주의: 파이썬 f-string 안에서는 중괄호 {}를 두 번 {{}} 써야 JavaScript 문법으로 인식됩니다.
 html_code = f"""
 <!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>2026 ktMOS북부 설 맞이 클린캠페인</title>
+    <title>Clean Campaign</title>
+    
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -37,8 +43,11 @@ html_code = f"""
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
+
     <style>
-        body {{ font-family: 'Pretendard', sans-serif; letter-spacing: -0.02em; scroll-behavior: smooth; }}
+        body {{ font-family: 'Pretendard', sans-serif; background-color: #020617; color: white; margin: 0; padding: 0; overflow-x: hidden; }}
+        
+        /* 애니메이션 정의 */
         @keyframes fade-in-up {{ from {{ opacity: 0; transform: translateY(30px); }} to {{ opacity: 1; transform: translateY(0); }} }}
         @keyframes scale-in {{ from {{ opacity: 0; transform: scale(0.95); }} to {{ opacity: 1; transform: scale(1); }} }}
         @keyframes scan {{ 0% {{ transform: translateY(-100%); opacity: 0; }} 50% {{ opacity: 1; }} 100% {{ transform: translateY(100%); opacity: 0; }} }}
@@ -49,46 +58,43 @@ html_code = f"""
         .animate-scan {{ animation: scan 2s infinite linear; }}
         .animate-float {{ animation: float 3s ease-in-out infinite; }}
         
-        .video-background {{ position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }}
-        .counter-glitch {{ font-variant-numeric: tabular-nums; }}
-        
-        .custom-alert {{
-            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
-            z-index: 10000; animation: fade-in-up 0.3s ease-out forwards;
-        }}
-        ::-webkit-scrollbar {{ width: 8px; }}
-        ::-webkit-scrollbar-track {{ background: #0f172a; }}
-        ::-webkit-scrollbar-thumb {{ background: #ef4444; border-radius: 10px; }}
         .glass-panel {{
             background: rgba(255, 255, 255, 0.03);
             backdrop-filter: blur(12px);
             border: 1px solid rgba(255, 255, 255, 0.1);
         }}
+        .custom-alert {{
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+            z-index: 9999; animation: fade-in-up 0.3s ease-out forwards;
+        }}
+        /* 스크롤바 커스텀 */
+        ::-webkit-scrollbar {{ width: 8px; }}
+        ::-webkit-scrollbar-track {{ background: #0f172a; }}
+        ::-webkit-scrollbar-thumb {{ background: #ef4444; border-radius: 10px; }}
     </style>
 </head>
-<body class="bg-slate-950 text-slate-100 antialiased overflow-x-hidden">
+<body>
     <div id="root"></div>
 
     <script type="module">
         import {{ initializeApp }} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import {{ getAuth, signInAnonymously, onAuthStateChanged }} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import {{ getFirestore, collection, addDoc, onSnapshot, query, doc, setDoc }} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import {{ getFirestore, collection, addDoc, onSnapshot }} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         window.FirebaseSDK = {{ 
             initializeApp, getAuth, signInAnonymously, 
-            onAuthStateChanged, getFirestore, collection, addDoc, onSnapshot, 
-            query, doc, setDoc 
+            onAuthStateChanged, getFirestore, collection, addDoc, onSnapshot
         }};
     </script>
 
     <script type="text/babel">
-        // [중요] Python에서 주입된 변수 사용
-        const firebaseConfig = {firebase_config_str}; 
+        // Python에서 주입한 설정값 사용
+        const firebaseConfig = {firebase_config_str};
         const appId = 'ktmos-clean-2026';
-        
-        // --- React Code Start ---
-        const {{ useState, useEffect, useRef, useMemo }} = React;
 
+        const {{ useState, useEffect, useRef }} = React;
+
+        // 아이콘 컴포넌트
         const Icon = ({{ name, size = 24, className = "" }}) => {{
             useEffect(() => {{ if (window.lucide) window.lucide.createIcons(); }}, [name]);
             return <i data-lucide={{name}} style={{{{ width: size, height: size }}}} className={{className}}></i>;
@@ -108,14 +114,13 @@ html_code = f"""
             const [selectedGoal, setSelectedGoal] = useState('');
             const [alertMsg, setAlertMsg] = useState('');
             const videoRef = useRef(null);
+            const TOTAL_EMPLOYEES = 500;
 
-            const TOTAL_EMPLOYEES = 500; 
-
+            // 운세 DB
             const fortuneDB = {{
                 growth: [
                     {{ slogan: "투명한 도약, 붉은 말처럼 거침없이 성장하는 한 해", fortune: "올해 당신의 청렴 에너지는 99%! 투명한 업무 처리가 곧 당신의 독보적인 커리어가 됩니다." }},
-                    {{ slogan: "정직이라는 박차를 가해 더 높은 곳으로 질주하세요", fortune: "거짓 없는 성장이 가장 빠른 길입니다. 주변의 두터운 신뢰가 당신의 든든한 날개가 될 것입니다." }},
-                    {{ slogan: "신뢰의 레이스, 당신의 깨끗한 실력이 승리를 결정합니다", fortune: "원칙을 지키는 힘이 ktMOS의 미래를 만드는 가장 강력한 성장 동력이 됩니다." }}
+                    {{ slogan: "정직이라는 박차를 가해 더 높은 곳으로 질주하세요", fortune: "거짓 없는 성장이 가장 빠른 길입니다. 주변의 두터운 신뢰가 당신의 든든한 날개가 될 것입니다." }}
                 ],
                 happiness: [
                     {{ slogan: "떳떳한 마음이 선사하는 가장 따뜻한 행복의 해", fortune: "가족에게 부끄럽지 않은 당신의 정직함이 집안의 평안과 웃음꽃을 불러옵니다." }},
@@ -127,29 +132,40 @@ html_code = f"""
                 ]
             }};
 
-            // Firebase Init
+            // Firebase 초기화
             useEffect(() => {{
-                const {{ initializeApp, getAuth, signInAnonymously, onAuthStateChanged }} = window.FirebaseSDK;
-                try {{
-                    const app = initializeApp(firebaseConfig);
-                    const auth = getAuth(app);
-                    signInAnonymously(auth).catch(console.error);
-                    onAuthStateChanged(auth, setUser);
-                }} catch (e) {{ console.error(e); }}
+                const initAuth = async () => {{
+                    if (!window.FirebaseSDK) {{ setTimeout(initAuth, 500); return; }}
+                    const {{ initializeApp, getAuth, signInAnonymously, onAuthStateChanged }} = window.FirebaseSDK;
+                    
+                    try {{
+                        let app;
+                        try {{ app = initializeApp(firebaseConfig); }} catch(e) {{}} 
+                        const auth = getAuth();
+                        await signInAnonymously(auth);
+                        onAuthStateChanged(auth, setUser);
+                    }} catch (e) {{
+                        console.error("Firebase Auth Error", e);
+                        if(e.code === 'auth/invalid-api-key') showAlert("설정 오류: API Key를 확인하세요.");
+                    }}
+                }};
+                initAuth();
             }}, []);
 
-            // Data Fetch
+            // 실시간 데이터 수신
             useEffect(() => {{
-                if (!user) return;
+                if (!user || !window.FirebaseSDK) return;
                 const {{ getFirestore, collection, onSnapshot }} = window.FirebaseSDK;
                 const db = getFirestore();
                 const pledgeCol = collection(db, 'artifacts', appId, 'public', 'data', 'pledges');
-                return onSnapshot(pledgeCol, (snapshot) => {{
+                
+                const unsubscribe = onSnapshot(pledgeCol, (snapshot) => {{
                     setPledges(snapshot.docs.map(doc => doc.data()));
                 }});
+                return () => unsubscribe();
             }}, [user]);
 
-            // Progress Bar
+            // 프로그레스바 애니메이션
             useEffect(() => {{
                 if (isPledged || pledges.length > 0) {{
                     const targetRate = Math.min(100, (pledges.length / TOTAL_EMPLOYEES) * 100);
@@ -162,7 +178,7 @@ html_code = f"""
                         }} else {{
                             setDisplayRate(start.toFixed(1));
                         }}
-                    }}, 25);
+                    }}, 20);
                     return () => clearInterval(timer);
                 }}
             }}, [isPledged, pledges.length]);
@@ -174,25 +190,19 @@ html_code = f"""
 
             const fireFireworks = () => {{
                 const end = Date.now() + 3000;
-                (function frame() {{
+                const frame = () => {{
                     confetti({{ particleCount: 5, angle: 60, spread: 55, origin: {{ x: 0 }}, colors: ['#ff0000', '#ffd700'] }});
                     confetti({{ particleCount: 5, angle: 120, spread: 55, origin: {{ x: 1 }}, colors: ['#ff0000', '#ffd700'] }});
                     if (Date.now() < end) requestAnimationFrame(frame);
-                }}());
-            }};
-
-            const toggleMute = () => {{
-                if (videoRef.current) {{
-                    videoRef.current.muted = !videoRef.current.muted;
-                    setIsMuted(videoRef.current.muted);
-                }}
+                }};
+                frame();
             }};
 
             const handlePledgeSubmit = async (e) => {{
                 e.preventDefault();
                 if (!user) {{ showAlert("서버 연결 중입니다..."); return; }}
                 if (!empId || !empName) return;
-
+                
                 if (pledges.some(p => p.empId === empId)) {{
                     showAlert(`${{empName}}님은 이미 참여하셨습니다.`);
                     setIsPledged(true);
@@ -207,11 +217,11 @@ html_code = f"""
                     }});
                     setIsPledged(true);
                     fireFireworks();
-                }} catch (err) {{ showAlert("저장 오류 발생"); }}
+                }} catch (err) {{ showAlert("저장 실패: 권한이 없거나 설정 오류입니다."); }}
             }};
 
             const runAIScan = () => {{
-                if (!empName || !selectedGoal) {{ showAlert("성함과 목표를 입력하세요."); return; }}
+                if (!empName || !selectedGoal) {{ showAlert("정보를 입력해주세요."); return; }}
                 setIsScanning(true);
                 setScanResult(null);
                 setTimeout(() => {{
@@ -227,16 +237,16 @@ html_code = f"""
             }};
 
             return (
-                <div className="min-h-screen bg-slate-950">
+                <div className="min-h-screen text-slate-100">
                     {{alertMsg && (
-                        <div className="custom-alert bg-red-600 text-white px-6 py-3 rounded-2xl shadow-2xl font-bold flex items-center gap-2 border border-red-400">
+                        <div className="custom-alert bg-red-600 text-white px-6 py-3 rounded-2xl shadow-xl font-bold flex items-center gap-2">
                              {{alertMsg}}
                         </div>
                     )}}
 
-                    {{/* 1. Hero Section */}}
+                    {{/* Hero Section */}}
                     <section className="relative h-screen flex flex-col items-center justify-center text-center px-6 overflow-hidden">
-                        <video ref={{videoRef}} className="video-background opacity-40" autoPlay muted loop playsInline src={{videoSrc}}></video>
+                        <video ref={{videoRef}} className="absolute top-0 left-0 w-full h-full object-cover opacity-40 z-0" autoPlay muted loop playsInline src={{videoSrc}}></video>
                         <div className="absolute inset-0 bg-gradient-to-b from-slate-950/80 via-transparent to-slate-950 z-[1]"></div>
                         
                         <div className="z-10 animate-fade-in-up max-w-5xl">
@@ -252,7 +262,7 @@ html_code = f"""
                             </p>
                             <div className="flex flex-wrap justify-center gap-4">
                                 <a href="#campaign" className="px-10 py-4 bg-red-600 text-white font-black rounded-2xl hover:bg-red-500 transition-all shadow-[0_0_30px_rgba(220,38,38,0.4)] hover:scale-105">캠페인 확인하기</a>
-                                <button onClick={{toggleMute}} className="p-4 bg-white/10 border border-white/20 rounded-2xl backdrop-blur-md hover:bg-white/20 transition-all">
+                                <button onClick={{() => {{ videoRef.current.muted = !videoRef.current.muted; setIsMuted(!isMuted); }}}} className="p-4 bg-white/10 border border-white/20 rounded-2xl backdrop-blur-md hover:bg-white/20 transition-all">
                                     <Icon name={{isMuted ? "volume-x" : "volume-2"}} />
                                 </button>
                                 <label className="p-4 bg-white/10 border border-white/20 rounded-2xl backdrop-blur-md hover:bg-white/20 transition-all cursor-pointer">
@@ -263,32 +273,25 @@ html_code = f"""
                         </div>
                     </section>
 
-                    {{/* 2. AI Aura Scanner */}}
+                    {{/* AI Aura Scanner */}}
                     <section className="py-24 px-6 relative overflow-hidden">
                         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-red-600/10 rounded-full blur-[120px]"></div>
                         <div className="max-w-4xl mx-auto text-center relative z-10">
                             <h2 className="text-4xl md:text-5xl font-black mb-16 tracking-tight">2026 청렴 아우라 분석</h2>
-                            
                             <div className="glass-panel p-8 md:p-12 rounded-[3rem] shadow-2xl">
                                 <div className="grid md:grid-cols-2 gap-4 mb-8">
-                                    <input type="text" value={{empName}} onChange={{e => setEmpName(e.target.value)}} placeholder="성함" className="w-full px-6 py-4 bg-slate-900/50 border border-white/10 rounded-2xl focus:ring-2 focus:ring-red-600 outline-none font-bold text-center"/>
-                                    <select value={{selectedGoal}} onChange={{e => setSelectedGoal(e.target.value)}} className="w-full px-6 py-4 bg-slate-900/50 border border-white/10 rounded-2xl focus:ring-2 focus:ring-red-600 outline-none font-bold text-center appearance-none cursor-pointer">
-                                        <option value="">올해의 주요 목표</option>
-                                        <option value="growth">지속적인 성장</option>
-                                        <option value="happiness">가족의 행복</option>
-                                        <option value="challenge">새로운 도전</option>
+                                    <input type="text" value={{empName}} onChange={{e => setEmpName(e.target.value)}} placeholder="성함" className="w-full px-6 py-4 bg-slate-900/50 border border-white/10 rounded-2xl focus:ring-2 focus:ring-red-600 outline-none font-bold text-center text-white"/>
+                                    <select value={{selectedGoal}} onChange={{e => setSelectedGoal(e.target.value)}} className="w-full px-6 py-4 bg-slate-900/50 border border-white/10 rounded-2xl focus:ring-2 focus:ring-red-600 outline-none font-bold text-center appearance-none cursor-pointer text-white">
+                                        <option value="" className="text-black">올해의 주요 목표</option>
+                                        <option value="growth" className="text-black">지속적인 성장</option>
+                                        <option value="happiness" className="text-black">가족의 행복</option>
+                                        <option value="challenge" className="text-black">새로운 도전</option>
                                     </select>
                                 </div>
-                                <button onClick={{runAIScan}} disabled={{isScanning}} className="w-full py-5 bg-gradient-to-r from-red-600 to-orange-600 rounded-2xl font-black text-xl hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-3 shadow-xl">
+                                <button onClick={{runAIScan}} disabled={{isScanning}} className="w-full py-5 bg-gradient-to-r from-red-600 to-orange-600 rounded-2xl font-black text-xl hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-3 shadow-xl text-white">
                                     {{isScanning ? <Icon name="loader-2" className="animate-spin" /> : <Icon name="sparkles" />}}
                                     {{isScanning ? "아우라 분석 중..." : "청렴 기운 스캔하기"}}
                                 </button>
-                                {{isScanning && (
-                                    <div className="mt-12 relative h-40 bg-slate-900/80 rounded-3xl overflow-hidden border border-red-600/30">
-                                        <div className="absolute inset-0 flex items-center justify-center text-xs font-black text-red-500 uppercase tracking-[1em] opacity-50">Analyzing Your Integrity...</div>
-                                        <div className="absolute top-0 left-0 w-full h-1.5 bg-red-600 shadow-[0_0_30px_rgba(220,38,38,1)] animate-scan"></div>
-                                    </div>
-                                )}}
                                 {{scanResult && !isScanning && (
                                     <div className="mt-12 animate-scale-in">
                                         <div className="p-1 bg-gradient-to-br from-red-600 via-orange-500 to-yellow-500 rounded-[2.5rem]">
@@ -305,7 +308,7 @@ html_code = f"""
                         </div>
                     </section>
 
-                    {{/* 3. Campaign Rules */}}
+                    {{/* Campaign Section */}}
                     <section id="campaign" className="py-32 px-6 bg-slate-900/50">
                         <div className="max-w-6xl mx-auto">
                             <div className="text-center mb-20">
@@ -330,49 +333,22 @@ html_code = f"""
                         </div>
                     </section>
 
-                    {{/* 4. Reporting Channels */}}
-                    <section className="py-32 px-6">
-                        <div className="max-w-6xl mx-auto grid md:grid-cols-3 gap-6">
-                            <div className="md:col-span-1 py-10">
-                                <h2 className="text-3xl font-black mb-4">비윤리 행위 <br/> 신고 채널</h2>
-                                <p className="text-slate-400 font-medium">부정부패 없는 ktMOS북부를 위해 <br/> 여러분의 용기 있는 목소리가 필요합니다.</p>
-                            </div>
-                            <div className="md:col-span-2 grid sm:grid-cols-2 gap-4">
-                                <div className="glass-panel p-8 rounded-3xl flex items-center gap-6 group hover:bg-white/5 transition-all">
-                                    <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center group-hover:text-red-500"><Icon name="phone" /></div>
-                                    <div><p className="text-xs font-bold text-slate-500 uppercase mb-1">감사실 직통</p><p className="text-xl font-black">02-3414-1919</p></div>
-                                </div>
-                                <div className="glass-panel p-8 rounded-3xl flex items-center gap-6 group hover:bg-white/5 transition-all">
-                                    <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center group-hover:text-blue-500"><Icon name="globe" /></div>
-                                    <div><p className="text-xs font-bold text-slate-500 uppercase mb-1">사이버 신문고</p><a href="#" className="text-xl font-black border-b border-white/20 pb-1">바로가기</a></div>
-                                </div>
-                                <div className="sm:col-span-2 glass-panel p-8 rounded-3xl flex items-center gap-6 group hover:bg-white/5 transition-all">
-                                    <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center group-hover:text-yellow-500"><Icon name="mail" /></div>
-                                    <div><p className="text-xs font-bold text-slate-500 uppercase mb-1">이메일 제보</p><p className="text-xl font-black">ethics@ktmos.com</p></div>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
-
-                    {{/* 5. Pledge Section */}}
+                    {{/* Pledge Section */}}
                     <section className="py-32 px-6 bg-red-600/5 relative">
-                        <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-red-600 to-transparent opacity-50"></div>
                         <div className="max-w-4xl mx-auto text-center">
                             {{!isPledged ? (
                                 <div className="animate-scale-in">
                                     <h2 className="text-5xl md:text-7xl font-black mb-10 tracking-tighter leading-none italic">스스로 다짐하는 <br/> <span className="text-red-600 underline">청렴 서약</span></h2>
                                     <div className="glass-panel p-10 md:p-14 rounded-[4rem] mb-12 shadow-2xl relative overflow-hidden">
-                                        <div className="absolute -top-10 -right-10 w-40 h-40 bg-red-600/20 rounded-full blur-3xl"></div>
                                         <Icon name="award" size={{80}} className="mx-auto mb-8 text-red-600 animate-bounce" />
                                         <h3 className="text-2xl md:text-3xl font-black mb-6">🎁 청렴 실천 응원 이벤트</h3>
                                         <p className="text-lg md:text-xl text-slate-300 font-bold mb-10 leading-relaxed">
-                                            참여 인원 <span className="text-red-500">500명 이상</span>이 서약에 참여하시면, <br/>
-                                            참여자 중 <span className="text-red-500">50분을 추첨</span>하여 모바일 커피 쿠폰<br className="hidden md:block"/> 
-                                            을 발송해 드립니다.
+                                            참여 인원 <span className="text-red-500">500명 이상</span> 달성 시,<br/>
+                                            추첨을 통해 <span className="text-red-500">50분</span>께 커피 쿠폰을 드립니다.
                                         </p>
                                         <form onSubmit={{handlePledgeSubmit}} className="flex flex-col sm:flex-row gap-4">
-                                            <input type="text" value={{empId}} onChange={{e => setEmpId(e.target.value)}} placeholder="사번" className="flex-1 px-8 py-5 bg-slate-900 border border-white/10 rounded-3xl outline-none focus:ring-2 focus:ring-red-600 font-bold text-center" required />
-                                            <input type="text" value={{empName}} onChange={{e => setEmpName(e.target.value)}} placeholder="성함" className="sm:w-32 px-8 py-5 bg-slate-900 border border-white/10 rounded-3xl outline-none focus:ring-2 focus:ring-red-600 font-bold text-center" required />
+                                            <input type="text" value={{empId}} onChange={{e => setEmpId(e.target.value)}} placeholder="사번" className="flex-1 px-8 py-5 bg-slate-900 border border-white/10 rounded-3xl outline-none focus:ring-2 focus:ring-red-600 font-bold text-center text-white" required />
+                                            <input type="text" value={{empName}} onChange={{e => setEmpName(e.target.value)}} placeholder="성함" className="sm:w-32 px-8 py-5 bg-slate-900 border border-white/10 rounded-3xl outline-none focus:ring-2 focus:ring-red-600 font-bold text-center text-white" required />
                                             <button type="submit" className="px-10 py-5 bg-red-600 text-white font-black rounded-3xl hover:bg-red-500 transition-all shadow-xl">서약하기</button>
                                         </form>
                                     </div>
@@ -383,7 +359,8 @@ html_code = f"""
                                     <div className="glass-panel p-12 md:p-20 rounded-[4rem] border-b-[12px] border-red-600 shadow-2xl">
                                         <div className="w-24 h-24 bg-green-500 text-white rounded-full flex items-center justify-center mx-auto mb-10 shadow-lg"><Icon name="check" size={{48}} /></div>
                                         <h3 className="text-4xl md:text-6xl font-black mb-6 tracking-tighter italic">서약 완료!</h3>
-                                        <p className="text-slate-400 text-xl font-bold mb-16">{{empName}}님, 청렴한 ktMOS북부 만들기에 <br/> 동참해 주셔서 대단히 감사합니다.</p>
+                                        <p className="text-slate-400 text-xl font-bold mb-16">{{empName}}님, 감사합니다.</p>
+                                        
                                         <div className="relative py-16 px-6 bg-slate-900/50 rounded-[3rem] border border-white/5">
                                             <p className="text-xs font-black text-slate-500 mb-8 tracking-[0.6em] uppercase">Participation Rate</p>
                                             <div className="flex items-baseline justify-center gap-4 mb-6">
@@ -393,22 +370,18 @@ html_code = f"""
                                             <div className="max-w-md mx-auto h-4 bg-slate-900 rounded-full overflow-hidden mb-6 p-1">
                                                 <div className="h-full bg-gradient-to-r from-red-600 to-orange-500 transition-all duration-1000 rounded-full shadow-[0_0_20px_rgba(220,38,38,0.5)]" style={{{{ width: `${{displayRate}}%` }}}}></div>
                                             </div>
-                                            <p className="text-slate-400 font-bold">현재 {{pledges.length}}명 참여 중 (목표: 250명)</p>
+                                            <p className="text-slate-400 font-bold">현재 {{pledges.length}}명 참여 (목표: 500명)</p>
                                         </div>
                                     </div>
-                                    <button onClick={{() => setIsPledged(false)}} className="mt-12 text-slate-500 hover:text-white transition-all font-bold border-b border-slate-800 pb-1">서약 정보 수정하기</button>
+                                    <button onClick={{() => setIsPledged(false)}} className="mt-12 text-slate-500 hover:text-white transition-all font-bold border-b border-slate-800 pb-1">정보 수정하기</button>
                                 </div>
                             )}}
                         </div>
                     </section>
-
-                    <footer className="py-20 text-center border-t border-white/5">
-                        <div className="flex items-center justify-center gap-2 mb-6 opacity-40">
-                            <span className="font-black text-xl tracking-tighter">kt</span>
-                            <span className="font-light text-xl tracking-[0.3em] uppercase">MOS 북부</span>
-                        </div>
-                        <p className="text-xs text-slate-600 font-bold tracking-widest uppercase mb-2">Audit & Ethics Department</p>
-                        <p className="text-[10px] text-slate-700 font-medium">© 2026 ktMOS NORTH. ALL RIGHTS RESERVED. PREMIUM CAMPAIGN WEB.</p>
+                    
+                    <footer className="py-20 text-center border-t border-white/5 text-slate-600">
+                        <p className="text-xs font-bold tracking-widest uppercase mb-2">Audit & Ethics Department</p>
+                        <p className="text-[10px]">© 2026 ktMOS NORTH.</p>
                     </footer>
                 </div>
             );
@@ -421,6 +394,5 @@ html_code = f"""
 </html>
 """
 
-# 3. Streamlit에 HTML 렌더링
-# height는 페이지가 잘리지 않도록 넉넉하게 설정 (스크롤은 내부에서 처리)
+# 3. Streamlit 화면에 HTML 렌더링 (높이 넉넉하게 설정)
 components.html(html_code, height=5000, scrolling=False)
