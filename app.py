@@ -708,8 +708,8 @@ def _build_pledge_popup_html(name: str, rank: int, total: int) -> str:
   }
   @keyframes floatPollen {
     0%   { transform: translateY(0) translateX(0) scale(0.9); opacity:0; }
-    12%  { opacity:0.85; }
-    100% { transform: translateY(-140px) translateX(18px) scale(1.2); opacity:0; }
+    12%  { opacity:0.92; }
+    100% { transform: translateY(-190px) translateX(var(--tx, 18px)) scale(1.25); opacity:0; }
   }
   .overlay {
     position: fixed; inset: 0;
@@ -756,7 +756,7 @@ def _build_pledge_popup_html(name: str, rank: int, total: int) -> str:
     margin: 0;
     font-weight: 950;
     letter-spacing: -0.03em;
-    font-size: 22px;
+    font-size: 24px;
     color: var(--txt);
   }
   .line {
@@ -767,7 +767,7 @@ def _build_pledge_popup_html(name: str, rank: int, total: int) -> str:
   }
   .msg {
     margin: 0;
-    font-size: 18px;
+    font-size: 19px;
     font-weight: 900;
     letter-spacing: -0.02em;
     color: var(--txt);
@@ -780,7 +780,7 @@ def _build_pledge_popup_html(name: str, rank: int, total: int) -> str:
   }
   .sub {
     margin: 10px 0 0 0;
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 800;
     color: var(--muted);
     line-height: 1.6;
@@ -798,6 +798,15 @@ def _build_pledge_popup_html(name: str, rank: int, total: int) -> str:
     pointer-events:none;
     z-index: 1;
   }
+
+  .tip{
+    margin: 10px 0 0 0;
+    font-size: 13.5px;
+    font-weight: 850;
+    color: rgba(229, 231, 235, 0.82);
+    line-height: 1.55;
+  }
+
 </style>
 </head>
 <body>
@@ -811,6 +820,7 @@ def _build_pledge_popup_html(name: str, rank: int, total: int) -> str:
       <div class="big">청렴 서약</div>
       <p class="msg"><span class="hot">__NAME__</span>님은 <span class="hot">__RANK__</span>번째 참여자입니다!</p>
       <p class="sub">현재 누적 <b>__TOTAL__</b>명 참여 · 여러분의 한 번의 선택이 ktMOS북부의 신뢰가 됩니다.</p>
+      <p class="tip">※ 본 안내창은 <b>약 5초 후</b> 자동으로 닫힙니다. (원하면 화면을 클릭해 즉시 닫을 수 있어요.)</p>
     </div>
   </div>
 </div>
@@ -862,7 +872,7 @@ def _build_pledge_popup_html(name: str, rank: int, total: int) -> str:
 // Pollen particles
   const overlay = document.getElementById('overlay');
   const pollenColors = ['#ef4444','#f97316','#f59e0b','#22c55e','#14b8a6','#3b82f6','#6366f1','#ec4899'];
-  for(let i=0;i<36;i++){
+  for(let i=0;i<64;i++){
     const s = document.createElement('div');
     s.className = 'pollen';
     const c = pollenColors[Math.floor(Math.random()*pollenColors.length)];
@@ -871,29 +881,85 @@ def _build_pledge_popup_html(name: str, rank: int, total: int) -> str:
     s.style.height = sz.toFixed(1) + 'px';
     s.style.setProperty('--c', c);
     s.style.boxShadow = `0 0 18px ${c}88, 0 0 44px ${c}33`;
-    s.style.left = (Math.random()*100).toFixed(2) + 'vw';
-    s.style.bottom = (Math.random()*20).toFixed(2) + 'vh';
-    s.style.opacity = (0.75 + Math.random()*0.25).toFixed(2);
-    s.style.animationDelay = (Math.random()*0.35).toFixed(2) + 's';
-    const tx = (Math.random()*-10).toFixed(2);
-    const sc = (0.7 + Math.random()*0.9).toFixed(2);
-    s.style.transform = "translateY(0) translateX(" + tx + "px) scale(" + sc + ")";
+    const side = (i % 2 === 0) ? "L" : "R";
+    const leftVW = (side === "L")
+      ? (Math.random()*34)
+      : (66 + Math.random()*34);
+    s.style.left = leftVW.toFixed(2) + 'vw';
+    s.style.bottom = (Math.random()*22).toFixed(2) + 'vh';
+    s.style.opacity = (0.78 + Math.random()*0.22).toFixed(2);
+    s.style.animationDelay = (Math.random()*0.25).toFixed(2) + 's';
+    const tx = (side === "L")
+      ? (18 + Math.random()*36)
+      : (-18 - Math.random()*36);
+    s.style.setProperty('--tx', tx.toFixed(2) + 'px');
+    const sc = (0.75 + Math.random()*0.75).toFixed(2);
+    // initial transform is not critical because keyframes controls motion; keep for first frame
+    s.style.transform = "translateY(0) translateX(0) scale(" + sc + ")";
     overlay.appendChild(s);
   }
 
-  // Confetti for ~3s
-  const end = Date.now() + 5000;
+  // Confetti (stronger, reaches center)
+  const DURATION = 5200;
+  const end = Date.now() + DURATION;
   (function frame(){
-    confetti({ particleCount: 7, angle: 60,  spread: 62, origin: { x: 0 }, colors: ['#ef4444','#f97316','#f59e0b','#22c55e','#14b8a6','#3b82f6','#6366f1','#ec4899']});
-    confetti({ particleCount: 7, angle: 120, spread: 62, origin: { x: 1 }, colors: ['#ef4444','#f97316','#f59e0b','#22c55e','#14b8a6','#3b82f6','#6366f1','#ec4899']});
+    const t = end - Date.now();
+    const pct = Math.max(0, t / DURATION);
+    const count = Math.floor(18 * pct) + 10; // 28 -> 10
+    const palette = ['#ef4444','#f97316','#f59e0b','#22c55e','#14b8a6','#3b82f6','#6366f1','#ec4899'];
+
+    // Left → Center
+    confetti({
+      particleCount: count,
+      angle: 60,
+      spread: 96,
+      startVelocity: 58,
+      decay: 0.92,
+      gravity: 0.92,
+      ticks: 210,
+      origin: { x: 0.10, y: 0.82 },
+      colors: palette
+    });
+
+    // Right → Center
+    confetti({
+      particleCount: count,
+      angle: 120,
+      spread: 96,
+      startVelocity: 58,
+      decay: 0.92,
+      gravity: 0.92,
+      ticks: 210,
+      origin: { x: 0.90, y: 0.82 },
+      colors: palette
+    });
+
+    // Extra sprinkle near center
+    if(Math.random() < 0.40){
+      confetti({
+        particleCount: 12,
+        spread: 130,
+        startVelocity: 26,
+        decay: 0.94,
+        gravity: 0.96,
+        ticks: 160,
+        origin: { x: 0.50, y: 0.72 },
+        colors: palette
+      });
+    }
+
     if(Date.now() < end) requestAnimationFrame(frame);
   })();
 
-  // Auto close
-  setTimeout(() => {
+  function closeNow(){
     overlay.style.animation = "fadeOut 0.30s ease-in forwards";
     setTimeout(() => { overlay.remove(); restoreFrame(); setFrame(1); }, 360);
-  }, 5200);
+  }
+  // Click anywhere to close immediately
+  overlay.addEventListener('click', closeNow);
+
+  // Auto close
+  setTimeout(closeNow, 5200);
 })();
 </script>
 </body>
@@ -1432,8 +1498,9 @@ with tab_audit:
             b = _load_mp4_bytes(_path)
             return base64.b64encode(b).decode("utf-8")
 
-        def _render_autoplay_video(_path: str) -> None:
+        def _render_autoplay_video(_path: str, _container=None) -> None:
             try:
+                _c = _container if _container is not None else st
                 if not os.path.exists(_path):
                     st.warning(f"⚠️ 캠페인 영상 파일을 찾을 수 없습니다: {_path}")
                     return
@@ -1443,7 +1510,7 @@ with tab_audit:
                 # ✅ 가장 안정적인 방식: HTML5 <video> 직접 렌더링(autoplay+muted+loop+playsinline)
                 #    - 모바일(iOS) 호환: webkit-playsinline 포함
                 #    - onloadedmetadata에서 play() 재시도
-                st.markdown(
+                _c.markdown(
                     f'''
                     <div style="max-width:1500px;margin:0 auto;">
                       <video autoplay muted loop playsinline webkit-playsinline preload="auto"
@@ -1460,7 +1527,25 @@ with tab_audit:
                 st.error(f"❌ 캠페인 영상 로드 실패: {e}")
 
         if os.path.exists(video_path):
-            _render_autoplay_video(video_path)
+            _video_slot = st.empty()
+            _video_slot.markdown(r'''<div style="max-width:1500px;margin:0 auto;">
+  <style>
+    @keyframes ccShimmer { 0% { transform: translateX(-120%); } 100% { transform: translateX(120%); } }
+  </style>
+  <div style="height:280px;border-radius:18px;position:relative;overflow:hidden;
+              border:1px solid rgba(255,255,255,0.10);
+              background: linear-gradient(135deg, rgba(239,68,68,0.10), rgba(2,6,23,0.55), rgba(59,130,246,0.10));">
+    <div style="position:absolute;inset:0;opacity:0.55;
+                background: linear-gradient(90deg, transparent, rgba(255,255,255,0.10), transparent);
+                transform: translateX(-120%);
+                animation: ccShimmer 1.25s linear infinite;"></div>
+    <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;">
+      <div style="font-weight:900;font-size:18px;color:rgba(255,255,255,0.92);letter-spacing:-0.02em;">캠페인 영상 로딩 중…</div>
+      <div style="margin-top:6px;font-weight:700;font-size:13px;color:rgba(203,213,225,0.82);">잠시만 기다려주세요. (자동 재생/반복은 유지됩니다)</div>
+    </div>
+  </div>
+</div>''', unsafe_allow_html=True)
+            _render_autoplay_video(video_path, _container=_video_slot)
             st.markdown('<div style="height:24px"></div>', unsafe_allow_html=True)
         else:
             st.warning(f"⚠️ 캠페인 영상 파일을 찾을 수 없습니다: {video_filename}\n(app.py와 동일 폴더에 업로드해 주세요.)")
@@ -1661,6 +1746,22 @@ with tab_audit:
               flex-direction:column;
               gap: 10px;
             }
+            /* ✅ Agenda rocking wave (restored) */
+            @keyframes agendaWave{
+              0%,100%{ transform: translateX(0); }
+              25%{ transform: translateX(-6px); }
+              75%{ transform: translateX(6px); }
+            }
+            .agenda-card{
+              animation: agendaWave 5.2s ease-in-out infinite;
+              will-change: transform;
+            }
+            .agenda-card:nth-child(2){ animation-delay: .35s; }
+            .agenda-card:nth-child(3){ animation-delay: .70s; }
+            @media (prefers-reduced-motion: reduce){
+              .agenda-card{ animation: none !important; }
+            }
+
             .ico{
               width: 54px; height: 54px;
               border-radius: 18px;
@@ -1736,7 +1837,30 @@ with tab_audit:
               margin-top: 2px;
             }
             .fade-in{animation: fadeIn .25s ease both;}
-            @keyframes fadeIn{from{opacity:0; transform: translateY(10px) scale(.99);}to{opacity:1; transform: translateY(0) scale(1);}}
+            @keyframes fadeIn{from{opacity:0; transform: translateY(10px) scale(.99);}
+            /* ✅ Result panel natural slide-down (integrity aura) */
+            #resultWrap{
+              margin-top: 0 !important;
+              display:block;
+              max-height: 0;
+              opacity: 0;
+              transform: translateY(-8px);
+              overflow:hidden;
+              pointer-events:none;
+              transition:
+                max-height .72s cubic-bezier(.2,.9,.2,1),
+                opacity .42s ease,
+                transform .42s ease;
+              will-change: max-height, opacity, transform;
+            }
+            #resultWrap.open{
+              margin-top: 16px !important;
+              max-height: 900px;
+              opacity: 1;
+              transform: translateY(0);
+              pointer-events:auto;
+            }
+to{opacity:1; transform: translateY(0) scale(1);}}
           
             /* Integrity Aura scanning FX (inpor.html inspired) */
             .scan-fx{
@@ -1826,7 +1950,7 @@ with tab_audit:
                   </div>
                 </div>
 
-                <div id="resultWrap" class="grad-border" style="margin-top:16px; display:none;">
+                <div id="resultWrap" class="grad-border" style="margin-top:16px; ">
                   <div class="result fade-in">
                     <div class="ok">SCAN COMPLETED</div>
                     <div id="slogan" class="slogan"></div>
@@ -1883,7 +2007,7 @@ with tab_audit:
                     </div>
                   </div>
 
-                  <a class="report-card glass" href="http://ktmos.com/management/management" target="_blank" rel="noopener noreferrer" style="grid-column: span 1;">
+                  <a class="report-card glass" href="http://ktmos.com/management/management" target="_blank" rel="noopener noreferrer" onclick="try{window.open(this.href,\'_blank\',\'noopener,noreferrer\');}catch(e){} return false;" style="grid-column: span 1;">
                     <div class="ico" style="font-size:20px;">🌐</div>
                     <div>
                       <div class="label">사이버 신문고</div>
@@ -1937,12 +2061,14 @@ with tab_audit:
               scanBtn.style.filter="brightness(0.92)";
               scanBtn.innerHTML = '⏳ 스캔 중...';
               if(scanFx){ scanFx.style.display = "block"; }
-              if(resultWrap){ resultWrap.style.display = "none"; }
+              if(resultWrap){ resultWrap.classList.remove("open"); }
+              try{ sendHeight(); }catch(e){}
               setTimeout(()=>{
                 const picked = pickByGoal(g);
                 sloganEl.textContent = "“" + picked.slogan + "”";
                 fortuneEl.textContent = picked.fortune;
-                resultWrap.style.display = "block";
+                if(resultWrap){ resultWrap.classList.add("open"); }
+                try{ sendHeight(); setTimeout(sendHeight, 420); }catch(e){}
                 if(scanFx){ scanFx.style.display = "none"; }
                 scanBtn.style.filter="";
                 scanBtn.innerHTML = '✨ 청렴 기운 스캔하기';
@@ -2112,7 +2238,7 @@ with tab_audit:
             color: rgba(203,213,225,0.74);
             font-weight: 700;
             line-height: 1.6;
-            font-size: 13.5px;
+            font-size: 15.2px;
           }
           .cc-pledge-desc .hot{
             color: rgba(239,68,68,0.92);
@@ -2138,6 +2264,16 @@ with tab_audit:
           }
 
           /* ✅ Streamlit 위젯(이름 입력/버튼)도 동일 톤으로 */
+
+          /* ✅ 입력행(사번/성함/서약하기) 중앙 정렬: 이벤트 박스 기준으로 자연스럽게 */
+          div[data-testid="stVerticalBlock"]:has(.cc-pledge-anchor) div[data-testid="stForm"]{
+            max-width: 980px !important;
+            margin: 0 auto !important;
+          }
+          div[data-testid="stVerticalBlock"]:has(.cc-pledge-anchor) div[data-testid="stForm"] form{
+            width: 100% !important;
+          }
+
           div[data-testid="stVerticalBlock"]:has(.cc-pledge-anchor) div[data-testid="stTextInput"] input{
             background: rgba(15,23,42,0.65) !important;
             border: 1px solid rgba(255,255,255,0.12) !important;
