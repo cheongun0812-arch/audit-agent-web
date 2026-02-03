@@ -14,12 +14,13 @@ st.set_page_config(
 # (Firebase 콘솔 -> 프로젝트 설정 -> 일반 -> 내 앱 -> SDK 설정 및 구성 에서 복사)
 # ==============================================================================
 firebase_config = {
-    "apiKey": "여기에_API_KEY_를_넣으세요",
-    "authDomain": "your-project.firebaseapp.com",
-    "projectId": "your-project-id",
-    "storageBucket": "your-project.appspot.com",
-    "messagingSenderId": "123456789",
-    "appId": "1:123456789:web:abcdef"
+   apiKey: "AIzaSyBlEUW6VQQAR3gojzHqDqoWFSSz4Za-7yw",
+  authDomain: "clean-campaign-2026.firebaseapp.com",
+  projectId: "clean-campaign-2026",
+  storageBucket: "clean-campaign-2026.firebasestorage.app",
+  messagingSenderId: "55496851514",
+  appId: "1:55496851514:web:7e1cd4a0352500a7df7503",
+  measurementId: "G-VCBNRC2BYR"
 }
 # ==============================================================================
 
