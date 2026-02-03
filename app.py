@@ -683,7 +683,7 @@ def _build_pledge_popup_html(name: str, rank: int, total: int) -> str:
 <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 <style>
   :root {
-    --bg: rgba(2, 6, 23, 0.74);
+    --bg: rgba(2, 6, 23, 0.35);
     --panel: rgba(255, 255, 255, 0.06);
     --border: rgba(255, 255, 255, 0.14);
     --txt: rgba(255, 255, 255, 0.94);
@@ -691,6 +691,11 @@ def _build_pledge_popup_html(name: str, rank: int, total: int) -> str:
     --red: #ef4444;
     --orange: #f97316;
     --yellow: #f59e0b;
+    --green: #22c55e;
+    --teal: #14b8a6;
+    --blue: #3b82f6;
+    --indigo: #6366f1;
+    --pink: #ec4899;
   }
   html, body { margin:0; padding:0; background:transparent; font-family: Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, "Noto Sans KR", sans-serif; }
   @keyframes fadeUp {
@@ -709,7 +714,10 @@ def _build_pledge_popup_html(name: str, rank: int, total: int) -> str:
   .overlay {
     position: fixed; inset: 0;
     display:flex; align-items:center; justify-content:center;
-    background: var(--bg);
+    background: radial-gradient(900px 520px at 50% 35%, rgba(239,68,68,0.16), transparent 60%),
+                radial-gradient(700px 420px at 18% 75%, rgba(59,130,246,0.14), transparent 60%),
+                radial-gradient(700px 420px at 82% 75%, rgba(34,197,94,0.14), transparent 60%),
+                var(--bg);
     z-index: 999999;
   }
   .card {
@@ -780,13 +788,15 @@ def _build_pledge_popup_html(name: str, rank: int, total: int) -> str:
   .sub b { color: rgba(255,255,255,0.95); }
   .pollen {
     position:absolute;
-    width: 10px; height: 10px;
+    width: 12px; height: 12px;
     border-radius: 999px;
-    background: rgba(255,255,255,0.18);
-    box-shadow: 0 0 14px rgba(239,68,68,0.18);
-    filter: blur(0.3px);
-    animation: floatPollen 4.8s ease-out forwards;
+    background: var(--c, rgba(255,255,255,0.92));
+    box-shadow: 0 0 22px rgba(255,255,255,0.25);
+    filter: none;
+    mix-blend-mode: screen;
+    animation: floatPollen 5.2s ease-out forwards;
     pointer-events:none;
+    z-index: 1;
   }
 </style>
 </head>
@@ -851,12 +861,19 @@ def _build_pledge_popup_html(name: str, rank: int, total: int) -> str:
 
 // Pollen particles
   const overlay = document.getElementById('overlay');
-  for(let i=0;i<22;i++){
+  const pollenColors = ['#ef4444','#f97316','#f59e0b','#22c55e','#14b8a6','#3b82f6','#6366f1','#ec4899'];
+  for(let i=0;i<36;i++){
     const s = document.createElement('div');
     s.className = 'pollen';
+    const c = pollenColors[Math.floor(Math.random()*pollenColors.length)];
+    const sz = 8 + Math.random()*10;
+    s.style.width = sz.toFixed(1) + 'px';
+    s.style.height = sz.toFixed(1) + 'px';
+    s.style.setProperty('--c', c);
+    s.style.boxShadow = `0 0 18px ${c}88, 0 0 44px ${c}33`;
     s.style.left = (Math.random()*100).toFixed(2) + 'vw';
     s.style.bottom = (Math.random()*20).toFixed(2) + 'vh';
-    s.style.opacity = (0.4 + Math.random()*0.5).toFixed(2);
+    s.style.opacity = (0.75 + Math.random()*0.25).toFixed(2);
     s.style.animationDelay = (Math.random()*0.35).toFixed(2) + 's';
     const tx = (Math.random()*-10).toFixed(2);
     const sc = (0.7 + Math.random()*0.9).toFixed(2);
@@ -867,8 +884,8 @@ def _build_pledge_popup_html(name: str, rank: int, total: int) -> str:
   // Confetti for ~3s
   const end = Date.now() + 5000;
   (function frame(){
-    confetti({ particleCount: 7, angle: 60,  spread: 62, origin: { x: 0 }, colors: ['#ef4444','#f97316','#f59e0b']});
-    confetti({ particleCount: 7, angle: 120, spread: 62, origin: { x: 1 }, colors: ['#ef4444','#f97316','#f59e0b']});
+    confetti({ particleCount: 7, angle: 60,  spread: 62, origin: { x: 0 }, colors: ['#ef4444','#f97316','#f59e0b','#22c55e','#14b8a6','#3b82f6','#6366f1','#ec4899']});
+    confetti({ particleCount: 7, angle: 120, spread: 62, origin: { x: 1 }, colors: ['#ef4444','#f97316','#f59e0b','#22c55e','#14b8a6','#3b82f6','#6366f1','#ec4899']});
     if(Date.now() < end) requestAnimationFrame(frame);
   })();
 
@@ -1409,52 +1426,36 @@ with tab_audit:
             with open(_path, "rb") as f:
                 return f.read()
 
+        @st.cache_data(show_spinner=False)
+        def _load_mp4_b64(_path: str) -> str:
+            # ✅ 강한 캐시: 동시 접속 시에도 매번 파일을 읽거나 인코딩하지 않도록 1회만 base64로 변환
+            b = _load_mp4_bytes(_path)
+            return base64.b64encode(b).decode("utf-8")
+
         def _render_autoplay_video(_path: str) -> None:
             try:
-                # ✅ 속도 개선: base64 인라인(video/mp4;base64, ...) 방식은 HTML 전송량이 커서
-                #    첫 로딩 시 '잠깐 예전 화면이 보였다가' 갱신되는 현상이 생길 수 있습니다.
-                #    Streamlit의 st.video()로 출력하고, JS로 autoplay/muted/loop를 적용합니다.
-                video_bytes = _load_mp4_bytes(_path)
-                st.video(video_bytes, format="video/mp4")
+                if not os.path.exists(_path):
+                    st.warning(f"⚠️ 캠페인 영상 파일을 찾을 수 없습니다: {_path}")
+                    return
 
-                components.html(r'''
-<script>
-(function () {
-  // iframe(components.html) 자체는 보일 필요가 없어 높이를 0으로 축소
-  try {
-    const fe = window.frameElement;
-    if (fe) { fe.style.height="0px"; fe.style.minHeight="0px"; fe.style.border="0"; fe.style.margin="0"; fe.style.padding="0"; }
-    window.parent.postMessage({type:"streamlit:setFrameHeight", height:0}, "*");
-  } catch (e) {}
+                b64 = _load_mp4_b64(_path)
 
-  function apply(){
-    const doc = window.parent.document;
-    const vids = doc.querySelectorAll('#audit-tab div[data-testid="stVideo"] video');
-    if (!vids || !vids.length) return false;
-    const v = vids[vids.length - 1]; // 가장 마지막 video에 적용
-    try {
-      v.muted = true;
-      v.loop = true;
-      v.autoplay = true;
-      v.playsInline = true;
-      const p = v.play();
-      if (p && p.catch) p.catch(()=>{});
-    } catch (e) {}
-    return true;
-  }
-
-  let tries = 0;
-  const t = setInterval(() => {
-    tries += 1;
-    const ok = apply();
-    if (ok || tries > 40) clearInterval(t);
-  }, 250);
-
-  // 탭/클릭으로 DOM이 다시 그려질 때도 재적용
-  try { window.parent.document.addEventListener("click", () => setTimeout(apply, 80), true); } catch (e) {}
-})();
-</script>
-''', height=0, scrolling=False)
+                # ✅ 가장 안정적인 방식: HTML5 <video> 직접 렌더링(autoplay+muted+loop+playsinline)
+                #    - 모바일(iOS) 호환: webkit-playsinline 포함
+                #    - onloadedmetadata에서 play() 재시도
+                st.markdown(
+                    f'''
+                    <div style="max-width:1500px;margin:0 auto;">
+                      <video autoplay muted loop playsinline webkit-playsinline preload="auto"
+                             style="width:100%;border-radius:18px;outline:none;box-shadow:0 18px 48px rgba(0,0,0,0.25);"
+                             onloadedmetadata="try{{this.muted=true; this.play();}}catch(e){{}}"
+                             onended="try{{this.play();}}catch(e){{}}">
+                        <source src="data:video/mp4;base64,{b64}" type="video/mp4"/>
+                      </video>
+                    </div>
+                    ''',
+                    unsafe_allow_html=True
+                )
             except Exception as e:
                 st.error(f"❌ 캠페인 영상 로드 실패: {e}")
 
@@ -1736,7 +1737,59 @@ with tab_audit:
             }
             .fade-in{animation: fadeIn .25s ease both;}
             @keyframes fadeIn{from{opacity:0; transform: translateY(10px) scale(.99);}to{opacity:1; transform: translateY(0) scale(1);}}
-          </style>
+          
+            /* Integrity Aura scanning FX (inpor.html inspired) */
+            .scan-fx{
+              margin-top:14px;
+              height:220px;
+              border-radius: 30px;
+              border: 1px solid rgba(255,255,255,0.12);
+              background: rgba(255,255,255,0.03);
+              box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 12px 40px rgba(0,0,0,0.28);
+              position: relative;
+              overflow:hidden;
+            }
+            .scan-fx-inner{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
+            .scan-fx .ring{
+              position:absolute;
+              border-radius:999px;
+              border: 3px solid rgba(239,68,68,0.22);
+              box-shadow: 0 0 40px rgba(239,68,68,0.10);
+              animation: ccPing 1.6s infinite ease-out;
+            }
+            .scan-fx .r1{ width:160px; height:160px; }
+            .scan-fx .r2{ width:230px; height:230px; animation-delay: .18s; }
+            .scan-fx .r3{ width:310px; height:310px; animation-delay: .36s; }
+            .scan-fx .scanbar{
+              position:absolute;
+              top:-40px; left:0;
+              width:100%;
+              height:14px;
+              background: linear-gradient(90deg, transparent, rgba(239,68,68,0.95), rgba(249,115,22,0.85), transparent);
+              box-shadow: 0 0 22px rgba(239,68,68,0.85), 0 0 60px rgba(239,68,68,0.25);
+              animation: ccScan 2.0s linear infinite;
+            }
+            .scan-fx .scan-label{
+              position:absolute;
+              bottom:18px;
+              font-size: 13px;
+              font-weight: 900;
+              letter-spacing: .28em;
+              text-transform: uppercase;
+              color: rgba(255,255,255,0.78);
+              text-shadow: 0 6px 20px rgba(0,0,0,0.35);
+            }
+            @keyframes ccScan{
+              0% { transform: translateY(-40px); opacity:0; }
+              8% { opacity:1; }
+              100% { transform: translateY(260px); opacity:0; }
+            }
+            @keyframes ccPing{
+              0% { transform: scale(0.65); opacity:0; }
+              35% { opacity:1; }
+              100% { transform: scale(1.15); opacity:0; }
+            }
+</style>
         </head>
         <body>
           <div class="cc-card">
@@ -1761,6 +1814,16 @@ with tab_audit:
 
                 <div style="margin-top:12px;">
                   <button id="scanBtn" class="scan-btn"><span style="font-size:18px;">✨</span>청렴 기운 스캔하기</button>
+                </div>
+
+                <div id="scanFx" class="scan-fx" style="display:none;">
+                  <div class="scan-fx-inner">
+                    <div class="ring r1"></div>
+                    <div class="ring r2"></div>
+                    <div class="ring r3"></div>
+                    <div class="scanbar"></div>
+                    <div class="scan-label">AURA SCANNING…</div>
+                  </div>
                 </div>
 
                 <div id="resultWrap" class="grad-border" style="margin-top:16px; display:none;">
@@ -1842,24 +1905,14 @@ with tab_audit:
 
           <script>
           (function(){
-            const AURA = [
-              {goal:"가족의 행복", slogan:"깨끗한 소통으로 피어나는 동료 간의 진정한 즐거움", fortune:"작은 호의보다 큰 진심이 통하는 한 해입니다. 사람 사이의 신뢰가 최고의 행운입니다."},
-              {goal:"가족의 행복", slogan:"따뜻한 배려가 만드는 가장 큰 행운", fortune:"오늘의 작은 친절이 집안의 분위기를 환하게 바꿉니다. 말 한마디가 복이 됩니다."},
-              {goal:"업무의 성장", slogan:"원칙 위에 세워지는 성과", fortune:"규정을 지키는 것이 오히려 속도를 만듭니다. 리스크가 줄며 추진력이 커집니다."},
-              {goal:"업무의 성장", slogan:"투명한 과정이 부르는 인정", fortune:"과정이 깨끗하면 결과가 빛납니다. 평판이 성과를 돕습니다."},
-              {goal:"건강한 생활", slogan:"균형 잡힌 습관이 부르는 맑은 기운", fortune:"무리보다 꾸준함이 정답입니다. 작은 루틴이 큰 변화를 이끕니다."},
-              {goal:"건강한 생활", slogan:"정직한 선택이 만드는 가벼운 하루", fortune:"과식·과음을 줄이는 선택이 컨디션을 살립니다. 가벼워진 몸이 자신감을 줍니다."},
-              {goal:"관계의 회복", slogan:"솔직함이 여는 관계의 문", fortune:"한 번의 진심 어린 대화가 관계를 회복시킵니다. 오해를 풀 기회가 찾아옵니다."},
-              {goal:"관계의 회복", slogan:"공정함이 만드는 오래가는 인연", fortune:"공정한 태도는 관계를 오래가게 합니다. 상대가 당신을 더 신뢰하게 됩니다."},
-              {goal:"새로운 도전", slogan:"정직한 출발이 만드는 큰 도약", fortune:"출발이 깨끗하면 끝이 편합니다. 도전의 성공 확률이 올라갑니다."},
-              {goal:"새로운 도전", slogan:"원칙 있는 도전, 안전한 혁신", fortune:"무리한 모험 대신, 안전한 혁신이 가능합니다. ‘현명한 도전자’가 됩니다."},
-            ];
+            const AURA = [{"goal": "가족의 행복", "slogan": "행복한 가정은 미리 누리는 천국입니다.", "fortune": "로버트 브라우닝의 말처럼, 당신의 청렴한 생활은 가족에게 가장 안전한 울타리가 됩니다. 정직한 땀방울로 일궈낸 평온함이 집안 가득 넘쳐날 것입니다."}, {"goal": "가족의 행복", "slogan": "가장 중요한 것은 가족의 사랑입니다.", "fortune": "테레사 수녀는 세상의 평화가 가정에서 시작된다고 했습니다. 부끄러움 없는 직장 생활이 자녀에게 줄 수 있는 최고의 유산임을 기억하세요."}, {"goal": "가족의 행복", "slogan": "가정은 삶의 보물상자입니다.", "fortune": "투명한 업무 처리가 가져오는 떳떳한 마음은 퇴근길 당신의 발걸음을 가볍게 하고, 가족과 함께하는 저녁을 더욱 빛나게 할 것입니다."}, {"goal": "가족의 행복", "slogan": "가족이란 하늘이 맺어준 정거장입니다.", "fortune": "당신이 지킨 원칙이 가족에게는 자부심이 됩니다. 올해는 정직한 소득으로 더 큰 행복의 집을 지어보세요."}, {"goal": "가족의 행복", "slogan": "사랑하는 사람들을 위한 가장 큰 선물은 '신뢰'입니다.", "fortune": "외부의 유혹을 이겨내는 당신의 단단한 마음이 가족의 내일을 지키는 가장 강력한 방패가 될 것입니다."}, {"goal": "가족의 행복", "slogan": "집은 사랑의 거처이자 안식처입니다.", "fortune": "바깥에서의 올곧은 행실이 집안의 질서를 세웁니다. 당신의 청렴 아우라가 가족 모두에게 긍정적인 에너지를 전파하고 있습니다."}, {"goal": "가족의 행복", "slogan": "진정한 행복은 가까운 곳에 있습니다.", "fortune": "괴테는 왕이든 백성이든 가정에서 행복을 찾는 자가 가장 행복하다고 했습니다. 깨끗한 마음으로 일하고 가족과 웃음꽃을 피우는 한 해가 되세요."}, {"goal": "가족의 행복", "slogan": "가족은 고난의 시기를 견디게 하는 힘입니다.", "fortune": "어떠한 압력에도 굴하지 않는 당신의 강직함이 가족에게는 든든한 버팀목이 됩니다. 당신은 가족의 영웅입니다."}, {"goal": "가족의 행복", "slogan": "가족의 웃음은 세상에서 가장 아름다운 음악입니다.", "fortune": "정당한 보상과 정직한 노력으로 얻은 기쁨이야말로 가장 오래 지속됩니다. 올해 가족과 함께하는 모든 순간이 선율처럼 아름다울 것입니다."}, {"goal": "가족의 행복", "slogan": "행복은 나눌수록 커집니다.", "fortune": "청렴하게 얻은 성과를 가족과 함께 나누세요. 그 기쁨은 배가 되어 당신의 삶을 더욱 풍요롭게 만들 것입니다."}, {"goal": "가족의 행복", "slogan": "가족은 인생의 나침반입니다.", "fortune": "사랑하는 이들에게 부끄럽지 않은 길을 걷고 있는 당신, 2026년은 그 어느 때보다 가족과 깊은 신뢰를 쌓는 해가 될 것입니다."}, {"goal": "가족의 행복", "slogan": "가장 따뜻한 곳, 그곳은 가족의 품입니다.", "fortune": "청렴은 당신의 영혼을 맑게 하여 가족의 품에서 진정한 안식을 누리게 합니다. 평화로운 한 해가 약속되어 있습니다."}, {"goal": "가족의 행복", "slogan": "가족의 지지는 세상 그 무엇보다 강력합니다.", "fortune": "당신이 지키는 도덕적 가치는 가족들에게 깊은 존경심을 심어줍니다. 그 존경이 당신을 더 높이 날게 할 것입니다."}, {"goal": "가족의 행복", "slogan": "함께 밥을 먹는 즐거움, 청렴이 주는 평화입니다.", "fortune": "떳떳한 수입으로 차린 밥상은 세상에서 가장 맛있는 보약입니다. 가족의 건강과 행복이 당신의 손끝에서 시작됩니다."}, {"goal": "가족의 행복", "slogan": "가족은 당신이 가장 잘하는 일의 이유입니다.", "fortune": "사랑하는 사람들을 지키기 위해 선택한 정직의 길, 그 길 끝에 찬란한 가족의 영광이 기다리고 있습니다."}, {"goal": "업무의 성장", "slogan": "정직은 가장 확실한 자본입니다.", "fortune": "벤자민 프랭클린의 명언입니다. 당장의 이익보다 신뢰를 쌓는 당신의 방식이 올해 거대한 성장의 밑거름이 될 것입니다."}, {"goal": "업무의 성장", "slogan": "성공은 매일 반복되는 작은 노력의 합입니다.", "fortune": "로버트 콜리어의 말처럼, 원칙을 지키는 당신의 작은 습관들이 모여 누구도 넘볼 수 없는 전문성을 완성할 것입니다."}, {"goal": "업무의 성장", "slogan": "실력은 청렴에서 나옵니다.", "fortune": "편법을 쓰지 않는 업무 방식이 당신을 가장 견고한 전문가로 만듭니다. 올해 당신의 평판은 업계의 표준이 될 것입니다."}, {"goal": "업무의 성장", "slogan": "천천히 가는 것을 두려워 말고 중도에 멈춤을 두려워하십시오.", "fortune": "정도를 걷는 성장은 속도는 조금 더딜지 몰라도 결코 무너지지 않습니다. 당신의 커리어는 가장 단단한 반석 위에 서 있습니다."}, {"goal": "업무의 성장", "slogan": "품격 있는 업무가 품격 있는 인재를 만듭니다.", "fortune": "작은 서류 하나에도 정직을 담는 당신의 태도가 상사와 동료들에게 강력한 신뢰를 주고 있습니다. 승진의 운이 가까이 있습니다."}, {"goal": "업무의 성장", "slogan": "기회는 준비된 자에게 찾아옵니다.", "fortune": "청렴함으로 다져진 깨끗한 이력이야말로 최고의 준비입니다. 올해 중요한 프로젝트의 리더로 발탁될 기운이 강합니다."}, {"goal": "업무의 성장", "slogan": "가장 높은 곳으로 가려면 가장 낮은 곳부터 정직하게.", "fortune": "기초가 튼튼한 건물은 비바람에 흔들리지 않습니다. 당신의 정직한 업무 프로세스가 당신을 최고의 자리로 안내할 것입니다."}, {"goal": "업무의 성장", "slogan": "신뢰는 비즈니스의 유일한 화폐입니다.", "fortune": "청렴이라는 화폐를 많이 저축해 두셨군요. 올해 그 저축이 큰 이자가 되어 당신의 성과로 돌아올 것입니다."}, {"goal": "업무의 성장", "slogan": "탁월함은 행위가 아니라 습관입니다.", "fortune": "아리스토텔레스의 말처럼, 정직을 습관화한 당신은 이미 탁월한 인재입니다. 2026년은 당신의 진가가 널리 알려지는 해입니다."}, {"goal": "업무의 성장", "slogan": "어려운 일일수록 정공법이 답입니다.", "fortune": "복잡한 문제 앞에서 원칙을 선택하는 당신의 결단력이 빛을 발할 것입니다. 그 결단이 조직을 위기에서 구하고 당신을 영웅으로 만들 것입니다."}, {"goal": "업무의 성장", "slogan": "자신의 일에 정직한 자는 왕 앞에 설 것입니다.", "fortune": "성경의 잠언처럼, 당신의 성실과 정직은 당신을 귀한 자리로 인도합니다. 올해는 영전의 기쁨이 함께할 것입니다."}, {"goal": "업무의 성장", "slogan": "지식보다 중요한 것은 태도입니다.", "fortune": "청렴한 업무 태도는 지식 이상의 영향력을 발휘합니다. 동료들이 당신을 롤모델로 삼기 시작했습니다."}, {"goal": "업무의 성장", "slogan": "열정은 정직이라는 연료를 먹고 자랍니다.", "fortune": "떳떳한 마음에서 나오는 에너지는 지치지 않습니다. 올해 당신의 업무 열정은 주변을 밝히는 태양이 될 것입니다."}, {"goal": "업무의 성장", "slogan": "가장 위대한 영광은 한 번도 넘어지지 않는 것이 아닙니다.", "fortune": "실수를 정직하게 인정하고 다시 일어서는 당신, 그 청렴함이 당신을 진정한 리더로 성장시키고 있습니다."}, {"goal": "업무의 성장", "slogan": "당신의 이름 석 자가 브랜드가 됩니다.", "fortune": "'그 사람이 한 일이라면 믿을 수 있다'는 신뢰, 그것이 올해 당신이 얻게 될 가장 큰 성취입니다."}, {"goal": "건강한 생활", "slogan": "건강은 제1의 재산입니다.", "fortune": "에머슨의 격언입니다. 마음의 평화는 몸의 건강으로 이어집니다. 청렴한 마음으로 스트레스 없는 건강한 한 해를 누리세요."}, {"goal": "건강한 생활", "slogan": "맑은 정신은 바른 행동에서 나옵니다.", "fortune": "부끄러운 마음이 없으면 숙면을 취할 수 있습니다. 깊은 잠은 당신의 면역력을 높이고 생기를 불어넣어 줄 것입니다."}, {"goal": "건강한 생활", "slogan": "활기찬 인생은 정직한 땀방울에서 시작됩니다.", "fortune": "올해는 운동을 생활화해보세요. 정직하게 흘린 땀은 당신의 몸을 배신하지 않고 활력을 선물할 것입니다."}, {"goal": "건강한 생활", "slogan": "건강한 신체에 건전한 정신이 깃듭니다.", "fortune": "유베날리스의 말처럼, 바른 정신을 유지하기 위해 몸을 돌보세요. 규칙적인 생활이 당신의 청렴 아우라라 더 강화할 것입니다."}, {"goal": "건강한 생활", "slogan": "자연과 함께하는 삶, 마음의 정화입니다.", "fortune": "주말에는 숲길을 걸으며 마음의 먼지를 털어내세요. 맑은 공기가 당신의 원칙을 더 단단하게 해줄 것입니다."}, {"goal": "건강한 생활", "slogan": "절제는 건강의 어머니입니다.", "fortune": "식습관과 생활 전반에서의 절제는 청렴의 다른 이름입니다. 절제된 생활이 당신의 생체 리듬을 최상으로 유지해줄 것입니다."}, {"goal": "건강한 생활", "slogan": "웃음은 최고의 보약입니다.", "fortune": "떳떳하게 웃는 웃음은 혈액순환을 돕고 심장을 튼튼하게 합니다. 올해는 웃을 일이 작년보다 두 배는 많아질 기운입니다."}, {"goal": "건강한 생활", "slogan": "마음의 평화가 만병통치약입니다.", "fortune": "남을 속이지 않는 삶은 심혈관 질환을 예방한다는 연구도 있습니다. 당신의 고결함이 당신의 생명을 연장하고 있습니다."}, {"goal": "건강한 생활", "slogan": "꾸준함이 비범함을 만듭니다.", "fortune": "하루 30분, 자신을 위한 투자에 정직해지세요. 연말에는 몰라보게 달라진 건강한 자신을 발견하게 될 것입니다."}, {"goal": "건강한 생활", "slogan": "단순한 삶이 가장 건강합니다.", "fortune": "복잡한 욕심을 내려놓으면 삶이 단순해지고 몸이 가벼워집니다. 미니멀리즘 청렴 생활로 신체적 자유를 얻으세요."}, {"goal": "건강한 생활", "slogan": "당신은 당신이 먹는 음식 그 자체입니다.", "fortune": "정직한 식재료로 차린 건강한 식단에 관심을 가져보세요. 몸 안의 독소를 배출하고 맑은 기운을 채우는 해가 될 것입니다."}, {"goal": "건강한 생활", "slogan": "충분한 휴식은 다음 도약을 위한 준비입니다.", "fortune": "죄책감 없는 온전한 휴식을 즐기세요. 당신은 충분히 그럴 자격이 있는 정직한 근로자입니다."}, {"goal": "건강한 생활", "slogan": "건강한 중독, 운동에 빠져보세요.", "fortune": "나쁜 습관을 버리고 정직한 신체 활동에 중독되는 해가 되세요. 근육량이 늘어나는 만큼 자신감도 상승할 것입니다."}, {"goal": "건강한 생활", "slogan": "물처럼 맑고 유연하게.", "fortune": "하루 2리터의 물을 마시듯, 매 순간 청렴을 흡수하세요. 세포 하나하나가 생기로 가득 차오를 것입니다."}, {"goal": "건강한 생활", "slogan": "자신을 사랑하는 것이 청렴의 시작입니다.", "fortune": "몸을 아끼고 돌보는 태도가 곧 자신에 대한 정직입니다. 올해 당신의 건강 지수는 최고점을 기록할 것입니다."}, {"goal": "관계의 회복", "slogan": "먼저 사과하는 사람이 가장 용감합니다.", "fortune": "마하트마 간디의 정신을 본받으세요. 잘못을 솔직히 인정하는 용기가 꼬였던 인간관계를 푸는 마법의 열쇠가 될 것입니다."}, {"goal": "관계의 회복", "slogan": "신뢰는 유리잔과 같아서 소중히 다뤄야 합니다.", "fortune": "한 번 깨지면 붙이기 어렵지만, 당신의 진심 어린 청렴함은 이미 금이 간 관계조차 치유하는 강력한 접착제가 될 것입니다."}, {"goal": "관계의 회복", "slogan": "진심은 언제나 통합니다.", "fortune": "화려한 말보다 정직한 태도가 사람의 마음을 움직입니다. 오해받았던 관계가 눈 녹듯 사라지고 깊은 우정이 찾아올 해입니다."}, {"goal": "관계의 회복", "slogan": "남의 말을 경청하는 것은 정직의 다른 표현입니다.", "fortune": "상대방의 진실을 온전히 받아들이는 경청의 자세가 당신 주변에 좋은 사람들을 불러모으고 있습니다."}, {"goal": "관계의 회복", "slogan": "베푸는 손은 결코 비지 않습니다.", "fortune": "대가 없는 친절과 정직한 호의를 베풀어 보세요. 생각지 못한 곳에서 귀인이 나타나 당신을 도울 기운입니다."}, {"goal": "관계의 회복", "slogan": "우정은 한 영혼이 두 몸에 깃든 것입니다.", "fortune": "아리스토텔레스의 말처럼, 진정한 친구와 다시 연결될 기회가 옵니다. 청렴한 성품이 그 연결을 더욱 견고하게 할 것입니다."}, {"goal": "관계의 회복", "slogan": "사랑은 서로 마주 보는 것이 아니라 함께 같은 곳을 보는 것입니다.", "fortune": "동료와 같은 목표를 향해 정직하게 나아가세요. 경쟁자였던 이들이 가장 든든한 조력자로 변할 것입니다."}, {"goal": "관계의 회복", "slogan": "미소는 두 사람 사이의 가장 가까운 거리입니다.", "fortune": "투명한 마음에서 우러나오는 밝은 미소로 먼저 다가가세요. 서먹했던 팀 분위기가 당신으로 인해 따뜻해질 것입니다."}, {"goal": "관계의 회복", "slogan": "비판하기 전에 이해하려고 노력하세요.", "fortune": "상대의 상황을 정직하게 바라보는 공감 능력이 당신을 조직의 핵심 소통 창구로 만들 것입니다."}, {"goal": "관계의 회복", "slogan": "약속을 지키는 것은 신용의 기초입니다.", "fortune": "작은 약속 하나도 소중히 여기는 당신의 모습에 많은 이들이 감동하고 있습니다. 인맥의 폭이 넓어지는 해입니다."}, {"goal": "관계의 회복", "slogan": "용서는 자기 자신에게 주는 선물입니다.", "fortune": "과거의 서운함을 정직하게 직시하고 용서하세요. 마음의 짐이 사라지고 새로운 인연이 그 자리를 채울 것입니다."}, {"goal": "관계의 회복", "slogan": "칭찬은 고래도 춤추게 합니다.", "fortune": "동료의 성과를 정직하게 인정하고 칭찬해 보세요. 그 선한 에너지가 부메랑이 되어 당신에게 더 큰 존경으로 돌아올 것입니다."}, {"goal": "관계의 회복", "slogan": "정직한 소통이 건강한 조직을 만듭니다.", "fortune": "뒤에서 말하지 않고 앞에서 진실을 말하는 당신의 태도가 조직 내 갈등을 해결하는 열쇠가 됩니다."}, {"goal": "관계의 회복", "slogan": "사람은 사람을 통해 성장합니다.", "fortune": "올해는 멘토나 좋은 스승을 만날 운이 있습니다. 당신의 순수한 배움의 자세가 그분들의 마음을 열 것입니다."}, {"goal": "관계의 회복", "slogan": "품격 있는 거절은 신뢰를 높입니다.", "fortune": "부당한 요구에 대해 정중하지만 단호하게 거절하세요. 그 모습이 오히려 당신의 가치를 높이고 진정한 관계만 남게 할 것입니다."}, {"goal": "새로운 도전", "slogan": "도전은 인생을 흥미롭게 만듭니다.", "fortune": "조슈아 마린의 말처럼, 새로운 길을 가는 두려움을 정직하게 받아들이고 즐기세요. 당신의 청렴 아우라가 성공의 길을 밝히고 있습니다."}, {"goal": "새로운 도전", "slogan": "가장 큰 위험은 아무것도 하지 않는 것입니다.", "fortune": "마크 저커버그의 조언입니다. 원칙이라는 안전벨트를 매고 미지의 세계로 질주하세요. 2026년은 당신의 해입니다."}, {"goal": "새로운 도전", "slogan": "시작이 반입니다.", "fortune": "정직한 의도로 시작한 일은 이미 절반의 성공을 거둔 것과 같습니다. 당신의 결단이 곧 현실이 될 강력한 운세입니다."}, {"goal": "새로운 도전", "slogan": "실패는 성공을 맛내기 위한 양념입니다.", "fortune": "트루먼 커포티의 말입니다. 도중의 어려움을 숨기지 않고 정면 돌파하는 당신, 결국 더 큰 승리를 거머쥘 것입니다."}, {"goal": "새로운 도전", "slogan": "비전을 정직하게 공유하세요.", "fortune": "당신의 꿈을 주변에 알리고 정정당당하게 도움을 요청하세요. 우주의 기운이 당신의 도전을 응원하기 위해 움직이고 있습니다."}, {"goal": "새로운 도전", "slogan": "한계는 스스로 만드는 것입니다.", "fortune": "자신에 대한 정직한 믿음이 한계를 무너뜨립니다. 올해 당신은 자신이 생각했던 것보다 훨씬 더 큰일을 해낼 것입니다."}, {"goal": "새로운 도전", "slogan": "익숙함에서 벗어나 변화를 포용하세요.", "fortune": "청렴이라는 핵심 가치는 지키되, 방법론에서는 혁신을 추구하세요. 당신의 유연함이 놀라운 성과를 만들어낼 것입니다."}, {"goal": "새로운 도전", "slogan": "모든 위대한 일은 처음에는 불가능해 보였습니다.", "fortune": "넬슨 만델라의 명언입니다. 지금 무모해 보이는 그 도전이 연말에는 당신의 가장 큰 자랑거리가 되어 있을 것입니다."}, {"goal": "새로운 도전", "slogan": "자신을 믿는 자가 승리합니다.", "fortune": "당신의 정직한 노력을 믿으세요. 운은 하늘이 주지만 승리는 스스로 쟁취하는 것입니다. 당신은 이미 승자입니다."}, {"goal": "새로운 도전", "slogan": "배움에는 끝이 없습니다.", "fortune": "새로운 기술이나 지식을 습득하는 데 정직한 시간을 투자하세요. 그 지식은 배신하지 않는 강력한 무기가 될 것입니다."}, {"goal": "새로운 도전", "slogan": "꿈은 이루어진다, 행동하는 자에게만.", "fortune": "정직한 행동력이 당신의 비전을 현실로 소환하고 있습니다. 망설이지 말고 첫발을 내딛으세요."}, {"goal": "새로운 도전", "slogan": "역경 속에서 기회를 찾으세요.", "fortune": "알베르트 아인슈타인의 말처럼, 혼란 속에서도 원칙을 지키면 가장 큰 기회가 보일 것입니다. 당신의 통찰력이 최고조에 달해 있습니다."}, {"goal": "새로운 도전", "slogan": "작은 성공을 축하하세요.", "fortune": "도전 과정에서의 작은 성취들을 정직하게 기록하고 격려하세요. 그 기록들이 모여 거대한 승리의 역사가 됩니다."}, {"goal": "새로운 도전", "slogan": "당신의 직관을 믿으세요.", "fortune": "맑고 깨끗한 영혼에서 나오는 직관은 가장 정확한 나침반입니다. 올해 당신의 선택은 모두 정답일 것입니다."}, {"goal": "새로운 도전", "slogan": "세상을 바꾸는 것은 당신의 작은 실천입니다.", "fortune": "거창한 구호보다 정직한 한 걸음이 세상을 바꿉니다. 당신의 도전이 ktMOS의 새로운 역사가 될 것입니다."}];
 
             const pick = (arr)=> arr[Math.floor(Math.random()*arr.length)];
             const scanBtn = document.getElementById("scanBtn");
             const emp = document.getElementById("empName");
             const goal = document.getElementById("goal");
             const resultWrap = document.getElementById("resultWrap");
+            const scanFx = document.getElementById("scanFx");
             const sloganEl = document.getElementById("slogan");
             const fortuneEl = document.getElementById("fortune");
 
@@ -1883,16 +1936,19 @@ with tab_audit:
               scanning = true;
               scanBtn.style.filter="brightness(0.92)";
               scanBtn.innerHTML = '⏳ 스캔 중...';
+              if(scanFx){ scanFx.style.display = "block"; }
+              if(resultWrap){ resultWrap.style.display = "none"; }
               setTimeout(()=>{
                 const picked = pickByGoal(g);
                 sloganEl.textContent = "“" + picked.slogan + "”";
                 fortuneEl.textContent = picked.fortune;
                 resultWrap.style.display = "block";
+                if(scanFx){ scanFx.style.display = "none"; }
                 scanBtn.style.filter="";
                 scanBtn.innerHTML = '✨ 청렴 기운 스캔하기';
                 scanning = false;
                 sendHeight();
-              }, 650);
+              }, 1850);
             }
 
             scanBtn.addEventListener("click", doScan);
