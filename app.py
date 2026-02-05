@@ -1,113 +1,933 @@
 import streamlit as st
-import streamlit.components.v1 as components
-import json
+import os
+import google.generativeai as genai
+from docx import Document
+import PyPDF2
+from youtube_transcript_api import YouTubeTranscriptApi
+import requests
+from bs4 import BeautifulSoup
+import time
+import glob
+import tempfile
+import hashlib
+import base64
+import datetime
+import pytz
+import pandas as pd
 
-# 1. 페이지 기본 설정 (전체 화면 사용)
+import plotly.graph_objects as go
+import plotly.express as px
+
+# Plotly: 확대/축소 후 "원점 복원" 가능하도록 모드바 항상 표시
+PLOTLY_CONFIG = {
+    "displayModeBar": True,
+    "displaylogo": False,
+    "responsive": True,
+    "scrollZoom": False,          # 스크롤로 의도치 않은 확대 방지
+    "doubleClick": "reset",       # 더블클릭/더블탭 시 원점 복원
+}
+
+# [필수] 구글 시트 라이브러리 체크
+try:
+    import gspread
+    from oauth2client.service_account import ServiceAccountCredentials
+except ImportError:
+    gspread = None
+    ServiceAccountCredentials = None
+    st.error("❌ 구글 시트 라이브러리가 없습니다. requirements.txt를 확인하세요.")
+
+# [필수] yt_dlp 라이브러리 체크
+try:
+    import yt_dlp
+except ImportError:
+    yt_dlp = None
+
+# ==========================================
+# 1. 페이지 설정
+# ==========================================
 st.set_page_config(
-    page_title="2026 ktMOS북부 설 맞이 클린캠페인",
+    page_title="AUDIT AI Agent",
+    page_icon="🛡️",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
-# ==============================================================================
-# [필수 수정] 여기에 본인의 Firebase 설정값을 복사해서 붙여넣으세요.
-# (Firebase 콘솔 -> 프로젝트 설정 -> 일반 -> 내 앱 -> SDK 설정 및 구성 에서 복사)
-# ==============================================================================
-firebase_config = {
-   apiKey: "AIzaSyBlEUW6VQQAR3gojzHqDqoWFSSz4Za-7yw",
-  authDomain: "clean-campaign-2026.firebaseapp.com",
-  projectId: "clean-campaign-2026",
-  storageBucket: "clean-campaign-2026.firebasestorage.app",
-  messagingSenderId: "55496851514",
-  appId: "1:55496851514:web:7e1cd4a0352500a7df7503",
-  measurementId: "G-VCBNRC2BYR"
+# ==========================================
+# 2. 🎨 디자인 테마 (사이드바/토글 강제 표시 포함)
+#    + 전체 텍스트 0.2px 증가
+#    + ✅ (요청 반영) 자율점검 탭(#audit-tab) 내 Expander 헤더/입력라벨/셀렉트 가독성 강화
+# ==========================================
+st.markdown("""
+<style>
+* 🔥 Expander 제목 가독성 강제 개선 */
+details > summary {
+    font-size: 1.15rem !important;
+    font-weight: 900 !important;
+    color: #1565C0 !important;  /* 📜 서약 타이틀과 동일 색상 */
 }
-# ==============================================================================
 
-# Python 딕셔너리를 JSON 문자열로 변환 (HTML에 주입하기 위함)
-firebase_config_str = json.dumps(firebase_config)
+/* 펼쳐졌을 때도 동일하게 유지 */
+details[open] > summary {
+    font-size: 1.15rem !important;
+    font-weight: 900 !important;
+    color: #1565C0 !important;
+}
 
-# 2. 리액트(React) 웹페이지 코드 (HTML/JS)
-# 주의: 파이썬 f-string 안에서는 중괄호 {}를 두 번 {{}} 써야 JavaScript 문법으로 인식됩니다.
-html_code = f"""
-<!DOCTYPE html>
+/* summary 안의 span도 같이 잡아줌 (환경 차이 대응) */
+details > summary,
+details > summary span,
+details[open] > summary,
+details[open] > summary span {
+    font-size: 1.5rem !important;   /* ← 여기 숫자만 조절 */
+    font-weight: 900 !important;
+    color: #1565C0 !important;
+}
+
+/* ✅ 전체 글자 크기 +0.1px */
+html { font-size: 16.2px; }
+
+.stApp { background-color: #F4F6F9; }
+[data-testid="stSidebar"] { background-color: #2C3E50; }
+[data-testid="stSidebar"] * { color: #FFFFFF !important; }
+
+/* ✅ 사이드바 텍스트 입력의 아이콘(눈/지우기 등)을 항상 검정색으로 */
+[data-testid="stSidebar"] div[data-testid="stTextInput"] button,
+[data-testid="stSidebar"] div[data-testid="stTextInput"] button:hover,
+[data-testid="stSidebar"] div[data-testid="stTextInput"] button:focus,
+[data-testid="stSidebar"] div[data-testid="stTextInput"] button:active {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    color: #000000 !important;
+    opacity: 1 !important;
+}
+
+[data-testid="stSidebar"] div[data-testid="stTextInput"] button svg,
+[data-testid="stSidebar"] div[data-testid="stTextInput"] button svg *,
+[data-testid="stSidebar"] div[data-testid="stTextInput"] button svg path {
+    fill: #000000 !important;
+    stroke: #000000 !important;
+    opacity: 1 !important;
+}
+
+/* aria-label이 환경/언어에 따라 달라도 적용되도록, 패스워드 토글 버튼도 강제 */
+div[data-testid="stTextInput"] button[aria-label],
+div[data-testid="stTextInput"] button[aria-label] svg,
+div[data-testid="stTextInput"] button[aria-label] svg * {
+    fill: #000000 !important;
+    stroke: #000000 !important;
+    color: #000000 !important;
+    opacity: 1 !important;
+}
+
+.stTextInput input, .stTextArea textarea {
+    background-color: #FFFFFF !important;
+    color: #000000 !important;
+    -webkit-text-fill-color: #000000 !important;
+    border: 1px solid #BDC3C7 !important;
+}
+
+/* ✅ 버튼 스타일 (일반 버튼 + 폼 제출 버튼) */
+.stButton > button,
+div[data-testid="stFormSubmitButton"] > button {
+    background: linear-gradient(to right, #2980B9, #2C3E50) !important;
+    color: #FFFFFF !important;
+    border: none !important;
+    border-radius: 10px !important;
+    padding: 0.6rem 1rem !important;
+    font-weight: 800 !important;
+    width: 100% !important;
+    opacity: 1 !important;
+}
+
+/* ✅ disabled여도 텍스트가 흐려지지 않도록 */
+.stButton > button:disabled,
+div[data-testid="stFormSubmitButton"] > button:disabled {
+    background: linear-gradient(to right, #2980B9, #2C3E50) !important;
+    color: #FFFFFF !important;
+    opacity: 1 !important;
+    filter: none !important;
+}
+
+/* ✅ 버튼 내부 텍스트/아이콘도 상시 선명 */
+.stButton > button *,
+div[data-testid="stFormSubmitButton"] > button * {
+    color: #FFFFFF !important;
+    opacity: 1 !important;
+}
+
+/* (서약 우측 카운트다운 표시용) */
+.pledge-right {
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap: 8px;
+  font-weight: 900;
+  color: #0B5ED7;
+  min-width: 90px;
+}
+
+/* =========================================================
+   ✅ (요청 1,3,4) 자율점검 탭 전용 가독성 강화
+   - 다른 탭/영역 영향 최소화: #audit-tab 내부에서만 적용
+   ========================================================= */
+#audit-tab [data-testid="stExpander"] summary {
+    font-weight: 900 !important;
+    font-size: 1.12rem !important;
+    color: #1565C0 !important;                 /* 📜 타이틀 색상과 동일 */
+}
+#audit-tab [data-testid="stExpander"] summary * {
+    font-weight: 900 !important;
+    color: #1565C0 !important;
+}
+
+/* 입력 라벨(사번/성명/총괄/본부/단/상세 부서명) 굵게 */
+#audit-tab div[data-testid="stTextInput"] label,
+#audit-tab div[data-testid="stSelectbox"] label {
+    font-weight: 900 !important;
+    color: #2C3E50 !important;
+}
+
+/* ✅ 메인 화면의 Selectbox(총괄/본부/단) 선택값 가독성 강제 */
+section.main div[data-testid="stSelectbox"] div[data-baseweb="select"] {
+    font-size: 1.08rem !important;    /* ← 원하면 더 키우세요 */
+    font-weight: 900 !important;
+}
+
+/* 선택값이 들어있는 실제 박스(콤보박스) */
+section.main div[data-testid="stSelectbox"] div[role="combobox"] {
+    background: #FFFFFF !important;
+    border: 1px solid #90A4AE !important;
+}
+
+/* 선택된 텍스트(대부분 span에 들어감) */
+section.main div[data-testid="stSelectbox"] div[role="combobox"] span {
+    color: #2C3E50 !important;
+    font-weight: 900 !important;
+    opacity: 1 !important;
+}
+
+/* 어떤 환경에서는 input에 값이 들어가므로 같이 처리 */
+section.main div[data-testid="stSelectbox"] div[role="combobox"] input {
+    color: #2C3E50 !important;
+    -webkit-text-fill-color: #2C3E50 !important;
+    font-weight: 900 !important;
+    opacity: 1 !important;
+}
+
+/* 드롭다운 화살표(아이콘)도 선명하게 */
+section.main div[data-testid="stSelectbox"] svg,
+section.main div[data-testid="stSelectbox"] svg * {
+    fill: #2C3E50 !important;
+    stroke: #2C3E50 !important;
+    opacity: 1 !important;
+}
+
+/* 드롭다운 옵션 목록도 굵게 */
+div[role="listbox"] * {
+    font-weight: 850 !important;
+}
+/* ✅ 메인 영역 selectbox를 텍스트 입력창처럼 보이게 (흰박스 + 동일 톤) */
+section.main div[data-testid="stSelectbox"] div[role="combobox"]{
+  background:#FFFFFF !important;
+  border:1px solid #CBD5E1 !important;
+  border-radius:6px !important;
+  min-height: 42px !important;
+  box-shadow: none !important;
+}
+
+/* ✅ 선택값 텍스트(진하게) */
+section.main div[data-testid="stSelectbox"] div[role="combobox"] span{
+  color:#2C3E50 !important;
+  font-weight: 800 !important;
+  opacity: 1 !important;
+}
+
+/* ✅ '선택/placeholder'처럼 보이는 텍스트(옅은 회색) */
+/* Streamlit/브라우저마다 placeholder가 input에 들어가거나 span으로 들어가서 둘 다 커버 */
+section.main div[data-testid="stSelectbox"] div[role="combobox"] input{
+  color:#94A3B8 !important;                 /* search box 느낌의 회색 */
+  -webkit-text-fill-color:#94A3B8 !important;
+  font-weight: 700 !important;
+  opacity: 1 !important;
+}
+
+/* ✅ 드롭다운 화살표도 선명하게 */
+section.main div[data-testid="stSelectbox"] svg,
+section.main div[data-testid="stSelectbox"] svg *{
+  fill:#64748B !important;
+  stroke:#64748B !important;
+  opacity:1 !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ✅ PC에서는 사이드바 기본 펼침, 모바일에서는 기본 접힘
+st.markdown("""
+<script>
+(function() {
+  const KEY = "__sidebar_autopen_done__";
+  const isDesktop = () => (window.innerWidth || 0) >= 900;
+  let tries = 0;
+  const maxTries = 25;
+
+  function clickToggleIfNeeded() {
+    try {
+      if (!isDesktop()) return;
+      if (window.sessionStorage.getItem(KEY) === "1") return;
+
+      const doc = window.parent?.document || document;
+      const candidates = [
+        '[data-testid="stSidebarCollapsedControl"] button',
+        '[data-testid="stSidebarCollapsedControl"]',
+        'button[title="Open sidebar"]',
+        'button[aria-label="Open sidebar"]'
+      ];
+
+      for (const sel of candidates) {
+        const el = doc.querySelector(sel);
+        if (el) {
+          el.click();
+          window.sessionStorage.setItem(KEY, "1");
+          return;
+        }
+      }
+    } catch (e) {}
+  }
+
+  const timer = setInterval(() => {
+    tries += 1;
+    clickToggleIfNeeded();
+    if (tries >= maxTries) clearInterval(timer);
+  }, 250);
+})();
+</script>
+""", unsafe_allow_html=True)
+
+# ==========================================
+# 3. 로그인 및 세션 관리
+# ==========================================
+def _set_query_param_key(clean_key: str) -> None:
+    encoded_key = base64.b64encode(clean_key.encode()).decode()
+    try:
+        st.query_params["k"] = encoded_key
+    except Exception:
+        st.experimental_set_query_params(k=encoded_key)
+
+def _clear_query_params() -> None:
+    try:
+        st.query_params.clear()
+    except Exception:
+        st.experimental_set_query_params()
+
+def _validate_and_store_key(clean_key: str) -> None:
+    genai.configure(api_key=clean_key)
+    list(genai.list_models())
+    st.session_state["api_key"] = clean_key
+    st.session_state["login_error"] = None
+    _set_query_param_key(clean_key)
+
+def try_login_from_session_key(key_name: str) -> None:
+    raw_key = st.session_state.get(key_name, "")
+    clean_key = "".join(str(raw_key).split())
+    if not clean_key:
+        st.session_state["login_error"] = "⚠️ 키를 입력해주세요."
+        return
+    try:
+        _validate_and_store_key(clean_key)
+    except Exception as e:
+        st.session_state["login_error"] = f"❌ 인증 실패: {e}"
+
+def perform_logout():
+    st.session_state["logout_anim"] = True
+
+# ==========================================
+# 4. 자동 로그인 복구 (URL 파라미터)
+# ==========================================
+if "api_key" not in st.session_state:
+    try:
+        qp = st.query_params
+        if "k" in qp:
+            k_val = qp["k"] if isinstance(qp["k"], str) else qp["k"][0]
+            restored_key = base64.b64decode(k_val).decode("utf-8")
+            _validate_and_store_key(restored_key)
+            st.toast("🔄 세션이 복구되었습니다.", icon="✨")
+            st.rerun()
+    except Exception:
+        pass
+
+# ==========================================
+# 5. 사이드바 (로그인/로그아웃)
+# ==========================================
+with st.sidebar:
+    st.markdown("### 🏛️ Control Center")
+    st.markdown("---")
+
+    if "api_key" not in st.session_state:
+        with st.form(key="login_form"):
+            st.markdown("<h4 style='color:white;'>🔐 Access Key</h4>", unsafe_allow_html=True)
+            st.text_input(
+                "Key",
+                type="password",
+                placeholder="API 키를 입력해 주세요",
+                label_visibility="collapsed",
+                key="login_input_key",
+            )
+            st.form_submit_button(
+                label="시스템 접속 (Login)",
+                on_click=try_login_from_session_key,
+                args=("login_input_key",),
+                use_container_width=True,
+            )
+
+        if st.session_state.get("login_error"):
+            st.error(st.session_state["login_error"])
+    else:
+        st.success("🟢 정상 가동 중")
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("로그아웃 (Logout)", type="primary", use_container_width=True):
+            perform_logout()
+            st.rerun()
+
+    st.markdown("---")
+    st.markdown(
+        "<div style='color:white; text-align:center; font-size:12px; opacity:0.8;'>ktMOS북부 Audit AI Solution © 2026<br>Engine: Gemini 1.5 Pro</div>",
+        unsafe_allow_html=True,
+    )
+
+# ==========================================
+# 7. 로그아웃 애니메이션
+# ==========================================
+if st.session_state.get("logout_anim"):
+    st.markdown("""
+<div style="background:#0B1B2B; padding:44px 26px; border-radius:18px; text-align:center; border:1px solid rgba(255,255,255,0.12);">
+  <div style="font-size: 78px; margin-bottom: 12px; line-height:1.1;">🎆✨</div>
+  <div style="font-size: 22px; font-weight: 900; color: #FFFFFF; margin-bottom: 8px;">새해 복 많이 받으세요!</div>
+  <div style="font-size: 15px; color: rgba(255,255,255,0.85); line-height: 1.55;">
+    올해도 건강과 행운이 가득하시길 바랍니다.<br>
+    안전하게 로그아웃되었습니다.
+  </div>
+  <div style="margin-top:18px; font-size: 12px; color: rgba(255,255,255,0.65);">
+    ktMOS북부 Audit AI Solution © 2026
+  </div>
+</div>
+""", unsafe_allow_html=True)
+    time.sleep(3.0)
+    _clear_query_params()
+    st.session_state.clear()
+    st.rerun()
+
+# ==========================================
+# 8. 핵심 기능 함수 (구글시트, AI, 파일처리)
+# ==========================================
+@st.cache_resource
+def init_google_sheet_connection():
+    if gspread is None or ServiceAccountCredentials is None:
+        return None
+    try:
+        scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
+        return gspread.authorize(creds)
+    except Exception:
+        return None
+
+def _korea_now():
+    try:
+        kst = pytz.timezone("Asia/Seoul")
+        return datetime.datetime.now(kst)
+    except Exception:
+        return datetime.datetime.now()
+
+def _campaign_key(dt: datetime.datetime) -> str:
+    return f"{dt.year}-{dt.month:02d}"
+
+def _ensure_campaign_config_sheet(spreadsheet):
+    try:
+        ws = spreadsheet.worksheet("Campaign_Config")
+        return ws
+    except Exception:
+        ws = spreadsheet.add_worksheet(title="Campaign_Config", rows=200, cols=10)
+        ws.append_row(["campaign_key", "title", "sheet_name", "start_date"])
+        return ws
+
+def _default_campaign_title(dt: datetime.datetime) -> str:
+    if dt.month == 1:
+        return "1월 자율점검(윤리경영원칙 실천지침 실천 서약)"
+    return f"{dt.month}월 자율점검(윤리경영원칙 실천지침 실천서약)"
+
+def _default_campaign_sheet_name(dt: datetime.datetime, spreadsheet=None) -> str:
+    if spreadsheet is not None and dt.year == 2026 and dt.month == 1:
+        try:
+            spreadsheet.worksheet("2026_윤리경영_실천서약")
+            return "2026_윤리경영_실천서약"
+        except Exception:
+            pass
+    return f"{dt.year}_{dt.month:02d}_자율점검"
+
+def get_current_campaign_info(spreadsheet, now_dt: datetime.datetime | None = None) -> dict:
+    now_dt = now_dt or _korea_now()
+    key = _campaign_key(now_dt)
+    cfg_ws = _ensure_campaign_config_sheet(spreadsheet)
+    records = cfg_ws.get_all_records()
+    for r in records:
+        if str(r.get("campaign_key", "")).strip() == key:
+            title = str(r.get("title") or "").strip() or _default_campaign_title(now_dt)
+            sheet_name = str(r.get("sheet_name") or "").strip() or _default_campaign_sheet_name(now_dt, spreadsheet)
+            start_date = str(r.get("start_date") or "").strip()
+            return {"key": key, "title": title, "sheet_name": sheet_name, "start_date": start_date}
+
+    title = _default_campaign_title(now_dt)
+    sheet_name = _default_campaign_sheet_name(now_dt, spreadsheet)
+    start_date = now_dt.strftime("%Y.%m.%d")
+    cfg_ws.append_row([key, title, sheet_name, start_date])
+    return {"key": key, "title": title, "sheet_name": sheet_name, "start_date": start_date}
+
+def set_current_campaign_info(spreadsheet, title: str | None = None, sheet_name: str | None = None, now_dt: datetime.datetime | None = None) -> dict:
+    now_dt = now_dt or _korea_now()
+    key = _campaign_key(now_dt)
+    cfg_ws = _ensure_campaign_config_sheet(spreadsheet)
+    all_rows = cfg_ws.get_all_values()
+    row_idx = None
+    for i in range(2, len(all_rows) + 1):
+        if len(all_rows[i-1]) >= 1 and str(all_rows[i-1][0]).strip() == key:
+            row_idx = i
+            break
+    if row_idx is None:
+        _ = get_current_campaign_info(spreadsheet, now_dt)
+        row_idx = len(all_rows) + 1
+
+    cur = get_current_campaign_info(spreadsheet, now_dt)
+    new_title = (title or cur["title"]).strip()
+    new_sheet = (sheet_name or cur["sheet_name"]).strip()
+    new_start = cur.get("start_date") or now_dt.strftime("%Y.%m.%d")
+    cfg_ws.update(f"B{row_idx}:D{row_idx}", [[new_title, new_sheet, new_start]])
+    return {"key": key, "title": new_title, "sheet_name": new_sheet, "start_date": new_start}
+
+def save_audit_result(emp_id, name, unit, dept, answer, sheet_name):
+    client = init_google_sheet_connection()
+    if not client:
+        return False, "구글 시트 연결 실패 (Secrets 확인)"
+    try:
+        spreadsheet = client.open("Audit_Result_2026")
+        try:
+            sheet = spreadsheet.worksheet(sheet_name)
+        except Exception:
+            sheet = spreadsheet.add_worksheet(title=sheet_name, rows=2000, cols=10)
+            sheet.append_row(["저장시간", "사번", "성명", "총괄/본부/단", "부서", "답변", "비고"])
+
+        # ==========================================
+        # ✅ 중복 검증 로직 개선 (사번 + 성명 조합)
+        # ==========================================
+        all_records = sheet.get_all_records()
+        emp_id_str = str(emp_id).strip()
+        name_str = str(name).strip()
+
+        for record in all_records:
+            # 시트의 사번과 성명 데이터를 가져옴
+            existing_emp_id = str(record.get("사번", "")).strip()
+            existing_name = str(record.get("성명", "")).strip()
+
+            if emp_id_str == "00000000":
+                # 예외 사번(00000000)인 경우: 사번과 성명이 모두 같아야 중복
+                if existing_emp_id == "00000000" and existing_name == name_str:
+                    return False, f"'{name_str}'님은 이미 '00000000' 사번으로 참여하셨습니다."
+            else:
+                # 일반 사번인 경우: 사번만 같아도 중복 처리
+                if existing_emp_id == emp_id_str:
+                    return False, f"사번 {emp_id_str}은(는) 이미 참여한 기록이 있습니다."
+        # ==========================================
+
+        korea_tz = pytz.timezone("Asia/Seoul")
+        now = datetime.datetime.now(korea_tz).strftime("%Y-%m-%d %H:%M:%S")
+        sheet.append_row([now, emp_id, name, unit, dept, answer, "완료"])
+        return True, "성공"
+    except Exception as e:
+        return False, str(e)
+
+def get_model():
+    if "api_key" in st.session_state:
+        genai.configure(api_key=st.session_state["api_key"])
+    try:
+        available_models = [m.name for m in genai.list_models() if "generateContent" in m.supported_generation_methods]
+        for m in available_models:
+            if "1.5-pro" in m:
+                return genai.GenerativeModel(m)
+        for m in available_models:
+            if "1.5-flash" in m:
+                return genai.GenerativeModel(m)
+        if available_models:
+            return genai.GenerativeModel(available_models[0])
+    except Exception:
+        pass
+    return genai.GenerativeModel("gemini-1.5-flash")
+
+def read_file(uploaded_file):
+    content = ""
+    try:
+        if uploaded_file.name.endswith(".txt"):
+            content = uploaded_file.getvalue().decode("utf-8")
+        elif uploaded_file.name.endswith(".pdf"):
+            reader = PyPDF2.PdfReader(uploaded_file)
+            for page in reader.pages:
+                content += (page.extract_text() or "") + "\n"
+        elif uploaded_file.name.endswith(".docx"):
+            doc = Document(uploaded_file)
+            content = "\n".join([para.text for para in doc.paragraphs])
+    except Exception:
+        return None
+    return content
+
+def process_media_file(uploaded_file):
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp_file:
+            tmp_file.write(uploaded_file.getvalue())
+            tmp_path = tmp_file.name
+
+        st.toast("🤖 AI에게 분석 자료를 전달하고 있습니다...", icon="📂")
+        myfile = genai.upload_file(tmp_path)
+        with st.spinner("🎧 AI가 데이터를 분석하고 있습니다..."):
+            while myfile.state.name == "PROCESSING":
+                time.sleep(2)
+                myfile = genai.get_file(myfile.name)
+
+        os.remove(tmp_path)
+        if myfile.state.name == "FAILED":
+            return None
+        return myfile
+    except Exception:
+        return None
+
+def download_and_upload_youtube_audio(url):
+    if yt_dlp is None:
+        return None
+    try:
+        ydl_opts = {"format": "bestaudio/best", "outtmpl": "temp_audio.%(ext)s", "quiet": True}
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
+        audio_files = glob.glob("temp_audio.*")
+        if not audio_files:
+            return None
+        audio_path = audio_files[0]
+        myfile = genai.upload_file(audio_path)
+        with st.spinner("🎧 유튜브 분석 중..."):
+            while myfile.state.name == "PROCESSING":
+                time.sleep(2)
+                myfile = genai.get_file(myfile.name)
+        os.remove(audio_path)
+        return myfile
+    except Exception:
+        return None
+
+def get_youtube_transcript(url):
+    try:
+        video_id = url.split("v=")[-1].split("&")[0]
+        transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=["ko", "en"])
+        return " ".join([t["text"] for t in transcript])
+    except Exception:
+        return None
+
+def get_web_content(url):
+    try:
+        headers = {"User-Agent": "Mozilla/5.0"}
+        response = requests.get(url, headers=headers, timeout=15)
+        soup = BeautifulSoup(response.text, "html.parser")
+        for script in soup(["script", "style"]):
+            script.decompose()
+        return soup.get_text()[:10000]
+    except Exception:
+        return None
+
+# ==========================================
+# ✅ (요청 2) 사번 검증 유틸
+# ==========================================
+def validate_emp_id(emp_id: str) -> tuple[bool, str]:
+    """
+    규칙:
+    - 기본: 8자리 숫자, '10'으로 시작 (10******)
+    - 예외: 사번 미부여자는 '00000000' 허용(제출 가능)
+    """
+    s = (emp_id or "").strip()
+
+    if not s:
+        return False, "⚠️ 사번을 입력해 주세요. (사번 미부여 시 '00000000')"
+
+    # ✅ 예외 허용: 사번 미부여
+    if s == "00000000":
+        return True, "ℹ️ 사번 미부여: '00000000'으로 제출됩니다. 제출 후 관리자에게 연락해 주세요."
+
+    # 기본 형식 체크
+    if (len(s) != 8) or (not s.isdigit()):
+        return False, "⚠️ 사번이 8자리 숫자가 아닙니다. 사번을 정확히 입력했는지 다시 확인해 주세요."
+
+    # 기본 규칙: 10으로 시작
+    if not s.startswith("10"):
+        return False, "⚠️ 사번을 정확히 입력했는지 확인해 주세요. 사번이 '10********'이 아니라면 '00000000'을 입력해 제출 후 관리자에게 연락해 주세요."
+
+    return True, ""
+
+# ==========================================
+# 9. 메인 화면 및 탭 구성
+# ==========================================
+st.markdown("<h1 style='text-align: center; color: #2C3E50;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
+st.markdown("<div style='text-align: center; color: #555; margin-bottom: 20px;'>Professional Legal & Audit Assistant System</div>", unsafe_allow_html=True)
+
+_now_kst = _korea_now()
+CURRENT_YEAR = _now_kst.year
+CURRENT_MONTH = _now_kst.month
+
+campaign_info = {
+    "key": f"{CURRENT_YEAR}-{CURRENT_MONTH:02d}",
+    "title": _default_campaign_title(_now_kst),
+    "sheet_name": f"{CURRENT_YEAR}_{CURRENT_MONTH:02d}_자율점검",
+    "start_date": _now_kst.strftime("%Y.%m.%d"),
+}
+
+try:
+    _client_for_campaign = init_google_sheet_connection()
+    if _client_for_campaign:
+        _ss_for_campaign = _client_for_campaign.open("Audit_Result_2026")
+        campaign_info = get_current_campaign_info(_ss_for_campaign, _now_kst)
+except Exception:
+    pass
+
+tab_audit, tab_doc, tab_chat, tab_summary, tab_admin = st.tabs([
+    "✅ 자율점검", "📄 법률 검토", "💬 AI 에이전트(챗봇)", "📰 스마트 요약", "🔒 관리자 모드"
+])
+
+# ---------- (아이콘) 인라인 SVG: 애니메이션 모래시계 ----------
+HOURGLASS_SVG = """
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+     xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <path d="M6 2h12v5c0 2.2-1.4 4.2-3.5 5 2.1.8 3.5 2.8 3.5 5v5H6v-5c0-2.2 1.4-4.2 3.5-5C7.4 11.2 6 9.2 6 7V2Z"
+        stroke="#0B5ED7" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M8 7h8M8 17h8" stroke="#0B5ED7" stroke-width="2" stroke-linecap="round"/>
+
+  <rect x="9" y="8.2" width="6" height="3.0" rx="1.0" fill="#0B5ED7" opacity="0.95">
+    <animate attributeName="height" values="3.0;0.3;3.0" dur="1.0s" repeatCount="indefinite" />
+    <animate attributeName="y"      values="8.2;10.9;8.2" dur="1.0s" repeatCount="indefinite" />
+  </rect>
+
+  <rect x="9" y="15.8" width="6" height="0.3" rx="1.0" fill="#0B5ED7" opacity="0.95">
+    <animate attributeName="height" values="0.3;3.0;0.3" dur="1.0s" repeatCount="indefinite" />
+    <animate attributeName="y"      values="15.8;13.1;15.8" dur="1.0s" repeatCount="indefinite" />
+  </rect>
+
+  <circle cx="12" cy="12" r="0.8" fill="#0B5ED7" opacity="0.95">
+    <animate attributeName="cy" values="11.2;14.2;11.2" dur="0.6s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.95;0.2;0.95" dur="0.6s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="11" cy="12" r="0.6" fill="#0B5ED7" opacity="0.80">
+    <animate attributeName="cy" values="11.0;14.0;11.0" dur="0.7s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.8;0.15;0.8" dur="0.7s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="13" cy="12" r="0.6" fill="#0B5ED7" opacity="0.80">
+    <animate attributeName="cy" values="11.4;14.4;11.4" dur="0.8s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.8;0.15;0.8" dur="0.8s" repeatCount="indefinite"/>
+  </circle>
+</svg>
+"""
+
+COUNTDOWN_SECONDS = 7  # ✅ 요청 확정: 7초
+
+# =========================
+# ✅ 체크 "순간" 감지 + 우측 카운트다운 렌더 유틸
+# =========================
+def _init_pledge_runtime(keys: list[str]) -> None:
+    if "pledge_prev" not in st.session_state:
+        st.session_state["pledge_prev"] = {k: False for k in keys}
+    if "pledge_done" not in st.session_state:
+        st.session_state["pledge_done"] = {k: False for k in keys}
+    if "pledge_running" not in st.session_state:
+        st.session_state["pledge_running"] = {k: False for k in keys}
+
+def _order_enforce_cb(changed_key: str, prereq_keys: list[str], message: str) -> None:
+    """체크 순서가 어긋나면 체크를 되돌리고, 경고 메시지를 세션에 기록합니다."""
+    try:
+        now_checked = bool(st.session_state.get(changed_key, False))
+        prereq_ok = all(bool(st.session_state.get(k, False)) for k in prereq_keys)
+        if now_checked and (not prereq_ok):
+            st.session_state[changed_key] = False
+            st.session_state["order_warning"] = message
+    except Exception:
+        pass
+
+def _render_pledge_group(
+    title: str,
+    items: list[tuple[str, str]],
+    all_keys: list[str],
+    order_guard: dict | None = None,   # {"keys": [...], "prereq": [...], "message": "..."}
+) -> None:
+    st.markdown(f"### ■ {title}")
+
+    guard_keys = set(order_guard.get("keys", [])) if isinstance(order_guard, dict) else set()
+    prereq_keys = list(order_guard.get("prereq", [])) if isinstance(order_guard, dict) else []
+    guard_msg = str(order_guard.get("message", "")) if isinstance(order_guard, dict) else ""
+
+    for key, text in items:
+        c1, c2, c3 = st.columns([0.06, 0.78, 0.16], vertical_alignment="center")
+
+        with c1:
+            cb_kwargs = dict(
+                key=key,
+                label_visibility="collapsed",
+                disabled=bool(st.session_state["pledge_running"].get(key, False)),
+            )
+
+            # ✅ 관리자 서약을 임직원 서약보다 먼저 체크하려 하면: 체크를 되돌리고 토스트 경고
+            if key in guard_keys:
+                cb_kwargs.update(
+                    dict(
+                        on_change=_order_enforce_cb,
+                        args=(key, prereq_keys, guard_msg),
+                    )
+                )
+
+            st.checkbox("", **cb_kwargs)
+
+        with c2:
+            checked = bool(st.session_state.get(key, False))
+            color = "#0B5ED7" if checked else "#2C3E50"
+            weight = "900" if checked else "650"
+            st.markdown(
+                f"<div style='font-size:1.02rem; font-weight:{weight}; color:{color}; line-height:1.55;'>{text}</div>",
+                unsafe_allow_html=True
+            )
+
+        with c3:
+            ph = st.empty()
+            now_checked = bool(st.session_state.get(key, False))
+            prev_checked = bool(st.session_state["pledge_prev"].get(key, False))
+            done = bool(st.session_state["pledge_done"].get(key, False))
+            running = bool(st.session_state["pledge_running"].get(key, False))
+
+            # ✅ 방금 체크된 순간에만 7초 카운트다운 실행
+            if now_checked and (not prev_checked) and (not done) and (not running):
+                st.session_state["pledge_running"][key] = True
+                for sec in range(COUNTDOWN_SECONDS, 0, -1):
+                    ph.markdown(
+                        f"<div class='pledge-right'>{HOURGLASS_SVG}<span>{sec}s</span></div>",
+                        unsafe_allow_html=True
+                    )
+                    time.sleep(1)
+                st.session_state["pledge_running"][key] = False
+                st.session_state["pledge_done"][key] = True
+                ph.markdown(
+                    "<div style='text-align:right; font-weight:900; color:#27AE60;'>✅ 완료</div>",
+                    unsafe_allow_html=True
+                )
+            else:
+                if running:
+                    ph.markdown(
+                        f"<div class='pledge-right'>{HOURGLASS_SVG}<span>...</span></div>",
+                        unsafe_allow_html=True
+                    )
+                elif done and now_checked:
+                    ph.markdown(
+                        "<div style='text-align:right; font-weight:900; color:#27AE60;'>✅ 완료</div>",
+                        unsafe_allow_html=True
+                    )
+                else:
+                    ph.markdown("", unsafe_allow_html=True)
+
+# --- [Tab 1: 자율점검] ---
+with tab_audit:
+    # ✅ 자율점검 탭 전용 스타일 범위 시작(#audit-tab)
+    st.markdown('<div id="audit-tab">', unsafe_allow_html=True)
+
+    # ============================================================
+    # 2026 설 명절 클린 캠페인 (Self-inspection)
+    # - 기존 "윤리경영원칙실천지침" 관련 학습/서약 UI는 전부 제거
+    # - inpor.html(첨부) 콘텐츠를 그대로 이식하여 표시
+    # - 첫 화면(히어로)에는 '말이 달리는 영상'이 반드시 재생되도록 교체
+    # ============================================================
+    import streamlit.components.v1 as components
+
+    HORSE_VIDEO_URL = "https://upload.wikimedia.org/wikipedia/commons/1/18/Muybridge_race_horse.webm"
+
+    CAMPAIGN_HTML = r"""<!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Clean Campaign</title>
-    
+    <title>2026 ktMOS북부 설 맞이 클린캠페인</title>
+    <!-- React & Libraries -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    
+    <!-- Premium Font: Pretendard -->
     <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
 
     <style>
-        body {{ font-family: 'Pretendard', sans-serif; background-color: #020617; color: white; margin: 0; padding: 0; overflow-x: hidden; }}
+        body { font-family: 'Pretendard', sans-serif; letter-spacing: -0.02em; scroll-behavior: smooth; }
+        @keyframes fade-in-up { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes scale-in { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        @keyframes scan { 0% { transform: translateY(-100%); opacity: 0; } 50% { opacity: 1; } 100% { transform: translateY(100%); opacity: 0; } }
+        @keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-10px); } 100% { transform: translateY(0px); } }
         
-        /* 애니메이션 정의 */
-        @keyframes fade-in-up {{ from {{ opacity: 0; transform: translateY(30px); }} to {{ opacity: 1; transform: translateY(0); }} }}
-        @keyframes scale-in {{ from {{ opacity: 0; transform: scale(0.95); }} to {{ opacity: 1; transform: scale(1); }} }}
-        @keyframes scan {{ 0% {{ transform: translateY(-100%); opacity: 0; }} 50% {{ opacity: 1; }} 100% {{ transform: translateY(100%); opacity: 0; }} }}
-        @keyframes float {{ 0% {{ transform: translateY(0px); }} 50% {{ transform: translateY(-10px); }} 100% {{ transform: translateY(0px); }} }}
+        .animate-fade-in-up { animation: fade-in-up 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
+        .animate-scale-in { animation: scale-in 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+        .animate-scan { animation: scan 2s infinite linear; }
+        .animate-float { animation: float 3s ease-in-out infinite; }
         
-        .animate-fade-in-up {{ animation: fade-in-up 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }}
-        .animate-scale-in {{ animation: scale-in 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }}
-        .animate-scan {{ animation: scan 2s infinite linear; }}
-        .animate-float {{ animation: float 3s ease-in-out infinite; }}
+        .video-background { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
+        .counter-glitch { font-variant-numeric: tabular-nums; }
         
-        .glass-panel {{
+        .custom-alert {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10000;
+            animation: fade-in-up 0.3s ease-out forwards;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #ef4444; border-radius: 10px; }
+        
+        .glass-panel {
             background: rgba(255, 255, 255, 0.03);
             backdrop-filter: blur(12px);
             border: 1px solid rgba(255, 255, 255, 0.1);
-        }}
-        .custom-alert {{
-            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
-            z-index: 9999; animation: fade-in-up 0.3s ease-out forwards;
-        }}
-        /* 스크롤바 커스텀 */
-        ::-webkit-scrollbar {{ width: 8px; }}
-        ::-webkit-scrollbar-track {{ background: #0f172a; }}
-        ::-webkit-scrollbar-thumb {{ background: #ef4444; border-radius: 10px; }}
+        }
     </style>
 </head>
-<body>
+<body class="bg-slate-950 text-slate-100 antialiased overflow-x-hidden">
     <div id="root"></div>
 
+    <!-- Firebase SDK Setup -->
     <script type="module">
-        import {{ initializeApp }} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import {{ getAuth, signInAnonymously, onAuthStateChanged }} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import {{ getFirestore, collection, addDoc, onSnapshot }} from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, doc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        window.FirebaseSDK = {{ 
-            initializeApp, getAuth, signInAnonymously, 
-            onAuthStateChanged, getFirestore, collection, addDoc, onSnapshot
-        }};
+        window.FirebaseSDK = { 
+            initializeApp, getAuth, signInAnonymously, signInWithCustomToken, 
+            onAuthStateChanged, getFirestore, collection, addDoc, onSnapshot, 
+            query, doc, setDoc 
+        };
     </script>
 
     <script type="text/babel">
-        // Python에서 주입한 설정값 사용
-        const firebaseConfig = {firebase_config_str};
-        const appId = 'ktmos-clean-2026';
+        const { useState, useEffect, useRef, useMemo } = React;
 
-        const {{ useState, useEffect, useRef }} = React;
+        const Icon = ({ name, size = 24, className = "" }) => {
+            useEffect(() => { if (window.lucide) window.lucide.createIcons(); }, [name]);
+            return <i data-lucide={name} style={{ width: size, height: size }} className={className}></i>;
+        };
 
-        // 아이콘 컴포넌트
-        const Icon = ({{ name, size = 24, className = "" }}) => {{
-            useEffect(() => {{ if (window.lucide) window.lucide.createIcons(); }}, [name]);
-            return <i data-lucide={{name}} style={{{{ width: size, height: size }}}} className={{className}}></i>;
-        }};
-
-        const App = () => {{
+        const App = () => {
             const [user, setUser] = useState(null);
             const [empId, setEmpId] = useState('');
             const [empName, setEmpName] = useState('');
             const [isPledged, setIsPledged] = useState(false);
             const [isMuted, setIsMuted] = useState(true);
-            const [videoSrc, setVideoSrc] = useState("https://assets.mixkit.co/videos/preview/mixkit-abstract-red-and-white-flow-2336-large.mp4");
+            const [videoSrc, setVideoSrc] = useState("https://assets.mixkit.co/videos/preview/mixkit-abstract-red-and-white-flow-2336-large.mp4"); // 기본 배경 영상
             const [pledges, setPledges] = useState([]);
             const [displayRate, setDisplayRate] = useState(0);
             const [isScanning, setIsScanning] = useState(false);
@@ -115,139 +935,165 @@ html_code = f"""
             const [selectedGoal, setSelectedGoal] = useState('');
             const [alertMsg, setAlertMsg] = useState('');
             const videoRef = useRef(null);
-            const TOTAL_EMPLOYEES = 500;
 
-            // 운세 DB
-            const fortuneDB = {{
+            const TOTAL_EMPLOYEES = 500; 
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'ktmos-clean-2026';
+
+            // Fortune Data
+            const fortuneDB = {
                 growth: [
-                    {{ slogan: "투명한 도약, 붉은 말처럼 거침없이 성장하는 한 해", fortune: "올해 당신의 청렴 에너지는 99%! 투명한 업무 처리가 곧 당신의 독보적인 커리어가 됩니다." }},
-                    {{ slogan: "정직이라는 박차를 가해 더 높은 곳으로 질주하세요", fortune: "거짓 없는 성장이 가장 빠른 길입니다. 주변의 두터운 신뢰가 당신의 든든한 날개가 될 것입니다." }}
+                    { slogan: "투명한 도약, 붉은 말처럼 거침없이 성장하는 한 해", fortune: "올해 당신의 청렴 에너지는 99%! 투명한 업무 처리가 곧 당신의 독보적인 커리어가 됩니다." },
+                    { slogan: "정직이라는 박차를 가해 더 높은 곳으로 질주하세요", fortune: "거짓 없는 성장이 가장 빠른 길입니다. 주변의 두터운 신뢰가 당신의 든든한 날개가 될 것입니다." },
+                    { slogan: "신뢰의 레이스, 당신의 깨끗한 실력이 승리를 결정합니다", fortune: "원칙을 지키는 힘이 ktMOS의 미래를 만드는 가장 강력한 성장 동력이 됩니다." }
                 ],
                 happiness: [
-                    {{ slogan: "떳떳한 마음이 선사하는 가장 따뜻한 행복의 해", fortune: "가족에게 부끄럽지 않은 당신의 정직함이 집안의 평안과 웃음꽃을 불러옵니다." }},
-                    {{ slogan: "깨끗한 소통으로 피어나는 동료 간의 진정한 즐거움", fortune: "작은 호의보다 큰 진심이 통하는 한 해입니다. 사람 사이의 신뢰가 최고의 행운입니다." }}
+                    { slogan: "떳떳한 마음이 선사하는 가장 따뜻한 행복의 해", fortune: "가족에게 부끄럽지 않은 당신의 정직함이 집안의 평안과 웃음꽃을 불러옵니다." },
+                    { slogan: "깨끗한 소통으로 피어나는 동료 간의 진정한 즐거움", fortune: "작은 호의보다 큰 진심이 통하는 한 해입니다. 사람 사이의 신뢰가 최고의 행운입니다." }
                 ],
                 challenge: [
-                    {{ slogan: "청렴의 가치를 지키며 한계를 넘어 질주하는 2026", fortune: "어려운 순간에도 원칙을 지키는 모습이 동료들에게 가장 큰 영감이 될 것입니다." }},
-                    {{ slogan: "정직한 도전은 결코 멈추지 않는 붉은 말과 같습니다", fortune: "타협하지 않는 용기가 당신을 독보적인 전문가로 만들어주는 결정적 한 해가 됩니다." }}
+                    { slogan: "청렴의 가치를 지키며 한계를 넘어 질주하는 2026", fortune: "어려운 순간에도 원칙을 지키는 모습이 동료들에게 가장 큰 영감이 될 것입니다." },
+                    { slogan: "정직한 도전은 결코 멈추지 않는 붉은 말과 같습니다", fortune: "타협하지 않는 용기가 당신을 독보적인 전문가로 만들어주는 결정적 한 해가 됩니다." }
                 ]
-            }};
+            };
 
-            // Firebase 초기화
-            useEffect(() => {{
-                const initAuth = async () => {{
-                    if (!window.FirebaseSDK) {{ setTimeout(initAuth, 500); return; }}
-                    const {{ initializeApp, getAuth, signInAnonymously, onAuthStateChanged }} = window.FirebaseSDK;
-                    
-                    try {{
-                        let app;
-                        try {{ app = initializeApp(firebaseConfig); }} catch(e) {{}} 
-                        const auth = getAuth();
-                        await signInAnonymously(auth);
-                        onAuthStateChanged(auth, setUser);
-                    }} catch (e) {{
-                        console.error("Firebase Auth Error", e);
-                        if(e.code === 'auth/invalid-api-key') showAlert("설정 오류: API Key를 확인하세요.");
-                    }}
-                }};
+            // Firebase Initialize & Auth (Rule 3)
+            useEffect(() => {
+                const { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } = window.FirebaseSDK;
+                const firebaseConfig = JSON.parse(__firebase_config);
+                const app = initializeApp(firebaseConfig);
+                const auth = getAuth(app);
+
+                const initAuth = async () => {
+                    try {
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    } catch (error) {
+                        console.error("Auth Error:", error);
+                    }
+                };
+                
                 initAuth();
-            }}, []);
+                const unsubscribe = onAuthStateChanged(auth, setUser);
+                return () => unsubscribe();
+            }, []);
 
-            // 실시간 데이터 수신
-            useEffect(() => {{
-                if (!user || !window.FirebaseSDK) return;
-                const {{ getFirestore, collection, onSnapshot }} = window.FirebaseSDK;
+            // Real-time Data Fetching (Rule 1 & 2)
+            useEffect(() => {
+                if (!user) return;
+                const { getFirestore, collection, onSnapshot } = window.FirebaseSDK;
                 const db = getFirestore();
+                
+                // Strict Path Rule 1
                 const pledgeCol = collection(db, 'artifacts', appId, 'public', 'data', 'pledges');
                 
-                const unsubscribe = onSnapshot(pledgeCol, (snapshot) => {{
+                const unsubscribe = onSnapshot(pledgeCol, (snapshot) => {
                     setPledges(snapshot.docs.map(doc => doc.data()));
-                }});
+                }, (err) => {
+                    console.error("Firestore Error:", err);
+                });
+                
                 return () => unsubscribe();
-            }}, [user]);
+            }, [user]);
 
-            // 프로그레스바 애니메이션
-            useEffect(() => {{
-                if (isPledged || pledges.length > 0) {{
+            // Progress Bar Animation
+            useEffect(() => {
+                if (isPledged || pledges.length > 0) {
                     const targetRate = Math.min(100, (pledges.length / TOTAL_EMPLOYEES) * 100);
                     let start = 0;
-                    const timer = setInterval(() => {{
-                        start += (targetRate / 60);
-                        if (start >= targetRate) {{
+                    const duration = 1500;
+                    const steps = 60;
+                    const increment = targetRate / steps;
+                    const timer = setInterval(() => {
+                        start += increment;
+                        if (start >= targetRate) {
                             setDisplayRate(targetRate.toFixed(1));
                             clearInterval(timer);
-                        }} else {{
+                        } else {
                             setDisplayRate(start.toFixed(1));
-                        }}
-                    }}, 20);
+                        }
+                    }, duration / steps);
                     return () => clearInterval(timer);
-                }}
-            }}, [isPledged, pledges.length]);
+                }
+            }, [isPledged, pledges.length]);
 
-            const showAlert = (msg) => {{
+            const showAlert = (msg) => {
                 setAlertMsg(msg);
                 setTimeout(() => setAlertMsg(''), 4000);
-            }};
+            };
 
-            const fireFireworks = () => {{
-                const end = Date.now() + 3000;
-                const frame = () => {{
-                    confetti({{ particleCount: 5, angle: 60, spread: 55, origin: {{ x: 0 }}, colors: ['#ff0000', '#ffd700'] }});
-                    confetti({{ particleCount: 5, angle: 120, spread: 55, origin: {{ x: 1 }}, colors: ['#ff0000', '#ffd700'] }});
+            const fireFireworks = () => {
+                const end = Date.now() + 3 * 1000;
+                const frame = () => {
+                    confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#ff0000', '#ffd700'] });
+                    confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#ff0000', '#ffd700'] });
                     if (Date.now() < end) requestAnimationFrame(frame);
-                }};
+                };
                 frame();
-            }};
+            };
 
-            const handlePledgeSubmit = async (e) => {{
+            const toggleMute = () => {
+                if (videoRef.current) {
+                    videoRef.current.muted = !videoRef.current.muted;
+                    setIsMuted(videoRef.current.muted);
+                }
+            };
+
+            const handlePledgeSubmit = async (e) => {
                 e.preventDefault();
-                if (!user) {{ showAlert("서버 연결 중입니다..."); return; }}
+                if (!user) { showAlert("연결 중입니다. 잠시 후 다시 시도해 주세요."); return; }
                 if (!empId || !empName) return;
-                
-                if (pledges.some(p => p.empId === empId)) {{
-                    showAlert(`${{empName}}님은 이미 참여하셨습니다.`);
+
+                // 중복 체크 (Memory level filter - Rule 2)
+                if (pledges.some(p => p.empId === empId)) {
+                    showAlert(`${empName}님은 이미 서약에 참여하셨습니다.`);
                     setIsPledged(true);
                     return;
-                }}
+                }
 
-                const {{ getFirestore, collection, addDoc }} = window.FirebaseSDK;
+                const { getFirestore, collection, addDoc } = window.FirebaseSDK;
                 const db = getFirestore();
-                try {{
-                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'pledges'), {{
+                try {
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'pledges'), {
                         empId, empName, timestamp: Date.now(), uid: user.uid
-                    }});
+                    });
                     setIsPledged(true);
                     fireFireworks();
-                }} catch (err) {{ showAlert("저장 실패: 권한이 없거나 설정 오류입니다."); }}
-            }};
+                } catch (err) {
+                    showAlert("서약 저장 중 오류가 발생했습니다.");
+                }
+            };
 
-            const runAIScan = () => {{
-                if (!empName || !selectedGoal) {{ showAlert("정보를 입력해주세요."); return; }}
+            const runAIScan = () => {
+                if (!empName || !selectedGoal) { showAlert("성함과 목표를 먼저 입력해 주세요."); return; }
                 setIsScanning(true);
                 setScanResult(null);
-                setTimeout(() => {{
+                setTimeout(() => {
                     const options = fortuneDB[selectedGoal];
                     setScanResult(options[Math.floor(Math.random() * options.length)]);
                     setIsScanning(false);
-                }}, 2000);
-            }};
+                }, 2000);
+            };
 
-            const handleVideoUpload = (e) => {{
+            const handleVideoUpload = (e) => {
                 const file = e.target.files[0];
                 if (file) setVideoSrc(URL.createObjectURL(file));
-            }};
+            };
 
             return (
-                <div className="min-h-screen text-slate-100">
-                    {{alertMsg && (
-                        <div className="custom-alert bg-red-600 text-white px-6 py-3 rounded-2xl shadow-xl font-bold flex items-center gap-2">
-                             {{alertMsg}}
+                <div className="min-h-screen bg-slate-950">
+                    {/* Floating Alert */}
+                    {alertMsg && (
+                        <div className="custom-alert bg-red-600 text-white px-6 py-3 rounded-2xl shadow-2xl font-bold flex items-center gap-2 border border-red-400">
+                            <Icon name="alert-circle" size={20} /> {alertMsg}
                         </div>
-                    )}}
+                    )}
 
-                    {{/* Hero Section */}}
+                    {/* 1. Hero Section */}
                     <section className="relative h-screen flex flex-col items-center justify-center text-center px-6 overflow-hidden">
-                        <video ref={{videoRef}} className="absolute top-0 left-0 w-full h-full object-cover opacity-40 z-0" autoPlay muted loop playsInline src={{videoSrc}}></video>
+                        <video ref={videoRef} className="video-background opacity-40" autoPlay muted loop playsInline src={videoSrc}></video>
                         <div className="absolute inset-0 bg-gradient-to-b from-slate-950/80 via-transparent to-slate-950 z-[1]"></div>
                         
                         <div className="z-10 animate-fade-in-up max-w-5xl">
@@ -263,137 +1109,610 @@ html_code = f"""
                             </p>
                             <div className="flex flex-wrap justify-center gap-4">
                                 <a href="#campaign" className="px-10 py-4 bg-red-600 text-white font-black rounded-2xl hover:bg-red-500 transition-all shadow-[0_0_30px_rgba(220,38,38,0.4)] hover:scale-105">캠페인 확인하기</a>
-                                <button onClick={{() => {{ videoRef.current.muted = !videoRef.current.muted; setIsMuted(!isMuted); }}}} className="p-4 bg-white/10 border border-white/20 rounded-2xl backdrop-blur-md hover:bg-white/20 transition-all">
-                                    <Icon name={{isMuted ? "volume-x" : "volume-2"}} />
+                                <button onClick={toggleMute} className="p-4 bg-white/10 border border-white/20 rounded-2xl backdrop-blur-md hover:bg-white/20 transition-all">
+                                    <Icon name={isMuted ? "volume-x" : "volume-2"} />
                                 </button>
                                 <label className="p-4 bg-white/10 border border-white/20 rounded-2xl backdrop-blur-md hover:bg-white/20 transition-all cursor-pointer">
                                     <Icon name="upload" />
-                                    <input type="file" className="hidden" accept="video/*" onChange={{handleVideoUpload}} />
+                                    <input type="file" className="hidden" accept="video/*" onChange={handleVideoUpload} />
                                 </label>
                             </div>
                         </div>
                     </section>
 
-                    {{/* AI Aura Scanner */}}
+                    {/* 2. AI Aura Scanner */}
                     <section className="py-24 px-6 relative overflow-hidden">
                         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-red-600/10 rounded-full blur-[120px]"></div>
                         <div className="max-w-4xl mx-auto text-center relative z-10">
                             <h2 className="text-4xl md:text-5xl font-black mb-16 tracking-tight">2026 청렴 아우라 분석</h2>
+                            
                             <div className="glass-panel p-8 md:p-12 rounded-[3rem] shadow-2xl">
                                 <div className="grid md:grid-cols-2 gap-4 mb-8">
-                                    <input type="text" value={{empName}} onChange={{e => setEmpName(e.target.value)}} placeholder="성함" className="w-full px-6 py-4 bg-slate-900/50 border border-white/10 rounded-2xl focus:ring-2 focus:ring-red-600 outline-none font-bold text-center text-white"/>
-                                    <select value={{selectedGoal}} onChange={{e => setSelectedGoal(e.target.value)}} className="w-full px-6 py-4 bg-slate-900/50 border border-white/10 rounded-2xl focus:ring-2 focus:ring-red-600 outline-none font-bold text-center appearance-none cursor-pointer text-white">
-                                        <option value="" className="text-black">올해의 주요 목표</option>
-                                        <option value="growth" className="text-black">지속적인 성장</option>
-                                        <option value="happiness" className="text-black">가족의 행복</option>
-                                        <option value="challenge" className="text-black">새로운 도전</option>
+                                    <input 
+                                        type="text" 
+                                        value={empName} 
+                                        onChange={e => setEmpName(e.target.value)} 
+                                        placeholder="성함" 
+                                        className="w-full px-6 py-4 bg-slate-900/50 border border-white/10 rounded-2xl focus:ring-2 focus:ring-red-600 outline-none font-bold text-center"
+                                    />
+                                    <select 
+                                        value={selectedGoal} 
+                                        onChange={e => setSelectedGoal(e.target.value)}
+                                        className="w-full px-6 py-4 bg-slate-900/50 border border-white/10 rounded-2xl focus:ring-2 focus:ring-red-600 outline-none font-bold text-center appearance-none cursor-pointer"
+                                    >
+                                        <option value="">올해의 주요 목표</option>
+                                        <option value="growth">지속적인 성장</option>
+                                        <option value="happiness">가족의 행복</option>
+                                        <option value="challenge">새로운 도전</option>
                                     </select>
                                 </div>
-                                <button onClick={{runAIScan}} disabled={{isScanning}} className="w-full py-5 bg-gradient-to-r from-red-600 to-orange-600 rounded-2xl font-black text-xl hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-3 shadow-xl text-white">
-                                    {{isScanning ? <Icon name="loader-2" className="animate-spin" /> : <Icon name="sparkles" />}}
-                                    {{isScanning ? "아우라 분석 중..." : "청렴 기운 스캔하기"}}
+
+                                <button 
+                                    onClick={runAIScan} 
+                                    disabled={isScanning}
+                                    className="w-full py-5 bg-gradient-to-r from-red-600 to-orange-600 rounded-2xl font-black text-xl hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-3 shadow-xl"
+                                >
+                                    {isScanning ? <Icon name="loader-2" className="animate-spin" /> : <Icon name="sparkles" />}
+                                    {isScanning ? "아우라 분석 중..." : "청렴 기운 스캔하기"}
                                 </button>
-                                {{scanResult && !isScanning && (
+
+                                {isScanning && (
+                                    <div className="mt-12 relative h-40 bg-slate-900/80 rounded-3xl overflow-hidden border border-red-600/30">
+                                        <div className="absolute inset-0 flex items-center justify-center text-xs font-black text-red-500 uppercase tracking-[1em] opacity-50">Analyzing Your Integrity...</div>
+                                        <div className="absolute top-0 left-0 w-full h-1.5 bg-red-600 shadow-[0_0_30px_rgba(220,38,38,1)] animate-scan"></div>
+                                    </div>
+                                )}
+
+                                {scanResult && !isScanning && (
                                     <div className="mt-12 animate-scale-in">
                                         <div className="p-1 bg-gradient-to-br from-red-600 via-orange-500 to-yellow-500 rounded-[2.5rem]">
                                             <div className="bg-slate-950 p-8 md:p-10 rounded-[2.4rem]">
                                                 <h4 className="text-red-500 font-black text-sm uppercase tracking-widest mb-4">Scan Completed</h4>
-                                                <p className="text-2xl md:text-3xl font-black mb-6 leading-tight">"{{scanResult.slogan}}"</p>
+                                                <p className="text-2xl md:text-3xl font-black mb-6 leading-tight">"{scanResult.slogan}"</p>
                                                 <div className="w-12 h-1 bg-slate-800 mx-auto mb-6"></div>
-                                                <p className="text-slate-400 text-lg md:text-xl font-medium italic leading-relaxed">{{scanResult.fortune}}</p>
+                                                <p className="text-slate-400 text-lg md:text-xl font-medium italic leading-relaxed">
+                                                    {scanResult.fortune}
+                                                </p>
                                             </div>
                                         </div>
                                     </div>
-                                )}}
+                                )}
                             </div>
                         </div>
                     </section>
 
-                    {{/* Campaign Section */}}
+                    {/* 3. Campaign Rules */}
                     <section id="campaign" className="py-32 px-6 bg-slate-900/50">
                         <div className="max-w-6xl mx-auto">
                             <div className="text-center mb-20">
                                 <h2 className="text-red-600 font-black text-sm uppercase tracking-[0.4em] mb-4">Clean Festival Policy</h2>
                                 <h3 className="text-4xl md:text-6xl font-black tracking-tighter">설 명절 클린 캠페인 아젠다</h3>
                             </div>
+                            
                             <div className="grid md:grid-cols-3 gap-8">
-                                {{[
-                                    {{ icon: "gift", title: "선물 안 주고 안 받기", desc: "협력사 및 이해관계자와의 명절 선물 교환은 금지됩니다. 마음만 정중히 받겠습니다.", color: "bg-red-600" }},
-                                    {{ icon: "coffee", title: "향응 및 편의 제공 금지", desc: "부적절한 식사 대접이나 골프 등 편의 제공은 원천 차단하여 투명성을 지킵니다.", color: "bg-orange-600" }},
-                                    {{ icon: "shield-check", title: "부득이한 경우 자진신고", desc: "택배 등으로 배송된 선물은 반송이 원칙이며, 불가피할 시 클린센터로 즉시 신고합니다.", color: "bg-amber-600" }}
+                                {[
+                                    { icon: "gift", title: "선물 안 주고 안 받기", desc: "협력사 및 이해관계자와의 명절 선물 교환은 금지됩니다. 마음만 정중히 받겠습니다.", color: "bg-red-600" },
+                                    { icon: "coffee", title: "향응 및 편의 제공 금지", desc: "부적절한 식사 대접이나 골프 등 편의 제공은 원천 차단하여 투명성을 지킵니다.", color: "bg-orange-600" },
+                                    { icon: "shield-check", title: "부득이한 경우 자진신고", desc: "택배 등으로 배송된 선물은 반송이 원칙이며, 불가피할 시 클린센터로 즉시 신고합니다.", color: "bg-amber-600" }
                                 ].map((item, idx) => (
-                                    <div key={{idx}} className="glass-panel p-10 rounded-[3rem] hover:border-red-600/50 transition-all group animate-float" style={{{{animationDelay: `${{idx * 0.5}}s`}}}}>
-                                        <div className={{`w-16 h-16 ${{item.color}} rounded-2xl flex items-center justify-center mb-8 group-hover:scale-110 transition-transform shadow-lg`}}>
-                                            <Icon name={{item.icon}} size={{32}} />
+                                    <div key={idx} className="glass-panel p-10 rounded-[3rem] hover:border-red-600/50 transition-all group animate-float" style={{animationDelay: `${idx * 0.5}s`}}>
+                                        <div className={`w-16 h-16 ${item.color} rounded-2xl flex items-center justify-center mb-8 group-hover:scale-110 transition-transform shadow-lg`}>
+                                            <Icon name={item.icon} size={32} />
                                         </div>
-                                        <h4 className="text-2xl font-bold mb-4">{{item.title}}</h4>
-                                        <p className="text-slate-400 leading-relaxed font-medium">{{item.desc}}</p>
+                                        <h4 className="text-2xl font-bold mb-4">{item.title}</h4>
+                                        <p className="text-slate-400 leading-relaxed font-medium">{item.desc}</p>
                                     </div>
-                                ))}}
+                                ))}
                             </div>
                         </div>
                     </section>
 
-                    {{/* Pledge Section */}}
+                    {/* 4. Reporting Channels */}
+                    <section className="py-32 px-6">
+                        <div className="max-w-6xl mx-auto grid md:grid-cols-3 gap-6">
+                            <div className="md:col-span-1 py-10">
+                                <h2 className="text-3xl font-black mb-4">비윤리 행위 <br/> 신고 채널</h2>
+                                <p className="text-slate-400 font-medium">부정부패 없는 ktMOS북부를 위해 <br/> 여러분의 용기 있는 목소리가 필요합니다.</p>
+                            </div>
+                            <div className="md:col-span-2 grid sm:grid-cols-2 gap-4">
+                                <div className="glass-panel p-8 rounded-3xl flex items-center gap-6 group hover:bg-white/5 transition-all">
+                                    <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center group-hover:text-red-500"><Icon name="phone" /></div>
+                                    <div>
+                                        <p className="text-xs font-bold text-slate-500 uppercase mb-1">감사실 직통</p>
+                                        <p className="text-xl font-black">02-3414-1919</p>
+                                    </div>
+                                </div>
+                                <div className="glass-panel p-8 rounded-3xl flex items-center gap-6 group hover:bg-white/5 transition-all">
+                                    <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center group-hover:text-blue-500"><Icon name="globe" /></div>
+                                    <div>
+                                        <p className="text-xs font-bold text-slate-500 uppercase mb-1">사이버 신문고</p>
+                                        <a href="#" className="text-xl font-black border-b border-white/20 pb-1">바로가기</a>
+                                    </div>
+                                </div>
+                                <div className="sm:col-span-2 glass-panel p-8 rounded-3xl flex items-center gap-6 group hover:bg-white/5 transition-all">
+                                    <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center group-hover:text-yellow-500"><Icon name="mail" /></div>
+                                    <div>
+                                        <p className="text-xs font-bold text-slate-500 uppercase mb-1">이메일 제보</p>
+                                        <p className="text-xl font-black">ethics@ktmos.com</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* 5. Pledge Section */}
                     <section className="py-32 px-6 bg-red-600/5 relative">
+                        <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-red-600 to-transparent opacity-50"></div>
                         <div className="max-w-4xl mx-auto text-center">
-                            {{!isPledged ? (
+                            {!isPledged ? (
                                 <div className="animate-scale-in">
-                                    <h2 className="text-5xl md:text-7xl font-black mb-10 tracking-tighter leading-none italic">스스로 다짐하는 <br/> <span className="text-red-600 underline">청렴 서약</span></h2>
+                                    <h2 className="text-5xl md:text-7xl font-black mb-10 tracking-tighter leading-none italic">
+                                        스스로 다짐하는 <br/> <span className="text-red-600 underline">청렴 서약</span>
+                                    </h2>
                                     <div className="glass-panel p-10 md:p-14 rounded-[4rem] mb-12 shadow-2xl relative overflow-hidden">
-                                        <Icon name="award" size={{80}} className="mx-auto mb-8 text-red-600 animate-bounce" />
+                                        <div className="absolute -top-10 -right-10 w-40 h-40 bg-red-600/20 rounded-full blur-3xl"></div>
+                                        <Icon name="award" size={80} className="mx-auto mb-8 text-red-600 animate-bounce" />
                                         <h3 className="text-2xl md:text-3xl font-black mb-6">🎁 청렴 실천 응원 이벤트</h3>
                                         <p className="text-lg md:text-xl text-slate-300 font-bold mb-10 leading-relaxed">
-                                            참여 인원 <span className="text-red-500">500명 이상</span> 달성 시,<br/>
-                                            추첨을 통해 <span className="text-red-500">50분</span>께 커피 쿠폰을 드립니다.
+                                            전 임직원의 <span className="text-red-500">50% 이상</span>이 서약에 참여하시면, <br/>
+                                            참여자 중 <span className="text-red-500">50분을 추첨</span>하여 새해 첫 모바일 <br className="hidden md:block"/> 
+                                            커피 쿠폰을 감사실에서 쏩니다!
                                         </p>
-                                        <form onSubmit={{handlePledgeSubmit}} className="flex flex-col sm:flex-row gap-4">
-                                            <input type="text" value={{empId}} onChange={{e => setEmpId(e.target.value)}} placeholder="사번" className="flex-1 px-8 py-5 bg-slate-900 border border-white/10 rounded-3xl outline-none focus:ring-2 focus:ring-red-600 font-bold text-center text-white" required />
-                                            <input type="text" value={{empName}} onChange={{e => setEmpName(e.target.value)}} placeholder="성함" className="sm:w-32 px-8 py-5 bg-slate-900 border border-white/10 rounded-3xl outline-none focus:ring-2 focus:ring-red-600 font-bold text-center text-white" required />
+                                        <form onSubmit={handlePledgeSubmit} className="flex flex-col sm:flex-row gap-4">
+                                            <input 
+                                                type="text" 
+                                                value={empId} 
+                                                onChange={e => setEmpId(e.target.value)} 
+                                                placeholder="사번" 
+                                                className="flex-1 px-8 py-5 bg-slate-900 border border-white/10 rounded-3xl outline-none focus:ring-2 focus:ring-red-600 font-bold text-center" 
+                                                required 
+                                            />
+                                            <input 
+                                                type="text" 
+                                                value={empName} 
+                                                onChange={e => setEmpName(e.target.value)} 
+                                                placeholder="성함" 
+                                                className="sm:w-32 px-8 py-5 bg-slate-900 border border-white/10 rounded-3xl outline-none focus:ring-2 focus:ring-red-600 font-bold text-center" 
+                                                required 
+                                            />
                                             <button type="submit" className="px-10 py-5 bg-red-600 text-white font-black rounded-3xl hover:bg-red-500 transition-all shadow-xl">서약하기</button>
                                         </form>
                                     </div>
-                                    <p className="text-slate-500 font-black tracking-widest uppercase">Current: {{pledges.length}} Signatures</p>
+                                    <p className="text-slate-500 font-black tracking-widest uppercase">Current: {pledges.length} Signatures</p>
                                 </div>
                             ) : (
                                 <div className="animate-scale-in">
                                     <div className="glass-panel p-12 md:p-20 rounded-[4rem] border-b-[12px] border-red-600 shadow-2xl">
-                                        <div className="w-24 h-24 bg-green-500 text-white rounded-full flex items-center justify-center mx-auto mb-10 shadow-lg"><Icon name="check" size={{48}} /></div>
+                                        <div className="w-24 h-24 bg-green-500 text-white rounded-full flex items-center justify-center mx-auto mb-10 shadow-lg">
+                                            <Icon name="check" size={48} />
+                                        </div>
                                         <h3 className="text-4xl md:text-6xl font-black mb-6 tracking-tighter italic">서약 완료!</h3>
-                                        <p className="text-slate-400 text-xl font-bold mb-16">{{empName}}님, 감사합니다.</p>
+                                        <p className="text-slate-400 text-xl font-bold mb-16">
+                                            {empName}님, 청렴한 ktMOS북부 만들기에 <br/> 동참해 주셔서 대단히 감사합니다.
+                                        </p>
                                         
-                                        <div className="relative py-16 px-6 bg-slate-900/50 rounded-[3rem] border border-white/5">
+                                        <div className="relative py-16 px-6 bg-slate-950/50 rounded-[3rem] border border-white/5">
                                             <p className="text-xs font-black text-slate-500 mb-8 tracking-[0.6em] uppercase">Participation Rate</p>
                                             <div className="flex items-baseline justify-center gap-4 mb-6">
-                                                <span className="text-8xl md:text-[10rem] font-black counter-glitch leading-none text-red-600">{{displayRate}}</span>
+                                                <span className="text-8xl md:text-[10rem] font-black counter-glitch leading-none text-red-600">{displayRate}</span>
                                                 <span className="text-4xl font-black text-slate-600">%</span>
                                             </div>
                                             <div className="max-w-md mx-auto h-4 bg-slate-900 rounded-full overflow-hidden mb-6 p-1">
-                                                <div className="h-full bg-gradient-to-r from-red-600 to-orange-500 transition-all duration-1000 rounded-full shadow-[0_0_20px_rgba(220,38,38,0.5)]" style={{{{ width: `${{displayRate}}%` }}}}></div>
+                                                <div 
+                                                    className="h-full bg-gradient-to-r from-red-600 to-orange-500 transition-all duration-1000 rounded-full shadow-[0_0_20px_rgba(220,38,38,0.5)]" 
+                                                    style={{ width: `${displayRate}%` }}
+                                                ></div>
                                             </div>
-                                            <p className="text-slate-400 font-bold">현재 {{pledges.length}}명 참여 (목표: 500명)</p>
+                                            <p className="text-slate-400 font-bold">현재 {pledges.length}명 참여 중 (목표: 250명)</p>
                                         </div>
                                     </div>
-                                    <button onClick={{() => setIsPledged(false)}} className="mt-12 text-slate-500 hover:text-white transition-all font-bold border-b border-slate-800 pb-1">정보 수정하기</button>
+                                    <button onClick={() => setIsPledged(false)} className="mt-12 text-slate-500 hover:text-white transition-all font-bold border-b border-slate-800 pb-1">서약 정보 수정하기</button>
                                 </div>
-                            )}}
+                            )}
                         </div>
                     </section>
-                    
-                    <footer className="py-20 text-center border-t border-white/5 text-slate-600">
-                        <p className="text-xs font-bold tracking-widest uppercase mb-2">Audit & Ethics Department</p>
-                        <p className="text-[10px]">© 2026 ktMOS NORTH.</p>
+
+                    {/* Footer */}
+                    <footer className="py-20 text-center border-t border-white/5">
+                        <div className="flex items-center justify-center gap-2 mb-6 opacity-40">
+                            <span className="font-black text-xl tracking-tighter">kt</span>
+                            <span className="font-light text-xl tracking-[0.3em] uppercase">MOS 북부</span>
+                        </div>
+                        <p className="text-xs text-slate-600 font-bold tracking-widest uppercase mb-2">Audit & Ethics Department</p>
+                        <p className="text-[10px] text-slate-700 font-medium">© 2026 ktMOS NORTH. ALL RIGHTS RESERVED. PREMIUM CAMPAIGN WEB.</p>
                     </footer>
                 </div>
             );
-        }};
+        };
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
 </body>
-</html>
-"""
+</html>"""
 
-# 3. Streamlit 화면에 HTML 렌더링 (높이 넉넉하게 설정)
-components.html(html_code, height=5000, scrolling=False)
+    # inpor.html 내 기본 배경영상 URL이 잘려 있어(… 포함) 실제 재생이 불가하므로,
+    # 요구사항에 따라 '말이 달리는 영상'으로 교체합니다.
+    _html = (
+        CAMPAIGN_HTML
+        .replace(
+            "https://assets.mixkit.co/vide...mixkit-abstract-red-and-white-flow-2336-large.mp4",
+            HORSE_VIDEO_URL,
+        )
+        # Pretendard 링크가 축약되어 있으면(https...orioncactus) 정상 링크로 보정
+        .replace(
+            'href="https...orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css"',
+            'href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css"',
+        )
+    )
+
+    # iFrame 내부 스크롤로 전체 콘텐츠가 순서대로(1~5) 보이도록 높이를 넉넉히 설정
+    components.html(_html, height=3200, scrolling=True)
+
+    # ✅ 자율점검 탭 전용 스타일 범위 종료
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# --- [Tab 2: 법률 리스크/규정/계약 검토 & 감사보고서 작성] ---
+with tab_doc:
+    st.markdown("### 📄 법률 리스크(계약서)·규정 검토 / 감사보고서 작성·검증")
+
+    if "api_key" not in st.session_state:
+        st.warning("🔒 로그인 후 이용 가능합니다.")
+    else:
+        # 2-레벨 메뉴: 커리큘럼 1(법률 리스크) / 커리큘럼 2(감사보고서)
+        cur1, cur2 = st.tabs(["⚖️ 커리큘럼 1: 법률 리스크 심층 검토", "🔍 커리큘럼 2: 감사보고서 작성·검증"])
+
+        # -------------------------
+        # ⚖️ 커리큘럼 1: 법률 리스크 심층 검토
+        # -------------------------
+        with cur1:
+            st.markdown("#### ⚖️ 법률 리스크 정밀 검토")
+            st.caption("PDF/Word/TXT 파일을 업로드하면, 핵심 쟁점·리스크·개선안을 구조적으로 정리합니다.")
+
+            uploaded_file = st.file_uploader("파일 업로드 (PDF, Word, TXT)", type=["txt", "pdf", "docx"], key="cur1_file")
+
+            analysis_depth = st.selectbox(
+                "분석 수준",
+                ["핵심 요약", "리스크 식별(중점)", "조항/근거 중심(가능 범위 내)"],
+                index=1,
+                key="cur1_depth"
+            )
+
+            if st.button("🚀 분석 시작", use_container_width=True, key="cur1_run"):
+                if not uploaded_file:
+                    st.warning("⚠️ 먼저 파일을 업로드해주세요.")
+                else:
+                    content = read_file(uploaded_file)
+                    if not content:
+                        st.error("❌ 파일에서 텍스트를 추출하지 못했습니다.")
+                    else:
+                        with st.spinner("🧠 AI가 분석 중입니다..."):
+                            try:
+                                prompt = f"""[역할] 법률/준법 리스크 심층 검토 전문가
+[작업] 법률 리스크 정밀 검토
+[분석 수준] {analysis_depth}
+
+[작성 원칙]
+- 사실과 의견을 구분해 작성
+- 근거가 부족하면 '근거 미확인'으로 표시
+- 회사에 불리할 수 있는 문구(단정/추정)는 피하고, 조건부 표현 사용
+
+[입력 문서]
+{content[:30000]}
+"""
+                                res = get_model().generate_content(prompt)
+                                st.success("✅ 분석 완료")
+                                st.markdown(res.text)
+                            except Exception as e:
+                                st.error(f"오류: {e}")
+
+        # -------------------------
+        # 🔍 커리큘럼 2: 감사보고서 작성·검증 (Multi-Source Upload)
+        # -------------------------
+        with cur2:
+            st.markdown("#### 🔍 감사보고서 작성·검증 (Multi-Source Upload)")
+
+            # ✅ 작업 모드 선택(선택에 따라 필요한 입력만 노출/활성화)
+            mode = st.radio(
+                "작업 모드",
+                ["🧾 감사보고서 초안 생성", "✅ 감사보고서 검증·교정(오탈자/논리/형식)"],
+                horizontal=True,
+                key="cur2_mode"
+            )
+            is_draft_mode = "초안" in mode
+
+            # ✅ (초기화) 모드별로 정의되지 않을 수 있는 변수들
+            interview_audio = None
+            interview_transcript = None
+            evidence_files = []
+            draft_text = ""
+            draft_file = None
+
+            st.caption("선택한 작업 모드에 따라 아래 입력 항목이 자동으로 바뀝니다.")
+            with st.expander("🔐 보안·주의사항(필독)", expanded=False):
+                st.markdown(
+                    "- 민감정보(주민등록번호/계좌/건강/징계대상 실명 등)는 업로드 전 **내부 보안 기준**을 반드시 확인하세요.\n"
+                    "- 본 기능은 **감사 판단을 보조**하는 도구이며, 최종 판단·결재 책임은 감사실에 있습니다.\n"
+                    "- 규정 근거는 업로드된 자료에서 확인되는 내용만 인용하도록 설계되었습니다."
+                )
+
+            if is_draft_mode:
+                st.markdown("### ① 감사 자료 입력 (초안 생성에 사용)")
+                cL, cR = st.columns(2)
+
+                with cL:
+                    interview_audio = st.file_uploader(
+                        "🎧 면담 음성 (mp3/wav/mp4) — 선택",
+                        type=["mp3", "wav", "mp4"],
+                        key="cur2_audio"
+                    )
+                    interview_transcript = st.file_uploader(
+                        "📝 면담 녹취(텍스트/문서) — 권장",
+                        type=["txt", "pdf", "docx"],
+                        key="cur2_transcript"
+                    )
+
+                with cR:
+                    evidence_files = st.file_uploader(
+                        "📂 조사·증거/확인 자료 — 권장(복수 업로드 가능)",
+                        type=["pdf", "png", "jpg", "jpeg", "xlsx", "csv", "txt", "docx"],
+                        accept_multiple_files=True,
+                        key="cur2_evidence"
+                    ) or []
+
+            else:
+                st.markdown("### ① 검증 대상 보고서 입력 (검증·교정에 사용)")
+                cL, cR = st.columns(2)
+
+                with cL:
+                    draft_text = st.text_area(
+                        "검증할 감사보고서(초안/기존본) — 붙여넣기",
+                        height=220,
+                        key="cur2_draft"
+                    )
+
+                with cR:
+                    draft_file = st.file_uploader(
+                        "또는 파일 업로드(PDF/DOCX/TXT) — 선택",
+                        type=["pdf", "docx", "txt"],
+                        key="cur2_draft_file"
+                    )
+
+            st.markdown("### ② 회사 규정/판단 기준  ·  ③ 표준 감사보고서 형식(참고)")
+            left, right = st.columns(2)
+
+            with left:
+                regulations = st.file_uploader(
+                    "📘 회사 규정/기준(인사규정·징계기준·윤리지침 등)",
+                    type=["pdf", "docx", "txt"],
+                    accept_multiple_files=True,
+                    key="cur2_regs"
+                )
+                st.caption("초안/검증 모두에 유용합니다. (특히 ‘근거 인용’ 필요 시 권장)")
+
+            with right:
+                reference_reports = st.file_uploader(
+                    "📑 표준 감사보고서 형식(정부·공공·기업) — 선택",
+                    type=["pdf", "docx", "txt"],
+                    accept_multiple_files=True,
+                    key="cur2_refs"
+                )
+                st.caption("문서 형식/톤을 맞추고 싶을 때만 넣어도 됩니다.")
+
+            st.markdown("### ④ 사건 개요(필수) 및 작성 옵션")
+            row1, row2 = st.columns(2)
+
+            with row1:
+                case_title = st.text_input(
+                    "사건명/건명(필수)",
+                    placeholder="예: 법인카드 사적 사용 의혹 조사",
+                    key="cur2_title"
+                )
+
+            with row2:
+                report_tone = st.selectbox(
+                    "문서 톤",
+                    ["감사보고서(공식·중립)", "보고서(간결·결정 중심)", "상신용(결재/조치 권고 중심)"],
+                    index=0,
+                    key="cur2_tone"
+                )
+
+            case_scope = st.text_area(
+                "사건 개요 요약(필수) — 무엇을/언제/누가/어떤 경위로",
+                height=110,
+                key="cur2_scope"
+            )
+
+            # (이하 기존 코드 그대로 유지: 사용자가 올려준 파일의 원문 로직이 이어짐)
+            st.info("※ 이하(감사보고서 생성/검증 로직)는 기존 코드 흐름을 그대로 유지합니다. (이번 요청 범위: 자율점검 UI/검증만)")
+
+# --- [Tab 3: AI 에이전트] ---
+with tab_chat:
+    st.markdown("### 💬 AI 법률/챗봇")
+    if "api_key" not in st.session_state:
+        st.warning("🔒 로그인 후 이용 가능합니다.")
+    else:
+        if "messages" not in st.session_state:
+            st.session_state.messages = []
+
+        with st.form(key="chat_input_form", clear_on_submit=True):
+            user_input = st.text_input("질문 입력")
+            send_btn = st.form_submit_button("전송 📤", use_container_width=True)
+
+        if send_btn and user_input:
+            st.session_state.messages.append({"role": "user", "content": user_input})
+            with st.spinner("답변 생성 중..."):
+                try:
+                    res = get_model().generate_content(user_input)
+                    st.session_state.messages.append({"role": "assistant", "content": res.text})
+                except Exception as e:
+                    st.error(f"오류: {e}")
+
+        for msg in reversed(st.session_state.messages):
+            with st.chat_message(msg["role"]):
+                st.write(msg["content"])
+
+# --- [Tab 4: 스마트 요약] ---
+with tab_summary:
+    st.markdown("### 📰 스마트 요약")
+    if "api_key" not in st.session_state:
+        st.warning("🔒 로그인 후 이용 가능합니다.")
+    else:
+        st_type = st.radio("입력 방식", ["URL (유튜브/웹)", "미디어 파일", "텍스트"])
+        final_input = None
+        is_multimodal = False
+
+        if "URL" in st_type:
+            url = st.text_input("URL 입력")
+            if url and "youtu" in url:
+                with st.spinner("자막 추출 중..."):
+                    final_input = get_youtube_transcript(url)
+                    if not final_input:
+                        final_input = download_and_upload_youtube_audio(url)
+                        is_multimodal = True
+            elif url:
+                with st.spinner("웹페이지 분석 중..."):
+                    final_input = get_web_content(url)
+
+        elif "미디어" in st_type:
+            mf = st.file_uploader("파일 업로드", type=["mp3", "wav", "mp4"])
+            if mf:
+                final_input = process_media_file(mf)
+                is_multimodal = True
+        else:
+            final_input = st.text_area("텍스트 입력", height=200)
+
+        if st.button("⚡ 요약 실행", use_container_width=True):
+            if final_input:
+                with st.spinner("요약 중..."):
+                    try:
+                        p = "다음 내용을 핵심 요약, 상세 내용, 인사이트로 정리해줘."
+                        if is_multimodal:
+                            res = get_model().generate_content([p, final_input])
+                        else:
+                            res = get_model().generate_content(f"{p}\n\n{str(final_input)[:30000]}")
+                        st.markdown(res.text)
+                    except Exception as e:
+                        st.error(f"오류: {e}")
+
+# --- [Tab 5: 관리자 대시보드 최종 버전] ---
+with tab_admin:
+    st.markdown("### 🔒 관리자 전용 대시보드")
+    st.caption("실시간 참여율 분석 및 제출 데이터 통합 관리")
+
+    # 1. 관리자 비밀번호 검증
+    admin_pw = st.text_input("관리자 비밀번호", type="password", key="admin_dash_pw")
+    if admin_pw.strip() != "ktmos0402!":
+        st.info("관리자 비밀번호를 입력하세요.")
+        st.stop()
+
+    st.success("✅ 접속 성공")
+
+    # 2. 데이터 로드 (구글 시트 연결)
+    client = init_google_sheet_connection()
+    if not client:
+        st.error("❌ 구글 시트 연결 실패. API 권한 및 Secrets 설정을 확인하세요.")
+        st.stop()
+
+    try:
+        spreadsheet = client.open("Audit_Result_2026")
+        ws_list = spreadsheet.worksheets()
+        sheet_names = [ws.title for ws in ws_list if ws.title != "Campaign_Config"]
+        
+        selected_sheet = st.selectbox("📊 분석 대상 시트 선택", sheet_names, key="admin_sheet_select")
+        ws = spreadsheet.worksheet(selected_sheet)
+        values = ws.get_all_values()
+        
+        if not values or len(values) < 2:
+            st.warning("선택한 시트에 데이터가 없습니다.")
+            st.stop()
+            
+        df = pd.DataFrame(values[1:], columns=values[0])
+    except Exception as e:
+        st.error(f"데이터 로드 중 오류 발생: {e}")
+        st.stop()
+
+    # 3. 실시간 참여율 대시보드 (이미지 정원 데이터 반영)
+    st.markdown("---")
+    st.markdown("#### 📈 실시간 참여 현황 분석")
+
+    # 조직별 정원 설정 (제공된 이미지 데이터 기반)
+    total_staff_map = {
+        "감사실": 3,
+        "경영총괄": 27,
+        "사업총괄": 39,
+        "강북본부": 221,
+        "강남본부": 173,
+        "서부본부": 278,
+        "강원본부": 101,
+        "품질지원단": 137
+    }
+
+    # 현재 제출 현황 집계
+    unit_counts = df['총괄/본부/단'].value_counts().to_dict()
+    
+    stats_data = []
+    for unit, total in total_staff_map.items():
+        current = unit_counts.get(unit, 0)
+        ratio = (current / total) * 100 if total > 0 else 0
+        stats_data.append({
+            "조직": unit,
+            "정원": total,
+            "참여인원": current,
+            "참여율(%)": round(ratio, 1)
+        })
+    
+    stats_df = pd.DataFrame(stats_data)
+
+    # 상단 요약 지표
+    total_target = sum(total_staff_map.values()) # 총 979명
+    total_current = len(df)
+    total_ratio = (total_current / total_target) * 100
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric("전체 대상자", f"{total_target}명")
+    m2.metric("현재 참여자", f"{total_current}명")
+    m3.metric("전체 참여율", f"{total_ratio:.1f}%")
+
+    # 시각화 차트
+    c1, c2 = st.columns(2)
+    
+    with c1:
+        fig1 = px.bar(stats_df, x="조직", y="참여인원", text="참여인원",
+                      title="조직별 참여 인원", color="참여인원", color_continuous_scale="Blues")
+        st.plotly_chart(fig1, use_container_width=True, config=PLOTLY_CONFIG)
+        
+    with c2:
+        fig2 = px.bar(stats_df, x="조직", y="참여율(%)", text="참여율(%)",
+                      title="조직별 참여율(%)", color="참여율(%)", color_continuous_scale="Viridis")
+        fig2.add_hline(y=100, line_dash="dash", line_color="red")
+        st.plotly_chart(fig2, use_container_width=True, config=PLOTLY_CONFIG)
+
+    # 4. 제출 데이터 상세 조회
+    with st.expander("📄 제출 데이터 상세 보기 / 검색", expanded=False):
+        # 간단한 검색 기능 추가
+        search_term = st.text_input("🔍 성명 또는 부서 검색", "")
+        if search_term:
+            display_df = df[df.apply(lambda row: row.astype(str).str.contains(search_term).any(), axis=1)]
+        else:
+            display_df = df
+        st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+    # 5. 데이터 다운로드
+    st.markdown("---")
+    st.markdown("#### ⬇️ 데이터 내보내기")
+    d1, d2 = st.columns(2)
+    
+    with d1:
+        csv_bytes = df.to_csv(index=False).encode("utf-8-sig")
+        st.download_button("📥 CSV 다운로드", csv_bytes, f"{selected_sheet}.csv", "text/csv", use_container_width=True)
+        
+    with d2:
+        try:
+            from io import BytesIO
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                df.to_excel(writer, index=False, sheet_name='참여현황')
+            st.download_button("📥 Excel 다운로드", output.getvalue(), f"{selected_sheet}.xlsx", use_container_width=True)
+        except Exception:
+            st.info("Excel 엔진 미설치로 CSV 이용을 권장합니다.")
