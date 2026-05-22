@@ -1279,18 +1279,10 @@ with tab_audit:
 
             # ------------------------------------------------------
             # KT 내부 도급 관리자: 블록 안에서 이 정보만 추가/삭제
+            # - 추가/삭제 버튼은 제목부가 아니라 "마지막 입력 행 바로 아래"에 배치
+            # - 여러 행을 추가해도 사용자가 다시 위로 올라갈 필요가 없도록 개선
             # ------------------------------------------------------
-            kt_title_col, kt_add_col, kt_del_col = st.columns([0.90, 0.05, 0.05], vertical_alignment="center")
-            with kt_title_col:
-                st.markdown("<div class='fa-section-title fa-kt-title'>KT 내부 도급 관리자</div>", unsafe_allow_html=True)
-            with kt_add_col:
-                if st.button("＋", use_container_width=True, key=f"fa_add_kt_{block_idx}", help="KT 내부 도급 관리자 입력 행 추가", type="secondary"):
-                    st.session_state[kt_count_key] += 1
-                    st.rerun()
-            with kt_del_col:
-                if st.button("－", use_container_width=True, key=f"fa_del_kt_{block_idx}", help="KT 내부 도급 관리자 마지막 입력 행 삭제", disabled=st.session_state[kt_count_key] <= 1, type="secondary"):
-                    st.session_state[kt_count_key] = max(1, st.session_state[kt_count_key] - 1)
-                    st.rerun()
+            st.markdown("<div class='fa-section-title fa-kt-title'>KT 내부 도급 관리자</div>", unsafe_allow_html=True)
 
             kt_rows = []
             for kt_idx in range(st.session_state[kt_count_key]):
@@ -1320,22 +1312,27 @@ with tab_audit:
                 kt_row["_has_any"] = any(kt_row.values())
                 kt_rows.append(kt_row)
 
+            # ✅ KT 내부 도급 관리자 행 추가/삭제 버튼: 항상 마지막 KT 입력행 아래에 표시
+            kt_btn_c1, kt_btn_c2, kt_btn_c3 = st.columns([0.045, 0.045, 0.91], vertical_alignment="center")
+            with kt_btn_c1:
+                if st.button("＋", use_container_width=True, key=f"fa_add_kt_{block_idx}", help="KT 내부 도급 관리자 입력 행 추가", type="secondary"):
+                    st.session_state[kt_count_key] += 1
+                    st.rerun()
+            with kt_btn_c2:
+                if st.button("－", use_container_width=True, key=f"fa_del_kt_{block_idx}", help="KT 내부 도급 관리자 마지막 입력 행 삭제", disabled=st.session_state[kt_count_key] <= 1, type="secondary"):
+                    st.session_state[kt_count_key] = max(1, st.session_state[kt_count_key] - 1)
+                    st.rerun()
+            with kt_btn_c3:
+                st.caption("＋/－: KT 내부 도급 관리자 행 추가·삭제")
+
             st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
 
             # ------------------------------------------------------
             # ktMOS북부 현장 대리인: 블록 안에서 이 정보만 추가/삭제
+            # - 추가/삭제 버튼은 제목부가 아니라 "마지막 입력 행 바로 아래"에 배치
+            # - 여러 행을 추가해도 사용자가 다시 위로 올라갈 필요가 없도록 개선
             # ------------------------------------------------------
-            mos_title_col, mos_add_col, mos_del_col = st.columns([0.90, 0.05, 0.05], vertical_alignment="center")
-            with mos_title_col:
-                st.markdown("<div class='fa-section-title fa-mos-title'>ktMOS북부 현장 대리인</div>", unsafe_allow_html=True)
-            with mos_add_col:
-                if st.button("＋", use_container_width=True, key=f"fa_add_mos_{block_idx}", help="ktMOS북부 현장 대리인 입력 행 추가", type="secondary"):
-                    st.session_state[mos_count_key] += 1
-                    st.rerun()
-            with mos_del_col:
-                if st.button("－", use_container_width=True, key=f"fa_del_mos_{block_idx}", help="ktMOS북부 현장 대리인 마지막 입력 행 삭제", disabled=st.session_state[mos_count_key] <= 1, type="secondary"):
-                    st.session_state[mos_count_key] = max(1, st.session_state[mos_count_key] - 1)
-                    st.rerun()
+            st.markdown("<div class='fa-section-title fa-mos-title'>ktMOS북부 현장 대리인</div>", unsafe_allow_html=True)
 
             mos_rows = []
             for mos_idx in range(st.session_state[mos_count_key]):
@@ -1362,6 +1359,19 @@ with tab_audit:
                 }
                 mos_row["_has_any"] = any(mos_row.values())
                 mos_rows.append(mos_row)
+
+            # ✅ ktMOS북부 현장 대리인 행 추가/삭제 버튼: 항상 마지막 대리인 입력행 아래에 표시
+            mos_btn_c1, mos_btn_c2, mos_btn_c3 = st.columns([0.045, 0.045, 0.91], vertical_alignment="center")
+            with mos_btn_c1:
+                if st.button("＋", use_container_width=True, key=f"fa_add_mos_{block_idx}", help="ktMOS북부 현장 대리인 입력 행 추가", type="secondary"):
+                    st.session_state[mos_count_key] += 1
+                    st.rerun()
+            with mos_btn_c2:
+                if st.button("－", use_container_width=True, key=f"fa_del_mos_{block_idx}", help="ktMOS북부 현장 대리인 마지막 입력 행 삭제", disabled=st.session_state[mos_count_key] <= 1, type="secondary"):
+                    st.session_state[mos_count_key] = max(1, st.session_state[mos_count_key] - 1)
+                    st.rerun()
+            with mos_btn_c3:
+                st.caption("＋/－: ktMOS북부 현장 대리인 행 추가·삭제")
 
             # ------------------------------------------------------
             # 저장 데이터 구성
@@ -1696,7 +1706,7 @@ with tab_summary:
 # --- [Tab 5: 관리자 대시보드 최종 버전] ---
 with tab_admin:
     st.markdown("### 🔒 관리자 전용 대시보드")
-    st.caption("실시간 참여율 분석 및 제출 데이터 통합 관리")
+    st.caption("현장대리인 선임 신고 내역을 실시간으로 확인하고 CSV/Excel로 다운로드할 수 있습니다.")
 
     # 1. 관리자 비밀번호 검증
     admin_pw = st.text_input("관리자 비밀번호", type="password", key="admin_dash_pw")
@@ -1706,7 +1716,7 @@ with tab_admin:
 
     st.success("✅ 접속 성공")
 
-    # 2. 데이터 로드 (구글 시트 연결)
+    # 2. 구글 시트 연결
     client = init_google_sheet_connection()
     if not client:
         st.error("❌ 구글 시트 연결 실패. API 권한 및 Secrets 설정을 확인하세요.")
@@ -1714,103 +1724,181 @@ with tab_admin:
 
     try:
         spreadsheet = client.open("Audit_Result_2026")
-        ws_list = spreadsheet.worksheets()
-        sheet_names = [ws.title for ws in ws_list if ws.title not in ["Campaign_Config", FIELD_AGENT_SHEET_NAME]]
-        
-        selected_sheet = st.selectbox("📊 분석 대상 시트 선택", sheet_names, key="admin_sheet_select")
-        ws = spreadsheet.worksheet(selected_sheet)
-        values = ws.get_all_values()
-        
-        if not values or len(values) < 2:
-            st.warning("선택한 시트에 데이터가 없습니다.")
-            st.stop()
-            
-        df = pd.DataFrame(values[1:], columns=values[0])
     except Exception as e:
         st.error(f"데이터 로드 중 오류 발생: {e}")
         st.stop()
 
-    # 3. 실시간 참여율 대시보드 (이미지 정원 데이터 반영)
+    # =========================================================
+    # ✅ 현장대리인 선임 신고 내역: 실시간 확인 / CSV 다운로드
+    # =========================================================
     st.markdown("---")
-    st.markdown("#### 📈 실시간 참여 현황 분석")
+    st.markdown("#### 🧭 현장대리인 선임 신고 내역 실시간 확인")
+    st.caption("Google Sheet에 저장된 신고 내역을 그대로 불러옵니다. 필요 시 새로고침 후 CSV/Excel로 내려받아 활용하세요.")
 
-    # 조직별 정원 설정 (제공된 이미지 데이터 기반)
-    total_staff_map = {
-        "감사실": 3,
-        "경영총괄": 27,
-        "사업총괄": 39,
-        "강북본부": 221,
-        "강남본부": 173,
-        "서부본부": 278,
-        "강원본부": 101,
-        "품질지원단": 137
-    }
+    refresh_col, info_col = st.columns([0.16, 0.84])
+    with refresh_col:
+        if st.button("🔄 새로고침", use_container_width=True, key="fa_admin_refresh"):
+            st.cache_data.clear()
+            st.rerun()
+    with info_col:
+        st.caption("제출 직후 화면에 바로 보이지 않으면 새로고침을 눌러 최신 Google Sheet 데이터를 다시 불러오세요.")
 
-    # 현재 제출 현황 집계
-    unit_counts = df['총괄/본부/단'].value_counts().to_dict()
-    
-    stats_data = []
-    for unit, total in total_staff_map.items():
-        current = unit_counts.get(unit, 0)
-        ratio = (current / total) * 100 if total > 0 else 0
-        stats_data.append({
-            "조직": unit,
-            "정원": total,
-            "참여인원": current,
-            "참여율(%)": round(ratio, 1)
-        })
-    
-    stats_df = pd.DataFrame(stats_data)
-
-    # 상단 요약 지표
-    total_target = sum(total_staff_map.values()) # 총 979명
-    total_current = len(df)
-    total_ratio = (total_current / total_target) * 100
-
-    m1, m2, m3 = st.columns(3)
-    m1.metric("전체 대상자", f"{total_target}명")
-    m2.metric("현재 참여자", f"{total_current}명")
-    m3.metric("전체 참여율", f"{total_ratio:.1f}%")
-
-    # 시각화 차트
-    c1, c2 = st.columns(2)
-    
-    with c1:
-        fig1 = px.bar(stats_df, x="조직", y="참여인원", text="참여인원",
-                      title="조직별 참여 인원", color="참여인원", color_continuous_scale="Blues")
-        st.plotly_chart(fig1, use_container_width=True, config=PLOTLY_CONFIG)
-        
-    with c2:
-        fig2 = px.bar(stats_df, x="조직", y="참여율(%)", text="참여율(%)",
-                      title="조직별 참여율(%)", color="참여율(%)", color_continuous_scale="Viridis")
-        fig2.add_hline(y=100, line_dash="dash", line_color="red")
-        st.plotly_chart(fig2, use_container_width=True, config=PLOTLY_CONFIG)
-
-    # 4. 제출 데이터 상세 조회
-    with st.expander("📄 제출 데이터 상세 보기 / 검색", expanded=False):
-        # 간단한 검색 기능 추가
-        search_term = st.text_input("🔍 성명 또는 부서 검색", "")
-        if search_term:
-            display_df = df[df.apply(lambda row: row.astype(str).str.contains(search_term).any(), axis=1)]
-        else:
-            display_df = df
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
-
-    # 5. 데이터 다운로드
-    st.markdown("---")
-    st.markdown("#### ⬇️ 데이터 내보내기")
-    d1, d2 = st.columns(2)
-    
-    with d1:
-        csv_bytes = df.to_csv(index=False).encode("utf-8-sig")
-        st.download_button("📥 CSV 다운로드", csv_bytes, f"{selected_sheet}.csv", "text/csv", use_container_width=True)
-        
-    with d2:
+    try:
         try:
-            from io import BytesIO
-            output = BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                df.to_excel(writer, index=False, sheet_name='참여현황')
-            st.download_button("📥 Excel 다운로드", output.getvalue(), f"{selected_sheet}.xlsx", use_container_width=True)
+            fa_ws = spreadsheet.worksheet(FIELD_AGENT_SHEET_NAME)
+            fa_values = fa_ws.get_all_values()
         except Exception:
-            st.info("Excel 엔진 미설치로 CSV 이용을 권장합니다.")
+            fa_values = []
+
+        if not fa_values or len(fa_values) < 2:
+            st.warning("아직 저장된 현장대리인 선임 신고 내역이 없습니다.")
+            fa_df = pd.DataFrame(columns=FIELD_AGENT_HEADERS)
+        else:
+            fa_df = pd.DataFrame(fa_values[1:], columns=fa_values[0])
+
+        m1, m2, m3 = st.columns(3)
+        m1.metric("총 저장 행", f"{len(fa_df)}건")
+        if not fa_df.empty and "NO" in fa_df.columns:
+            m2.metric("신고 블록 수", f"{fa_df['NO'].astype(str).nunique()}개")
+        else:
+            m2.metric("신고 블록 수", "0개")
+        if not fa_df.empty and "저장시간" in fa_df.columns:
+            last_saved = str(fa_df["저장시간"].iloc[-1])
+            m3.metric("최근 저장시간", last_saved)
+        else:
+            m3.metric("최근 저장시간", "-")
+
+        search_term = st.text_input("🔍 현장대리인 신고 내역 검색", placeholder="성명, 부서, 본부, 연락처 등", key="fa_admin_search")
+        if search_term and not fa_df.empty:
+            fa_display_df = fa_df[fa_df.apply(lambda row: row.astype(str).str.contains(search_term, case=False, na=False).any(), axis=1)]
+        else:
+            fa_display_df = fa_df
+
+        st.dataframe(fa_display_df, use_container_width=True, hide_index=True)
+
+        dl1, dl2 = st.columns(2)
+        with dl1:
+            fa_csv_bytes = fa_display_df.to_csv(index=False).encode("utf-8-sig")
+            st.download_button(
+                "📥 현재 조회내역 CSV 다운로드",
+                fa_csv_bytes,
+                f"{FIELD_AGENT_SHEET_NAME}.csv",
+                "text/csv",
+                use_container_width=True,
+                key="fa_csv_download"
+            )
+        with dl2:
+            try:
+                from io import BytesIO
+                output = BytesIO()
+                with pd.ExcelWriter(output, engine="openpyxl") as writer:
+                    fa_display_df.to_excel(writer, index=False, sheet_name="현장대리인_선임신고")
+                st.download_button(
+                    "📥 현재 조회내역 Excel 다운로드",
+                    output.getvalue(),
+                    f"{FIELD_AGENT_SHEET_NAME}.xlsx",
+                    use_container_width=True,
+                    key="fa_xlsx_download"
+                )
+            except Exception:
+                st.info("Excel 엔진 미설치로 CSV 다운로드를 이용하세요.")
+    except Exception as e:
+        st.error(f"현장대리인 신고 내역 로드 중 오류 발생: {e}")
+
+    # =========================================================
+    # 기존 자율점검 참여율 대시보드는 숨김 보관함으로 이동
+    # =========================================================
+    with st.expander("📁 기존 자율점검 참여율 대시보드 열기", expanded=False):
+        st.caption("기존 윤리경영 실천서약 참여율 및 제출 데이터 조회 기능입니다. 필요할 때만 펼쳐서 확인하세요.")
+
+        try:
+            ws_list = spreadsheet.worksheets()
+            sheet_names = [ws.title for ws in ws_list if ws.title not in ["Campaign_Config", FIELD_AGENT_SHEET_NAME]]
+
+            if not sheet_names:
+                st.warning("분석 가능한 기존 자율점검 시트가 없습니다.")
+            else:
+                selected_sheet = st.selectbox("📊 분석 대상 시트 선택", sheet_names, key="admin_sheet_select")
+                ws = spreadsheet.worksheet(selected_sheet)
+                values = ws.get_all_values()
+
+                if not values or len(values) < 2:
+                    st.warning("선택한 시트에 데이터가 없습니다.")
+                else:
+                    df = pd.DataFrame(values[1:], columns=values[0])
+
+                    st.markdown("---")
+                    st.markdown("#### 📈 실시간 참여 현황 분석")
+
+                    total_staff_map = {
+                        "감사실": 3,
+                        "경영총괄": 27,
+                        "사업총괄": 39,
+                        "강북본부": 221,
+                        "강남본부": 173,
+                        "서부본부": 278,
+                        "강원본부": 101,
+                        "품질지원단": 137
+                    }
+
+                    if "총괄/본부/단" not in df.columns:
+                        st.warning("선택한 시트에 '총괄/본부/단' 컬럼이 없어 참여율 차트를 생성할 수 없습니다.")
+                    else:
+                        unit_counts = df["총괄/본부/단"].value_counts().to_dict()
+                        stats_data = []
+                        for unit, total in total_staff_map.items():
+                            current = unit_counts.get(unit, 0)
+                            ratio = (current / total) * 100 if total > 0 else 0
+                            stats_data.append({
+                                "조직": unit,
+                                "정원": total,
+                                "참여인원": current,
+                                "참여율(%)": round(ratio, 1)
+                            })
+
+                        stats_df = pd.DataFrame(stats_data)
+                        total_target = sum(total_staff_map.values())
+                        total_current = len(df)
+                        total_ratio = (total_current / total_target) * 100 if total_target else 0
+
+                        m1, m2, m3 = st.columns(3)
+                        m1.metric("전체 대상자", f"{total_target}명")
+                        m2.metric("현재 참여자", f"{total_current}명")
+                        m3.metric("전체 참여율", f"{total_ratio:.1f}%")
+
+                        c1, c2 = st.columns(2)
+                        with c1:
+                            fig1 = px.bar(stats_df, x="조직", y="참여인원", text="참여인원",
+                                          title="조직별 참여 인원", color="참여인원", color_continuous_scale="Blues")
+                            st.plotly_chart(fig1, use_container_width=True, config=PLOTLY_CONFIG)
+                        with c2:
+                            fig2 = px.bar(stats_df, x="조직", y="참여율(%)", text="참여율(%)",
+                                          title="조직별 참여율(%)", color="참여율(%)", color_continuous_scale="Viridis")
+                            fig2.add_hline(y=100, line_dash="dash", line_color="red")
+                            st.plotly_chart(fig2, use_container_width=True, config=PLOTLY_CONFIG)
+
+                    with st.expander("📄 제출 데이터 상세 보기 / 검색", expanded=False):
+                        search_term_old = st.text_input("🔍 성명 또는 부서 검색", "", key="old_admin_search")
+                        if search_term_old:
+                            display_df = df[df.apply(lambda row: row.astype(str).str.contains(search_term_old, case=False, na=False).any(), axis=1)]
+                        else:
+                            display_df = df
+                        st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+                    st.markdown("---")
+                    st.markdown("#### ⬇️ 기존 자율점검 데이터 내보내기")
+                    d1, d2 = st.columns(2)
+                    with d1:
+                        csv_bytes = df.to_csv(index=False).encode("utf-8-sig")
+                        st.download_button("📥 CSV 다운로드", csv_bytes, f"{selected_sheet}.csv", "text/csv", use_container_width=True, key="old_csv_download")
+                    with d2:
+                        try:
+                            from io import BytesIO
+                            output = BytesIO()
+                            with pd.ExcelWriter(output, engine="openpyxl") as writer:
+                                df.to_excel(writer, index=False, sheet_name="참여현황")
+                            st.download_button("📥 Excel 다운로드", output.getvalue(), f"{selected_sheet}.xlsx", use_container_width=True, key="old_xlsx_download")
+                        except Exception:
+                            st.info("Excel 엔진 미설치로 CSV 이용을 권장합니다.")
+        except Exception as e:
+            st.error(f"기존 자율점검 데이터 로드 중 오류 발생: {e}")
