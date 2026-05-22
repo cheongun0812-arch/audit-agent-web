@@ -59,7 +59,7 @@ st.set_page_config(
 # ==========================================
 st.markdown("""
 <style>
-* 🔥 Expander 제목 가독성 강제 개선 */
+/* 🔥 Expander 제목 가독성 강제 개선 */
 details > summary {
     font-size: 1.15rem !important;
     font-weight: 900 !important;
@@ -939,190 +939,211 @@ with tab_audit:
         margin-bottom: 4px;
     }
     .fa-required { color:#D32F2F; font-weight:900; }
+    div[data-testid="stCheckbox"] label p {
+        font-weight: 900 !important;
+        color: #1565C0 !important;
+        font-size: 1.02rem !important;
+    }
+    div[data-testid="stForm"] {
+        border-radius: 16px !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-    with st.expander("📁 기존 ‘2026 임직원 윤리경영원칙 실천지침 실천서약’ 보관함 열기", expanded=False):
-        st.info("기존 실천서약 화면입니다. 필요할 때만 펼쳐서 기존 형식 그대로 사용할 수 있습니다.")
-        # ✅ 자율점검 탭 전용 스타일 범위 시작(#audit-tab)
-        st.markdown('<div id="audit-tab">', unsafe_allow_html=True)
+    # ✅ 기존 실천서약은 기본 화면에서 완전히 렌더링하지 않습니다.
+    #    버튼을 켰을 때만 아래 보관함에 기존 코드를 그대로 표시합니다.
+    show_legacy_pledge = st.checkbox(
+        "📁 기존 ‘2026 임직원 윤리경영원칙 실천지침 실천서약’ 보관함 열기",
+        value=False,
+        key="show_legacy_pledge_archive",
+        help="내년에도 사용할 기존 실천서약 화면입니다. 기본 화면에서는 표시하지 않습니다."
+    )
 
-        current_sheet_name = campaign_info.get("sheet_name", "2026_윤리경영_실천서약")
+    if show_legacy_pledge:
+        with st.container(border=True):
+            st.info("기존 실천서약 화면입니다. 필요할 때만 펼쳐서 기존 형식 그대로 사용할 수 있습니다.")
+            # ✅ 자율점검 탭 전용 스타일 범위 시작(#audit-tab)
+            st.markdown('<div id="audit-tab">', unsafe_allow_html=True)
 
-        # ✅ (UX) '서약 확인/임직원 정보 입력' 영역: 최초에는 접힘, 입력/체크 시 자동 펼침
-        if "pledge_box_open" not in st.session_state:
-            st.session_state["pledge_box_open"] = False
+            current_sheet_name = campaign_info.get("sheet_name", "2026_윤리경영_실천서약")
 
-        # ✅ (요청 1) 제목: Google Sheet 값과 무관하게 강제 고정
-        title_for_box = "2026 임직원 윤리경영원칙 실천지침 실천서약"
+            # ✅ (UX) '서약 확인/임직원 정보 입력' 영역: 최초에는 접힘, 입력/체크 시 자동 펼침
+            if "pledge_box_open" not in st.session_state:
+                st.session_state["pledge_box_open"] = False
 
-        st.markdown(f"""
-            <div style='background-color: #E3F2FD; padding: 20px; border-radius: 10px; border-left: 5px solid #2196F3; margin-bottom: 20px;'>
-                <h3 style='margin-top:0; color: #1565C0; font-weight:900;'>📜 {title_for_box}</h3>
-            </div>
-        """, unsafe_allow_html=True)
+            # ✅ (요청 1) 제목: Google Sheet 값과 무관하게 강제 고정
+            title_for_box = "2026 임직원 윤리경영원칙 실천지침 실천서약"
 
-        # 2) 실천지침 주요내용
-        with st.expander("※ 윤리경영원칙 실천지침 주요내용", expanded=True):
-            st.markdown(
-                """
-                <div style='background-color:#FFFDE7; padding: 18px; border-radius: 10px; border-left: 5px solid #FBC02D; margin-bottom: 12px;'>
-                    <div style='font-weight: 900; color:#6D4C41; font-size: 1.10rem; margin-bottom: 6px;'>📌 윤리경영 위반 주요 유형</div>
-                    <div style='color:#444; font-size: 0.97rem; line-height: 1.55;'>
-                        아래 항목은 <b>윤리경영원칙 실천지침</b>의 주요 위반 유형을 정리한 내용입니다.
-                        업무 수행 시 유사 사례가 발생하지 않도록 참고해 주세요.
+            st.markdown(f"""
+                <div style='background-color: #E3F2FD; padding: 20px; border-radius: 10px; border-left: 5px solid #2196F3; margin-bottom: 20px;'>
+                    <h3 style='margin-top:0; color: #1565C0; font-weight:900;'>📜 {title_for_box}</h3>
+                </div>
+            """, unsafe_allow_html=True)
+
+            # 2) 실천지침 주요내용
+            with st.expander("※ 윤리경영원칙 실천지침 주요내용", expanded=True):
+                st.markdown(
+                    """
+                    <div style='background-color:#FFFDE7; padding: 18px; border-radius: 10px; border-left: 5px solid #FBC02D; margin-bottom: 12px;'>
+                        <div style='font-weight: 900; color:#6D4C41; font-size: 1.10rem; margin-bottom: 6px;'>📌 윤리경영 위반 주요 유형</div>
+                        <div style='color:#444; font-size: 0.97rem; line-height: 1.55;'>
+                            아래 항목은 <b>윤리경영원칙 실천지침</b>의 주요 위반 유형을 정리한 내용입니다.
+                            업무 수행 시 유사 사례가 발생하지 않도록 참고해 주세요.
+                        </div>
                     </div>
-                </div>
 
-                <div style='overflow-x:auto;'>
-                    <table style='width:100%; border-collapse: collapse; background:#FFFFFF; border:1px solid #E0E0E0; border-radius: 10px; overflow:hidden;'>
-                        <thead>
-                            <tr style='background:#FFF8E1;'>
-                                <th style='text-align:center; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037; width:28%;'>구분</th>
-                                <th style='text-align:center; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037;'>윤리경영 위반사항</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; font-weight:900; color:#2C3E50;'>고객과의 관계</td>
-                                <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>고객으로부터 금품 등 이익 수수, 고객만족 저해, 고객정보 유출</td>
-                            </tr>
-                            <tr>
-                                <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; font-weight:900; color:#2C3E50;'>임직원과 회사의 관계</td>
-                                <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>공금 유용 및 횡령, 회사재산의 사적 사용, 기업정보 유출, 경영왜곡</td>
-                            </tr>
-                            <tr>
-                                <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; font-weight:900; color:#2C3E50;'>임직원 상호간의 관계</td>
-                                <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>직장 내 괴롭힘, 성희롱, 조직질서 문란행위</td>
-                            </tr>
-                            <tr>
-                                <td style='text-align:center; padding:12px; font-weight:900; color:#2C3E50;'>이해관계자와의 관계</td>
-                                <td style='text-align:center; padding:12px; color:#333;'>이해관계자로부터 금품 등 이익 수수, 이해관계자에게 부당한 요구</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
+                    <div style='overflow-x:auto;'>
+                        <table style='width:100%; border-collapse: collapse; background:#FFFFFF; border:1px solid #E0E0E0; border-radius: 10px; overflow:hidden;'>
+                            <thead>
+                                <tr style='background:#FFF8E1;'>
+                                    <th style='text-align:center; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037; width:28%;'>구분</th>
+                                    <th style='text-align:center; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037;'>윤리경영 위반사항</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; font-weight:900; color:#2C3E50;'>고객과의 관계</td>
+                                    <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>고객으로부터 금품 등 이익 수수, 고객만족 저해, 고객정보 유출</td>
+                                </tr>
+                                <tr>
+                                    <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; font-weight:900; color:#2C3E50;'>임직원과 회사의 관계</td>
+                                    <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>공금 유용 및 횡령, 회사재산의 사적 사용, 기업정보 유출, 경영왜곡</td>
+                                </tr>
+                                <tr>
+                                    <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; font-weight:900; color:#2C3E50;'>임직원 상호간의 관계</td>
+                                    <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>직장 내 괴롭힘, 성희롱, 조직질서 문란행위</td>
+                                </tr>
+                                <tr>
+                                    <td style='text-align:center; padding:12px; font-weight:900; color:#2C3E50;'>이해관계자와의 관계</td>
+                                    <td style='text-align:center; padding:12px; color:#333;'>이해관계자로부터 금품 등 이익 수수, 이해관계자에게 부당한 요구</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
 
-                <div style='margin-top:10px; color:#666; font-size:0.88rem;'>
-                    ※ 위 내용은 안내 목적이며, 세부 기준은 사내 <b>윤리경영원칙 실천지침</b>을 따릅니다.
-                </div>
-                """,
-                unsafe_allow_html=True
+                    <div style='margin-top:10px; color:#666; font-size:0.88rem;'>
+                        ※ 위 내용은 안내 목적이며, 세부 기준은 사내 <b>윤리경영원칙 실천지침</b>을 따릅니다.
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+            # ✅ 서약 항목
+            exec_pledges = [
+                ("pledge_e1", "나는 회사 윤리경영원칙과 윤리경영원칙 실천지침에 따라 판단하고 행동한다."),
+                ("pledge_e2", "나는 윤리경영원칙 실천지침을 몰랐다는 이유로 면책을 주장하지 않는다."),
+                ("pledge_e3", "나는 직무수행 과정에서 윤리적 갈등 상황에 직면한 경우 감사부서의 해석에 따른다."),
+                ("pledge_e4", "나는 가족, 친·인척, 지인 등을 이용하여 회사 윤리경영원칙 실천지침을 위반하지 않는다."),
+            ]
+            mgr_pledges = [
+                ("pledge_m1", "나는 소속 구성원 및 업무상 이해관계자들이 지침을 준수할 수 있도록 지원하고 관리한다."),
+                ("pledge_m2", "나는 공정하고 깨끗한 의사결정을 통해 지침 준수를 솔선수범한다."),
+                ("pledge_m3", "나는 부서 내 위반 사안 발생 시 관리자로서의 책임을 다한다."),
+            ]
+
+            all_keys = [k for k, _ in exec_pledges] + [k for k, _ in mgr_pledges]
+            _init_pledge_runtime(all_keys)
+
+            with st.expander("✅ 서약 확인 및 임직원 정보 입력", expanded=st.session_state["pledge_box_open"]):
+
+                # ✅ 체크 순서 안내/경고 (관리자 서약을 먼저 체크하면 자동으로 되돌리고 토스트 표시)
+                if st.session_state.get("order_warning"):
+                    st.toast(st.session_state["order_warning"], icon="⚠️")
+                    st.session_state.pop("order_warning", None)
+
+                _render_pledge_group("임직원의 책임과 의무", exec_pledges, all_keys)
+                st.markdown("<br>", unsafe_allow_html=True)
+
+                st.info("📌 진행 순서 안내: **임직원의 책임과 의무(4개)**를 먼저 확인(체크)하신 후, **관리자의 책임과 의무(3개)**를 순서대로 진행해 주세요.")
+
+                _render_pledge_group(
+                    "관리자의 책임과 의무",
+                    mgr_pledges,
+                    all_keys,
+                    order_guard={
+                        "keys": ["pledge_m1", "pledge_m2", "pledge_m3"],
+                        "prereq": ["pledge_e1", "pledge_e2", "pledge_e3", "pledge_e4"],
+                        "message": "⚠️ 순서 안내: 먼저 '임직원의 책임과 의무' 4개 항목을 모두 체크한 뒤 '관리자의 책임과 의무'를 진행해 주세요."
+                    }
+                )
+
+                # ✅ prev 상태 업데이트 (탭 끝에서 1번)
+                st.session_state["pledge_prev"] = {k: bool(st.session_state.get(k, False)) for k in all_keys}
+
+                # ✅ 서약 문구를 현재 위치보다 약 20mm(≈76px) 아래로 내리기
+                st.markdown("<div style='height:76px;'></div>", unsafe_allow_html=True)
+                st.markdown(
+                    """
+                    <div style="font-size:1.05rem; font-weight:900; color:#2C3E50; line-height:1.7;">
+                    나는 <b>KT MOS 북부</b>의 지속적인 발전을 위하여 회사 윤리경영원칙 실천지침에 명시된
+                    <b>「임직원의 책임과 의무」 및 「관리자의 책임과 의무」</b>를
+                    <b>성실히 이행할 것을 서약합니다.</b>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+                # ✅ 임직원 서명(정보 입력) 영역을 15mm(≈57px) 더 아래로
+                st.markdown("<div style='height:57px;'></div>", unsafe_allow_html=True)
+
+                # 입력 박스 (한 박스 안)
+                c1, c2, c3, c4 = st.columns(4)
+                emp_id = c1.text_input("사번", placeholder="사번(1000****) 없으면 (00000000)")
+                name = c2.text_input("성명")
+                ordered_units = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
+                unit = c3.selectbox(
+            "총괄 / 본부 / 단",
+            ordered_units,
+            index=None,                     # ✅ 처음엔 아무것도 선택 안 됨(placeholder처럼 보이게)
+            placeholder="총괄 / 본부 / 단 선택",  # ✅ Streamlit 버전에 따라 지원(지원 안 되면 아래 CSS가 커버)
+            label_visibility="collapsed",
+            key="unit_select"
             )
+                dept = c4.text_input("상세 부서명", placeholder="현 소속부서명 입력")
 
-        # ✅ 서약 항목
-        exec_pledges = [
-            ("pledge_e1", "나는 회사 윤리경영원칙과 윤리경영원칙 실천지침에 따라 판단하고 행동한다."),
-            ("pledge_e2", "나는 윤리경영원칙 실천지침을 몰랐다는 이유로 면책을 주장하지 않는다."),
-            ("pledge_e3", "나는 직무수행 과정에서 윤리적 갈등 상황에 직면한 경우 감사부서의 해석에 따른다."),
-            ("pledge_e4", "나는 가족, 친·인척, 지인 등을 이용하여 회사 윤리경영원칙 실천지침을 위반하지 않는다."),
-        ]
-        mgr_pledges = [
-            ("pledge_m1", "나는 소속 구성원 및 업무상 이해관계자들이 지침을 준수할 수 있도록 지원하고 관리한다."),
-            ("pledge_m2", "나는 공정하고 깨끗한 의사결정을 통해 지침 준수를 솔선수범한다."),
-            ("pledge_m3", "나는 부서 내 위반 사안 발생 시 관리자로서의 책임을 다한다."),
-        ]
+                # ✅ 입력을 시작하면 expander가 다시 접히지 않도록 유지
+                if any([str(emp_id).strip(), str(name).strip(), str(dept).strip()]):
+                    st.session_state["pledge_box_open"] = True
 
-        all_keys = [k for k, _ in exec_pledges] + [k for k, _ in mgr_pledges]
-        _init_pledge_runtime(all_keys)
+            st.markdown("---")
 
-        with st.expander("✅ 서약 확인 및 임직원 정보 입력", expanded=st.session_state["pledge_box_open"]):
+            # 제출 버튼은 “체크 전부 완료”일 때만 활성화
+            all_checked = all(bool(st.session_state.get(k, False)) for k in all_keys)
+            submit = st.button("서약 제출", use_container_width=True, disabled=(not all_checked))
 
-            # ✅ 체크 순서 안내/경고 (관리자 서약을 먼저 체크하면 자동으로 되돌리고 토스트 표시)
-            if st.session_state.get("order_warning"):
-                st.toast(st.session_state["order_warning"], icon="⚠️")
-                st.session_state.pop("order_warning", None)
-
-            _render_pledge_group("임직원의 책임과 의무", exec_pledges, all_keys)
-            st.markdown("<br>", unsafe_allow_html=True)
-
-            st.info("📌 진행 순서 안내: **임직원의 책임과 의무(4개)**를 먼저 확인(체크)하신 후, **관리자의 책임과 의무(3개)**를 순서대로 진행해 주세요.")
-
-            _render_pledge_group(
-                "관리자의 책임과 의무",
-                mgr_pledges,
-                all_keys,
-                order_guard={
-                    "keys": ["pledge_m1", "pledge_m2", "pledge_m3"],
-                    "prereq": ["pledge_e1", "pledge_e2", "pledge_e3", "pledge_e4"],
-                    "message": "⚠️ 순서 안내: 먼저 '임직원의 책임과 의무' 4개 항목을 모두 체크한 뒤 '관리자의 책임과 의무'를 진행해 주세요."
-                }
-            )
-
-            # ✅ prev 상태 업데이트 (탭 끝에서 1번)
-            st.session_state["pledge_prev"] = {k: bool(st.session_state.get(k, False)) for k in all_keys}
-
-            # ✅ 서약 문구를 현재 위치보다 약 20mm(≈76px) 아래로 내리기
-            st.markdown("<div style='height:76px;'></div>", unsafe_allow_html=True)
-            st.markdown(
-                """
-                <div style="font-size:1.05rem; font-weight:900; color:#2C3E50; line-height:1.7;">
-                나는 <b>KT MOS 북부</b>의 지속적인 발전을 위하여 회사 윤리경영원칙 실천지침에 명시된
-                <b>「임직원의 책임과 의무」 및 「관리자의 책임과 의무」</b>를
-                <b>성실히 이행할 것을 서약합니다.</b>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
-            # ✅ 임직원 서명(정보 입력) 영역을 15mm(≈57px) 더 아래로
-            st.markdown("<div style='height:57px;'></div>", unsafe_allow_html=True)
-
-            # 입력 박스 (한 박스 안)
-            c1, c2, c3, c4 = st.columns(4)
-            emp_id = c1.text_input("사번", placeholder="사번(1000****) 없으면 (00000000)")
-            name = c2.text_input("성명")
-            ordered_units = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
-            unit = c3.selectbox(
-        "총괄 / 본부 / 단",
-        ordered_units,
-        index=None,                     # ✅ 처음엔 아무것도 선택 안 됨(placeholder처럼 보이게)
-        placeholder="총괄 / 본부 / 단 선택",  # ✅ Streamlit 버전에 따라 지원(지원 안 되면 아래 CSS가 커버)
-        label_visibility="collapsed",
-        key="unit_select"
-        )
-            dept = c4.text_input("상세 부서명", placeholder="현 소속부서명 입력")
-
-            # ✅ 입력을 시작하면 expander가 다시 접히지 않도록 유지
-            if any([str(emp_id).strip(), str(name).strip(), str(dept).strip()]):
-                st.session_state["pledge_box_open"] = True
-
-        st.markdown("---")
-
-        # 제출 버튼은 “체크 전부 완료”일 때만 활성화
-        all_checked = all(bool(st.session_state.get(k, False)) for k in all_keys)
-        submit = st.button("서약 제출", use_container_width=True, disabled=(not all_checked))
-
-        if submit:
-            if not emp_id or not name:
-                st.warning("⚠️ 사번과 성명을 입력해주세요.")
-            else:
-                # ✅ (요청 2) 사번 검증 로직
-                ok, msg = validate_emp_id(emp_id)
-                if not ok:
-                    st.warning(msg)
+            if submit:
+                if not emp_id or not name:
+                    st.warning("⚠️ 사번과 성명을 입력해주세요.")
                 else:
-                    answer = "윤리경영 서약서 제출 완료 (임직원 의무 4/4, 관리자 의무 3/3)"
-                    with st.spinner("제출 중..."):
-                        success, msg2 = save_audit_result(emp_id, name, unit, dept, answer, current_sheet_name)
-                    if success:
-                        st.success(f"✅ {name}님, 윤리경영 서약서 제출이 완료되었습니다!")
-                        st.balloons()
+                    # ✅ (요청 2) 사번 검증 로직
+                    ok, msg = validate_emp_id(emp_id)
+                    if not ok:
+                        st.warning(msg)
                     else:
-                        st.error(f"❌ 제출 실패: {msg2}")
+                        answer = "윤리경영 서약서 제출 완료 (임직원 의무 4/4, 관리자 의무 3/3)"
+                        with st.spinner("제출 중..."):
+                            success, msg2 = save_audit_result(emp_id, name, unit, dept, answer, current_sheet_name)
+                        if success:
+                            st.success(f"✅ {name}님, 윤리경영 서약서 제출이 완료되었습니다!")
+                            st.balloons()
+                        else:
+                            st.error(f"❌ 제출 실패: {msg2}")
 
-        # ✅ 자율점검 탭 전용 스타일 범위 종료
-        st.markdown("</div>", unsafe_allow_html=True)
+            # ✅ 자율점검 탭 전용 스타일 범위 종료
+            st.markdown("</div>", unsafe_allow_html=True)
 
+
+    else:
+        st.info("📁 기존 실천서약은 보관함에 숨겨져 있습니다. 필요할 때만 위 체크박스를 눌러 열어 주세요.")
 
     st.markdown("---")
     st.markdown("""
         <div class="field-agent-hero">
-            <h3>🧭 2026 현장대리인 선임 신고서 작성</h3>
+            <h3>🧭 2026 현장대리인 선임 신고서 제출</h3>
             <p>
-                아래 양식은 제공해 주신 표 구조를 기준으로 구성했습니다.
-                <b>KT 내부 도급 관리자</b>와 <b>ktMOS북부 현장 대리인</b> 정보를 한 줄씩 입력하고,
-                필요 시 <b>➕ 입력 행 추가</b>로 같은 양식을 계속 추가할 수 있습니다.
+                아래 양식에 <b>KT 내부 도급 관리자</b>와 <b>ktMOS북부 현장 대리인</b> 정보를 입력해 주세요.
+                여러 건을 한 번에 제출해야 하는 경우 각 입력 블록 하단의 <b>➕ 전체 블록 추가</b>를 사용하고, 특정 영역만 추가해야 할 때는 해당 영역의 추가 버튼을 사용하면 됩니다.
+                제출된 내용은 Google Sheet에 행 단위로 저장됩니다.
             </p>
         </div>
     """, unsafe_allow_html=True)
@@ -1131,7 +1152,7 @@ with tab_audit:
         <div class="fa-mini-guide">
             <b>작성 방식</b> · 입력한 행은 제출 시 Google Sheet의
             <b>2026_현장대리인_선임신고</b> 시트에 저장됩니다.
-            NO는 자동 부여되며, 일부만 입력한 행은 누락 항목을 확인한 후 제출할 수 있습니다.
+            NO는 전체 블록 기준으로 자동 부여됩니다. 블록 내부에서 KT 또는 ktMOS 행이 추가되어도 같은 NO로 저장됩니다.
         </div>
     """, unsafe_allow_html=True)
 
@@ -1140,23 +1161,19 @@ with tab_audit:
             "- 기존 윤리경영 실천서약은 위 보관함에 그대로 보존되어 있습니다.\n"
             "- 현장대리인 선임 신고서는 별도 Google Sheet 시트에 저장됩니다.\n"
             "- 화면 캡처 양식의 컬럼 구조: **NO / KT 내부 도급 관리자 / ktMOS북부 현장 대리인**을 반영했습니다.\n"
-            "- 여러 건을 신고해야 하는 경우 **➕ 입력 행 추가** 버튼을 눌러 같은 양식의 입력칸을 아래에 추가하세요."
+            "- 여러 건을 신고해야 하는 경우 각 블록 하단의 **➕ 전체 블록 추가**를 사용하세요.\n"
+            "- 같은 블록 안에서 **KT 내부 도급 관리자** 또는 **ktMOS북부 현장 대리인**만 추가해야 하는 경우, 각 영역 제목 오른쪽의 추가/삭제 버튼을 사용하세요."
         )
 
-    if "field_agent_row_count" not in st.session_state:
-        st.session_state["field_agent_row_count"] = 1
+    # ✅ 입력 구조 개선
+    # - 상단의 '입력 행 추가/삭제' 버튼 제거
+    # - 각 블록 하단에서 전체 블록 추가/삭제
+    # - 각 블록 내부에서 KT 내부 도급 관리자 / ktMOS북부 현장 대리인 정보만 각각 추가/삭제
+    if "field_agent_block_count" not in st.session_state:
+        st.session_state["field_agent_block_count"] = 1
 
-    add_col, remove_col, guide_col = st.columns([0.18, 0.18, 0.64])
-    with add_col:
-        if st.button("➕ 입력 행 추가", use_container_width=True, key="fa_add_row"):
-            st.session_state["field_agent_row_count"] += 1
-            st.rerun()
-    with remove_col:
-        if st.button("➖ 마지막 행 삭제", use_container_width=True, key="fa_remove_row", disabled=st.session_state["field_agent_row_count"] <= 1):
-            st.session_state["field_agent_row_count"] = max(1, st.session_state["field_agent_row_count"] - 1)
-            st.rerun()
-    with guide_col:
-        st.caption("입력 행을 추가해도 기존 입력값은 유지됩니다. 제출 시 입력된 행들이 한 번에 저장됩니다.")
+    # 예전 버전의 row_count 세션값이 남아 있어도 새 화면에는 영향이 없도록 둡니다.
+    st.caption("블록 추가/삭제는 각 입력 블록 하단에서, KT 관리자 또는 현장대리인 개별 추가/삭제는 각 영역 제목 오른쪽 버튼에서 할 수 있습니다.")
 
     st.markdown("""
         <div style='overflow-x:auto; margin-top:8px; margin-bottom:12px;'>
@@ -1202,78 +1219,175 @@ with tab_audit:
     records_to_save = []
     validation_errors = []
 
-    for idx in range(st.session_state["field_agent_row_count"]):
-        row_no = idx + 1
+    for block_idx in range(st.session_state["field_agent_block_count"]):
+        block_no = block_idx + 1
+        kt_count_key = f"fa_kt_row_count_{block_idx}"
+        mos_count_key = f"fa_mos_row_count_{block_idx}"
+        if kt_count_key not in st.session_state:
+            st.session_state[kt_count_key] = 1
+        if mos_count_key not in st.session_state:
+            st.session_state[mos_count_key] = 1
+
         with st.container(border=True):
             st.markdown(
-                f"<div class='fa-row-title'>NO. {row_no} 현장대리인 선임 정보 <span class='fa-required'>*</span></div>",
+                f"<div class='fa-row-title'>NO. {block_no} 현장대리인 선임 정보 <span class='fa-required'>*</span></div>",
                 unsafe_allow_html=True
             )
 
-            st.markdown("<div class='fa-section-title fa-kt-title'>KT 내부 도급 관리자</div>", unsafe_allow_html=True)
-            ktc1, ktc2, ktc3 = st.columns([0.9, 1.1, 2.0])
-            with ktc1:
-                kt_division = st.text_input("부문", placeholder="예: 네트워크부문", key=f"fa_kt_division_{idx}")
-            with ktc2:
-                kt_hq = st.text_input("본부", placeholder="예: 네트워크 운용혁신본부", key=f"fa_kt_hq_{idx}")
-            with ktc3:
-                kt_org = st.text_input("소속", placeholder="예: 액세스운용담당 액세스망운용개선팀", key=f"fa_kt_org_{idx}")
+            # ------------------------------------------------------
+            # KT 내부 도급 관리자: 블록 안에서 이 정보만 추가/삭제
+            # ------------------------------------------------------
+            kt_title_col, kt_add_col, kt_del_col = st.columns([0.70, 0.15, 0.15], vertical_alignment="center")
+            with kt_title_col:
+                st.markdown("<div class='fa-section-title fa-kt-title'>KT 내부 도급 관리자</div>", unsafe_allow_html=True)
+            with kt_add_col:
+                if st.button("➕ KT 추가", use_container_width=True, key=f"fa_add_kt_{block_idx}"):
+                    st.session_state[kt_count_key] += 1
+                    st.rerun()
+            with kt_del_col:
+                if st.button("➖ KT 삭제", use_container_width=True, key=f"fa_del_kt_{block_idx}", disabled=st.session_state[kt_count_key] <= 1):
+                    st.session_state[kt_count_key] = max(1, st.session_state[kt_count_key] - 1)
+                    st.rerun()
 
-            ktc4, ktc5 = st.columns([1, 1])
-            with ktc4:
-                kt_manager_name = st.text_input("소속(장)", placeholder="예: 홍길상", key=f"fa_kt_manager_name_{idx}")
-            with ktc5:
-                kt_manager_phone = st.text_input("연락처", placeholder="예: 010-0000-0000", key=f"fa_kt_manager_phone_{idx}")
+            kt_rows = []
+            for kt_idx in range(st.session_state[kt_count_key]):
+                if st.session_state[kt_count_key] > 1:
+                    st.caption(f"KT 내부 도급 관리자 {kt_idx + 1}")
+                ktc1, ktc2, ktc3 = st.columns([0.9, 1.1, 2.0])
+                with ktc1:
+                    kt_division = st.text_input("부문", placeholder="예: 네트워크부문", key=f"fa_kt_division_{block_idx}_{kt_idx}")
+                with ktc2:
+                    kt_hq = st.text_input("본부", placeholder="예: 네트워크 운용혁신본부", key=f"fa_kt_hq_{block_idx}_{kt_idx}")
+                with ktc3:
+                    kt_org = st.text_input("소속", placeholder="예: 액세스운용담당 액세스망운용개선팀", key=f"fa_kt_org_{block_idx}_{kt_idx}")
 
-            st.markdown("<div class='fa-section-title fa-mos-title'>ktMOS북부 현장 대리인</div>", unsafe_allow_html=True)
-            mosc1, mosc2, mosc3, mosc4, mosc5 = st.columns([1, 1, 0.8, 0.8, 1])
-            with mosc1:
-                mos_hq = st.text_input("본부", placeholder="예: 사업총괄", key=f"fa_mos_hq_{idx}")
-            with mosc2:
-                mos_team = st.text_input("팀/파트", placeholder="예: 기술지원팀", key=f"fa_mos_team_{idx}")
-            with mosc3:
-                mos_position = st.text_input("직위", placeholder="예: 과장", key=f"fa_mos_position_{idx}")
-            with mosc4:
-                mos_name = st.text_input("성명", placeholder="예: 홍길동", key=f"fa_mos_name_{idx}")
-            with mosc5:
-                mos_phone = st.text_input("연락처", placeholder="예: 010-0000-0000", key=f"fa_mos_phone_{idx}")
+                ktc4, ktc5 = st.columns([1, 1])
+                with ktc4:
+                    kt_manager_name = st.text_input("소속(장)", placeholder="예: 홍길상", key=f"fa_kt_manager_name_{block_idx}_{kt_idx}")
+                with ktc5:
+                    kt_manager_phone = st.text_input("연락처", placeholder="예: 010-0000-0000", key=f"fa_kt_manager_phone_{block_idx}_{kt_idx}")
 
-            row_values = [
-                kt_division, kt_hq, kt_org, kt_manager_name, kt_manager_phone,
-                mos_hq, mos_team, mos_position, mos_name, mos_phone
-            ]
-            has_any_value = any(str(v).strip() for v in row_values)
-
-            if has_any_value:
-                required_map = {
-                    "KT 내부 도급 관리자 부문": kt_division,
-                    "KT 내부 도급 관리자 본부": kt_hq,
-                    "KT 내부 도급 관리자 소속": kt_org,
-                    "KT 내부 도급 관리자 소속(장)": kt_manager_name,
-                    "KT 내부 도급 관리자 연락처": kt_manager_phone,
-                    "ktMOS북부 현장 대리인 본부": mos_hq,
-                    "ktMOS북부 현장 대리인 팀/파트": mos_team,
-                    "ktMOS북부 현장 대리인 직위": mos_position,
-                    "ktMOS북부 현장 대리인 성명": mos_name,
-                    "ktMOS북부 현장 대리인 연락처": mos_phone,
-                }
-                for label, value in required_map.items():
-                    if not str(value).strip():
-                        validation_errors.append(f"NO. {row_no}: {label}을(를) 입력해 주세요.")
-
-                records_to_save.append({
-                    "NO": row_no,
+                kt_row = {
                     "KT 내부 도급 관리자_부문": kt_division.strip(),
                     "KT 내부 도급 관리자_본부": kt_hq.strip(),
                     "KT 내부 도급 관리자_소속": kt_org.strip(),
                     "KT 내부 도급 관리자_소속(장)": kt_manager_name.strip(),
                     "KT 내부 도급 관리자_연락처": kt_manager_phone.strip(),
+                }
+                kt_row["_has_any"] = any(kt_row.values())
+                kt_rows.append(kt_row)
+
+            st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
+
+            # ------------------------------------------------------
+            # ktMOS북부 현장 대리인: 블록 안에서 이 정보만 추가/삭제
+            # ------------------------------------------------------
+            mos_title_col, mos_add_col, mos_del_col = st.columns([0.70, 0.15, 0.15], vertical_alignment="center")
+            with mos_title_col:
+                st.markdown("<div class='fa-section-title fa-mos-title'>ktMOS북부 현장 대리인</div>", unsafe_allow_html=True)
+            with mos_add_col:
+                if st.button("➕ 대리인 추가", use_container_width=True, key=f"fa_add_mos_{block_idx}"):
+                    st.session_state[mos_count_key] += 1
+                    st.rerun()
+            with mos_del_col:
+                if st.button("➖ 대리인 삭제", use_container_width=True, key=f"fa_del_mos_{block_idx}", disabled=st.session_state[mos_count_key] <= 1):
+                    st.session_state[mos_count_key] = max(1, st.session_state[mos_count_key] - 1)
+                    st.rerun()
+
+            mos_rows = []
+            for mos_idx in range(st.session_state[mos_count_key]):
+                if st.session_state[mos_count_key] > 1:
+                    st.caption(f"ktMOS북부 현장 대리인 {mos_idx + 1}")
+                mosc1, mosc2, mosc3, mosc4, mosc5 = st.columns([1, 1, 0.8, 0.8, 1])
+                with mosc1:
+                    mos_hq = st.text_input("본부", placeholder="예: 사업총괄", key=f"fa_mos_hq_{block_idx}_{mos_idx}")
+                with mosc2:
+                    mos_team = st.text_input("팀/파트", placeholder="예: 기술지원팀", key=f"fa_mos_team_{block_idx}_{mos_idx}")
+                with mosc3:
+                    mos_position = st.text_input("직위", placeholder="예: 과장", key=f"fa_mos_position_{block_idx}_{mos_idx}")
+                with mosc4:
+                    mos_name = st.text_input("성명", placeholder="예: 홍길동", key=f"fa_mos_name_{block_idx}_{mos_idx}")
+                with mosc5:
+                    mos_phone = st.text_input("연락처", placeholder="예: 010-0000-0000", key=f"fa_mos_phone_{block_idx}_{mos_idx}")
+
+                mos_row = {
                     "ktMOS북부 현장 대리인_본부": mos_hq.strip(),
                     "ktMOS북부 현장 대리인_팀/파트": mos_team.strip(),
                     "ktMOS북부 현장 대리인_직위": mos_position.strip(),
                     "ktMOS북부 현장 대리인_성명": mos_name.strip(),
                     "ktMOS북부 현장 대리인_연락처": mos_phone.strip(),
+                }
+                mos_row["_has_any"] = any(mos_row.values())
+                mos_rows.append(mos_row)
+
+            # ------------------------------------------------------
+            # 저장 데이터 구성
+            # - 같은 블록 안에서 KT/MOS 행 수가 다르면 max 기준으로 행 단위 저장
+            # - 추가된 한쪽 정보만 있는 행도 저장 가능
+            # - 단, NO는 세부행 번호(1-1, 1-2)가 아니라 전체 블록 번호(1, 2, 3)로 동일하게 저장
+            # ------------------------------------------------------
+            max_inner_rows = max(len(kt_rows), len(mos_rows))
+            for inner_idx in range(max_inner_rows):
+                kt_row = kt_rows[inner_idx] if inner_idx < len(kt_rows) else {}
+                mos_row = mos_rows[inner_idx] if inner_idx < len(mos_rows) else {}
+                kt_has_any = bool(kt_row.get("_has_any"))
+                mos_has_any = bool(mos_row.get("_has_any"))
+
+                if not (kt_has_any or mos_has_any):
+                    continue
+
+                if kt_has_any:
+                    for label, value in {
+                        "KT 내부 도급 관리자 부문": kt_row.get("KT 내부 도급 관리자_부문", ""),
+                        "KT 내부 도급 관리자 본부": kt_row.get("KT 내부 도급 관리자_본부", ""),
+                        "KT 내부 도급 관리자 소속": kt_row.get("KT 내부 도급 관리자_소속", ""),
+                        "KT 내부 도급 관리자 소속(장)": kt_row.get("KT 내부 도급 관리자_소속(장)", ""),
+                        "KT 내부 도급 관리자 연락처": kt_row.get("KT 내부 도급 관리자_연락처", ""),
+                    }.items():
+                        if not str(value).strip():
+                            validation_errors.append(f"NO. {block_no} / 행 {inner_idx + 1}: {label}을(를) 입력해 주세요.")
+
+                if mos_has_any:
+                    for label, value in {
+                        "ktMOS북부 현장 대리인 본부": mos_row.get("ktMOS북부 현장 대리인_본부", ""),
+                        "ktMOS북부 현장 대리인 팀/파트": mos_row.get("ktMOS북부 현장 대리인_팀/파트", ""),
+                        "ktMOS북부 현장 대리인 직위": mos_row.get("ktMOS북부 현장 대리인_직위", ""),
+                        "ktMOS북부 현장 대리인 성명": mos_row.get("ktMOS북부 현장 대리인_성명", ""),
+                        "ktMOS북부 현장 대리인 연락처": mos_row.get("ktMOS북부 현장 대리인_연락처", ""),
+                    }.items():
+                        if not str(value).strip():
+                            validation_errors.append(f"NO. {block_no} / 행 {inner_idx + 1}: {label}을(를) 입력해 주세요.")
+
+                # 저장 시에는 양쪽 중 없는 정보는 빈칸으로 저장합니다.
+                # 중요: 블록 내부 행이 늘어나더라도 NO는 전체 블록 번호를 그대로 유지합니다.
+                # 예) NO.1 블록 안에 KT 2행, MOS 7행이 있어도 저장 NO는 모두 '1'
+                display_no = str(block_no)
+                records_to_save.append({
+                    "NO": display_no,
+                    "KT 내부 도급 관리자_부문": kt_row.get("KT 내부 도급 관리자_부문", ""),
+                    "KT 내부 도급 관리자_본부": kt_row.get("KT 내부 도급 관리자_본부", ""),
+                    "KT 내부 도급 관리자_소속": kt_row.get("KT 내부 도급 관리자_소속", ""),
+                    "KT 내부 도급 관리자_소속(장)": kt_row.get("KT 내부 도급 관리자_소속(장)", ""),
+                    "KT 내부 도급 관리자_연락처": kt_row.get("KT 내부 도급 관리자_연락처", ""),
+                    "ktMOS북부 현장 대리인_본부": mos_row.get("ktMOS북부 현장 대리인_본부", ""),
+                    "ktMOS북부 현장 대리인_팀/파트": mos_row.get("ktMOS북부 현장 대리인_팀/파트", ""),
+                    "ktMOS북부 현장 대리인_직위": mos_row.get("ktMOS북부 현장 대리인_직위", ""),
+                    "ktMOS북부 현장 대리인_성명": mos_row.get("ktMOS북부 현장 대리인_성명", ""),
+                    "ktMOS북부 현장 대리인_연락처": mos_row.get("ktMOS북부 현장 대리인_연락처", ""),
                 })
+
+        # ✅ 전체 블록 추가/삭제: 각 블록 바로 아래에 배치하여 상단으로 다시 올라갈 필요가 없도록 개선
+        block_add_col, block_del_col, block_caption_col = st.columns([0.18, 0.18, 0.64])
+        with block_add_col:
+            if st.button("➕ 전체 블록 추가", use_container_width=True, key=f"fa_add_block_after_{block_idx}"):
+                st.session_state["field_agent_block_count"] += 1
+                st.rerun()
+        with block_del_col:
+            if st.button("➖ 마지막 블록 삭제", use_container_width=True, key=f"fa_del_block_after_{block_idx}", disabled=st.session_state["field_agent_block_count"] <= 1):
+                st.session_state["field_agent_block_count"] = max(1, st.session_state["field_agent_block_count"] - 1)
+                st.rerun()
+        with block_caption_col:
+            st.caption("전체 블록을 추가하면 KT 관리자와 ktMOS북부 현장 대리인 입력 영역이 함께 새로 생성됩니다.")
 
     st.markdown("---")
     submit_field_agents = st.button("📨 현장대리인 선임 신고서 제출", use_container_width=True, key="fa_submit")
