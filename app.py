@@ -1142,7 +1142,7 @@ with tab_audit:
             <h3>🧭 2026 현장대리인 선임 신고서 제출</h3>
             <p>
                 아래 양식에 <b>KT 내부 도급 관리자</b>와 <b>ktMOS북부 현장 대리인</b> 정보를 입력해 주세요.
-                여러 건을 한 번에 제출해야 하는 경우 각 입력 블록 하단의 <b>➕ 전체 블록 추가</b>를 사용하고, 특정 영역만 추가해야 할 때는 해당 영역의 추가 버튼을 사용하면 됩니다.
+                여러 건을 한 번에 제출해야 하는 경우 각 입력 블록 하단의 <b>＋/－</b> 버튼으로 전체 블록을 추가·삭제하고, 특정 영역만 추가해야 할 때는 해당 영역의 작은 <b>＋/－</b> 버튼을 사용하면 됩니다.
                 제출된 내용은 Google Sheet에 행 단위로 저장됩니다.
             </p>
         </div>
@@ -1162,7 +1162,7 @@ with tab_audit:
             "- 현장대리인 선임 신고서는 별도 Google Sheet 시트에 저장됩니다.\n"
             "- 화면 캡처 양식의 컬럼 구조: **NO / KT 내부 도급 관리자 / ktMOS북부 현장 대리인**을 반영했습니다.\n"
             "- 여러 건을 신고해야 하는 경우 각 블록 하단의 **➕ 전체 블록 추가**를 사용하세요.\n"
-            "- 같은 블록 안에서 **KT 내부 도급 관리자** 또는 **ktMOS북부 현장 대리인**만 추가해야 하는 경우, 각 영역 제목 오른쪽의 추가/삭제 버튼을 사용하세요."
+            "- 같은 블록 안에서 **KT 내부 도급 관리자** 또는 **ktMOS북부 현장 대리인**만 추가해야 하는 경우, 각 영역 제목 오른쪽의 작은 **＋/－** 버튼을 사용하세요."
         )
 
     # ✅ 입력 구조 개선
@@ -1173,7 +1173,7 @@ with tab_audit:
         st.session_state["field_agent_block_count"] = 1
 
     # 예전 버전의 row_count 세션값이 남아 있어도 새 화면에는 영향이 없도록 둡니다.
-    st.caption("블록 추가/삭제는 각 입력 블록 하단에서, KT 관리자 또는 현장대리인 개별 추가/삭제는 각 영역 제목 오른쪽 버튼에서 할 수 있습니다.")
+    st.caption("＋/－ 버튼으로 전체 블록 또는 각 영역의 입력 행을 필요한 만큼 추가·삭제할 수 있습니다.")
 
     st.markdown("""
         <div style='overflow-x:auto; margin-top:8px; margin-bottom:12px;'>
@@ -1237,15 +1237,15 @@ with tab_audit:
             # ------------------------------------------------------
             # KT 내부 도급 관리자: 블록 안에서 이 정보만 추가/삭제
             # ------------------------------------------------------
-            kt_title_col, kt_add_col, kt_del_col = st.columns([0.70, 0.15, 0.15], vertical_alignment="center")
+            kt_title_col, kt_add_col, kt_del_col = st.columns([0.84, 0.08, 0.08], vertical_alignment="center")
             with kt_title_col:
                 st.markdown("<div class='fa-section-title fa-kt-title'>KT 내부 도급 관리자</div>", unsafe_allow_html=True)
             with kt_add_col:
-                if st.button("➕ KT 추가", use_container_width=True, key=f"fa_add_kt_{block_idx}"):
+                if st.button("＋", use_container_width=True, key=f"fa_add_kt_{block_idx}", help="KT 내부 도급 관리자 입력 행 추가"):
                     st.session_state[kt_count_key] += 1
                     st.rerun()
             with kt_del_col:
-                if st.button("➖ KT 삭제", use_container_width=True, key=f"fa_del_kt_{block_idx}", disabled=st.session_state[kt_count_key] <= 1):
+                if st.button("－", use_container_width=True, key=f"fa_del_kt_{block_idx}", help="KT 내부 도급 관리자 마지막 입력 행 삭제", disabled=st.session_state[kt_count_key] <= 1):
                     st.session_state[kt_count_key] = max(1, st.session_state[kt_count_key] - 1)
                     st.rerun()
 
@@ -1282,15 +1282,15 @@ with tab_audit:
             # ------------------------------------------------------
             # ktMOS북부 현장 대리인: 블록 안에서 이 정보만 추가/삭제
             # ------------------------------------------------------
-            mos_title_col, mos_add_col, mos_del_col = st.columns([0.70, 0.15, 0.15], vertical_alignment="center")
+            mos_title_col, mos_add_col, mos_del_col = st.columns([0.84, 0.08, 0.08], vertical_alignment="center")
             with mos_title_col:
                 st.markdown("<div class='fa-section-title fa-mos-title'>ktMOS북부 현장 대리인</div>", unsafe_allow_html=True)
             with mos_add_col:
-                if st.button("➕ 대리인 추가", use_container_width=True, key=f"fa_add_mos_{block_idx}"):
+                if st.button("＋", use_container_width=True, key=f"fa_add_mos_{block_idx}", help="ktMOS북부 현장 대리인 입력 행 추가"):
                     st.session_state[mos_count_key] += 1
                     st.rerun()
             with mos_del_col:
-                if st.button("➖ 대리인 삭제", use_container_width=True, key=f"fa_del_mos_{block_idx}", disabled=st.session_state[mos_count_key] <= 1):
+                if st.button("－", use_container_width=True, key=f"fa_del_mos_{block_idx}", help="ktMOS북부 현장 대리인 마지막 입력 행 삭제", disabled=st.session_state[mos_count_key] <= 1):
                     st.session_state[mos_count_key] = max(1, st.session_state[mos_count_key] - 1)
                     st.rerun()
 
@@ -1377,17 +1377,17 @@ with tab_audit:
                 })
 
         # ✅ 전체 블록 추가/삭제: 각 블록 바로 아래에 배치하여 상단으로 다시 올라갈 필요가 없도록 개선
-        block_add_col, block_del_col, block_caption_col = st.columns([0.18, 0.18, 0.64])
+        block_add_col, block_del_col, block_caption_col = st.columns([0.09, 0.09, 0.82])
         with block_add_col:
-            if st.button("➕ 전체 블록 추가", use_container_width=True, key=f"fa_add_block_after_{block_idx}"):
+            if st.button("＋", use_container_width=True, key=f"fa_add_block_after_{block_idx}", help="전체 입력 블록 추가"):
                 st.session_state["field_agent_block_count"] += 1
                 st.rerun()
         with block_del_col:
-            if st.button("➖ 마지막 블록 삭제", use_container_width=True, key=f"fa_del_block_after_{block_idx}", disabled=st.session_state["field_agent_block_count"] <= 1):
+            if st.button("－", use_container_width=True, key=f"fa_del_block_after_{block_idx}", help="마지막 전체 입력 블록 삭제", disabled=st.session_state["field_agent_block_count"] <= 1):
                 st.session_state["field_agent_block_count"] = max(1, st.session_state["field_agent_block_count"] - 1)
                 st.rerun()
         with block_caption_col:
-            st.caption("전체 블록을 추가하면 KT 관리자와 ktMOS북부 현장 대리인 입력 영역이 함께 새로 생성됩니다.")
+            st.caption("왼쪽 ＋/－: 전체 블록 추가·삭제")
 
     st.markdown("---")
     submit_field_agents = st.button("📨 현장대리인 선임 신고서 제출", use_container_width=True, key="fa_submit")
