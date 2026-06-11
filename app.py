@@ -1219,7 +1219,7 @@ with tab_audit:
     # - 기존 윤리경영 실천서약 보관함은 유지
     # - 현장대리인 등록 모듈 위치에 고품질 교육 모듈 배치
     # - 순차형 Quest 구조 / Previous·Next 이동 / Step별 Clear 표시
-    # - STEP 1~4 단계별 최소 학습시간 100초 적용 / STEP 5 체크항목별 10초 확인
+    # - STEP 1~4 단계별 최소 학습시간 60초 적용 / STEP 5 체크항목별 10초 확인
     # - Theme 1: 부패방지 + 공정거래 / Theme 2: 하도급 + 정보보호
     # =========================================================
     st.markdown("""
@@ -1411,14 +1411,18 @@ with tab_audit:
         .tile-green { background:linear-gradient(135deg,#DCFCE7,#ECFDF5); color:#14532D; }
         .tile-purple { background:linear-gradient(135deg,#F3E8FF,#EEF2FF); color:#4C1D95; }
         .principle-grid-v2 { display:grid; grid-template-columns: repeat(2, minmax(230px, 1fr)); gap:14px; margin-top:13px; }
-        .principle-box-v2 { background:#F8FAFC; border:1px solid #E2E8F0; border-radius:18px; padding:17px 18px; }
-        .principle-box-v2 b { color:#0F172A; font-size:1.03rem; }
-        .principle-box-v2 span { display:block; color:#475569; margin-top:7px; line-height:1.56; font-weight:700; }
+        .principle-card-v2 { background:#F8FAFC; border:1px solid #E2E8F0; border-radius:18px; padding:18px 19px; box-shadow:0 7px 17px rgba(15,23,42,0.05); }
+        .principle-keyword-v2 { display:inline-block; color:#DC2626; font-size:1.08rem; font-weight:950; letter-spacing:-0.01em; margin-bottom:12px; padding:4px 10px; border-radius:999px; background:#FEF2F2; border:1px solid #FECACA; }
+        .principle-desc-v2 { display:block; color:#334155; line-height:1.62; font-weight:760; padding-top:2px; }
         .risk-grid-v2 { display:grid; grid-template-columns: repeat(3, minmax(190px, 1fr)); gap:12px; margin-top:13px; }
         .risk-card-v2 { background:#FFF7ED; border:1px solid #FDBA74; border-radius:18px; padding:15px; color:#7C2D12; font-weight:950; min-height:78px; box-shadow:0 7px 17px rgba(249,115,22,0.08); }
         .case-box-v2 { background:linear-gradient(135deg,#F8FAFC 0%,#EFF6FF 100%); border:1px solid #BFDBFE; border-radius:20px; padding:18px 19px; margin:14px 0; color:#334155; line-height:1.65; font-weight:720; }
         .case-box-v2 b { color:#1E3A8A; }
         .answer-box-v2 { background:#F0FDF4; border:1px solid #BBF7D0; border-radius:18px; padding:15px 17px; margin:12px 0; color:#14532D; font-weight:780; line-height:1.62; }
+        .quiz-feedback-v2 { border-radius:18px; padding:14px 16px; margin:8px 0 18px 0; line-height:1.58; font-weight:760; }
+        .quiz-feedback-v2.correct { background:#ECFDF5; border:1px solid #86EFAC; color:#14532D; }
+        .quiz-feedback-v2.wrong { background:#FFF7ED; border:1px solid #FDBA74; color:#7C2D12; }
+        .quiz-feedback-v2 b { font-weight:950; }
         .quote-line-v2 { font-size:1.34rem; color:#0F172A; font-weight:950; line-height:1.50; margin:8px 0 12px 0; letter-spacing:-0.02em; }
         .score-pill-v2 { display:inline-block; padding:8px 13px; border-radius:999px; background:#F0FDF4; color:#166534; border:1px solid #BBF7D0; font-weight:950; margin:5px 6px 5px 0; }
         .score-pill-warn-v2 { display:inline-block; padding:8px 13px; border-radius:999px; background:#FFF7ED; color:#9A3412; border:1px solid #FED7AA; font-weight:950; margin:5px 6px 5px 0; }
@@ -1461,7 +1465,7 @@ with tab_audit:
     # =========================================================
     # 2026년 6월 컴플라이언스 인식제고 교육 - Final V3
     # - 초기 안내 화면 분리
-    # - STEP 1~4: 단계별 100초 자동 카운트다운 + 게이지
+    # - STEP 1~4: 단계별 60초 자동 카운트다운 + 게이지
     # - STEP 5: 체크 항목별 10초 모래시계 확인, 체크 유지, 순차 활성화
     # - STEP 6: 시간제한 제외
     # =========================================================
@@ -1570,7 +1574,7 @@ with tab_audit:
     """, unsafe_allow_html=True)
 
     SELECT_PLACEHOLDER = "선택하세요"
-    STEP_MIN_SECONDS = 100
+    STEP_MIN_SECONDS = 60
     STEP_WARMUP_SECONDS = 3
     CHECK_ITEM_SECONDS = 10
     CHECK_ITEM_DELAY_SECONDS = 1
@@ -1805,7 +1809,7 @@ with tab_audit:
         st.markdown("<div class='nav-help'>완료된 단계는 초록색, 현재 단계는 파란색, 아직 진행할 수 없는 단계는 회색으로 표시됩니다.</div>", unsafe_allow_html=True)
 
     def _render_step_timer(theme_no: int, step_no: int) -> None:
-        """STEP 1~4에 적용되는 100초 자동 카운트다운 게이지입니다."""
+        """STEP 1~4에 적용되는 60초 자동 카운트다운 게이지입니다."""
         if step_no not in TIMED_STEPS:
             return
         if step_no in set(_completed_steps(theme_no)):
@@ -1844,7 +1848,7 @@ with tab_audit:
             ph.markdown(f"""
                 <div class="timer-live-wrap">
                     <div class="timer-live-head">
-                        <div class="timer-live-left">{HOURGLASS_SVG}<span>최소 학습시간 충족을 위한 100초 카운트다운</span></div>
+                        <div class="timer-live-left">{HOURGLASS_SVG}<span>최소 학습시간 충족을 위한 60초 카운트다운</span></div>
                         <span class="timer-live-count">{remain}초 남음</span>
                     </div>
                     <div class="timer-bar-bg"><div class="timer-bar-fill" style="width:{pct}%;"></div></div>
@@ -1854,7 +1858,7 @@ with tab_audit:
         ph.markdown(f"""
             <div class="timer-live-wrap clear">
                 <div class="timer-live-head">
-                    <div class="timer-live-left">✅ 최소 학습시간 충족 · STEP {step_no} 100초 학습 완료</div>
+                    <div class="timer-live-left">✅ 최소 학습시간 충족 · STEP {step_no} 60초 학습 완료</div>
                     <span class="timer-live-count">CLEAR</span>
                 </div>
                 <div class="timer-bar-bg"><div class="timer-bar-fill" style="width:100%;"></div></div>
@@ -1928,6 +1932,19 @@ with tab_audit:
             """, unsafe_allow_html=True)
             _show_training_asset(img, cap)
 
+    def _render_quiz_question(label: str, options: list[str], key: str, correct: str, explanation: str) -> None:
+        """퀴즈 선택 직후 정답 여부와 구체 설명을 카드로 표시합니다."""
+        selected = st.radio(label, [SELECT_PLACEHOLDER] + options, key=key)
+        if selected != SELECT_PLACEHOLDER:
+            is_correct = (selected == correct)
+            cls = "correct" if is_correct else "wrong"
+            title = "✅ 정답입니다" if is_correct else "⚠️ 다시 확인해 주세요"
+            correct_line = "" if is_correct else f"<br><b>정답:</b> {correct}"
+            st.markdown(
+                f"<div class='quiz-feedback-v2 {cls}'><b>{title}</b>{correct_line}<br>{explanation}</div>",
+                unsafe_allow_html=True,
+            )
+
     def _render_theme_step(theme_no: int):
         step = int(st.session_state.get("june_v2_step", 1))
         if theme_no == 1:
@@ -1976,20 +1993,20 @@ with tab_audit:
         elif step == 2:
             if theme_no == 1:
                 principles = [
-                    ("청탁 금지", "공직자 등에게 직접 또는 제3자를 통해 부정청탁을 하지 않습니다."),
-                    ("금품 제공 금지", "직무 관련 금품·향응·편의 제공 또는 약속을 하지 않습니다."),
-                    ("제3자 리스크", "에이전트·협력사·하도급사를 통한 우회 제공도 금지됩니다."),
-                    ("담합 금지", "가격, 입찰, 거래조건 등에 관한 경쟁사 합의를 하지 않습니다."),
+                    ("청탁 금지", "금품 등을 받는 것이 금지된 공직자 등에게 직접 또는 제3자를 통해 부정청탁을 하지 않습니다."),
+                    ("금품 제공 금지", "직무 관련 여부를 확인하고, 금품·향응·편의 제공 또는 제공 약속·의사표시를 하지 않습니다."),
+                    ("제3자 우회 금지", "에이전트·협력사·하도급사를 통한 우회 제공도 회사의 부패 리스크가 될 수 있습니다."),
+                    ("담합 금지", "가격, 입찰, 거래조건 등에 관한 경쟁사 정보교환이나 합의를 하지 않습니다."),
                 ]
             else:
                 principles = [
-                    ("서면 발급", "위탁업무 시작 전 계약서 등 법정기재사항 포함 서면을 발급합니다."),
-                    ("대금·검사", "대금 지급기한과 검사결과 통지기한을 준수합니다."),
-                    ("기술자료 보호", "정당한 사유와 절차, 목적 범위 내 사용 원칙을 지킵니다."),
-                    ("정보보호", "개인정보 목적 외 이용, ID/PW 공유, 기업비밀 방치를 금지합니다."),
+                    ("서면 발급", "위탁업무 시작 전 계약서 등 법정기재사항이 포함된 서면을 발급하고 보존합니다."),
+                    ("대금·검사 기한", "대금 지급기한과 검사결과 통지기한을 지켜 협력사와 회사의 신뢰를 보호합니다."),
+                    ("기술자료 보호", "정당한 사유와 절차 없이 기술자료·경영정보를 요구하거나 목적 외로 사용하지 않습니다."),
+                    ("정보보호", "개인정보 목적 외 이용, ID/PW 공유, 기업비밀 방치·무단반출을 금지합니다."),
                 ]
-            html = ''.join([f"<div class='principle-card-v2'><b>{a}</b><span>{b}</span></div>" for a,b in principles])
-            st.markdown(f"""<div class="content-card-v2"><span class="page-pill-v2">STEP 2 · Core Principles</span><h4>기억해야 할 핵심 원칙</h4><div class="principle-grid-v2">{html}</div></div>""", unsafe_allow_html=True)
+            html = ''.join([f"<div class='principle-card-v2'><div class='principle-keyword-v2'>{a}</div><div class='principle-desc-v2'>{b}</div></div>" for a,b in principles])
+            st.markdown(f"""<div class="content-card-v2"><span class="page-pill-v2">STEP 2 · Core Principles</span><h4>기억해야 할 핵심 원칙</h4><p style='margin-top:0;color:#475569;font-weight:740;'>빨간 핵심 키워드를 먼저 기억하고, 아래 설명으로 실제 업무 기준을 확인해 주세요.</p><div class="principle-grid-v2">{html}</div></div>""", unsafe_allow_html=True)
 
         elif step == 3:
             if theme_no == 1:
@@ -2006,7 +2023,9 @@ with tab_audit:
                     <div class="case-box-v2"><b>사례 A</b><br>공공기관 관계자가 특정 협회비 또는 협찬을 요청했습니다. 담당자는 관계 유지를 위해 신속히 진행하려고 합니다.</div>
                     <div class="answer-box-v2"><b>판단 포인트</b><br>공직자 등으로부터 직·간접적으로 청탁·권유·요청받은 기부, 협찬, 협회비 등은 내부 사전심의 대상인지 먼저 확인해야 합니다.</div>
                     <div class="case-box-v2"><b>사례 B</b><br>입찰 전 경쟁사 담당자가 ‘이번에는 어느 정도 금액으로 들어가느냐’고 묻습니다.</div>
-                    <div class="answer-box-v2"><b>판단 포인트</b><br>가격, 입찰, 거래조건에 관한 경쟁사 정보교환은 담합 리스크가 있으므로 대화를 중단하고 내부 기준을 확인해야 합니다.</div></div>
+                    <div class="answer-box-v2"><b>판단 포인트</b><br>가격, 입찰, 거래조건에 관한 경쟁사 정보교환은 담합 리스크가 있으므로 대화를 중단하고 내부 기준을 확인해야 합니다.</div>
+                    <div class="case-box-v2"><b>사례 C</b><br>평소 업무 연락을 자주 하던 협력사 담당자가 감사의 의미라며 모바일 커피 쿠폰을 개인 메신저로 보냈습니다.</div>
+                    <div class="answer-box-v2"><b>판단 포인트</b><br>소액이라도 직무 관련성이 있으면 금품·편의 제공 리스크가 발생할 수 있습니다. 사내 기준을 확인하고 필요 시 반환·신고·상담 절차를 진행해야 합니다.</div></div>
                 """, unsafe_allow_html=True)
             else:
                 st.markdown("""
@@ -2014,7 +2033,9 @@ with tab_audit:
                     <div class="case-box-v2"><b>사례 A</b><br>협력사 업무가 급해 계약서 발급 전 먼저 작업을 시작했습니다.</div>
                     <div class="answer-box-v2"><b>판단 포인트</b><br>위탁업무 시작 전 서면 발급은 협력사와 회사를 함께 보호하는 기본 절차입니다. 급한 업무라도 절차를 생략하면 리스크가 커집니다.</div>
                     <div class="case-box-v2"><b>사례 B</b><br>고객정보가 포함된 엑셀 파일을 개인 이메일로 보내 야간에 처리하려고 합니다.</div>
-                    <div class="answer-box-v2"><b>판단 포인트</b><br>개인정보와 기업비밀은 목적, 권한, 보관, 파기 기준을 지켜야 하며 개인 메일 등 비인가 경로 사용은 원칙적으로 금지됩니다.</div></div>
+                    <div class="answer-box-v2"><b>판단 포인트</b><br>개인정보와 기업비밀은 목적, 권한, 보관, 파기 기준을 지켜야 하며 개인 메일 등 비인가 경로 사용은 원칙적으로 금지됩니다.</div>
+                    <div class="case-box-v2"><b>사례 C</b><br>보직이 변경된 직원이 이전 업무 시스템 권한을 계속 보유하고 있어, 필요할 때 과거 고객정보를 조회할 수 있는 상태입니다.</div>
+                    <div class="answer-box-v2"><b>판단 포인트</b><br>불필요한 시스템 접근 권한은 즉시 반납·회수되어야 합니다. 업무 필요성이 사라진 권한은 개인정보 오·남용과 내부통제 리스크로 이어질 수 있습니다.</div></div>
                 """, unsafe_allow_html=True)
 
         elif step == 5:
@@ -2024,16 +2045,70 @@ with tab_audit:
         elif step == 6:
             st.markdown("<div class='content-card-v2'><span class='page-pill-v2'>STEP 6 · Quiz & Clear</span><h4>이해도 확인 퀴즈</h4><p>정답률은 교육 이해도 확인용입니다. 모든 문항에 응답해야 테마를 완료할 수 있습니다.</p></div>", unsafe_allow_html=True)
             if theme_no == 1:
-                st.radio("Q1. 공공기관 관계자가 협찬을 요청했습니다. 가장 적절한 조치는?", [SELECT_PLACEHOLDER, "관계 유지를 위해 바로 진행한다", "컴플라이언스 사전심의 등 내부 절차를 확인한다", "개인적으로 처리한다"], key="t1_v2_q1")
-                st.radio("Q2. 경쟁사가 입찰가격을 묻습니다. 가장 적절한 조치는?", [SELECT_PLACEHOLDER, "대략적인 가격 수준만 알려준다", "담합 리스크가 있으므로 대화를 중단하고 내부 기준을 확인한다", "서로 도움 되는 정보라면 공유한다"], key="t1_v2_q2")
-                st.radio("Q3. 협력사로부터 선물을 받았습니다. 가장 적절한 조치는?", [SELECT_PLACEHOLDER, "금액이 작으면 보관한다", "기준을 확인하고 필요 시 신고·반환·상담한다", "상급자에게만 구두 보고한다"], key="t1_v2_q3")
-                st.radio("Q4. 거래상대방에게 합리적 이유 없이 불리한 조건을 요구했습니다. 가장 적절한 판단은?", [SELECT_PLACEHOLDER, "회사에 유리하면 가능하다", "거래상 지위 남용 소지가 있으므로 합리적 사유와 절차를 확인한다", "상대방이 수용하면 문제없다"], key="t1_v2_q4")
+                _render_quiz_question(
+                    "Q1. 공공기관 관계자가 협찬을 요청했습니다. 가장 적절한 조치는?",
+                    ["관계 유지를 위해 바로 진행한다", "컴플라이언스 사전심의 등 내부 절차를 확인한다", "개인적으로 처리한다"],
+                    "t1_v2_q1",
+                    "컴플라이언스 사전심의 등 내부 절차를 확인한다",
+                    "공직자 등으로부터 요청받은 기부·협찬·협회비는 이해관계와 직무 관련성이 문제될 수 있으므로, 담당자가 임의로 진행하지 말고 내부 사전심의 대상 여부를 먼저 확인해야 합니다."
+                )
+                _render_quiz_question(
+                    "Q2. 경쟁사가 입찰가격을 묻습니다. 가장 적절한 조치는?",
+                    ["대략적인 가격 수준만 알려준다", "담합 리스크가 있으므로 대화를 중단하고 내부 기준을 확인한다", "서로 도움 되는 정보라면 공유한다"],
+                    "t1_v2_q2",
+                    "담합 리스크가 있으므로 대화를 중단하고 내부 기준을 확인한다",
+                    "입찰가격, 거래조건, 낙찰 예정자 등 경쟁 민감 정보의 교환은 담합 의심을 받을 수 있습니다. 대화를 중단하고 기록·보고·상담 절차를 검토하는 것이 안전합니다."
+                )
+                _render_quiz_question(
+                    "Q3. 협력사로부터 선물을 받았습니다. 가장 적절한 조치는?",
+                    ["금액이 작으면 보관한다", "기준을 확인하고 필요 시 신고·반환·상담한다", "상급자에게만 구두 보고한다"],
+                    "t1_v2_q3",
+                    "기준을 확인하고 필요 시 신고·반환·상담한다",
+                    "소액 선물이라도 직무 관련성이 있거나 반복·관행화되면 부패 리스크가 될 수 있습니다. 회사 기준에 따라 반환, 신고, 상담 등 객관적인 처리 절차를 남기는 것이 중요합니다."
+                )
+                _render_quiz_question(
+                    "Q4. 거래상대방에게 합리적 이유 없이 불리한 조건을 요구했습니다. 가장 적절한 판단은?",
+                    ["회사에 유리하면 가능하다", "거래상 지위 남용 소지가 있으므로 합리적 사유와 절차를 확인한다", "상대방이 수용하면 문제없다"],
+                    "t1_v2_q4",
+                    "거래상 지위 남용 소지가 있으므로 합리적 사유와 절차를 확인한다",
+                    "상대방이 수용하더라도 거래상 지위, 불이익 정도, 합리적 사유와 협의 절차가 부족하면 공정거래 리스크가 발생할 수 있습니다."
+                )
             else:
-                st.radio("Q5. 중소기업에게 위탁업무를 시작하기 전 원칙적으로 필요한 것은?", [SELECT_PLACEHOLDER, "구두 합의 후 사후 정리한다", "법정기재사항이 포함된 서면을 먼저 발급한다", "업무 완료 후 정산 메모만 남긴다"], key="t2_v2_q1")
-                st.radio("Q6. 목적물 수령 후 검사결과 통지는 원칙적으로 언제까지 해야 할까요?", [SELECT_PLACEHOLDER, "10일 이내 서면으로 통지한다", "30일 이내 구두로 통지한다", "문제가 있을 때만 통지한다"], key="t2_v2_q2")
-                st.radio("Q7. 협력사의 기술자료를 요구할 때 가장 적절한 기준은?", [SELECT_PLACEHOLDER, "업무에 필요하면 자유롭게 요구한다", "정당한 사유와 절차에 따라 요구하고 목적 범위 내에서만 사용한다", "받은 자료는 유사 업무에도 사용할 수 있다"], key="t2_v2_q3")
-                st.radio("Q8. 고객 개인정보가 포함된 파일을 개인 메일로 보내는 행위에 대한 가장 적절한 판단은?", [SELECT_PLACEHOLDER, "편의를 위해 가능하다", "원칙적으로 금지되며 내부 보안 기준을 따라야 한다", "암호 없이 보내도 된다"], key="t2_v2_q4")
-                st.radio("Q9. 정보시스템 ID/PW 관리 기준으로 가장 적절한 것은?", [SELECT_PLACEHOLDER, "팀 업무 편의를 위해 공유한다", "공용 메모장에 적어둔다", "공유하지 않고 개인별 계정과 권한 기준을 준수한다"], key="t2_v2_q5")
+                _render_quiz_question(
+                    "Q5. 중소기업에게 위탁업무를 시작하기 전 원칙적으로 필요한 것은?",
+                    ["구두 합의 후 사후 정리한다", "법정기재사항이 포함된 서면을 먼저 발급한다", "업무 완료 후 정산 메모만 남긴다"],
+                    "t2_v2_q1",
+                    "법정기재사항이 포함된 서면을 먼저 발급한다",
+                    "위탁업무 시작 전 계약서 등 필요한 서면을 발급하고 보존하는 것은 협력사와 회사 모두를 보호하는 기본 절차입니다. 구두 합의나 사후 정리는 분쟁과 법 위반 리스크를 키울 수 있습니다."
+                )
+                _render_quiz_question(
+                    "Q6. 목적물 수령 후 검사결과 통지는 원칙적으로 언제까지 해야 할까요?",
+                    ["10일 이내 서면으로 통지한다", "30일 이내 구두로 통지한다", "문제가 있을 때만 통지한다"],
+                    "t2_v2_q2",
+                    "10일 이내 서면으로 통지한다",
+                    "검사결과는 정해진 기한 내 서면으로 통지해야 대금 지급과 후속 절차가 투명하게 관리됩니다. 구두 통지만으로는 분쟁 발생 시 입증이 어렵습니다."
+                )
+                _render_quiz_question(
+                    "Q7. 협력사의 기술자료를 요구할 때 가장 적절한 기준은?",
+                    ["업무에 필요하면 자유롭게 요구한다", "정당한 사유와 절차에 따라 요구하고 목적 범위 내에서만 사용한다", "받은 자료는 유사 업무에도 사용할 수 있다"],
+                    "t2_v2_q3",
+                    "정당한 사유와 절차에 따라 요구하고 목적 범위 내에서만 사용한다",
+                    "기술자료는 정당한 사유, 요구서, 비밀유지, 목적 범위 등 절차가 중요합니다. 제공받은 자료를 다른 목적에 쓰거나 제3자에게 제공하면 중대한 리스크가 됩니다."
+                )
+                _render_quiz_question(
+                    "Q8. 고객 개인정보가 포함된 파일을 개인 메일로 보내는 행위에 대한 가장 적절한 판단은?",
+                    ["편의를 위해 가능하다", "원칙적으로 금지되며 내부 보안 기준을 따라야 한다", "암호 없이 보내도 된다"],
+                    "t2_v2_q4",
+                    "원칙적으로 금지되며 내부 보안 기준을 따라야 한다",
+                    "개인정보와 기업비밀은 승인된 시스템과 보안 절차 안에서 처리해야 합니다. 개인 메일, 개인 클라우드, 메신저 등 비인가 경로는 유출 사고로 이어질 수 있습니다."
+                )
+                _render_quiz_question(
+                    "Q9. 정보시스템 ID/PW 관리 기준으로 가장 적절한 것은?",
+                    ["팀 업무 편의를 위해 공유한다", "공용 메모장에 적어둔다", "공유하지 않고 개인별 계정과 권한 기준을 준수한다"],
+                    "t2_v2_q5",
+                    "공유하지 않고 개인별 계정과 권한 기준을 준수한다",
+                    "ID/PW 공유는 책임 추적을 어렵게 하고 권한 오남용 위험을 높입니다. 개인별 계정, 최소 권한, 권한 회수 기준을 지켜야 합니다."
+                )
 
         if step in TIMED_STEPS:
             _render_step_timer(theme_no, step)
@@ -2087,7 +2162,7 @@ with tab_audit:
                 else:
                     if step in TIMED_STEPS and not _step_time_met(theme_no, step):
                         remain = _step_remaining(theme_no, step)
-                        st.warning(f"최소 학습시간 100초를 충족해야 다음 단계로 이동할 수 있습니다. 현재 {remain}초 남았습니다.")
+                        st.warning(f"최소 학습시간 60초를 충족해야 다음 단계로 이동할 수 있습니다. 현재 {remain}초 남았습니다.")
                     else:
                         _mark_step_done(theme_no, step)
                         next_step = min(6, step + 1)
@@ -2114,7 +2189,7 @@ with tab_audit:
                 <h4>감사실 안내</h4>
                 <p>
                     교육은 순차형 Quest 방식으로 진행됩니다. 현재 단계를 완료해야 다음 단계로 이동할 수 있으며,
-                    각 테마의 STEP 1~4는 단계별 최소 100초 이상 학습해야 다음 단계로 이동할 수 있습니다.
+                    각 테마의 STEP 1~4는 단계별 최소 60초 이상 학습해야 다음 단계로 이동할 수 있습니다.
                     STEP 5 실천 체크는 항목별 10초 확인 카운트다운을 통해 실질적인 확인 절차를 거칩니다.
                     이는 단순 클릭형 수료를 방지하고, 전 임직원이 핵심 기준을 충분히 확인하기 위한 장치입니다.
                 </p>
@@ -2310,7 +2385,7 @@ with tab_audit:
                             "최종점수": final_score,
                             "수료상태": "수료",
                             "이벤트추첨대상": "대상",
-                            "비고": "감사실 주관 2026년 6월 컴플라이언스 인식제고 자율점검 교육 / 모바일 쿠폰 추첨 대상 포함 / Final V3 단계별 100초·체크항목 10초 확인형 교육",
+                            "비고": "감사실 주관 2026년 6월 컴플라이언스 인식제고 자율점검 교육 / 모바일 쿠폰 추첨 대상 포함 / Final V3 단계별 60초·체크항목 10초 확인형 교육",
                         }
                         with st.spinner("6월 컴플라이언스 교육 수료 내역을 저장 중입니다..."):
                             success, save_msg = save_june_compliance_training_result(record)
