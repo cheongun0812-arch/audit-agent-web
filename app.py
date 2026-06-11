@@ -667,22 +667,20 @@ def validate_emp_id(emp_id: str) -> tuple[bool, str]:
 
 
 # ==========================================
-# ✅ 현장대리인 선임 신고서 저장 유틸
+# ✅ 2026년 6월 컴플라이언스 인식제고 교육 저장 유틸
 #    - 기존 윤리경영 실천서약 저장 로직과 분리
-#    - Google Sheet: Audit_Result_2026 / 2026_현장대리인_선임신고
+#    - Google Sheet: Audit_Result_2026 / 2026_06_컴플라이언스_인식제고교육
 # ==========================================
-FIELD_AGENT_SHEET_NAME = "2026_현장대리인_선임신고"
-FIELD_AGENT_HEADERS = [
-    "저장시간", "제출ID", "NO",
-    "KT 내부 도급 관리자_부문", "KT 내부 도급 관리자_본부", "KT 내부 도급 관리자_소속", "KT 내부 도급 관리자_소속(장)", "KT 내부 도급 관리자_연락처",
-    "ktMOS북부 현장 대리인_본부", "ktMOS북부 현장 대리인_팀/파트", "ktMOS북부 현장 대리인_직위", "ktMOS북부 현장 대리인_성명", "ktMOS북부 현장 대리인_연락처"
+JUNE_TRAINING_SHEET_NAME = "2026_06_컴플라이언스_인식제고교육"
+JUNE_TRAINING_HEADERS = [
+    "저장시간", "수료ID", "사번", "성명", "총괄/본부/단", "부서",
+    "교육대상", "Theme1_청렴공정_확인", "Theme1_점수", "Theme2_협력정보_확인", "Theme2_점수",
+    "이벤트퀴즈_선택", "이벤트퀴즈_정답여부", "퀴즈점수", "참여점수", "최종점수", "수료상태", "이벤트추첨대상", "비고"
 ]
 
-def save_field_agent_appointment_reports(records: list[dict]) -> tuple[bool, str]:
-    """현장대리인 선임 신고 내역을 Google Sheet에 행 단위로 저장합니다."""
-    if not records:
-        return False, "저장할 현장대리인 선임 신고 내역이 없습니다."
 
+def save_june_compliance_training_result(record: dict) -> tuple[bool, str]:
+    """6월 컴플라이언스 인식제고 교육 수료 내역을 Google Sheet에 저장합니다."""
     client = init_google_sheet_connection()
     if not client:
         return False, "구글 시트 연결 실패 (Secrets 확인)"
@@ -690,35 +688,54 @@ def save_field_agent_appointment_reports(records: list[dict]) -> tuple[bool, str
     try:
         spreadsheet = client.open("Audit_Result_2026")
         try:
-            sheet = spreadsheet.worksheet(FIELD_AGENT_SHEET_NAME)
+            sheet = spreadsheet.worksheet(JUNE_TRAINING_SHEET_NAME)
         except Exception:
-            sheet = spreadsheet.add_worksheet(title=FIELD_AGENT_SHEET_NAME, rows=3000, cols=len(FIELD_AGENT_HEADERS) + 2)
-            sheet.append_row(FIELD_AGENT_HEADERS)
+            sheet = spreadsheet.add_worksheet(title=JUNE_TRAINING_SHEET_NAME, rows=3000, cols=len(JUNE_TRAINING_HEADERS) + 2)
+            sheet.append_row(JUNE_TRAINING_HEADERS)
+
+        all_records = sheet.get_all_records()
+        emp_id_str = str(record.get("사번", "")).strip()
+        name_str = str(record.get("성명", "")).strip()
+        dept_str = str(record.get("부서", "")).strip()
+
+        for existing in all_records:
+            existing_emp_id = str(existing.get("사번", "")).strip()
+            existing_name = str(existing.get("성명", "")).strip()
+            existing_dept = str(existing.get("부서", "")).strip()
+            if emp_id_str == "00000000":
+                if existing_emp_id == "00000000" and existing_name == name_str and existing_dept == dept_str:
+                    return False, f"'{name_str}'님은 이미 6월 컴플라이언스 교육 수료 기록이 있습니다."
+            else:
+                if existing_emp_id == emp_id_str:
+                    return False, f"사번 {emp_id_str}은(는) 이미 6월 컴플라이언스 교육 수료 기록이 있습니다."
 
         now = _korea_now().strftime("%Y-%m-%d %H:%M:%S")
-        submission_seed = f"{now}|{records[0].get('작성자','')}|{records[0].get('작성부서','')}|{len(records)}"
-        submission_id = hashlib.sha256(submission_seed.encode("utf-8")).hexdigest()[:12]
+        completion_seed = f"{now}|{emp_id_str}|{name_str}|{dept_str}|2026-06-compliance"
+        completion_id = hashlib.sha256(completion_seed.encode("utf-8")).hexdigest()[:12]
 
-        rows = []
-        for idx, record in enumerate(records, start=1):
-            rows.append([
-                now,
-                submission_id,
-                record.get("NO", idx),
-                record.get("KT 내부 도급 관리자_부문", ""),
-                record.get("KT 내부 도급 관리자_본부", ""),
-                record.get("KT 내부 도급 관리자_소속", ""),
-                record.get("KT 내부 도급 관리자_소속(장)", ""),
-                record.get("KT 내부 도급 관리자_연락처", ""),
-                record.get("ktMOS북부 현장 대리인_본부", ""),
-                record.get("ktMOS북부 현장 대리인_팀/파트", ""),
-                record.get("ktMOS북부 현장 대리인_직위", ""),
-                record.get("ktMOS북부 현장 대리인_성명", ""),
-                record.get("ktMOS북부 현장 대리인_연락처", ""),
-            ])
-
-        sheet.append_rows(rows, value_input_option="USER_ENTERED")
-        return True, f"현장대리인 선임 신고 내역 {len(rows)}건이 저장되었습니다."
+        row = [
+            now,
+            completion_id,
+            record.get("사번", ""),
+            record.get("성명", ""),
+            record.get("총괄/본부/단", ""),
+            record.get("부서", ""),
+            record.get("교육대상", "전 임직원"),
+            record.get("Theme1_청렴공정_확인", "완료"),
+            record.get("Theme1_점수", 0),
+            record.get("Theme2_협력정보_확인", "완료"),
+            record.get("Theme2_점수", 0),
+            record.get("이벤트퀴즈_선택", ""),
+            record.get("이벤트퀴즈_정답여부", ""),
+            record.get("퀴즈점수", 0),
+            record.get("참여점수", 0),
+            record.get("최종점수", 0),
+            record.get("수료상태", "수료"),
+            record.get("이벤트추첨대상", "대상"),
+            record.get("비고", ""),
+        ]
+        sheet.append_row(row, value_input_option="USER_ENTERED")
+        return True, "6월 컴플라이언스 인식제고 교육 수료 내역이 저장되었습니다."
     except Exception as e:
         return False, str(e)
 
@@ -889,7 +906,7 @@ def _render_pledge_group(
 # --- [Tab 1: 자율점검] ---
 with tab_audit:
     st.markdown("### ✅ 자율점검")
-    st.caption("기존 실천서약은 접힌 보관 영역에 그대로 유지하고, 아래에서 2026 현장대리인 선임 신고서를 작성·제출할 수 있습니다.")
+    st.caption("기존 윤리경영 실천서약은 보관 영역에 그대로 유지하고, 아래에서 6월 컴플라이언스 인식제고 자율점검 교육을 진행합니다.")
 
     st.markdown("""
     <style>
@@ -1180,286 +1197,706 @@ with tab_audit:
         st.info("📁 기존 실천서약은 보관함에 숨겨져 있습니다. 필요할 때만 위 체크박스를 눌러 열어 주세요.")
 
     st.markdown("---")
+
+    # =========================================================
+    # 2026년 6월 컴플라이언스 인식제고 자율점검 교육 - Premium
+    # - 기존 윤리경영 실천서약 보관함은 유지
+    # - 현장대리인 등록 모듈 위치에 고품질 교육 모듈 배치
+    # - Theme 1: 부패방지 + 공정거래
+    # - Theme 2: 하도급 + 정보보호
+    # =========================================================
     st.markdown("""
-        <div class="field-agent-hero">
-            <h3>🧭 2026 현장대리인 선임 신고서 제출</h3>
+        <style>
+        .premium-hero {
+            background: linear-gradient(135deg, #0F172A 0%, #1E3A8A 42%, #0EA5E9 100%);
+            color: #FFFFFF;
+            padding: 30px 32px;
+            border-radius: 24px;
+            box-shadow: 0 14px 34px rgba(15, 23, 42, 0.22);
+            margin: 10px 0 18px 0;
+            border: 1px solid rgba(255,255,255,0.16);
+        }
+        .premium-hero h2 {
+            margin: 0 0 8px 0;
+            font-size: 1.72rem;
+            font-weight: 950;
+            letter-spacing: -0.02em;
+        }
+        .premium-hero p {
+            margin: 0;
+            color: rgba(255,255,255,0.90);
+            line-height: 1.68;
+            font-weight: 650;
+            font-size: 1.02rem;
+        }
+        .premium-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.16);
+            color: #E0F2FE;
+            font-weight: 950;
+            margin-bottom: 12px;
+            border: 1px solid rgba(255,255,255,0.18);
+        }
+        .audit-message {
+            background: #FFFFFF;
+            border: 1px solid #E2E8F0;
+            border-left: 7px solid #2563EB;
+            border-radius: 18px;
+            padding: 18px 20px;
+            box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
+            margin: 14px 0;
+        }
+        .audit-message h4 {
+            margin: 0 0 8px 0;
+            color: #1E3A8A;
+            font-weight: 950;
+            font-size: 1.10rem;
+        }
+        .audit-message p {
+            margin: 0;
+            color: #334155;
+            line-height: 1.65;
+            font-weight: 650;
+        }
+        .learning-flow {
+            display: grid;
+            grid-template-columns: repeat(6, minmax(100px, 1fr));
+            gap: 10px;
+            margin: 15px 0 20px 0;
+        }
+        .learning-flow div {
+            background: #FFFFFF;
+            border: 1px solid #DCE7F3;
+            border-radius: 18px;
+            padding: 12px 10px;
+            text-align: center;
+            font-weight: 900;
+            color: #0F172A;
+            box-shadow: 0 5px 14px rgba(15, 23, 42, 0.05);
+        }
+        .theme-hero {
+            padding: 22px 24px;
+            border-radius: 22px;
+            margin: 8px 0 16px 0;
+            box-shadow: 0 10px 26px rgba(15, 23, 42, 0.10);
+        }
+        .theme-hero h3 {
+            margin: 0 0 8px 0;
+            font-weight: 950;
+            font-size: 1.45rem;
+            letter-spacing: -0.02em;
+        }
+        .theme-hero p {
+            margin: 0;
+            line-height: 1.65;
+            font-weight: 650;
+        }
+        .theme-one { background: linear-gradient(135deg, #FFF7ED 0%, #FEF3C7 100%); border:1px solid #FED7AA; color:#78350F; }
+        .theme-two { background: linear-gradient(135deg, #ECFEFF 0%, #DBEAFE 100%); border:1px solid #A5F3FC; color:#0F172A; }
+        .premium-card {
+            background: #FFFFFF;
+            border: 1px solid #E2E8F0;
+            border-radius: 20px;
+            padding: 20px 22px;
+            margin: 12px 0;
+            box-shadow: 0 7px 20px rgba(15, 23, 42, 0.06);
+        }
+        .premium-card h4 {
+            margin: 0 0 10px 0;
+            color: #1E3A8A;
+            font-size: 1.17rem;
+            font-weight: 950;
+        }
+        .premium-card p {
+            color: #334155;
+            line-height: 1.65;
+            font-weight: 620;
+        }
+        .page-pill {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 999px;
+            background: #DBEAFE;
+            color: #1D4ED8;
+            font-weight: 950;
+            font-size: 0.88rem;
+            margin-bottom: 10px;
+        }
+        .principle-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(180px, 1fr));
+            gap: 12px;
+            margin-top: 12px;
+        }
+        .principle-box {
+            background: #F8FAFC;
+            border: 1px solid #E2E8F0;
+            border-radius: 16px;
+            padding: 15px 16px;
+        }
+        .principle-box b { color:#0F172A; font-size:1.02rem; }
+        .principle-box span { display:block; color:#475569; margin-top:6px; line-height:1.55; font-weight:600; }
+        .risk-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(170px, 1fr));
+            gap: 11px;
+            margin-top: 12px;
+        }
+        .risk-card {
+            background: #FFF7ED;
+            border: 1px solid #FDBA74;
+            border-radius: 16px;
+            padding: 14px 14px;
+            color: #7C2D12;
+            font-weight: 900;
+            min-height: 68px;
+        }
+        .case-box {
+            background: linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 100%);
+            border: 1px solid #BFDBFE;
+            border-radius: 18px;
+            padding: 16px 18px;
+            margin: 12px 0;
+        }
+        .case-box b { color:#1E3A8A; }
+        .answer-box {
+            background:#F0FDF4;
+            border:1px solid #BBF7D0;
+            border-radius:16px;
+            padding:14px 16px;
+            margin:12px 0;
+            color:#14532D;
+            font-weight:700;
+            line-height:1.6;
+        }
+        .quote-line {
+            font-size: 1.18rem;
+            color: #0F172A;
+            font-weight: 950;
+            line-height: 1.55;
+            margin: 8px 0 12px 0;
+        }
+        .score-pill {
+            display:inline-block;
+            padding:7px 12px;
+            border-radius:999px;
+            background:#F0FDF4;
+            color:#166534;
+            border:1px solid #BBF7D0;
+            font-weight:950;
+            margin:4px 6px 4px 0;
+        }
+        .score-pill-warn {
+            display:inline-block;
+            padding:7px 12px;
+            border-radius:999px;
+            background:#FFF7ED;
+            color:#9A3412;
+            border:1px solid #FED7AA;
+            font-weight:950;
+            margin:4px 6px 4px 0;
+        }
+        .summer-zone {
+            background: linear-gradient(135deg, #E0F2FE 0%, #BAE6FD 45%, #ECFEFF 100%);
+            border: 1px solid #7DD3FC;
+            border-radius: 22px;
+            padding: 22px 24px;
+            box-shadow:0 10px 26px rgba(14, 165, 233, 0.16);
+            margin: 10px 0 16px 0;
+        }
+        .summer-zone h3 { margin:0 0 8px 0; color:#075985; font-weight:950; font-size:1.40rem; }
+        .summer-zone p { margin:0; color:#0F172A; line-height:1.65; font-weight:650; }
+        @media (max-width: 900px) {
+            .learning-flow { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+            .principle-grid { grid-template-columns: 1fr; }
+            .risk-grid { grid-template-columns: 1fr; }
+        }
+        </style>
+
+        <div class="premium-hero">
+            <div class="premium-badge">Audit Office · June Compliance Self-Inspection</div>
+            <h2>🌊 2026년 6월 컴플라이언스 인식제고 자율점검 교육</h2>
             <p>
-                아래 양식에 <b>KT 내부 도급 관리자</b>와 <b>ktMOS북부 현장 대리인</b> 정보를 입력해 주세요.
-                여러 건을 한 번에 제출해야 하는 경우 각 입력 블록 하단의 <b>전체 ＋/－</b> 버튼으로 전체 블록을 추가·삭제하고, 특정 영역만 추가해야 할 때는 해당 영역의 작은 <b>＋/－</b> 버튼을 사용하면 됩니다.
-                제출된 내용은 Google Sheet에 행 단위로 저장됩니다.
+                본 과정은 전 임직원을 대상으로 하는 감사실 주관 정기 자율점검 교육입니다.
+                부패방지·공정거래·하도급·정보보호 리스크를 사례 중심으로 학습하고,
+                실제 업무에서 바로 적용할 수 있는 실천 기준을 확인합니다.
+            </p>
+        </div>
+
+        <div class="audit-message">
+            <h4>감사실 안내</h4>
+            <p>
+                컴플라이언스는 특정 부서만의 업무가 아니라, 임직원 모두의 업무 방식입니다.
+                이번 교육은 짧게 끝나는 확인 절차가 아니라, 현장에서 자주 마주치는 판단 상황을 스스로 점검하기 위한 과정입니다.
+                각 테마의 인포그래픽, 핵심 원칙, 위험 신호, 사례 판단, 실천 체크, 퀴즈를 순서대로 진행해 주세요.
             </p>
         </div>
     """, unsafe_allow_html=True)
 
     st.markdown("""
-        <div class="fa-mini-guide">
-            <b>작성 방식</b> · 입력한 행은 제출 시 Google Sheet의
-            <b>2026_현장대리인_선임신고</b> 시트에 저장됩니다.
-            NO는 전체 블록 기준으로 자동 부여됩니다. 블록 내부에서 KT 또는 ktMOS 행이 추가되어도 같은 NO로 저장됩니다.
+        <div class="learning-flow">
+            <div>STEP 1<br>인포그래픽</div>
+            <div>STEP 2<br>핵심 원칙</div>
+            <div>STEP 3<br>위험 신호</div>
+            <div>STEP 4<br>사례 판단</div>
+            <div>STEP 5<br>실천 체크</div>
+            <div>STEP 6<br>퀴즈·완료</div>
         </div>
     """, unsafe_allow_html=True)
 
-    with st.expander("ℹ️ 작성 안내 자세히 보기", expanded=False):
-        st.markdown(
-            "- 기존 윤리경영 실천서약은 위 보관함에 그대로 보존되어 있습니다.\n"
-            "- 현장대리인 선임 신고서는 별도 Google Sheet 시트에 저장됩니다.\n"
-            "- 화면 캡처 양식의 컬럼 구조: **NO / KT 내부 도급 관리자 / ktMOS북부 현장 대리인**을 반영했습니다.\n"
-            "- 여러 건을 신고해야 하는 경우 각 블록 하단의 **➕ 전체 블록 추가**를 사용하세요.\n"
-            "- 같은 블록 안에서 **KT 내부 도급 관리자** 또는 **ktMOS북부 현장 대리인**만 추가해야 하는 경우, 각 영역 제목 오른쪽의 작은 **＋/－** 버튼을 사용하세요."
-        )
+    if "june_training_saved" not in st.session_state:
+        st.session_state["june_training_saved"] = False
 
-    # ✅ 입력 구조 개선
-    # - 상단의 '입력 행 추가/삭제' 버튼 제거
-    # - 각 블록 하단에서 전체 블록 추가/삭제
-    # - 각 블록 내부에서 KT 내부 도급 관리자 / ktMOS북부 현장 대리인 정보만 각각 추가/삭제
-    if "field_agent_block_count" not in st.session_state:
-        st.session_state["field_agent_block_count"] = 1
+    # 선택값/정답 정의
+    SELECT_PLACEHOLDER = "선택하세요"
+    t1_answer_map = {
+        "t1_premium_q1": "컴플라이언스 사전심의 등 내부 절차를 확인한다",
+        "t1_premium_q2": "담합 리스크가 있으므로 대화를 중단하고 내부 기준을 확인한다",
+        "t1_premium_q3": "기준을 확인하고 필요 시 신고·반환·상담한다",
+        "t1_premium_q4": "거래상 지위 남용 소지가 있으므로 합리적 사유와 절차를 확인한다",
+    }
+    t2_answer_map = {
+        "t2_premium_q1": "법정기재사항이 포함된 서면을 먼저 발급한다",
+        "t2_premium_q2": "10일 이내 서면으로 통지한다",
+        "t2_premium_q3": "정당한 사유와 절차에 따라 요구하고 목적 범위 내에서만 사용한다",
+        "t2_premium_q4": "원칙적으로 금지되며 내부 보안 기준을 따라야 한다",
+        "t2_premium_q5": "공유하지 않고 개인별 계정과 권한 기준을 준수한다",
+    }
 
-    # 예전 버전의 row_count 세션값이 남아 있어도 새 화면에는 영향이 없도록 둡니다.
-    st.caption("전체 블록 버튼은 조금 크게, KT/MOS 개별 정보 버튼은 작게 구분해 두었습니다.")
+    t1_check_keys = ["t1_premium_c1", "t1_premium_c2", "t1_premium_c3", "t1_premium_c4", "t1_premium_c5"]
+    t2_check_keys = ["t2_premium_c1", "t2_premium_c2", "t2_premium_c3", "t2_premium_c4", "t2_premium_c5", "t2_premium_c6", "t2_premium_c7"]
 
-    st.markdown("""
-        <div style='overflow-x:auto; margin-top:8px; margin-bottom:12px;'>
-            <table style='width:100%; border-collapse:collapse; background:#FFFFFF; border:1px solid #B0BEC5; font-size:0.88rem;'>
-                <thead>
-                    <tr>
-                        <th rowspan='2' style='border:1px solid #90A4AE; background:#E3F2FD; padding:7px; text-align:center;'>NO</th>
-                        <th colspan='5' style='border:1px solid #90A4AE; background:#BBDEFB; padding:7px; text-align:center;'>KT 내부 도급 관리자</th>
-                        <th colspan='5' style='border:1px solid #90A4AE; background:#E0F2F1; padding:7px; text-align:center;'>ktMOS북부 현장 대리인</th>
-                    </tr>
-                    <tr>
-                        <th style='border:1px solid #90A4AE; background:#E3F2FD; padding:7px;'>부문</th>
-                        <th style='border:1px solid #90A4AE; background:#E3F2FD; padding:7px;'>본부</th>
-                        <th style='border:1px solid #90A4AE; background:#E3F2FD; padding:7px;'>소속</th>
-                        <th style='border:1px solid #90A4AE; background:#E3F2FD; padding:7px;'>소속(장)</th>
-                        <th style='border:1px solid #90A4AE; background:#E3F2FD; padding:7px;'>연락처</th>
-                        <th style='border:1px solid #90A4AE; background:#E0F2F1; padding:7px;'>본부</th>
-                        <th style='border:1px solid #90A4AE; background:#E0F2F1; padding:7px;'>팀/파트</th>
-                        <th style='border:1px solid #90A4AE; background:#E0F2F1; padding:7px;'>직위</th>
-                        <th style='border:1px solid #90A4AE; background:#E0F2F1; padding:7px;'>성명</th>
-                        <th style='border:1px solid #90A4AE; background:#E0F2F1; padding:7px;'>연락처</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td style='border:1px solid #CFD8DC; padding:6px; color:#D32F2F; text-align:center;'>예시</td>
-                        <td style='border:1px solid #CFD8DC; padding:6px;'>네트워크부문</td>
-                        <td style='border:1px solid #CFD8DC; padding:6px;'>네트워크 운용혁신본부</td>
-                        <td style='border:1px solid #CFD8DC; padding:6px;'>액세스운용담당 액세스망운용개선팀</td>
-                        <td style='border:1px solid #CFD8DC; padding:6px;'>홍길상</td>
-                        <td style='border:1px solid #CFD8DC; padding:6px;'>010-0000-0000</td>
-                        <td style='border:1px solid #CFD8DC; padding:6px;'>사업총괄</td>
-                        <td style='border:1px solid #CFD8DC; padding:6px;'>기술지원팀</td>
-                        <td style='border:1px solid #CFD8DC; padding:6px;'>과장</td>
-                        <td style='border:1px solid #CFD8DC; padding:6px;'>홍길동</td>
-                        <td style='border:1px solid #CFD8DC; padding:6px;'>010-0000-0000</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-    """, unsafe_allow_html=True)
+    theme1_tab, theme2_tab, event_tab, submit_tab = st.tabs([
+        "① 청렴·공정경영", "② 협력사·정보보호", "🌊 Summer Event", "✅ 수료 제출"
+    ])
 
-    records_to_save = []
-    validation_errors = []
+    # ------------------------------------------------------
+    # Theme 1: 청렴·공정경영
+    # ------------------------------------------------------
+    with theme1_tab:
+        st.markdown("""
+            <div class="theme-hero theme-one">
+                <h3>Theme 1. 청렴·공정경영 Zone</h3>
+                <p>
+                    부패방지와 공정거래는 회사의 신뢰를 지키는 가장 기본적인 내부통제입니다.
+                    공직자 관련 요청, 금품·향응, 제3자 우회 제공, 경쟁사 정보교환, 거래상 지위 남용은
+                    모두 사전에 멈추고 확인해야 할 신호입니다.
+                </p>
+            </div>
+        """, unsafe_allow_html=True)
 
-    for block_idx in range(st.session_state["field_agent_block_count"]):
-        block_no = block_idx + 1
-        kt_count_key = f"fa_kt_row_count_{block_idx}"
-        mos_count_key = f"fa_mos_row_count_{block_idx}"
-        if kt_count_key not in st.session_state:
-            st.session_state[kt_count_key] = 1
-        if mos_count_key not in st.session_state:
-            st.session_state[mos_count_key] = 1
+        t1_page1, t1_page2, t1_page3, t1_page4, t1_page5, t1_page6 = st.tabs([
+            "1 인포그래픽", "2 핵심 원칙", "3 위험 신호", "4 사례 판단", "5 실천 체크", "6 퀴즈"
+        ])
 
-        with st.container(border=True):
-            st.markdown(
-                f"<div class='fa-row-title'>NO. {block_no} 현장대리인 선임 정보 <span class='fa-required'>*</span></div>",
-                unsafe_allow_html=True
+        with t1_page1:
+            st.markdown("""
+                <div class="premium-card">
+                    <span class="page-pill">STEP 1 · Infographic</span>
+                    <h4>청렴한 판단은 가장 강한 내부통제입니다</h4>
+                    <div class="quote-line">“관행이라고 생각한 작은 판단이 회사 전체의 리스크가 될 수 있습니다.”</div>
+                    <div class="principle-grid">
+                        <div class="principle-box"><b>🚫 부정청탁 NO</b><span>공직자 등에게 직접 또는 제3자를 통한 부정청탁을 하지 않습니다.</span></div>
+                        <div class="principle-box"><b>🎁 금품·향응 NO</b><span>직무 관련 금품, 향응, 편의 제공 또는 약속은 사전 기준 확인이 필요합니다.</span></div>
+                        <div class="principle-box"><b>🤝 담합 NO</b><span>가격, 입찰, 거래조건 등에 관한 경쟁사 합의 또는 정보교환을 하지 않습니다.</span></div>
+                        <div class="principle-box"><b>⚖️ 거래상 지위 남용 NO</b><span>거래상대방에게 구입 강제, 불이익한 조건, 경제상 이익 제공을 강요하지 않습니다.</span></div>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+
+        with t1_page2:
+            st.markdown("""
+                <div class="premium-card">
+                    <span class="page-pill">STEP 2 · Core Principles</span>
+                    <h4>기억해야 할 5가지 기준</h4>
+                    <div class="principle-grid">
+                        <div class="principle-box"><b>1. 청탁 금지</b><span>법령상 허용된 경우가 아닌 한 공직자 등에게 부정청탁을 하지 않습니다.</span></div>
+                        <div class="principle-box"><b>2. 금품 제공 금지</b><span>공직자 등에게 직무 관련 금품 등을 제공하거나 제공 의사표시를 하지 않습니다.</span></div>
+                        <div class="principle-box"><b>3. 제3자 리스크 관리</b><span>에이전트, 하도급사 등 제3자를 통한 우회 제공도 부패 리스크가 될 수 있습니다.</span></div>
+                        <div class="principle-box"><b>4. 회계 투명성</b><span>비용집행은 실제에 맞게 처리하고 증빙자료를 정확하게 보관합니다.</span></div>
+                        <div class="principle-box"><b>5. 공정거래 준수</b><span>담합, 구입 강제, 거래조건 일방 변경 등 불공정 행위를 하지 않습니다.</span></div>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+
+        with t1_page3:
+            st.markdown("""
+                <div class="premium-card">
+                    <span class="page-pill">STEP 3 · Red Flags</span>
+                    <h4>이런 말이 나오면 멈추고 확인하세요</h4>
+                    <div class="risk-grid">
+                        <div class="risk-card">🚩 “이번에는 관행대로 처리하시죠.”</div>
+                        <div class="risk-card">🚩 “식사 한 번 하시죠. 별일 아닙니다.”</div>
+                        <div class="risk-card">🚩 “경쟁사는 얼마에 들어온대요?”</div>
+                        <div class="risk-card">🚩 “협력사를 통해 전달하면 괜찮지 않을까요?”</div>
+                        <div class="risk-card">🚩 “증빙은 나중에 맞추면 됩니다.”</div>
+                        <div class="risk-card">🚩 “목표 미달이면 조건을 바꿔야죠.”</div>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+
+        with t1_page4:
+            st.markdown("""
+                <div class="premium-card">
+                    <span class="page-pill">STEP 4 · Case Study</span>
+                    <h4>사례로 판단하기</h4>
+                    <div class="case-box">
+                        <b>사례 A · 공직자 관련 요청</b><br>
+                        공공기관 관계자가 특정 협회비 또는 협찬을 요청했습니다. 담당자는 관계 유지를 위해 바로 진행하려고 합니다.
+                    </div>
+                    <div class="answer-box">
+                        <b>판단 포인트</b><br>
+                        공직자 등으로부터 직·간접적으로 청탁·권유·요청받은 기부, 협찬, 협회비 등은 내부 사전심의 대상인지 확인해야 합니다.
+                        관계 유지나 관행보다 절차 확인이 먼저입니다.
+                    </div>
+                    <div class="case-box">
+                        <b>사례 B · 경쟁사 정보교환</b><br>
+                        입찰 전 경쟁사 담당자가 “이번에는 어느 정도 가격대로 들어가나요?”라고 묻습니다.
+                    </div>
+                    <div class="answer-box">
+                        <b>판단 포인트</b><br>
+                        가격, 입찰, 거래조건에 관한 경쟁사 간 논의는 담합 리스크가 될 수 있습니다.
+                        가벼운 대화처럼 보여도 업무 관련 정보교환은 즉시 중단하고 내부 기준을 확인해야 합니다.
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+
+        with t1_page5:
+            st.markdown("#### STEP 5. 실천 체크")
+            st.caption("아래 항목을 직접 확인해야 Theme 1을 완료할 수 있습니다.")
+            t1_checks = {
+                "t1_premium_c1": "나는 공직자 등에게 부정청탁을 하지 않는다.",
+                "t1_premium_c2": "나는 직무 관련 금품·향응·편의 제공 기준을 반드시 확인한다.",
+                "t1_premium_c3": "나는 제3자를 통한 우회 제공도 부패 리스크가 될 수 있음을 이해한다.",
+                "t1_premium_c4": "나는 경쟁사와 가격·입찰·거래조건 정보를 교환하지 않는다.",
+                "t1_premium_c5": "나는 거래상 지위를 이용해 불리한 조건을 강요하지 않는다.",
+            }
+            for key, label in t1_checks.items():
+                st.checkbox(label, key=key)
+
+        with t1_page6:
+            st.markdown("#### STEP 6. 청렴·공정경영 퀴즈")
+            st.caption("단순 암기보다 실제 업무 판단을 확인하는 사례형 문항입니다.")
+            st.radio(
+                "Q1. 공직자 등으로부터 기부·협찬 요청을 받은 경우 가장 적절한 조치는?",
+                [SELECT_PLACEHOLDER, "요청기관이 공공성이 있으므로 바로 진행한다", "컴플라이언스 사전심의 등 내부 절차를 확인한다", "거래처를 통해 우회 지원한다"],
+                key="t1_premium_q1"
+            )
+            st.radio(
+                "Q2. 경쟁사 담당자가 입찰가격 수준을 묻는 경우 가장 적절한 조치는?",
+                [SELECT_PLACEHOLDER, "업계 관행이므로 가볍게 답한다", "담합 리스크가 있으므로 대화를 중단하고 내부 기준을 확인한다", "구두 대화는 기록이 없으므로 괜찮다"],
+                key="t1_premium_q2"
+            )
+            st.radio(
+                "Q3. 협력사 선물·식사 제안이 있을 때 우선해야 할 태도는?",
+                [SELECT_PLACEHOLDER, "개인적 친분이면 받아도 된다", "기준을 확인하고 필요 시 신고·반환·상담한다", "소액이면 확인하지 않아도 된다"],
+                key="t1_premium_q3"
+            )
+            st.radio(
+                "Q4. 대리점에 합리적 사유 없이 불리한 거래조건을 일방 변경하려는 경우 적절한 판단은?",
+                [SELECT_PLACEHOLDER, "회사 정책이면 언제든 가능하다", "거래상 지위 남용 소지가 있으므로 합리적 사유와 절차를 확인한다", "구두 안내만 하면 충분하다"],
+                key="t1_premium_q4"
             )
 
-            # ------------------------------------------------------
-            # KT 내부 도급 관리자: 블록 안에서 이 정보만 추가/삭제
-            # - 추가/삭제 버튼은 제목부가 아니라 "마지막 입력 행 바로 아래"에 배치
-            # - 여러 행을 추가해도 사용자가 다시 위로 올라갈 필요가 없도록 개선
-            # ------------------------------------------------------
-            st.markdown("<div class='fa-section-title fa-kt-title'>KT 내부 도급 관리자</div>", unsafe_allow_html=True)
+        t1_checked = all(bool(st.session_state.get(k, False)) for k in t1_check_keys)
+        t1_quiz_answered = all(st.session_state.get(k, SELECT_PLACEHOLDER) != SELECT_PLACEHOLDER for k in t1_answer_map)
+        t1_quiz_correct_count = sum(1 for k, ans in t1_answer_map.items() if st.session_state.get(k) == ans)
+        t1_quiz_score = t1_quiz_correct_count * 5
+        t1_check_score = 15 if t1_checked else 0
+        st.markdown(
+            f"<span class='score-pill'>Theme 1 실천 체크: {'완료' if t1_checked else '진행 중'}</span>"
+            f"<span class='score-pill'>Theme 1 퀴즈 응시: {'완료' if t1_quiz_answered else '진행 중'}</span>"
+            f"<span class='score-pill'>Theme 1 점수: {t1_check_score + t1_quiz_score}/35점</span>",
+            unsafe_allow_html=True
+        )
 
-            kt_rows = []
-            for kt_idx in range(st.session_state[kt_count_key]):
-                if st.session_state[kt_count_key] > 1:
-                    st.caption(f"KT 내부 도급 관리자 {kt_idx + 1}")
-                ktc1, ktc2, ktc3 = st.columns([0.9, 1.1, 2.0])
-                with ktc1:
-                    kt_division = st.text_input("부문", placeholder="예: 네트워크부문", key=f"fa_kt_division_{block_idx}_{kt_idx}")
-                with ktc2:
-                    kt_hq = st.text_input("본부", placeholder="예: 네트워크 운용혁신본부", key=f"fa_kt_hq_{block_idx}_{kt_idx}")
-                with ktc3:
-                    kt_org = st.text_input("소속", placeholder="예: 액세스운용담당 액세스망운용개선팀", key=f"fa_kt_org_{block_idx}_{kt_idx}")
+    # ------------------------------------------------------
+    # Theme 2: 협력사·정보보호
+    # ------------------------------------------------------
+    with theme2_tab:
+        st.markdown("""
+            <div class="theme-hero theme-two">
+                <h3>Theme 2. 협력사·정보보호 Zone</h3>
+                <p>
+                    협력사와 정보는 ‘절차’로 보호됩니다. 계약 전 서면, 대금 지급, 검사 통지,
+                    기술자료 보호, 개인정보 목적 외 이용 금지, 계정 보안은 현장에서 반드시 지켜야 할 기본 기준입니다.
+                </p>
+            </div>
+        """, unsafe_allow_html=True)
 
-                ktc4, ktc5 = st.columns([1, 1])
-                with ktc4:
-                    kt_manager_name = st.text_input("소속(장)", placeholder="예: 홍길상", key=f"fa_kt_manager_name_{block_idx}_{kt_idx}")
-                with ktc5:
-                    kt_manager_phone = st.text_input("연락처", placeholder="예: 010-0000-0000", key=f"fa_kt_manager_phone_{block_idx}_{kt_idx}")
+        t2_page1, t2_page2, t2_page3, t2_page4, t2_page5, t2_page6 = st.tabs([
+            "1 인포그래픽", "2 핵심 원칙", "3 위험 신호", "4 사례 판단", "5 실천 체크", "6 퀴즈"
+        ])
 
-                kt_row = {
-                    "KT 내부 도급 관리자_부문": kt_division.strip(),
-                    "KT 내부 도급 관리자_본부": kt_hq.strip(),
-                    "KT 내부 도급 관리자_소속": kt_org.strip(),
-                    "KT 내부 도급 관리자_소속(장)": kt_manager_name.strip(),
-                    "KT 내부 도급 관리자_연락처": kt_manager_phone.strip(),
-                }
-                kt_row["_has_any"] = any(kt_row.values())
-                kt_rows.append(kt_row)
+        with t2_page1:
+            st.markdown("""
+                <div class="premium-card">
+                    <span class="page-pill">STEP 1 · Infographic</span>
+                    <h4>협력사와 정보는 ‘절차’로 보호합니다</h4>
+                    <div class="quote-line">“업무가 급할수록 계약·정보보호 절차가 회사와 임직원을 보호합니다.”</div>
+                    <div class="principle-grid">
+                        <div class="principle-box"><b>📄 계약 전 서면</b><span>위탁업무 시작 전 법정기재사항이 포함된 서면을 발급합니다.</span></div>
+                        <div class="principle-box"><b>⏱️ 대금·검사 기한</b><span>대금 지급과 검사결과 통지 기한을 준수합니다.</span></div>
+                        <div class="principle-box"><b>🔐 기술자료 보호</b><span>정당한 사유, 절차, 목적 범위 내에서만 요구·사용합니다.</span></div>
+                        <div class="principle-box"><b>🛡️ 개인정보·기업비밀</b><span>목적 외 이용, 무단 제공, 계정 공유, 방치를 금지합니다.</span></div>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
 
-            # ✅ KT 내부 도급 관리자 행 추가/삭제 버튼: 항상 마지막 KT 입력행 아래에 표시
-            kt_btn_c1, kt_btn_c2, kt_btn_c3 = st.columns([0.045, 0.045, 0.91], vertical_alignment="center")
-            with kt_btn_c1:
-                if st.button("＋", use_container_width=True, key=f"fa_add_kt_{block_idx}", help="KT 내부 도급 관리자 입력 행 추가", type="secondary"):
-                    st.session_state[kt_count_key] += 1
-                    st.rerun()
-            with kt_btn_c2:
-                if st.button("－", use_container_width=True, key=f"fa_del_kt_{block_idx}", help="KT 내부 도급 관리자 마지막 입력 행 삭제", disabled=st.session_state[kt_count_key] <= 1, type="secondary"):
-                    st.session_state[kt_count_key] = max(1, st.session_state[kt_count_key] - 1)
-                    st.rerun()
-            with kt_btn_c3:
-                st.caption("＋/－: KT 내부 도급 관리자 행 추가·삭제")
+        with t2_page2:
+            st.markdown("""
+                <div class="premium-card">
+                    <span class="page-pill">STEP 2 · Core Principles</span>
+                    <h4>기억해야 할 6가지 기준</h4>
+                    <div class="principle-grid">
+                        <div class="principle-box"><b>1. 서면 발급</b><span>중소기업 위탁업무 시작 전 계약서 등 법정기재사항 포함 서면을 발급합니다.</span></div>
+                        <div class="principle-box"><b>2. 대금 지급</b><span>목적물 수령일 또는 용역수행 종료일 등 기준일로부터 법정 기한을 준수합니다.</span></div>
+                        <div class="principle-box"><b>3. 검사 통지</b><span>검사결과는 정해진 기한 내 서면으로 통지합니다.</span></div>
+                        <div class="principle-box"><b>4. 기술자료 보호</b><span>정당한 사유와 절차 없이 기술자료나 경영정보를 요구하지 않습니다.</span></div>
+                        <div class="principle-box"><b>5. 개인정보 보호</b><span>업무 목적 외 조회, 활용, 제3자 제공을 하지 않습니다.</span></div>
+                        <div class="principle-box"><b>6. 계정·기업비밀 관리</b><span>ID/PW를 공유하지 않고 기업비밀은 암호화·접근권한·파기 기준을 준수합니다.</span></div>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
 
-            st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
+        with t2_page3:
+            st.markdown("""
+                <div class="premium-card">
+                    <span class="page-pill">STEP 3 · Red Flags</span>
+                    <h4>이런 말이 나오면 절차를 확인하세요</h4>
+                    <div class="risk-grid">
+                        <div class="risk-card">🚩 “계약서는 나중에 쓰고 일단 시작합시다.”</div>
+                        <div class="risk-card">🚩 “검사는 했는데 통지는 굳이 안 해도 되겠죠.”</div>
+                        <div class="risk-card">🚩 “원가자료 좀 보내달라고 하세요.”</div>
+                        <div class="risk-card">🚩 “고객정보 파일을 개인 메일로 보내두겠습니다.”</div>
+                        <div class="risk-card">🚩 “비밀번호는 팀 공용으로 쓰면 편합니다.”</div>
+                        <div class="risk-card">🚩 “업무 끝난 파일이지만 그냥 보관해 두겠습니다.”</div>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
 
-            # ------------------------------------------------------
-            # ktMOS북부 현장 대리인: 블록 안에서 이 정보만 추가/삭제
-            # - 추가/삭제 버튼은 제목부가 아니라 "마지막 입력 행 바로 아래"에 배치
-            # - 여러 행을 추가해도 사용자가 다시 위로 올라갈 필요가 없도록 개선
-            # ------------------------------------------------------
-            st.markdown("<div class='fa-section-title fa-mos-title'>ktMOS북부 현장 대리인</div>", unsafe_allow_html=True)
+        with t2_page4:
+            st.markdown("""
+                <div class="premium-card">
+                    <span class="page-pill">STEP 4 · Case Study</span>
+                    <h4>사례로 판단하기</h4>
+                    <div class="case-box">
+                        <b>사례 C · 계약 전 업무 착수</b><br>
+                        협력사 업무가 급해서 계약서 발급 전에 먼저 작업을 시작했습니다.
+                    </div>
+                    <div class="answer-box">
+                        <b>판단 포인트</b><br>
+                        위탁업무는 시작 전 서면 발급이 핵심 절차입니다. 업무가 급하더라도 서면, 대금, 검사, 기술자료 관련 기준을 먼저 확인해야 합니다.
+                    </div>
+                    <div class="case-box">
+                        <b>사례 D · 고객정보 외부 반출</b><br>
+                        고객정보가 포함된 엑셀 파일을 개인 이메일로 보내 야간에 처리하려고 합니다.
+                    </div>
+                    <div class="answer-box">
+                        <b>판단 포인트</b><br>
+                        개인정보와 기업비밀은 편의보다 보호가 먼저입니다. 목적, 권한, 암호화, 저장 위치, 보관기간, 파기 기준을 지켜야 합니다.
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
 
-            mos_rows = []
-            for mos_idx in range(st.session_state[mos_count_key]):
-                if st.session_state[mos_count_key] > 1:
-                    st.caption(f"ktMOS북부 현장 대리인 {mos_idx + 1}")
-                mosc1, mosc2, mosc3, mosc4, mosc5 = st.columns([1, 1, 0.8, 0.8, 1])
-                with mosc1:
-                    mos_hq = st.text_input("본부", placeholder="예: 사업총괄", key=f"fa_mos_hq_{block_idx}_{mos_idx}")
-                with mosc2:
-                    mos_team = st.text_input("팀/파트", placeholder="예: 기술지원팀", key=f"fa_mos_team_{block_idx}_{mos_idx}")
-                with mosc3:
-                    mos_position = st.text_input("직위", placeholder="예: 과장", key=f"fa_mos_position_{block_idx}_{mos_idx}")
-                with mosc4:
-                    mos_name = st.text_input("성명", placeholder="예: 홍길동", key=f"fa_mos_name_{block_idx}_{mos_idx}")
-                with mosc5:
-                    mos_phone = st.text_input("연락처", placeholder="예: 010-0000-0000", key=f"fa_mos_phone_{block_idx}_{mos_idx}")
+        with t2_page5:
+            st.markdown("#### STEP 5. 실천 체크")
+            st.caption("아래 항목을 직접 확인해야 Theme 2를 완료할 수 있습니다.")
+            t2_checks = {
+                "t2_premium_c1": "나는 위탁업무 시작 전 서면 발급 필요성을 확인한다.",
+                "t2_premium_c2": "나는 하도급대금 지급기한과 검사결과 통지기한을 확인한다.",
+                "t2_premium_c3": "나는 정당한 사유 없이 기술자료나 경영정보를 요구하지 않는다.",
+                "t2_premium_c4": "나는 업무용 PC 내 불필요한 개인정보를 삭제한다.",
+                "t2_premium_c5": "나는 고객정보를 목적 외로 조회하거나 활용하지 않는다.",
+                "t2_premium_c6": "나는 ID/PW를 공유하지 않는다.",
+                "t2_premium_c7": "나는 기업비밀을 암호화하고 목적 완료 후 파기한다.",
+            }
+            for key, label in t2_checks.items():
+                st.checkbox(label, key=key)
 
-                mos_row = {
-                    "ktMOS북부 현장 대리인_본부": mos_hq.strip(),
-                    "ktMOS북부 현장 대리인_팀/파트": mos_team.strip(),
-                    "ktMOS북부 현장 대리인_직위": mos_position.strip(),
-                    "ktMOS북부 현장 대리인_성명": mos_name.strip(),
-                    "ktMOS북부 현장 대리인_연락처": mos_phone.strip(),
-                }
-                mos_row["_has_any"] = any(mos_row.values())
-                mos_rows.append(mos_row)
+        with t2_page6:
+            st.markdown("#### STEP 6. 협력사·정보보호 퀴즈")
+            st.caption("현장 업무에서 자주 발생할 수 있는 상황 중심 문항입니다.")
+            st.radio(
+                "Q5. 중소기업에게 위탁업무를 시작하기 전 원칙적으로 필요한 것은?",
+                [SELECT_PLACEHOLDER, "구두 합의 후 사후 정리한다", "법정기재사항이 포함된 서면을 먼저 발급한다", "업무 완료 후 정산 메모만 남긴다"],
+                key="t2_premium_q1"
+            )
+            st.radio(
+                "Q6. 목적물 수령 후 검사결과 통지는 원칙적으로 언제까지 해야 할까요?",
+                [SELECT_PLACEHOLDER, "10일 이내 서면으로 통지한다", "30일 이내 구두로 통지한다", "문제가 있을 때만 통지한다"],
+                key="t2_premium_q2"
+            )
+            st.radio(
+                "Q7. 협력사의 기술자료를 요구할 때 가장 적절한 기준은?",
+                [SELECT_PLACEHOLDER, "업무에 필요하면 자유롭게 요구한다", "정당한 사유와 절차에 따라 요구하고 목적 범위 내에서만 사용한다", "받은 자료는 유사 업무에도 사용할 수 있다"],
+                key="t2_premium_q3"
+            )
+            st.radio(
+                "Q8. 고객 개인정보가 포함된 파일을 개인 메일로 보내는 행위에 대한 가장 적절한 판단은?",
+                [SELECT_PLACEHOLDER, "편의를 위해 가능하다", "원칙적으로 금지되며 내부 보안 기준을 따라야 한다", "암호 없이 보내도 된다"],
+                key="t2_premium_q4"
+            )
+            st.radio(
+                "Q9. 정보시스템 ID/PW 관리 기준으로 가장 적절한 것은?",
+                [SELECT_PLACEHOLDER, "팀 업무 편의를 위해 공유한다", "공용 메모장에 적어둔다", "공유하지 않고 개인별 계정과 권한 기준을 준수한다"],
+                key="t2_premium_q5"
+            )
 
-            # ✅ ktMOS북부 현장 대리인 행 추가/삭제 버튼: 항상 마지막 대리인 입력행 아래에 표시
-            mos_btn_c1, mos_btn_c2, mos_btn_c3 = st.columns([0.045, 0.045, 0.91], vertical_alignment="center")
-            with mos_btn_c1:
-                if st.button("＋", use_container_width=True, key=f"fa_add_mos_{block_idx}", help="ktMOS북부 현장 대리인 입력 행 추가", type="secondary"):
-                    st.session_state[mos_count_key] += 1
-                    st.rerun()
-            with mos_btn_c2:
-                if st.button("－", use_container_width=True, key=f"fa_del_mos_{block_idx}", help="ktMOS북부 현장 대리인 마지막 입력 행 삭제", disabled=st.session_state[mos_count_key] <= 1, type="secondary"):
-                    st.session_state[mos_count_key] = max(1, st.session_state[mos_count_key] - 1)
-                    st.rerun()
-            with mos_btn_c3:
-                st.caption("＋/－: ktMOS북부 현장 대리인 행 추가·삭제")
+        t2_checked = all(bool(st.session_state.get(k, False)) for k in t2_check_keys)
+        t2_quiz_answered = all(st.session_state.get(k, SELECT_PLACEHOLDER) != SELECT_PLACEHOLDER for k in t2_answer_map)
+        t2_quiz_correct_count = sum(1 for k, ans in t2_answer_map.items() if st.session_state.get(k) == ans)
+        t2_quiz_score = t2_quiz_correct_count * 6
+        t2_check_score = 15 if t2_checked else 0
+        st.markdown(
+            f"<span class='score-pill'>Theme 2 실천 체크: {'완료' if t2_checked else '진행 중'}</span>"
+            f"<span class='score-pill'>Theme 2 퀴즈 응시: {'완료' if t2_quiz_answered else '진행 중'}</span>"
+            f"<span class='score-pill'>Theme 2 점수: {t2_check_score + t2_quiz_score}/45점</span>",
+            unsafe_allow_html=True
+        )
 
-            # ------------------------------------------------------
-            # 저장 데이터 구성
-            # - 같은 블록 안에서 KT/MOS 행 수가 다르면 max 기준으로 행 단위 저장
-            # - 추가된 한쪽 정보만 있는 행도 저장 가능
-            # - 단, NO는 세부행 번호(1-1, 1-2)가 아니라 전체 블록 번호(1, 2, 3)로 동일하게 저장
-            # ------------------------------------------------------
-            max_inner_rows = max(len(kt_rows), len(mos_rows))
-            for inner_idx in range(max_inner_rows):
-                kt_row = kt_rows[inner_idx] if inner_idx < len(kt_rows) else {}
-                mos_row = mos_rows[inner_idx] if inner_idx < len(mos_rows) else {}
-                kt_has_any = bool(kt_row.get("_has_any"))
-                mos_has_any = bool(mos_row.get("_has_any"))
-
-                if not (kt_has_any or mos_has_any):
-                    continue
-
-                if kt_has_any:
-                    for label, value in {
-                        "KT 내부 도급 관리자 부문": kt_row.get("KT 내부 도급 관리자_부문", ""),
-                        "KT 내부 도급 관리자 본부": kt_row.get("KT 내부 도급 관리자_본부", ""),
-                        "KT 내부 도급 관리자 소속": kt_row.get("KT 내부 도급 관리자_소속", ""),
-                        "KT 내부 도급 관리자 소속(장)": kt_row.get("KT 내부 도급 관리자_소속(장)", ""),
-                        "KT 내부 도급 관리자 연락처": kt_row.get("KT 내부 도급 관리자_연락처", ""),
-                    }.items():
-                        if not str(value).strip():
-                            validation_errors.append(f"NO. {block_no} / 행 {inner_idx + 1}: {label}을(를) 입력해 주세요.")
-
-                if mos_has_any:
-                    for label, value in {
-                        "ktMOS북부 현장 대리인 본부": mos_row.get("ktMOS북부 현장 대리인_본부", ""),
-                        "ktMOS북부 현장 대리인 팀/파트": mos_row.get("ktMOS북부 현장 대리인_팀/파트", ""),
-                        "ktMOS북부 현장 대리인 직위": mos_row.get("ktMOS북부 현장 대리인_직위", ""),
-                        "ktMOS북부 현장 대리인 성명": mos_row.get("ktMOS북부 현장 대리인_성명", ""),
-                        "ktMOS북부 현장 대리인 연락처": mos_row.get("ktMOS북부 현장 대리인_연락처", ""),
-                    }.items():
-                        if not str(value).strip():
-                            validation_errors.append(f"NO. {block_no} / 행 {inner_idx + 1}: {label}을(를) 입력해 주세요.")
-
-                # 저장 시에는 양쪽 중 없는 정보는 빈칸으로 저장합니다.
-                # 중요: 블록 내부 행이 늘어나더라도 NO는 전체 블록 번호를 그대로 유지합니다.
-                # 예) NO.1 블록 안에 KT 2행, MOS 7행이 있어도 저장 NO는 모두 '1'
-                display_no = str(block_no)
-                records_to_save.append({
-                    "NO": display_no,
-                    "KT 내부 도급 관리자_부문": kt_row.get("KT 내부 도급 관리자_부문", ""),
-                    "KT 내부 도급 관리자_본부": kt_row.get("KT 내부 도급 관리자_본부", ""),
-                    "KT 내부 도급 관리자_소속": kt_row.get("KT 내부 도급 관리자_소속", ""),
-                    "KT 내부 도급 관리자_소속(장)": kt_row.get("KT 내부 도급 관리자_소속(장)", ""),
-                    "KT 내부 도급 관리자_연락처": kt_row.get("KT 내부 도급 관리자_연락처", ""),
-                    "ktMOS북부 현장 대리인_본부": mos_row.get("ktMOS북부 현장 대리인_본부", ""),
-                    "ktMOS북부 현장 대리인_팀/파트": mos_row.get("ktMOS북부 현장 대리인_팀/파트", ""),
-                    "ktMOS북부 현장 대리인_직위": mos_row.get("ktMOS북부 현장 대리인_직위", ""),
-                    "ktMOS북부 현장 대리인_성명": mos_row.get("ktMOS북부 현장 대리인_성명", ""),
-                    "ktMOS북부 현장 대리인_연락처": mos_row.get("ktMOS북부 현장 대리인_연락처", ""),
-                })
-
-        # ✅ 전체 블록 추가/삭제: 각 블록 바로 아래에 배치하여 상단으로 다시 올라갈 필요가 없도록 개선
-        block_add_col, block_del_col, block_caption_col = st.columns([0.075, 0.075, 0.85])
-        with block_add_col:
-            if st.button("전체＋", use_container_width=True, key=f"fa_add_block_after_{block_idx}", help="전체 입력 블록 추가", type="primary"):
-                st.session_state["field_agent_block_count"] += 1
-                st.rerun()
-        with block_del_col:
-            if st.button("전체－", use_container_width=True, key=f"fa_del_block_after_{block_idx}", help="마지막 전체 입력 블록 삭제", disabled=st.session_state["field_agent_block_count"] <= 1, type="primary"):
-                st.session_state["field_agent_block_count"] = max(1, st.session_state["field_agent_block_count"] - 1)
-                st.rerun()
-        with block_caption_col:
-            st.caption("왼쪽 전체＋/전체－: 입력 블록 전체 추가·삭제")
-
-    st.markdown("---")
-    submit_field_agents = st.button("📨 현장대리인 선임 신고서 제출", use_container_width=True, key="fa_submit", type="primary")
-
-    if submit_field_agents:
-        if not records_to_save:
-            st.warning("⚠️ 저장할 현장대리인 선임 정보를 1건 이상 입력해 주세요.")
-        elif validation_errors:
-            st.error("입력값을 확인해 주세요.\n\n" + "\n".join([f"- {e}" for e in validation_errors[:10]]))
+    # ------------------------------------------------------
+    # Summer Event
+    # ------------------------------------------------------
+    with event_tab:
+        st.markdown("""
+            <div class="summer-zone">
+                <h3>🌊 Summer Compliance Event</h3>
+                <p>
+                    무더운 6월, 컴플라이언스도 시원하게 점검해 주세요.
+                    본 교육을 정상 수료한 임직원은 추후 별도 추첨을 통해 모바일 쿠폰 지급 대상에 포함됩니다.
+                    이벤트 퀴즈는 교육의 품격을 해치지 않도록 정보보호 핵심 수칙과 연결했습니다.
+                </p>
+            </div>
+        """, unsafe_allow_html=True)
+        st.markdown("""
+            <div class="premium-card">
+                <span class="page-pill">Special Event · 참여형 퀴즈</span>
+                <h4>여름철 휴가·외근 중에도 기준은 그대로입니다</h4>
+                <p>휴가철에는 외근, 재택, 이동 중 업무처리 등으로 정보보호 리스크가 커질 수 있습니다. 가장 안전한 행동을 선택해 주세요.</p>
+            </div>
+        """, unsafe_allow_html=True)
+        event_answer = st.radio(
+            "이벤트 Q. 여름철 휴가·외근 중에도 지켜야 할 정보보호 수칙으로 가장 적절한 것은?",
+            [
+                SELECT_PLACEHOLDER,
+                "업무 편의를 위해 고객정보 파일을 개인 메일로 보내 둔다",
+                "기업비밀·개인정보 파일은 암호화하고, 목적 완료 후 안전하게 파기한다",
+                "비밀번호는 동료와 공유해 두면 업무 공백을 줄일 수 있다"
+            ],
+            key="event_premium_q1"
+        )
+        event_answered = event_answer != SELECT_PLACEHOLDER
+        event_correct = event_answer == "기업비밀·개인정보 파일은 암호화하고, 목적 완료 후 안전하게 파기한다"
+        if event_answered and event_correct:
+            st.success("정답입니다. 시원한 여름에도 정보보호 기준은 그대로 유지됩니다. 🌊")
+        elif event_answered:
+            st.info("힌트: 개인정보·기업비밀은 암호화, 접근권한, 목적 완료 후 안전한 파기가 핵심입니다.")
         else:
-            with st.spinner("현장대리인 선임 신고 내역을 저장 중입니다..."):
-                success, msg = save_field_agent_appointment_reports(records_to_save)
-            if success:
-                st.success(f"✅ {msg}")
-                st.balloons()
-                st.caption("제출 완료 후 Google Sheet의 2026_현장대리인_선임신고 시트에서 저장 내역을 확인할 수 있습니다.")
-            else:
-                st.error(f"❌ 제출 실패: {msg}")
+            st.caption("이벤트 퀴즈에 참여하면 수료 제출 단계로 이동할 수 있습니다.")
 
+    # ------------------------------------------------------
+    # Completion Submit
+    # ------------------------------------------------------
+    with submit_tab:
+        st.markdown("### ✅ 수료 제출")
+        st.caption("아래 정보를 입력하고 제출하면 6월 컴플라이언스 인식제고 교육 수료 내역이 Google Sheet에 저장됩니다.")
+
+        # 최신 상태 재계산
+        t1_checked_now = all(bool(st.session_state.get(k, False)) for k in t1_check_keys)
+        t2_checked_now = all(bool(st.session_state.get(k, False)) for k in t2_check_keys)
+        t1_quiz_answered_now = all(st.session_state.get(k, SELECT_PLACEHOLDER) != SELECT_PLACEHOLDER for k in t1_answer_map)
+        t2_quiz_answered_now = all(st.session_state.get(k, SELECT_PLACEHOLDER) != SELECT_PLACEHOLDER for k in t2_answer_map)
+        t1_quiz_correct_now = sum(1 for k, ans in t1_answer_map.items() if st.session_state.get(k) == ans)
+        t2_quiz_correct_now = sum(1 for k, ans in t2_answer_map.items() if st.session_state.get(k) == ans)
+        t1_score_now = (15 if t1_checked_now else 0) + (t1_quiz_correct_now * 5)
+        t2_score_now = (15 if t2_checked_now else 0) + (t2_quiz_correct_now * 6)
+        event_answer_now = st.session_state.get("event_premium_q1", SELECT_PLACEHOLDER)
+        event_answered_now = event_answer_now != SELECT_PLACEHOLDER
+        event_correct_now = event_answer_now == "기업비밀·개인정보 파일은 암호화하고, 목적 완료 후 안전하게 파기한다"
+        event_score_now = 10 if event_answered_now else 0
+        final_submit_score = 10 if (t1_checked_now and t1_quiz_answered_now and t2_checked_now and t2_quiz_answered_now and event_answered_now) else 0
+        quiz_score_now = (t1_quiz_correct_now * 5) + (t2_quiz_correct_now * 6)
+        participation_score = (15 if t1_checked_now else 0) + (15 if t2_checked_now else 0) + event_score_now + final_submit_score
+        final_score = t1_score_now + t2_score_now + event_score_now + final_submit_score
+
+        cstat1, cstat2, cstat3, cstat4 = st.columns(4)
+        cstat1.metric("Theme 1", "완료" if (t1_checked_now and t1_quiz_answered_now) else "진행 중")
+        cstat2.metric("Theme 2", "완료" if (t2_checked_now and t2_quiz_answered_now) else "진행 중")
+        cstat3.metric("이벤트", "참여" if event_answered_now else "미참여")
+        cstat4.metric("최종점수", f"{final_score}/100")
+
+        st.markdown("""
+            <div class="premium-card">
+                <span class="page-pill">Completion Standard</span>
+                <h4>수료 기준</h4>
+                <p>
+                    Theme 1 실천 체크와 퀴즈, Theme 2 실천 체크와 퀴즈, Summer Event 참여를 모두 완료한 후
+                    사번·성명·소속을 입력해야 수료 제출이 가능합니다. 점수는 이해도 확인용이며, 수료자는 모바일 쿠폰 추첨 대상에 포함됩니다.
+                </p>
+            </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown("---")
+        c1, c2, c3, c4 = st.columns(4)
+        emp_id = c1.text_input("사번", placeholder="사번(1000****) / 미부여 시 00000000", key="june_emp_id")
+        name = c2.text_input("성명", key="june_name")
+        ordered_units = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
+        unit = c3.selectbox("총괄 / 본부 / 단", ordered_units, index=None, placeholder="선택", key="june_unit")
+        dept = c4.text_input("상세 부서명", placeholder="현 소속부서명", key="june_dept")
+
+        can_submit = t1_checked_now and t1_quiz_answered_now and t2_checked_now and t2_quiz_answered_now and event_answered_now
+        if not can_submit:
+            st.warning("Theme 1·Theme 2의 실천 체크와 퀴즈, Summer Event 퀴즈 참여까지 완료해야 수료 제출이 가능합니다.")
+
+        submit_june_training = st.button(
+            "📨 6월 컴플라이언스 교육 수료 제출",
+            use_container_width=True,
+            disabled=(not can_submit or st.session_state.get("june_training_saved", False)),
+            key="june_training_submit",
+            type="primary"
+        )
+
+        if submit_june_training:
+            if not emp_id or not name or not unit or not dept:
+                st.warning("⚠️ 사번, 성명, 총괄/본부/단, 상세 부서명을 모두 입력해 주세요.")
+            else:
+                ok, msg = validate_emp_id(emp_id)
+                if not ok:
+                    st.warning(msg)
+                else:
+                    record = {
+                        "사번": emp_id.strip(),
+                        "성명": name.strip(),
+                        "총괄/본부/단": unit,
+                        "부서": dept.strip(),
+                        "교육대상": "전 임직원",
+                        "Theme1_청렴공정_확인": "완료" if t1_checked_now else "미완료",
+                        "Theme1_점수": t1_score_now,
+                        "Theme2_협력정보_확인": "완료" if t2_checked_now else "미완료",
+                        "Theme2_점수": t2_score_now,
+                        "이벤트퀴즈_선택": event_answer_now,
+                        "이벤트퀴즈_정답여부": "정답" if event_correct_now else "오답",
+                        "퀴즈점수": quiz_score_now,
+                        "참여점수": participation_score,
+                        "최종점수": final_score,
+                        "수료상태": "수료",
+                        "이벤트추첨대상": "대상",
+                        "비고": "감사실 주관 2026년 6월 컴플라이언스 인식제고 자율점검 교육 / 모바일 쿠폰 추첨 대상 포함",
+                    }
+                    with st.spinner("6월 컴플라이언스 교육 수료 내역을 저장 중입니다..."):
+                        success, save_msg = save_june_compliance_training_result(record)
+                    if success:
+                        st.session_state["june_training_saved"] = True
+                        st.success(f"✅ {name}님, {save_msg}")
+                        st.balloons()
+                        st.info("수료자는 추후 별도 추첨을 통해 모바일 쿠폰 지급 대상에 포함됩니다. 감사실 교육에 참여해 주셔서 감사합니다.")
+                    else:
+                        st.error(f"❌ 제출 실패: {save_msg}")
+
+# --- [Tab 2: 법률 리스크/규정/계약 검토 & 감사보고서 작성] ---
 # --- [Tab 2: 법률 리스크/규정/계약 검토 & 감사보고서 작성] ---
 with tab_doc:
     st.markdown("### 📄 법률 리스크(계약서)·규정 검토 / 감사보고서 작성·검증")
@@ -1706,7 +2143,7 @@ with tab_summary:
 # --- [Tab 5: 관리자 대시보드 최종 버전] ---
 with tab_admin:
     st.markdown("### 🔒 관리자 전용 대시보드")
-    st.caption("현장대리인 선임 신고 내역을 실시간으로 확인하고 CSV/Excel로 다운로드할 수 있습니다.")
+    st.caption("6월 컴플라이언스 인식제고 교육 수료 현황을 실시간으로 확인하고 CSV/Excel로 다운로드할 수 있습니다.")
 
     # 1. 관리자 비밀번호 검증
     admin_pw = st.text_input("관리자 비밀번호", type="password", key="admin_dash_pw")
@@ -1729,15 +2166,15 @@ with tab_admin:
         st.stop()
 
     # =========================================================
-    # ✅ 현장대리인 선임 신고 내역: 실시간 확인 / CSV 다운로드
+    # ✅ 6월 컴플라이언스 교육 수료 내역: 실시간 확인 / CSV 다운로드
     # =========================================================
     st.markdown("---")
-    st.markdown("#### 🧭 현장대리인 선임 신고 내역 실시간 확인")
-    st.caption("Google Sheet에 저장된 신고 내역을 그대로 불러옵니다. 필요 시 새로고침 후 CSV/Excel로 내려받아 활용하세요.")
+    st.markdown("#### 🌊 6월 컴플라이언스 인식제고 교육 수료 현황")
+    st.caption("Google Sheet에 저장된 수료 내역을 그대로 불러옵니다. 필요 시 새로고침 후 CSV/Excel로 내려받아 활용하세요.")
 
     refresh_col, info_col = st.columns([0.16, 0.84])
     with refresh_col:
-        if st.button("🔄 새로고침", use_container_width=True, key="fa_admin_refresh"):
+        if st.button("🔄 새로고침", use_container_width=True, key="june_admin_refresh"):
             st.cache_data.clear()
             st.rerun()
     with info_col:
@@ -1745,65 +2182,71 @@ with tab_admin:
 
     try:
         try:
-            fa_ws = spreadsheet.worksheet(FIELD_AGENT_SHEET_NAME)
-            fa_values = fa_ws.get_all_values()
+            june_ws = spreadsheet.worksheet(JUNE_TRAINING_SHEET_NAME)
+            june_values = june_ws.get_all_values()
         except Exception:
-            fa_values = []
+            june_values = []
 
-        if not fa_values or len(fa_values) < 2:
-            st.warning("아직 저장된 현장대리인 선임 신고 내역이 없습니다.")
-            fa_df = pd.DataFrame(columns=FIELD_AGENT_HEADERS)
+        if not june_values or len(june_values) < 2:
+            st.warning("아직 저장된 6월 컴플라이언스 교육 수료 내역이 없습니다.")
+            june_df = pd.DataFrame(columns=JUNE_TRAINING_HEADERS)
         else:
-            fa_df = pd.DataFrame(fa_values[1:], columns=fa_values[0])
+            june_df = pd.DataFrame(june_values[1:], columns=june_values[0])
 
-        m1, m2, m3 = st.columns(3)
-        m1.metric("총 저장 행", f"{len(fa_df)}건")
-        if not fa_df.empty and "NO" in fa_df.columns:
-            m2.metric("신고 블록 수", f"{fa_df['NO'].astype(str).nunique()}개")
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("총 수료자", f"{len(june_df)}명")
+        if not june_df.empty and "이벤트추첨대상" in june_df.columns:
+            event_count = int((june_df["이벤트추첨대상"].astype(str) == "대상").sum())
+            m2.metric("이벤트 추첨 대상", f"{event_count}명")
         else:
-            m2.metric("신고 블록 수", "0개")
-        if not fa_df.empty and "저장시간" in fa_df.columns:
-            last_saved = str(fa_df["저장시간"].iloc[-1])
-            m3.metric("최근 저장시간", last_saved)
+            m2.metric("이벤트 추첨 대상", "0명")
+        if not june_df.empty and "최종점수" in june_df.columns:
+            score_series = pd.to_numeric(june_df["최종점수"], errors="coerce")
+            avg_score = score_series.mean() if not score_series.dropna().empty else 0
+            m3.metric("평균 점수", f"{avg_score:.1f}점")
         else:
-            m3.metric("최근 저장시간", "-")
+            m3.metric("평균 점수", "0점")
+        if not june_df.empty and "저장시간" in june_df.columns:
+            m4.metric("최근 저장시간", str(june_df["저장시간"].iloc[-1]))
+        else:
+            m4.metric("최근 저장시간", "-")
 
-        search_term = st.text_input("🔍 현장대리인 신고 내역 검색", placeholder="성명, 부서, 본부, 연락처 등", key="fa_admin_search")
-        if search_term and not fa_df.empty:
-            fa_display_df = fa_df[fa_df.apply(lambda row: row.astype(str).str.contains(search_term, case=False, na=False).any(), axis=1)]
+        search_term = st.text_input("🔍 수료 내역 검색", placeholder="성명, 사번, 부서, 본부 등", key="june_admin_search")
+        if search_term and not june_df.empty:
+            june_display_df = june_df[june_df.apply(lambda row: row.astype(str).str.contains(search_term, case=False, na=False).any(), axis=1)]
         else:
-            fa_display_df = fa_df
+            june_display_df = june_df
 
-        st.dataframe(fa_display_df, use_container_width=True, hide_index=True)
+        st.dataframe(june_display_df, use_container_width=True, hide_index=True)
 
         dl1, dl2 = st.columns(2)
         with dl1:
-            fa_csv_bytes = fa_display_df.to_csv(index=False).encode("utf-8-sig")
+            june_csv_bytes = june_display_df.to_csv(index=False).encode("utf-8-sig")
             st.download_button(
                 "📥 현재 조회내역 CSV 다운로드",
-                fa_csv_bytes,
-                f"{FIELD_AGENT_SHEET_NAME}.csv",
+                june_csv_bytes,
+                f"{JUNE_TRAINING_SHEET_NAME}.csv",
                 "text/csv",
                 use_container_width=True,
-                key="fa_csv_download"
+                key="june_csv_download"
             )
         with dl2:
             try:
                 from io import BytesIO
                 output = BytesIO()
                 with pd.ExcelWriter(output, engine="openpyxl") as writer:
-                    fa_display_df.to_excel(writer, index=False, sheet_name="현장대리인_선임신고")
+                    june_display_df.to_excel(writer, index=False, sheet_name="6월_컴플라이언스교육")
                 st.download_button(
                     "📥 현재 조회내역 Excel 다운로드",
                     output.getvalue(),
-                    f"{FIELD_AGENT_SHEET_NAME}.xlsx",
+                    f"{JUNE_TRAINING_SHEET_NAME}.xlsx",
                     use_container_width=True,
-                    key="fa_xlsx_download"
+                    key="june_xlsx_download"
                 )
             except Exception:
                 st.info("Excel 엔진 미설치로 CSV 다운로드를 이용하세요.")
     except Exception as e:
-        st.error(f"현장대리인 신고 내역 로드 중 오류 발생: {e}")
+        st.error(f"6월 교육 수료 내역 로드 중 오류 발생: {e}")
 
     # =========================================================
     # 기존 자율점검 참여율 대시보드는 숨김 보관함으로 이동
@@ -1813,7 +2256,8 @@ with tab_admin:
 
         try:
             ws_list = spreadsheet.worksheets()
-            sheet_names = [ws.title for ws in ws_list if ws.title not in ["Campaign_Config", FIELD_AGENT_SHEET_NAME]]
+            excluded_sheets = ["Campaign_Config", JUNE_TRAINING_SHEET_NAME, "2026_현장대리인_선임신고"]
+            sheet_names = [ws.title for ws in ws_list if ws.title not in excluded_sheets]
 
             if not sheet_names:
                 st.warning("분석 가능한 기존 자율점검 시트가 없습니다.")
