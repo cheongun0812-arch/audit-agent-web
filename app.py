@@ -989,6 +989,21 @@ with tab_audit:
         font-weight: 950 !important;
         box-shadow: 0 3px 8px rgba(37, 99, 235, 0.10) !important;
     }
+    /* ✅ 전역 버튼 CSS가 내부 span/p 텍스트를 흰색으로 만드는 문제 방지 */
+    .stButton > button[kind="secondary"] *,
+    .stButton > button[kind="secondary"] p,
+    .stButton > button[kind="secondary"] span {
+        color: #2563EB !important;
+        -webkit-text-fill-color: #2563EB !important;
+        opacity: 1 !important;
+    }
+    .stButton > button[kind="primary"] *,
+    .stButton > button[kind="primary"] p,
+    .stButton > button[kind="primary"] span {
+        color: #FFFFFF !important;
+        -webkit-text-fill-color: #FFFFFF !important;
+        opacity: 1 !important;
+    }
     .stButton > button[kind="secondary"]:hover {
         background: #EFF6FF !important;
         border-color: #60A5FA !important;
@@ -1200,7 +1215,7 @@ with tab_audit:
 
 
     # =========================================================
-    # 2026년 6월 컴플라이언스 인식제고 자율점검 교육 - Premium V2
+    # 2026년 6월 컴플라이언스 인식제고 자율점검 교육 - Final Image Edition
     # - 기존 윤리경영 실천서약 보관함은 유지
     # - 현장대리인 등록 모듈 위치에 고품질 교육 모듈 배치
     # - 순차형 Quest 구조 / Previous·Next 이동 / Step별 Clear 표시
@@ -1418,6 +1433,20 @@ with tab_audit:
         </div>
     """, unsafe_allow_html=True)
 
+    # ✅ GitHub 저장소의 assets 폴더 이미지를 안전하게 표시하는 유틸
+    #    app.py와 같은 위치에 assets 폴더를 두고, 아래 3개 파일명을 사용하세요.
+    TRAINING_ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
+
+    def _show_training_asset(filename: str, caption: str = "") -> None:
+        image_path = os.path.join(TRAINING_ASSET_DIR, filename)
+        if os.path.exists(image_path):
+            st.image(image_path, use_container_width=True, caption=caption)
+        else:
+            st.warning(
+                f"이미지 파일을 찾을 수 없습니다: assets/{filename} · "
+                "GitHub의 assets 폴더와 파일명을 확인해 주세요."
+            )
+
     SELECT_PLACEHOLDER = "선택하세요"
     THEME_MIN_SECONDS = 90
     STEPS = [
@@ -1579,7 +1608,7 @@ with tab_audit:
             _set_event()
     with c4:
         status_sub = 'READY' if st.session_state.get('june_v2_event_done') else 'LOCKED'
-        st.markdown(f"""<div class="quest-card {sub_state}"><h4>✅ 수료 제출</h4><p>교육 완료 정보를 Google Sheet에 저장합니다.</p><span class="status-chip">{status_sub}</span></div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div class="quest-card {sub_state}"><h4>✅ 수료 제출</h4><p>교육 수료 및 이벤트 퀴즈 정보를 저장합니다.</p><span class="status-chip">{status_sub}</span></div>""", unsafe_allow_html=True)
         if st.button("수료 제출 열기", use_container_width=True, key="june_v2_open_submit"):
             _set_submit()
 
@@ -1637,6 +1666,10 @@ with tab_audit:
 
         if step == 1:
             if theme_no == 1:
+                _show_training_asset(
+                    "theme1_integrity_fair.png",
+                    "Theme 1. 청렴·공정경영 핵심 인포그래픽"
+                )
                 st.markdown("""
                     <div class="content-card-v2">
                         <span class="page-pill-v2">STEP 1 · Infographic</span>
@@ -1651,6 +1684,10 @@ with tab_audit:
                     </div>
                 """, unsafe_allow_html=True)
             else:
+                _show_training_asset(
+                    "theme2_partner_security.png",
+                    "Theme 2. 협력사·정보보호 핵심 인포그래픽"
+                )
                 st.markdown("""
                     <div class="content-card-v2">
                         <span class="page-pill-v2">STEP 1 · Infographic</span>
@@ -1806,6 +1843,10 @@ with tab_audit:
                 </div>
             </div>
         """, unsafe_allow_html=True)
+        _show_training_asset(
+            "summer_event_quiz.png",
+            "Summer Compliance Event Quiz"
+        )
         event_answer = st.radio(
             "이벤트 Q. 여름철 휴가·외근 중에도 지켜야 할 정보보호 수칙으로 가장 적절한 것은?",
             [
@@ -1840,7 +1881,7 @@ with tab_audit:
 
     elif st.session_state.get("june_v2_view") == "submit":
         st.markdown("### ✅ 수료 제출")
-        st.caption("아래 정보를 입력하고 제출하면 6월 컴플라이언스 인식제고 교육 수료 내역이 Google Sheet에 저장됩니다.")
+        st.caption("아래 정보를 입력하고 제출하면 교육 수료 및 이벤트 퀴즈 정보가 Google Sheet에 저장됩니다.")
         t1_done = st.session_state.get("june_v2_theme1_done", False)
         t2_done = st.session_state.get("june_v2_theme2_done", False)
         event_answer_now = st.session_state.get("event_v2_q1", SELECT_PLACEHOLDER)
