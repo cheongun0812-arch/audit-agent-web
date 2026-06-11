@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import os
 import google.generativeai as genai
 from docx import Document
@@ -1415,7 +1416,10 @@ with tab_audit:
         .principle-keyword-v2 { display:inline-block; color:#DC2626; font-size:1.08rem; font-weight:950; letter-spacing:-0.01em; margin-bottom:12px; padding:4px 10px; border-radius:999px; background:#FEF2F2; border:1px solid #FECACA; }
         .principle-desc-v2 { display:block; color:#334155; line-height:1.62; font-weight:760; padding-top:2px; }
         .risk-grid-v2 { display:grid; grid-template-columns: repeat(3, minmax(190px, 1fr)); gap:12px; margin-top:13px; }
-        .risk-card-v2 { background:#FFF7ED; border:1px solid #FDBA74; border-radius:18px; padding:15px; color:#7C2D12; font-weight:950; min-height:78px; box-shadow:0 7px 17px rgba(249,115,22,0.08); }
+        .risk-card-v2 { background:#FFF7ED; border:1px solid #FDBA74; border-radius:18px; padding:16px 17px; color:#7C2D12; font-weight:950; min-height:122px; box-shadow:0 7px 17px rgba(249,115,22,0.08); }
+        .risk-phrase-v2 { display:block; font-size:1.02rem; font-weight:950; color:#7C2D12; line-height:1.42; margin-bottom:10px; }
+        .risk-response-v2 { display:block; border-top:1px dashed #FDBA74; padding-top:10px; margin-top:8px; color:#334155; font-size:0.88rem; line-height:1.48; font-weight:780; }
+        .risk-response-v2 b { color:#DC2626; font-weight:950; margin-right:4px; }
         .case-box-v2 { background:linear-gradient(135deg,#F8FAFC 0%,#EFF6FF 100%); border:1px solid #BFDBFE; border-radius:20px; padding:18px 19px; margin:14px 0; color:#334155; line-height:1.65; font-weight:720; }
         .case-box-v2 b { color:#1E3A8A; }
         .answer-box-v2 { background:#F0FDF4; border:1px solid #BBF7D0; border-radius:18px; padding:15px 17px; margin:12px 0; color:#14532D; font-weight:780; line-height:1.62; }
@@ -1643,6 +1647,39 @@ with tab_audit:
         st.session_state.setdefault("june_v2_completed_steps_1", [])
         st.session_state.setdefault("june_v2_completed_steps_2", [])
 
+    def _request_training_scroll_top() -> None:
+        st.session_state["june_v2_scroll_top_requested"] = True
+
+    def _render_training_scroll_top_if_requested() -> None:
+        """단계/테마 이동 후 이전 스크롤 위치가 남지 않도록 브라우저 화면을 상단으로 이동합니다."""
+        if st.session_state.pop("june_v2_scroll_top_requested", False):
+            components.html(
+                """
+                <script>
+                const scrollTop = () => {
+                  try {
+                    const doc = window.parent.document;
+                    const candidates = [
+                      doc.querySelector('section.main'),
+                      doc.querySelector('[data-testid="stAppViewContainer"]'),
+                      doc.documentElement,
+                      doc.body
+                    ].filter(Boolean);
+                    candidates.forEach(el => {
+                      try { el.scrollTo({top: 0, left: 0, behavior: 'smooth'}); } catch(e) { el.scrollTop = 0; }
+                    });
+                    window.parent.scrollTo({top: 0, left: 0, behavior: 'smooth'});
+                  } catch(e) {
+                    try { window.scrollTo({top: 0, left: 0, behavior: 'smooth'}); } catch(err) {}
+                  }
+                };
+                setTimeout(scrollTop, 80);
+                setTimeout(scrollTop, 280);
+                </script>
+                """,
+                height=0,
+            )
+
     def _step_load_key(theme_no: int, step_no: int) -> str:
         return f"june_v2_theme{theme_no}_step{step_no}_loaded_at"
 
@@ -1726,6 +1763,7 @@ with tab_audit:
             st.session_state["june_v2_theme"] = 1
             st.session_state["june_v2_step"] = 1
             _ensure_step_timer(1, 1)
+            _request_training_scroll_top()
             st.rerun()
         if theme_no == 2 and not st.session_state.get("june_v2_theme1_done", False):
             st.warning("현재 교육을 완료해야 다음 단계로 이동할 수 있습니다. Theme 1을 먼저 완료해 주세요.")
@@ -1734,6 +1772,7 @@ with tab_audit:
         st.session_state["june_v2_theme"] = theme_no
         st.session_state["june_v2_step"] = 1
         _ensure_step_timer(theme_no, 1)
+        _request_training_scroll_top()
         st.rerun()
 
     def _set_event():
@@ -1741,6 +1780,7 @@ with tab_audit:
             st.warning("현재 교육을 완료해야 다음 단계로 이동할 수 있습니다. Theme 2를 먼저 완료해 주세요.")
             return
         st.session_state["june_v2_view"] = "event"
+        _request_training_scroll_top()
         st.rerun()
 
     def _set_submit():
@@ -1748,6 +1788,7 @@ with tab_audit:
             st.warning("현재 교육을 완료해야 다음 단계로 이동할 수 있습니다. Summer Event까지 완료해 주세요.")
             return
         st.session_state["june_v2_view"] = "submit"
+        _request_training_scroll_top()
         st.rerun()
 
     def _theme_score(theme_no: int) -> int:
@@ -1803,6 +1844,7 @@ with tab_audit:
                     if num <= max_unlocked or num in completed:
                         st.session_state["june_v2_step"] = num
                         _ensure_step_timer(theme_no, num)
+                        _request_training_scroll_top()
                         st.rerun()
                     else:
                         st.warning("현재 교육을 완료해야 다음 단계로 이동할 수 있습니다.")
@@ -2010,11 +2052,25 @@ with tab_audit:
 
         elif step == 3:
             if theme_no == 1:
-                risks = ["🚩 ‘관행대로 처리하시죠’", "🚩 ‘식사 한 번 하시죠’", "🚩 ‘경쟁사는 얼마에 들어왔나요?’", "🚩 ‘협력사를 통해 전달하면 괜찮습니다’", "🚩 ‘증빙은 나중에 맞추면 됩니다’", "🚩 ‘이번 건은 기록을 남기지 맙시다’"]
+                risks = [
+                    ("🚩 ‘관행대로 처리하시죠’", "관행이라는 표현이 나오면 기준이 흐려질 수 있습니다. 관련 규정, 승인권자, 기록 필요 여부를 먼저 확인하세요."),
+                    ("🚩 ‘식사 한 번 하시죠’", "직무 관련자가 제공하는 식사·편의는 금액보다 직무 관련성과 반복성이 중요합니다. 회사 기준과 신고 필요 여부를 확인하세요."),
+                    ("🚩 ‘경쟁사는 얼마에 들어왔나요?’", "입찰가격·거래조건 등 경쟁 민감 정보는 담합 리스크가 있습니다. 대화를 중단하고 내부에 공유·상담하세요."),
+                    ("🚩 ‘협력사를 통해 전달하면 괜찮습니다’", "제3자를 통한 우회 제공도 회사 행위로 평가될 수 있습니다. 직접 제공과 동일하게 사전심의·승인 절차를 확인하세요."),
+                    ("🚩 ‘증빙은 나중에 맞추면 됩니다’", "증빙과 회계처리는 실제 거래와 일치해야 합니다. 사후 맞춤, 허위기재, 누락은 회계투명성 리스크입니다."),
+                    ("🚩 ‘이번 건은 기록을 남기지 맙시다’", "기록을 남기지 말자는 말은 내부통제 경고 신호입니다. 이메일, 회의록, 승인내역 등 객관 자료를 보존하세요."),
+                ]
             else:
-                risks = ["🚩 ‘계약서는 나중에 쓰고 일단 시작합시다’", "🚩 ‘검사 통지는 굳이 안 해도 됩니다’", "🚩 ‘원가자료 좀 받아주세요’", "🚩 ‘고객정보를 개인 메일로 보내겠습니다’", "🚩 ‘비밀번호는 팀 공용으로 쓰면 편합니다’", "🚩 ‘업무 끝난 파일은 그냥 보관해 둡시다’"]
-            html = ''.join([f"<div class='risk-card-v2'>{r}</div>" for r in risks])
-            st.markdown(f"""<div class="content-card-v2"><span class="page-pill-v2">STEP 3 · Red Flags</span><h4>이런 말이 나오면 멈추고 확인하세요</h4><div class="risk-grid-v2">{html}</div></div>""", unsafe_allow_html=True)
+                risks = [
+                    ("🚩 ‘계약서는 나중에 쓰고 일단 시작합시다’", "거래 시작 전 서면 발급은 기본 절차입니다. 긴급하더라도 계약·발주·업무범위 문서화를 먼저 확인하세요."),
+                    ("🚩 ‘검사 통지는 굳이 안 해도 됩니다’", "검사결과 통지는 대금 지급과 분쟁 예방의 기준입니다. 정해진 기한과 방식에 따라 서면 통지해야 합니다."),
+                    ("🚩 ‘원가자료 좀 받아주세요’", "원가·매출·경영전략 자료는 경영정보에 해당할 수 있습니다. 정당한 사유와 법무·컴플라이언스 기준을 확인하세요."),
+                    ("🚩 ‘고객정보를 개인 메일로 보내겠습니다’", "개인 메일·메신저·개인 클라우드는 비인가 경로입니다. 승인된 시스템, 암호화, 접근권한 기준을 따라야 합니다."),
+                    ("🚩 ‘비밀번호는 팀 공용으로 쓰면 편합니다’", "ID/PW 공유는 책임 추적과 권한관리를 무너뜨립니다. 개인별 계정과 최소권한 원칙을 지켜야 합니다."),
+                    ("🚩 ‘업무 끝난 파일은 그냥 보관해 둡시다’", "목적이 끝난 개인정보·기업비밀은 보관 필요성을 확인하고, 불필요한 자료는 복구 불가능하게 파기해야 합니다."),
+                ]
+            html = ''.join([f"<div class='risk-card-v2'><span class='risk-phrase-v2'>{phrase}</span><span class='risk-response-v2'><b>대응</b>{response}</span></div>" for phrase, response in risks])
+            st.markdown(f"""<div class="content-card-v2"><span class="page-pill-v2">STEP 3 · Red Flags</span><h4>이런 말이 나오면 멈추고 확인하세요</h4><p style='margin-top:0;color:#475569;font-weight:740;'>위험 문구를 보았다면 즉시 멈추고, 아래 대응 방향에 따라 기록·승인·상담 절차를 확인해 주세요.</p><div class="risk-grid-v2">{html}</div></div>""", unsafe_allow_html=True)
 
         elif step == 4:
             if theme_no == 1:
@@ -2135,6 +2191,7 @@ with tab_audit:
                     st.session_state["june_v2_view"] = "theme1"
                     st.session_state["june_v2_theme"] = 1
                     st.session_state["june_v2_step"] = 6
+                _request_training_scroll_top()
                 st.rerun()
         with msg_col:
             st.markdown("<div class='nav-help'>하단 버튼으로 순서대로 이동합니다. 완료된 단계는 상단 Quest Road에서 초록색으로 표시됩니다.</div>", unsafe_allow_html=True)
@@ -2158,6 +2215,7 @@ with tab_audit:
                         else:
                             st.session_state["june_v2_theme2_done"] = True
                             st.session_state["june_v2_view"] = "event"
+                        _request_training_scroll_top()
                         st.rerun()
                 else:
                     if step in TIMED_STEPS and not _step_time_met(theme_no, step):
@@ -2168,9 +2226,11 @@ with tab_audit:
                         next_step = min(6, step + 1)
                         st.session_state["june_v2_step"] = next_step
                         _ensure_step_timer(theme_no, next_step)
+                        _request_training_scroll_top()
                         st.rerun()
 
     _init_june_v2_state()
+    _render_training_scroll_top_if_requested()
 
     # ✅ 첫 안내 화면에서만 과정 소개를 표시합니다.
     #    학습 시작 후에는 Theme Quest 화면만 노출하여 중복·복잡도를 줄입니다.
@@ -2233,6 +2293,7 @@ with tab_audit:
                 st.session_state["june_v2_theme"] = 1
                 st.session_state["june_v2_step"] = 1
                 _ensure_step_timer(1, 1)
+                _request_training_scroll_top()
                 st.rerun()
 
     else:
@@ -2289,6 +2350,7 @@ with tab_audit:
                     st.session_state["june_v2_view"] = "theme2"
                     st.session_state["june_v2_theme"] = 2
                     st.session_state["june_v2_step"] = 6
+                    _request_training_scroll_top()
                     st.rerun()
             with ev_msg:
                 st.markdown("<div class='nav-help'>이벤트 퀴즈에 응답하면 수료 제출 단계로 이동할 수 있습니다.</div>", unsafe_allow_html=True)
@@ -2299,6 +2361,7 @@ with tab_audit:
                     else:
                         st.session_state["june_v2_event_done"] = True
                         st.session_state["june_v2_view"] = "submit"
+                        _request_training_scroll_top()
                         st.rerun()
 
         elif st.session_state.get("june_v2_view") == "submit":
@@ -2350,6 +2413,7 @@ with tab_audit:
             with left_nav:
                 if st.button("◀ Event로", use_container_width=True, key="june_v2_submit_prev", type="secondary"):
                     st.session_state["june_v2_view"] = "event"
+                    _request_training_scroll_top()
                     st.rerun()
             with right_submit:
                 submit_june_training = st.button(
@@ -2402,6 +2466,7 @@ with tab_audit:
                                 )
                                 time.sleep(1)
                             st.session_state["june_force_reset_after_submit"] = True
+                            _request_training_scroll_top()
                             st.rerun()
                         else:
                             st.error(f"❌ 제출 실패: {save_msg}")
@@ -2686,6 +2751,7 @@ with tab_admin:
     with refresh_col:
         if st.button("🔄 새로고침", use_container_width=True, key="june_admin_refresh"):
             st.cache_data.clear()
+            _request_training_scroll_top()
             st.rerun()
     with info_col:
         st.caption("제출 직후 화면에 바로 보이지 않으면 새로고침을 눌러 최신 Google Sheet 데이터를 다시 불러오세요.")
