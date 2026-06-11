@@ -1441,27 +1441,7 @@ with tab_audit:
         }
         </style>
     """, unsafe_allow_html=True)
-
-    st.markdown("""
-        <div class="premium-hero-v2">
-            <div class="premium-badge-v2">Audit Office · June Compliance Self-Inspection</div>
-            <h2>🌊 2026년 6월 컴플라이언스 인식제고 자율점검 교육</h2>
-            <p>
-                본 과정은 전 임직원을 대상으로 하는 감사실 주관 정기 자율점검 교육입니다.
-                부패방지·공정거래·하도급·정보보호 리스크를 사례 중심으로 학습하고,
-                실제 업무에서 바로 적용할 수 있는 실천 기준을 순서대로 확인합니다.
-            </p>
-        </div>
-        <div class="audit-message-v2">
-            <h4>감사실 안내</h4>
-            <p>
-                교육은 순차형 Quest 방식으로 진행됩니다. 현재 단계를 완료해야 다음 단계로 이동할 수 있으며,
-                각 테마의 STEP 1~4는 단계별 최소 100초 이상 학습해야 다음 단계로 이동할 수 있습니다.
-                STEP 5 실천 체크는 항목별 10초 확인 카운트다운을 통해 실질적인 확인 절차를 거칩니다.
-                이는 단순 클릭형 수료를 방지하고, 전 임직원이 핵심 기준을 충분히 확인하기 위한 장치입니다.
-            </p>
-        </div>
-    """, unsafe_allow_html=True)
+    # ✅ 안내 히어로는 Final V3 intro 화면에서만 렌더링합니다.
 
     # ✅ GitHub 저장소의 assets 폴더 이미지를 안전하게 표시하는 유틸
     #    app.py와 같은 위치에 assets 폴더를 두고, 아래 3개 파일명을 사용하세요.
@@ -2117,26 +2097,29 @@ with tab_audit:
 
     _init_june_v2_state()
 
-    st.markdown("""
-        <div class="premium-hero-v2">
-            <div class="premium-badge-v2">AUDIT OFFICE · 2026 JUNE COMPLIANCE</div>
-            <h2>2026년 6월 컴플라이언스 인식제고 자율점검 교육</h2>
-            <p>
-                본 과정은 전 임직원을 대상으로 하는 감사실 주관 정기 자율점검 교육입니다.
-                부패방지·공정거래·하도급·정보보호 리스크를 사례 중심으로 학습하고,
-                실제 업무에서 바로 적용할 수 있는 실천 기준을 순서대로 확인합니다.
-            </p>
-        </div>
-        <div class="audit-message-v2">
-            <h4>감사실 안내</h4>
-            <p>
-                교육은 순차형 Quest 방식으로 진행됩니다. 현재 단계를 완료해야 다음 단계로 이동할 수 있으며,
-                각 테마의 STEP 1~4는 단계별 최소 100초 이상 학습해야 다음 단계로 이동할 수 있습니다.
-                STEP 5 실천 체크는 항목별 10초 확인 카운트다운을 통해 실질적인 확인 절차를 거칩니다.
-                이는 단순 클릭형 수료를 방지하고, 전 임직원이 핵심 기준을 충분히 확인하기 위한 장치입니다.
-            </p>
-        </div>
-    """, unsafe_allow_html=True)
+    # ✅ 첫 안내 화면에서만 과정 소개를 표시합니다.
+    #    학습 시작 후에는 Theme Quest 화면만 노출하여 중복·복잡도를 줄입니다.
+    if st.session_state.get("june_v2_view") == "intro":
+        st.markdown("""
+            <div class="premium-hero-v2">
+                <div class="premium-badge-v2">AUDIT OFFICE · 2026 JUNE COMPLIANCE</div>
+                <h2>2026년 6월 컴플라이언스 인식제고 자율점검 교육</h2>
+                <p>
+                    본 과정은 전 임직원을 대상으로 하는 감사실 주관 정기 자율점검 교육입니다.
+                    부패방지·공정거래·하도급·정보보호 리스크를 사례 중심으로 학습하고,
+                    실제 업무에서 바로 적용할 수 있는 실천 기준을 순서대로 확인합니다.
+                </p>
+            </div>
+            <div class="audit-message-v2">
+                <h4>감사실 안내</h4>
+                <p>
+                    교육은 순차형 Quest 방식으로 진행됩니다. 현재 단계를 완료해야 다음 단계로 이동할 수 있으며,
+                    각 테마의 STEP 1~4는 단계별 최소 100초 이상 학습해야 다음 단계로 이동할 수 있습니다.
+                    STEP 5 실천 체크는 항목별 10초 확인 카운트다운을 통해 실질적인 확인 절차를 거칩니다.
+                    이는 단순 클릭형 수료를 방지하고, 전 임직원이 핵심 기준을 충분히 확인하기 위한 장치입니다.
+                </p>
+            </div>
+        """, unsafe_allow_html=True)
 
     # GitHub 저장소의 assets 폴더 이미지를 안전하게 표시하는 유틸
     TRAINING_ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
@@ -2153,17 +2136,24 @@ with tab_audit:
 
     if st.session_state.get("june_v2_view") == "intro":
         st.markdown("<div class='intro-sequence-title'>컴플라이언스 인식제고 교육은 다음 순서로 진행됩니다.</div>", unsafe_allow_html=True)
-        _render_quest_cards(show_buttons=False)
         st.markdown("""
+            <div class="content-card-v2" style="padding:18px 20px;">
+                <div style="display:grid; grid-template-columns:repeat(4, minmax(120px,1fr)); gap:10px; text-align:center;">
+                    <div class="score-pill-v2">① 청렴·공정경영</div>
+                    <div class="score-pill-v2">② 협력사·정보보호</div>
+                    <div class="score-pill-v2">③ Summer Event</div>
+                    <div class="score-pill-v2">④ 수료 제출</div>
+                </div>
+            </div>
             <div class="start-training-box">
                 <b>교육을 시작하겠습니다.</b><br>
-                아래 <b>확인</b> 버튼을 누르면 다음 화면에서 <b>Theme 1. 청렴·공정경영 Quest</b>가 시작됩니다.
+                <b>확인 · 학습하기</b>를 누르면 다음 화면에서 <b>Theme 1. 청렴·공정경영 Quest</b>가 시작됩니다.
                 이후부터는 단계별 교육을 순서대로 완료해야 다음 단계로 이동할 수 있습니다.
             </div>
         """, unsafe_allow_html=True)
-        ok_col, _ = st.columns([0.22, 0.78])
+        ok_col, _ = st.columns([0.24, 0.76])
         with ok_col:
-            if st.button("확인 · 교육 시작", use_container_width=True, key="june_v2_intro_start", type="primary"):
+            if st.button("확인 · 학습하기", use_container_width=True, key="june_v2_intro_start", type="primary"):
                 st.session_state["june_v2_view"] = "theme1"
                 st.session_state["june_v2_theme"] = 1
                 st.session_state["june_v2_step"] = 1
