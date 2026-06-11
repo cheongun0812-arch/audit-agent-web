@@ -1477,8 +1477,121 @@ with tab_audit:
                 "GitHub의 assets 폴더와 파일명을 확인해 주세요."
             )
 
+
+    # =========================================================
+    # 2026년 6월 컴플라이언스 인식제고 교육 - Final V3
+    # - 초기 안내 화면 분리
+    # - STEP 1~4: 단계별 100초 자동 카운트다운 + 게이지
+    # - STEP 5: 체크 항목별 10초 모래시계 확인, 체크 유지, 순차 활성화
+    # - STEP 6: 시간제한 제외
+    # =========================================================
+    st.markdown("""
+        <style>
+        .intro-sequence-title {
+            margin: 18px 0 12px 0;
+            padding: 17px 20px;
+            border-radius: 18px;
+            background: linear-gradient(135deg, #EEF6FF 0%, #FFFFFF 100%);
+            border: 1px solid #BFDBFE;
+            color: #1E3A8A;
+            font-weight: 950;
+            font-size: 1.18rem;
+            box-shadow: 0 8px 20px rgba(37, 99, 235, 0.08);
+        }
+        .start-training-box {
+            margin: 8px 0 16px 0;
+            padding: 18px 20px;
+            border-radius: 20px;
+            background: linear-gradient(135deg, #FFFBEB 0%, #FFF7ED 100%);
+            border: 1px solid #FCD34D;
+            color: #78350F;
+            font-weight: 850;
+            line-height: 1.62;
+        }
+        .start-training-box b { color:#92400E; font-weight:950; }
+        .timer-live-wrap {
+            background: linear-gradient(135deg, #EFF6FF 0%, #F8FAFC 100%);
+            border: 1px solid #93C5FD;
+            border-radius: 18px;
+            padding: 15px 17px;
+            color: #1E3A8A;
+            font-weight: 850;
+            margin: 14px 0 12px 0;
+            box-shadow: 0 8px 20px rgba(37,99,235,0.08);
+        }
+        .timer-live-wrap.clear {
+            background: linear-gradient(135deg, #ECFDF5 0%, #F0FDF4 100%);
+            border-color:#86EFAC;
+            color:#14532D;
+        }
+        .timer-live-head {
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            gap:10px;
+            flex-wrap:wrap;
+        }
+        .timer-live-left { display:flex; align-items:center; gap:10px; }
+        .timer-live-count {
+            display:inline-block;
+            min-width:78px;
+            text-align:center;
+            padding:7px 12px;
+            border-radius:999px;
+            background:#FFFFFF;
+            border:1px solid #BFDBFE;
+            color:#1D4ED8;
+            font-weight:950;
+            box-shadow:0 3px 8px rgba(37,99,235,0.10);
+        }
+        .timer-warmup {
+            background: linear-gradient(135deg, #FFF7ED 0%, #FFFBEB 100%);
+            border: 1px solid #FDBA74;
+            color:#92400E;
+        }
+        .check-row-locked {
+            opacity: .52;
+        }
+        .check-next-guide {
+            color:#64748B;
+            font-weight:850;
+            font-size:0.92rem;
+        }
+        .summary-title-card {
+            margin-top: 18px;
+            padding: 18px 20px;
+            border-radius: 22px;
+            background: linear-gradient(135deg, #F8FAFC 0%, #FFFFFF 100%);
+            border: 1px solid #D7E3F4;
+            box-shadow: 0 10px 26px rgba(15,23,42,0.07);
+        }
+        .summary-title-card h4 {
+            margin: 0 0 6px 0;
+            color: #1E3A8A;
+            font-weight: 950;
+            font-size: 1.24rem;
+        }
+        .summary-title-card p {
+            margin: 0;
+            color:#334155;
+            font-weight:750;
+            line-height:1.6;
+        }
+        /* Previous / secondary button visibility reinforcement */
+        .stButton > button[kind="secondary"],
+        .stButton > button[kind="secondary"] *,
+        .stButton > button[kind="secondary"] p,
+        .stButton > button[kind="secondary"] span {
+            color: #1D4ED8 !important;
+            -webkit-text-fill-color: #1D4ED8 !important;
+            opacity: 1 !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
     SELECT_PLACEHOLDER = "선택하세요"
     STEP_MIN_SECONDS = 100
+    STEP_WARMUP_SECONDS = 3
     CHECK_ITEM_SECONDS = 10
     CHECK_ITEM_DELAY_SECONDS = 1
     TIMED_STEPS = {1, 2, 3, 4}
@@ -1524,7 +1637,7 @@ with tab_audit:
     def _clear_june_training_state() -> None:
         """최종 제출 후 교육 화면을 초기 상태로 되돌리기 위한 전용 초기화입니다."""
         reset_prefixes = ("june_v2_", "t1_v2_", "t2_v2_", "event_v2_", "june_")
-        reset_exact = {"june_training_saved", "show_legacy_pledge_archive"}
+        reset_exact = {"june_training_saved"}
         for k in list(st.session_state.keys()):
             if k in reset_exact or any(k.startswith(p) for p in reset_prefixes):
                 try:
@@ -1536,7 +1649,7 @@ with tab_audit:
         _clear_june_training_state()
 
     def _init_june_v2_state():
-        st.session_state.setdefault("june_v2_view", "theme1")
+        st.session_state.setdefault("june_v2_view", "intro")
         st.session_state.setdefault("june_v2_theme", 1)
         st.session_state.setdefault("june_v2_step", 1)
         st.session_state.setdefault("june_v2_theme1_done", False)
@@ -1545,22 +1658,32 @@ with tab_audit:
         st.session_state.setdefault("june_training_saved", False)
         st.session_state.setdefault("june_v2_completed_steps_1", [])
         st.session_state.setdefault("june_v2_completed_steps_2", [])
-        st.session_state.setdefault("june_v2_theme1_started_at", time.time())
-        if st.session_state.get("june_v2_view") == "theme2":
-            st.session_state.setdefault("june_v2_theme2_started_at", time.time())
+
+    def _step_load_key(theme_no: int, step_no: int) -> str:
+        return f"june_v2_theme{theme_no}_step{step_no}_loaded_at"
 
     def _step_timer_key(theme_no: int, step_no: int) -> str:
-        return f"june_v2_theme{theme_no}_step{step_no}_started_at"
+        return f"june_v2_theme{theme_no}_step{step_no}_countdown_started_at"
+
+    def _step_warmup_key(theme_no: int, step_no: int) -> str:
+        return f"june_v2_theme{theme_no}_step{step_no}_warmup_done"
 
     def _ensure_step_timer(theme_no: int, step_no: int) -> None:
         if step_no in TIMED_STEPS:
-            st.session_state.setdefault(_step_timer_key(theme_no, step_no), time.time())
+            st.session_state.setdefault(_step_load_key(theme_no, step_no), time.time())
+
+    def _completed_steps(theme_no: int) -> list[int]:
+        return list(st.session_state.get(f"june_v2_completed_steps_{theme_no}", []))
 
     def _step_elapsed(theme_no: int, step_no: int) -> int:
         if step_no not in TIMED_STEPS:
             return 0
-        _ensure_step_timer(theme_no, step_no)
-        return int(time.time() - float(st.session_state[_step_timer_key(theme_no, step_no)]))
+        if step_no in set(_completed_steps(theme_no)):
+            return STEP_MIN_SECONDS
+        started = st.session_state.get(_step_timer_key(theme_no, step_no))
+        if not started:
+            return 0
+        return int(time.time() - float(started))
 
     def _step_remaining(theme_no: int, step_no: int) -> int:
         if step_no not in TIMED_STEPS:
@@ -1568,10 +1691,7 @@ with tab_audit:
         return max(0, STEP_MIN_SECONDS - _step_elapsed(theme_no, step_no))
 
     def _step_time_met(theme_no: int, step_no: int) -> bool:
-        return step_no not in TIMED_STEPS or _step_remaining(theme_no, step_no) <= 0
-
-    def _completed_steps(theme_no: int) -> list[int]:
-        return list(st.session_state.get(f"june_v2_completed_steps_{theme_no}", []))
+        return step_no not in TIMED_STEPS or step_no in set(_completed_steps(theme_no)) or _step_remaining(theme_no, step_no) <= 0
 
     def _mark_step_done(theme_no: int, step_no: int) -> None:
         key = f"june_v2_completed_steps_{theme_no}"
@@ -1588,6 +1708,12 @@ with tab_audit:
             else:
                 break
         return unlocked
+
+    def _check_done_key(check_key: str) -> str:
+        return f"{check_key}_timed_done"
+
+    def _check_is_done(check_key: str) -> bool:
+        return bool(st.session_state.get(_check_done_key(check_key), False))
 
     def _checks_done(theme_no: int) -> bool:
         checks = T1_CHECKS if theme_no == 1 else T2_CHECKS
@@ -1611,13 +1737,19 @@ with tab_audit:
         return True, "완료 가능"
 
     def _set_theme(theme_no: int):
+        if theme_no == 1:
+            st.session_state["june_v2_view"] = "theme1"
+            st.session_state["june_v2_theme"] = 1
+            st.session_state["june_v2_step"] = 1
+            _ensure_step_timer(1, 1)
+            st.rerun()
         if theme_no == 2 and not st.session_state.get("june_v2_theme1_done", False):
             st.warning("현재 교육을 완료해야 다음 단계로 이동할 수 있습니다. Theme 1을 먼저 완료해 주세요.")
             return
         st.session_state["june_v2_view"] = f"theme{theme_no}"
         st.session_state["june_v2_theme"] = theme_no
         st.session_state["june_v2_step"] = 1
-        st.session_state.setdefault(f"june_v2_theme{theme_no}_started_at", time.time())
+        _ensure_step_timer(theme_no, 1)
         st.rerun()
 
     def _set_event():
@@ -1639,34 +1771,32 @@ with tab_audit:
             return (15 if _checks_done(1) else 0) + (_quiz_correct_count(1) * 5)
         return (15 if _checks_done(2) else 0) + (_quiz_correct_count(2) * 6)
 
-    _init_june_v2_state()
-
-    # Quest Menu
-    q1_state = "quest-clear" if st.session_state.get("june_v2_theme1_done") else ("quest-active" if st.session_state.get("june_v2_view") == "theme1" else "quest-lock")
-    q2_state = "quest-clear" if st.session_state.get("june_v2_theme2_done") else ("quest-active" if st.session_state.get("june_v2_view") == "theme2" else "quest-lock")
-    ev_state = "quest-clear" if st.session_state.get("june_v2_event_done") else ("quest-event" if st.session_state.get("june_v2_view") == "event" else "quest-lock")
-    sub_state = "quest-active" if st.session_state.get("june_v2_view") == "submit" else "quest-lock"
-
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        st.markdown(f"""<div class="quest-card {q1_state}"><h4>① 청렴·공정경영</h4><p>부패방지·공정거래 리스크를 확인합니다.</p><span class="status-chip">{'CLEAR' if st.session_state.get('june_v2_theme1_done') else 'IN PROGRESS'}</span></div>""", unsafe_allow_html=True)
-        if st.button("청렴·공정경영 열기", use_container_width=True, key="june_v2_open_t1"):
-            _set_theme(1)
-    with c2:
-        status2 = 'CLEAR' if st.session_state.get('june_v2_theme2_done') else ('LOCKED' if not st.session_state.get('june_v2_theme1_done') else 'READY')
-        st.markdown(f"""<div class="quest-card {q2_state}"><h4>② 협력사·정보보호</h4><p>하도급·정보보호 기준을 점검합니다.</p><span class="status-chip">{status2}</span></div>""", unsafe_allow_html=True)
-        if st.button("협력사·정보보호 열기", use_container_width=True, key="june_v2_open_t2"):
-            _set_theme(2)
-    with c3:
-        status_ev = 'CLEAR' if st.session_state.get('june_v2_event_done') else ('LOCKED' if not st.session_state.get('june_v2_theme2_done') else 'READY')
-        st.markdown(f"""<div class="quest-card {ev_state}"><h4>🌊 Summer Event</h4><p>수료자 모바일 쿠폰 추첨 대상 이벤트입니다.</p><span class="status-chip">{status_ev}</span></div>""", unsafe_allow_html=True)
-        if st.button("이벤트 열기", use_container_width=True, key="june_v2_open_event"):
-            _set_event()
-    with c4:
-        status_sub = 'READY' if st.session_state.get('june_v2_event_done') else 'LOCKED'
-        st.markdown(f"""<div class="quest-card {sub_state}"><h4>✅ 수료 제출</h4><p>교육 수료 및 이벤트 퀴즈 정보를 저장합니다.</p><span class="status-chip">{status_sub}</span></div>""", unsafe_allow_html=True)
-        if st.button("수료 제출 열기", use_container_width=True, key="june_v2_open_submit"):
-            _set_submit()
+    def _render_quest_cards(show_buttons: bool = True):
+        q1_state = "quest-clear" if st.session_state.get("june_v2_theme1_done") else ("quest-active" if st.session_state.get("june_v2_view") == "theme1" else "quest-lock")
+        q2_state = "quest-clear" if st.session_state.get("june_v2_theme2_done") else ("quest-active" if st.session_state.get("june_v2_view") == "theme2" else "quest-lock")
+        ev_state = "quest-clear" if st.session_state.get("june_v2_event_done") else ("quest-event" if st.session_state.get("june_v2_view") == "event" else "quest-lock")
+        sub_state = "quest-active" if st.session_state.get("june_v2_view") == "submit" else "quest-lock"
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            status1 = 'CLEAR' if st.session_state.get('june_v2_theme1_done') else ('IN PROGRESS' if st.session_state.get('june_v2_view') == 'theme1' else 'READY')
+            st.markdown(f"""<div class="quest-card {q1_state}"><h4>① 청렴·공정경영</h4><p>부패방지·공정거래 리스크를 확인합니다.</p><span class="status-chip">{status1}</span></div>""", unsafe_allow_html=True)
+            if show_buttons and st.button("청렴·공정경영 열기", use_container_width=True, key="june_v2_open_t1"):
+                _set_theme(1)
+        with c2:
+            status2 = 'CLEAR' if st.session_state.get('june_v2_theme2_done') else ('LOCKED' if not st.session_state.get('june_v2_theme1_done') else 'READY')
+            st.markdown(f"""<div class="quest-card {q2_state}"><h4>② 협력사·정보보호</h4><p>하도급·정보보호 기준을 점검합니다.</p><span class="status-chip">{status2}</span></div>""", unsafe_allow_html=True)
+            if show_buttons and st.button("협력사·정보보호 열기", use_container_width=True, key="june_v2_open_t2"):
+                _set_theme(2)
+        with c3:
+            status_ev = 'CLEAR' if st.session_state.get('june_v2_event_done') else ('LOCKED' if not st.session_state.get('june_v2_theme2_done') else 'READY')
+            st.markdown(f"""<div class="quest-card {ev_state}"><h4>🌊 Summer Event</h4><p>수료자 모바일 쿠폰 추첨 대상 이벤트입니다.</p><span class="status-chip">{status_ev}</span></div>""", unsafe_allow_html=True)
+            if show_buttons and st.button("이벤트 열기", use_container_width=True, key="june_v2_open_event"):
+                _set_event()
+        with c4:
+            status_sub = 'READY' if st.session_state.get('june_v2_event_done') else 'LOCKED'
+            st.markdown(f"""<div class="quest-card {sub_state}"><h4>✅ 수료 제출</h4><p>교육 수료 및 이벤트 퀴즈 정보를 저장합니다.</p><span class="status-chip">{status_sub}</span></div>""", unsafe_allow_html=True)
+            if show_buttons and st.button("수료 제출 열기", use_container_width=True, key="june_v2_open_submit"):
+                _set_submit()
 
     def _render_step_road(theme_no: int):
         current = int(st.session_state.get("june_v2_step", 1))
@@ -1695,55 +1825,97 @@ with tab_audit:
         st.markdown("<div class='nav-help'>완료된 단계는 초록색, 현재 단계는 파란색, 아직 진행할 수 없는 단계는 회색으로 표시됩니다.</div>", unsafe_allow_html=True)
 
     def _render_step_timer(theme_no: int, step_no: int) -> None:
-        """STEP 1~4에 적용되는 100초 최소 학습시간 게이지입니다."""
+        """STEP 1~4에 적용되는 100초 자동 카운트다운 게이지입니다."""
         if step_no not in TIMED_STEPS:
             return
-        elapsed = _step_elapsed(theme_no, step_no)
-        remain = _step_remaining(theme_no, step_no)
-        pct = min(100, int(elapsed / STEP_MIN_SECONDS * 100))
-        if remain == 0:
-            msg = f"최소 학습시간 충족 · STEP {step_no}에서 {elapsed}초 학습 완료"
-            panel_cls = "timer-panel timer-panel-clear"
-        else:
-            msg = f"최소 학습시간 충족까지 {STEP_MIN_SECONDS}초 카운트다운 · {remain}초 남음 / 현재 {elapsed}초 학습"
-            panel_cls = "timer-panel"
-        st.markdown(f"""
-            <div class="{panel_cls}">
-                ⏱️ {msg}
-                <div class="timer-bar-bg"><div class="timer-bar-fill" style="width:{pct}%;"></div></div>
+        if step_no in set(_completed_steps(theme_no)):
+            st.markdown(f"""
+                <div class="timer-live-wrap clear">
+                    <div class="timer-live-head">
+                        <div class="timer-live-left">✅ STEP {step_no} 최소 학습시간 충족 완료</div>
+                        <span class="timer-live-count">CLEAR</span>
+                    </div>
+                    <div class="timer-bar-bg"><div class="timer-bar-fill" style="width:100%;"></div></div>
+                </div>
+            """, unsafe_allow_html=True)
+            return
+
+        ph = st.empty()
+        if not st.session_state.get(_step_warmup_key(theme_no, step_no), False):
+            for sec in range(STEP_WARMUP_SECONDS, 0, -1):
+                ph.markdown(f"""
+                    <div class="timer-live-wrap timer-warmup">
+                        <div class="timer-live-head">
+                            <div class="timer-live-left">{HOURGLASS_SVG}<span>STEP {step_no} 카운트다운 준비 중입니다.</span></div>
+                            <span class="timer-live-count">{sec}초 후 시작</span>
+                        </div>
+                        <div class="timer-bar-bg"><div class="timer-bar-fill" style="width:0%;"></div></div>
+                    </div>
+                """, unsafe_allow_html=True)
+                time.sleep(1)
+            st.session_state[_step_warmup_key(theme_no, step_no)] = True
+            st.session_state[_step_timer_key(theme_no, step_no)] = time.time()
+
+        st.session_state.setdefault(_step_timer_key(theme_no, step_no), time.time())
+        while _step_remaining(theme_no, step_no) > 0:
+            elapsed = _step_elapsed(theme_no, step_no)
+            remain = _step_remaining(theme_no, step_no)
+            pct = min(100, int(elapsed / STEP_MIN_SECONDS * 100))
+            ph.markdown(f"""
+                <div class="timer-live-wrap">
+                    <div class="timer-live-head">
+                        <div class="timer-live-left">{HOURGLASS_SVG}<span>최소 학습시간 충족을 위한 100초 카운트다운</span></div>
+                        <span class="timer-live-count">{remain}초 남음</span>
+                    </div>
+                    <div class="timer-bar-bg"><div class="timer-bar-fill" style="width:{pct}%;"></div></div>
+                </div>
+            """, unsafe_allow_html=True)
+            time.sleep(1)
+        ph.markdown(f"""
+            <div class="timer-live-wrap clear">
+                <div class="timer-live-head">
+                    <div class="timer-live-left">✅ 최소 학습시간 충족 · STEP {step_no} 100초 학습 완료</div>
+                    <span class="timer-live-count">CLEAR</span>
+                </div>
+                <div class="timer-bar-bg"><div class="timer-bar-fill" style="width:100%;"></div></div>
             </div>
         """, unsafe_allow_html=True)
-
-    def _check_done_key(check_key: str) -> str:
-        return f"{check_key}_timed_done"
-
-    def _check_is_done(check_key: str) -> bool:
-        return bool(st.session_state.get(_check_done_key(check_key), False))
 
     def _render_timed_checks(theme_no: int) -> None:
         """STEP 5 실천 체크 항목별 10초 모래시계 확인 절차입니다."""
         checks = T1_CHECKS if theme_no == 1 else T2_CHECKS
+        items = list(checks.items())
         st.markdown(
             "<div class='check-timer-card'>⌛ 각 항목은 체크 후 1초 뒤 10초 모래시계 카운트다운이 시작됩니다. "
-            "카운트다운이 끝난 뒤 다음 항목을 체크해 주세요.</div>",
+            "카운트다운이 끝난 뒤 다음 항목이 활성화됩니다.</div>",
             unsafe_allow_html=True,
         )
-        for idx, (key, label) in enumerate(checks.items(), start=1):
-            done_key = _check_done_key(key)
+        first_not_done_idx = None
+        for i, (k, _) in enumerate(items):
+            if not _check_is_done(k):
+                first_not_done_idx = i
+                break
+
+        for idx, (key, label) in enumerate(items, start=1):
             is_done = _check_is_done(key)
-            c_box, c_status = st.columns([0.78, 0.22], vertical_alignment="center")
+            is_active = (first_not_done_idx is not None and idx - 1 == first_not_done_idx)
+            c_box, c_status = st.columns([0.76, 0.24], vertical_alignment="center")
             with c_box:
-                st.checkbox(
-                    f"{idx}. {label}",
-                    key=key,
-                    disabled=is_done,
-                )
+                if is_done:
+                    st.checkbox(f"{idx}. {label}", value=True, disabled=True, key=f"{key}_done_widget")
+                elif is_active:
+                    checked_now = st.checkbox(f"{idx}. {label}", value=False, key=f"{key}_active_widget")
+                else:
+                    st.checkbox(f"{idx}. {label}", value=False, disabled=True, key=f"{key}_locked_widget")
+                    checked_now = False
             with c_status:
                 ph = st.empty()
                 if is_done:
                     ph.markdown("<span class='check-timer-done'>✅ 확인 완료</span>", unsafe_allow_html=True)
-                elif bool(st.session_state.get(key, False)):
-                    ph.markdown("<span class='check-timer-wait'>⌛ 준비 중...</span>", unsafe_allow_html=True)
+                elif not is_active:
+                    ph.markdown("<span class='check-next-guide'>이전 항목 완료 후 활성화</span>", unsafe_allow_html=True)
+                elif bool(checked_now):
+                    ph.markdown("<span class='check-timer-wait'>⌛ 1초 후 시작</span>", unsafe_allow_html=True)
                     time.sleep(CHECK_ITEM_DELAY_SECONDS)
                     for sec in range(CHECK_ITEM_SECONDS, 0, -1):
                         ph.markdown(
@@ -1751,12 +1923,30 @@ with tab_audit:
                             unsafe_allow_html=True,
                         )
                         time.sleep(1)
-                    st.session_state[done_key] = True
-                    st.session_state[key] = True
+                    st.session_state[_check_done_key(key)] = True
                     ph.markdown("<span class='check-timer-done'>✅ 확인 완료</span>", unsafe_allow_html=True)
                     st.rerun()
                 else:
                     ph.markdown("<span style='color:#64748B;font-weight:800;'>대기</span>", unsafe_allow_html=True)
+
+        if _checks_done(theme_no):
+            if theme_no == 1:
+                title = "Theme 1. 청렴·공정경영 Quest Summary"
+                desc = "실천 체크를 완료했습니다. 아래 요약 이미지를 통해 청렴·공정경영의 핵심 기준을 다시 한 번 정리해 주세요."
+                img = "theme1_integrity_fair.png"
+                cap = "Theme 1. 청렴·공정경영 Quest Summary"
+            else:
+                title = "Theme 2. 협력사·정보보호 Quest Summary"
+                desc = "실천 체크를 완료했습니다. 아래 요약 이미지를 통해 협력사·정보보호의 핵심 기준을 다시 한 번 정리해 주세요."
+                img = "theme2_partner_security.png"
+                cap = "Theme 2. 협력사·정보보호 Quest Summary"
+            st.markdown(f"""
+                <div class="summary-title-card">
+                    <h4>{title}</h4>
+                    <p>{desc}</p>
+                </div>
+            """, unsafe_allow_html=True)
+            _show_training_asset(img, cap)
 
     def _render_theme_step(theme_no: int):
         step = int(st.session_state.get("june_v2_step", 1))
@@ -1775,10 +1965,6 @@ with tab_audit:
 
         if step == 1:
             if theme_no == 1:
-                _show_training_asset(
-                    "theme1_integrity_fair.png",
-                    "Theme 1. 청렴·공정경영 핵심 인포그래픽"
-                )
                 st.markdown("""
                     <div class="content-card-v2">
                         <span class="page-pill-v2">STEP 1 · Infographic</span>
@@ -1793,10 +1979,6 @@ with tab_audit:
                     </div>
                 """, unsafe_allow_html=True)
             else:
-                _show_training_asset(
-                    "theme2_partner_security.png",
-                    "Theme 2. 협력사·정보보호 핵심 인포그래픽"
-                )
                 st.markdown("""
                     <div class="content-card-v2">
                         <span class="page-pill-v2">STEP 1 · Infographic</span>
@@ -1813,20 +1995,20 @@ with tab_audit:
 
         elif step == 2:
             if theme_no == 1:
-                items = [
-                    ("청탁 금지", "공직자 등에게 법령상 허용되지 않는 청탁을 하지 않습니다."),
-                    ("금품 제공 금지", "직무 관련 금품·향응·편의 제공 또는 약속을 금지합니다."),
-                    ("제3자 리스크", "에이전트, 협력사, 하도급사를 통한 우회 제공도 부패 리스크입니다."),
-                    ("담합 금지", "가격, 입찰, 거래조건에 관한 경쟁사 간 합의나 정보교환을 금지합니다."),
+                principles = [
+                    ("청탁 금지", "공직자 등에게 직접 또는 제3자를 통해 부정청탁을 하지 않습니다."),
+                    ("금품 제공 금지", "직무 관련 금품·향응·편의 제공 또는 약속을 하지 않습니다."),
+                    ("제3자 리스크", "에이전트·협력사·하도급사를 통한 우회 제공도 금지됩니다."),
+                    ("담합 금지", "가격, 입찰, 거래조건 등에 관한 경쟁사 합의를 하지 않습니다."),
                 ]
             else:
-                items = [
+                principles = [
                     ("서면 발급", "위탁업무 시작 전 계약서 등 법정기재사항 포함 서면을 발급합니다."),
-                    ("대금·검사 기한", "대금 지급기한과 검사결과 통지기한을 준수합니다."),
-                    ("기술자료 보호", "정당한 사유와 절차 없이 기술자료·경영정보를 요구하지 않습니다."),
-                    ("정보보호", "개인정보 목적 외 이용, 제3자 제공, ID/PW 공유를 금지합니다."),
+                    ("대금·검사", "대금 지급기한과 검사결과 통지기한을 준수합니다."),
+                    ("기술자료 보호", "정당한 사유와 절차, 목적 범위 내 사용 원칙을 지킵니다."),
+                    ("정보보호", "개인정보 목적 외 이용, ID/PW 공유, 기업비밀 방치를 금지합니다."),
                 ]
-            html = ''.join([f"<div class='principle-box-v2'><b>{a}</b><span>{b}</span></div>" for a,b in items])
+            html = ''.join([f"<div class='principle-card-v2'><b>{a}</b><span>{b}</span></div>" for a,b in principles])
             st.markdown(f"""<div class="content-card-v2"><span class="page-pill-v2">STEP 2 · Core Principles</span><h4>기억해야 할 핵심 원칙</h4><div class="principle-grid-v2">{html}</div></div>""", unsafe_allow_html=True)
 
         elif step == 3:
@@ -1876,7 +2058,6 @@ with tab_audit:
         if step in TIMED_STEPS:
             _render_step_timer(theme_no, step)
 
-        # Status pills
         checked = _checks_done(theme_no)
         answered = _quiz_answered(theme_no)
         score = _theme_score(theme_no)
@@ -1891,7 +2072,7 @@ with tab_audit:
         st.markdown("---")
         prev_col, msg_col, next_col = st.columns([0.18, 0.54, 0.28])
         with prev_col:
-            if st.button("◀ 이전", use_container_width=True, key=f"june_v2_prev_{theme_no}_{step}"):
+            if st.button("◀ 이전", use_container_width=True, key=f"june_v2_prev_{theme_no}_{step}", type="secondary"):
                 if step > 1:
                     st.session_state["june_v2_step"] = step - 1
                     _ensure_step_timer(theme_no, step - 1)
@@ -1934,172 +2115,231 @@ with tab_audit:
                         _ensure_step_timer(theme_no, next_step)
                         st.rerun()
 
-    # Main content view
-    if st.session_state.get("june_v2_view") in ["theme1", "theme2"]:
-        current_theme = 1 if st.session_state.get("june_v2_view") == "theme1" else 2
-        _render_theme_step(current_theme)
+    _init_june_v2_state()
 
-    elif st.session_state.get("june_v2_view") == "event":
-        st.markdown("""
-            <div class="summer-zone-v2">
-                <h3>🌊 Summer Compliance Event</h3>
-                <p>
-                    무더운 6월, 컴플라이언스도 시원하게 점검해 주세요.
-                    본 교육을 정상 수료한 임직원은 추후 별도 추첨을 통해 모바일 쿠폰 지급 대상에 포함됩니다.
-                    이벤트 퀴즈는 정보보호 핵심 수칙과 연결했습니다.
-                </p>
-            </div>
-            <div class="content-card-v2">
-                <span class="page-pill-v2">Special Event · 참여형 퀴즈</span>
-                <h4>여름철 휴가·외근 중에도 기준은 그대로입니다</h4>
-                <div class="infographic-grid">
-                    <div class="info-tile tile-blue"><span class="icon">🏖️</span><b>휴가철</b><span>업무 자료 반출·저장 경로 확인</span></div>
-                    <div class="info-tile tile-green"><span class="icon">🔑</span><b>계정관리</b><span>ID/PW 공유 금지, 개인별 권한 준수</span></div>
-                    <div class="info-tile tile-orange"><span class="icon">📁</span><b>파일보호</b><span>개인정보·기업비밀 암호화 및 파기</span></div>
-                    <div class="info-tile tile-purple"><span class="icon">🎁</span><b>추첨대상</b><span>정상 수료자 중 모바일 쿠폰 추첨</span></div>
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
-        _show_training_asset(
-            "summer_event_quiz.png",
-            "Summer Compliance Event Quiz"
-        )
-        event_answer = st.radio(
-            "이벤트 Q. 여름철 휴가·외근 중에도 지켜야 할 정보보호 수칙으로 가장 적절한 것은?",
-            [
-                SELECT_PLACEHOLDER,
-                "업무 편의를 위해 고객정보 파일을 개인 메일로 보내 둔다",
-                "기업비밀·개인정보 파일은 암호화하고, 목적 완료 후 안전하게 파기한다",
-                "비밀번호는 동료와 공유해 두면 업무 공백을 줄일 수 있다"
-            ],
-            key="event_v2_q1"
-        )
-        if event_answer == "기업비밀·개인정보 파일은 암호화하고, 목적 완료 후 안전하게 파기한다":
-            st.success("정답입니다. 시원한 여름에도 정보보호 기준은 그대로 유지됩니다. 🌊")
-        elif event_answer != SELECT_PLACEHOLDER:
-            st.info("힌트: 개인정보·기업비밀은 암호화, 접근권한, 목적 완료 후 안전한 파기가 핵심입니다.")
-        ev_prev, ev_msg, ev_next = st.columns([0.18, 0.54, 0.28])
-        with ev_prev:
-            if st.button("◀ Theme 2로", use_container_width=True, key="june_v2_event_prev"):
-                st.session_state["june_v2_view"] = "theme2"
-                st.session_state["june_v2_theme"] = 2
-                st.session_state["june_v2_step"] = 6
-                st.rerun()
-        with ev_msg:
-            st.markdown("<div class='nav-help'>이벤트 퀴즈에 응답하면 수료 제출 단계로 이동할 수 있습니다.</div>", unsafe_allow_html=True)
-        with ev_next:
-            if st.button("Event CLEAR → 수료 제출", use_container_width=True, key="june_v2_event_next", type="primary"):
-                if st.session_state.get("event_v2_q1", SELECT_PLACEHOLDER) == SELECT_PLACEHOLDER:
-                    st.warning("이벤트 퀴즈에 응답해야 수료 제출 단계로 이동할 수 있습니다.")
-                else:
-                    st.session_state["june_v2_event_done"] = True
-                    st.session_state["june_v2_view"] = "submit"
-                    st.rerun()
+    st.markdown("""
+        <div class="premium-hero-v2">
+            <div class="premium-badge-v2">AUDIT OFFICE · 2026 JUNE COMPLIANCE</div>
+            <h2>2026년 6월 컴플라이언스 인식제고 자율점검 교육</h2>
+            <p>
+                본 과정은 전 임직원을 대상으로 하는 감사실 주관 정기 자율점검 교육입니다.
+                부패방지·공정거래·하도급·정보보호 리스크를 사례 중심으로 학습하고,
+                실제 업무에서 바로 적용할 수 있는 실천 기준을 순서대로 확인합니다.
+            </p>
+        </div>
+        <div class="audit-message-v2">
+            <h4>감사실 안내</h4>
+            <p>
+                교육은 순차형 Quest 방식으로 진행됩니다. 현재 단계를 완료해야 다음 단계로 이동할 수 있으며,
+                각 테마의 STEP 1~4는 단계별 최소 100초 이상 학습해야 다음 단계로 이동할 수 있습니다.
+                STEP 5 실천 체크는 항목별 10초 확인 카운트다운을 통해 실질적인 확인 절차를 거칩니다.
+                이는 단순 클릭형 수료를 방지하고, 전 임직원이 핵심 기준을 충분히 확인하기 위한 장치입니다.
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
 
-    elif st.session_state.get("june_v2_view") == "submit":
-        st.markdown("### ✅ 수료 제출")
-        st.caption("아래 정보를 입력하고 제출하면 교육 수료 및 이벤트 퀴즈 정보가 Google Sheet에 저장됩니다.")
-        t1_done = st.session_state.get("june_v2_theme1_done", False)
-        t2_done = st.session_state.get("june_v2_theme2_done", False)
-        event_answer_now = st.session_state.get("event_v2_q1", SELECT_PLACEHOLDER)
-        event_answered_now = event_answer_now != SELECT_PLACEHOLDER
-        event_correct_now = event_answer_now == "기업비밀·개인정보 파일은 암호화하고, 목적 완료 후 안전하게 파기한다"
-        t1_score_now = _theme_score(1)
-        t2_score_now = _theme_score(2)
-        quiz_score_now = (_quiz_correct_count(1) * 5) + (_quiz_correct_count(2) * 6)
-        event_score_now = 10 if event_answered_now else 0
-        final_submit_score = 10 if (t1_done and t2_done and event_answered_now) else 0
-        participation_score = (15 if _checks_done(1) else 0) + (15 if _checks_done(2) else 0) + event_score_now + final_submit_score
-        final_score = t1_score_now + t2_score_now + event_score_now + final_submit_score
+    # GitHub 저장소의 assets 폴더 이미지를 안전하게 표시하는 유틸
+    TRAINING_ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 
-        cstat1, cstat2, cstat3, cstat4 = st.columns(4)
-        cstat1.metric("Theme 1", "CLEAR" if t1_done else "진행 중")
-        cstat2.metric("Theme 2", "CLEAR" if t2_done else "진행 중")
-        cstat3.metric("이벤트", "CLEAR" if event_answered_now else "미참여")
-        cstat4.metric("최종점수", f"{final_score}/100")
-
-        st.markdown("""
-            <div class="content-card-v2">
-                <span class="page-pill-v2">Completion Standard</span>
-                <h4>수료 기준</h4>
-                <p>
-                    Theme 1, Theme 2, Summer Event를 순서대로 완료하고 사번·성명·소속을 입력해야 수료 제출이 가능합니다.
-                    점수는 이해도 확인용이며, 정상 수료자는 추후 모바일 쿠폰 추첨 대상에 포함됩니다.
-                </p>
-            </div>
-        """, unsafe_allow_html=True)
-
-        st.markdown("---")
-        c1, c2, c3, c4 = st.columns(4)
-        emp_id = c1.text_input("사번", placeholder="사번(1000****) / 미부여 시 00000000", key="june_emp_id")
-        name = c2.text_input("성명", key="june_name")
-        ordered_units = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
-        unit = c3.selectbox("총괄 / 본부 / 단", ordered_units, index=None, placeholder="선택", key="june_unit")
-        dept = c4.text_input("상세 부서명", placeholder="현 소속부서명", key="june_dept")
-
-        can_submit = t1_done and t2_done and event_answered_now
-        if not can_submit:
-            st.warning("Theme 1·Theme 2·Summer Event를 모두 CLEAR해야 수료 제출이 가능합니다.")
-
-        left_nav, right_submit = st.columns([0.22, 0.78])
-        with left_nav:
-            if st.button("◀ Event로", use_container_width=True, key="june_v2_submit_prev"):
-                st.session_state["june_v2_view"] = "event"
-                st.rerun()
-        with right_submit:
-            submit_june_training = st.button(
-                "📨 6월 컴플라이언스 교육 수료 제출",
-                use_container_width=True,
-                disabled=(not can_submit or st.session_state.get("june_training_saved", False)),
-                key="june_training_submit",
-                type="primary"
+    def _show_training_asset(filename: str, caption: str = "") -> None:
+        image_path = os.path.join(TRAINING_ASSET_DIR, filename)
+        if os.path.exists(image_path):
+            st.image(image_path, use_container_width=True, caption=caption)
+        else:
+            st.warning(
+                f"이미지 파일을 찾을 수 없습니다: assets/{filename} · "
+                "GitHub의 assets 폴더와 파일명을 확인해 주세요."
             )
 
-        if submit_june_training:
-            if not emp_id or not name or not unit or not dept:
-                st.warning("⚠️ 사번, 성명, 총괄/본부/단, 상세 부서명을 모두 입력해 주세요.")
-            else:
-                ok, msg = validate_emp_id(emp_id)
-                if not ok:
-                    st.warning(msg)
-                else:
-                    record = {
-                        "사번": emp_id.strip(),
-                        "성명": name.strip(),
-                        "총괄/본부/단": unit,
-                        "부서": dept.strip(),
-                        "교육대상": "전 임직원",
-                        "Theme1_청렴공정_확인": "완료" if t1_done else "미완료",
-                        "Theme1_점수": t1_score_now,
-                        "Theme2_협력정보_확인": "완료" if t2_done else "미완료",
-                        "Theme2_점수": t2_score_now,
-                        "이벤트퀴즈_선택": event_answer_now,
-                        "이벤트퀴즈_정답여부": "정답" if event_correct_now else "오답",
-                        "퀴즈점수": quiz_score_now,
-                        "참여점수": participation_score,
-                        "최종점수": final_score,
-                        "수료상태": "수료",
-                        "이벤트추첨대상": "대상",
-                        "비고": "감사실 주관 2026년 6월 컴플라이언스 인식제고 자율점검 교육 / 모바일 쿠폰 추첨 대상 포함 / Premium V3 단계별 100초·체크항목 10초 확인형 교육",
-                    }
-                    with st.spinner("6월 컴플라이언스 교육 수료 내역을 저장 중입니다..."):
-                        success, save_msg = save_june_compliance_training_result(record)
-                    if success:
-                        st.session_state["june_training_saved"] = True
-                        st.success(f"✅ {name}님, 최종 수료 제출이 완료되었습니다.")
-                        st.balloons()
-                        st.info("교육 수료 및 이벤트 퀴즈 정보가 Google Sheet에 저장되었습니다. 5초 후 교육 초기 화면으로 이동합니다.")
-                        reset_ph = st.empty()
-                        for sec in range(5, 0, -1):
-                            reset_ph.markdown(
-                                f"<div class='timer-panel timer-panel-clear'>✅ 최종 제출 완료 · {sec}초 후 초기 화면으로 이동합니다.</div>",
-                                unsafe_allow_html=True,
-                            )
-                            time.sleep(1)
-                        st.session_state["june_force_reset_after_submit"] = True
-                        st.rerun()
+    if st.session_state.get("june_v2_view") == "intro":
+        st.markdown("<div class='intro-sequence-title'>컴플라이언스 인식제고 교육은 다음 순서로 진행됩니다.</div>", unsafe_allow_html=True)
+        _render_quest_cards(show_buttons=False)
+        st.markdown("""
+            <div class="start-training-box">
+                <b>교육을 시작하겠습니다.</b><br>
+                아래 <b>확인</b> 버튼을 누르면 다음 화면에서 <b>Theme 1. 청렴·공정경영 Quest</b>가 시작됩니다.
+                이후부터는 단계별 교육을 순서대로 완료해야 다음 단계로 이동할 수 있습니다.
+            </div>
+        """, unsafe_allow_html=True)
+        ok_col, _ = st.columns([0.22, 0.78])
+        with ok_col:
+            if st.button("확인 · 교육 시작", use_container_width=True, key="june_v2_intro_start", type="primary"):
+                st.session_state["june_v2_view"] = "theme1"
+                st.session_state["june_v2_theme"] = 1
+                st.session_state["june_v2_step"] = 1
+                _ensure_step_timer(1, 1)
+                st.rerun()
+
+    else:
+        _render_quest_cards(show_buttons=True)
+
+        if st.session_state.get("june_v2_view") in ["theme1", "theme2"]:
+            current_theme = 1 if st.session_state.get("june_v2_view") == "theme1" else 2
+            _render_theme_step(current_theme)
+
+        elif st.session_state.get("june_v2_view") == "event":
+            st.markdown("""
+                <div class="summer-zone-v2">
+                    <h3>🌊 Summer Compliance Event</h3>
+                    <p>
+                        무더운 6월, 컴플라이언스도 시원하게 점검해 주세요.
+                        본 교육을 정상 수료한 임직원은 추후 별도 추첨을 통해 모바일 쿠폰 지급 대상에 포함됩니다.
+                        이벤트 퀴즈는 정보보호 핵심 수칙과 연결했습니다.
+                    </p>
+                </div>
+            """, unsafe_allow_html=True)
+            _show_training_asset(
+                "summer_event_quiz.png",
+                "Summer Compliance Event Quiz"
+            )
+            st.markdown("""
+                <div class="content-card-v2">
+                    <span class="page-pill-v2">Special Event · 참여형 퀴즈</span>
+                    <h4>여름철 휴가·외근 중에도 기준은 그대로입니다</h4>
+                    <div class="infographic-grid">
+                        <div class="info-tile tile-blue"><span class="icon">🏖️</span><b>휴가철</b><span>업무 자료 반출·저장 경로 확인</span></div>
+                        <div class="info-tile tile-green"><span class="icon">🔑</span><b>계정관리</b><span>ID/PW 공유 금지, 개인별 권한 준수</span></div>
+                        <div class="info-tile tile-orange"><span class="icon">📁</span><b>파일보호</b><span>개인정보·기업비밀 암호화 및 파기</span></div>
+                        <div class="info-tile tile-purple"><span class="icon">🎁</span><b>추첨대상</b><span>정상 수료자 중 모바일 쿠폰 추첨</span></div>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+            event_answer = st.radio(
+                "이벤트 Q. 여름철 휴가·외근 중에도 지켜야 할 정보보호 수칙으로 가장 적절한 것은?",
+                [
+                    SELECT_PLACEHOLDER,
+                    "업무 편의를 위해 고객정보 파일을 개인 메일로 보내 둔다",
+                    "기업비밀·개인정보 파일은 암호화하고, 목적 완료 후 안전하게 파기한다",
+                    "비밀번호는 동료와 공유해 두면 업무 공백을 줄일 수 있다"
+                ],
+                key="event_v2_q1"
+            )
+            if event_answer == "기업비밀·개인정보 파일은 암호화하고, 목적 완료 후 안전하게 파기한다":
+                st.success("정답입니다. 시원한 여름에도 정보보호 기준은 그대로 유지됩니다. 🌊")
+            elif event_answer != SELECT_PLACEHOLDER:
+                st.info("힌트: 개인정보·기업비밀은 암호화, 접근권한, 목적 완료 후 안전한 파기가 핵심입니다.")
+            ev_prev, ev_msg, ev_next = st.columns([0.18, 0.54, 0.28])
+            with ev_prev:
+                if st.button("◀ Theme 2로", use_container_width=True, key="june_v2_event_prev", type="secondary"):
+                    st.session_state["june_v2_view"] = "theme2"
+                    st.session_state["june_v2_theme"] = 2
+                    st.session_state["june_v2_step"] = 6
+                    st.rerun()
+            with ev_msg:
+                st.markdown("<div class='nav-help'>이벤트 퀴즈에 응답하면 수료 제출 단계로 이동할 수 있습니다.</div>", unsafe_allow_html=True)
+            with ev_next:
+                if st.button("Event CLEAR → 수료 제출", use_container_width=True, key="june_v2_event_next", type="primary"):
+                    if st.session_state.get("event_v2_q1", SELECT_PLACEHOLDER) == SELECT_PLACEHOLDER:
+                        st.warning("이벤트 퀴즈에 응답해야 수료 제출 단계로 이동할 수 있습니다.")
                     else:
-                        st.error(f"❌ 제출 실패: {save_msg}")
+                        st.session_state["june_v2_event_done"] = True
+                        st.session_state["june_v2_view"] = "submit"
+                        st.rerun()
+
+        elif st.session_state.get("june_v2_view") == "submit":
+            st.markdown("### ✅ 수료 제출")
+            st.caption("아래 정보를 입력하고 제출하면 교육 수료 및 이벤트 퀴즈 정보가 Google Sheet에 저장됩니다.")
+            t1_done = st.session_state.get("june_v2_theme1_done", False)
+            t2_done = st.session_state.get("june_v2_theme2_done", False)
+            event_answer_now = st.session_state.get("event_v2_q1", SELECT_PLACEHOLDER)
+            event_answered_now = event_answer_now != SELECT_PLACEHOLDER
+            event_correct_now = event_answer_now == "기업비밀·개인정보 파일은 암호화하고, 목적 완료 후 안전하게 파기한다"
+            t1_score_now = _theme_score(1)
+            t2_score_now = _theme_score(2)
+            quiz_score_now = (_quiz_correct_count(1) * 5) + (_quiz_correct_count(2) * 6)
+            event_score_now = 10 if event_answered_now else 0
+            final_submit_score = 10 if (t1_done and t2_done and event_answered_now) else 0
+            participation_score = (15 if _checks_done(1) else 0) + (15 if _checks_done(2) else 0) + event_score_now + final_submit_score
+            final_score = t1_score_now + t2_score_now + event_score_now + final_submit_score
+
+            cstat1, cstat2, cstat3, cstat4 = st.columns(4)
+            cstat1.metric("Theme 1", "CLEAR" if t1_done else "진행 중")
+            cstat2.metric("Theme 2", "CLEAR" if t2_done else "진행 중")
+            cstat3.metric("이벤트", "CLEAR" if event_answered_now else "미참여")
+            cstat4.metric("최종점수", f"{final_score}/100")
+
+            st.markdown("""
+                <div class="content-card-v2">
+                    <span class="page-pill-v2">Completion Standard</span>
+                    <h4>수료 기준</h4>
+                    <p>
+                        Theme 1, Theme 2, Summer Event를 순서대로 완료하고 사번·성명·소속을 입력해야 수료 제출이 가능합니다.
+                        점수는 이해도 확인용이며, 정상 수료자는 추후 모바일 쿠폰 추첨 대상에 포함됩니다.
+                    </p>
+                </div>
+            """, unsafe_allow_html=True)
+
+            st.markdown("---")
+            c1, c2, c3, c4 = st.columns(4)
+            emp_id = c1.text_input("사번", placeholder="사번(1000****) / 미부여 시 00000000", key="june_emp_id")
+            name = c2.text_input("성명", key="june_name")
+            ordered_units = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
+            unit = c3.selectbox("총괄 / 본부 / 단", ordered_units, index=None, placeholder="선택", key="june_unit")
+            dept = c4.text_input("상세 부서명", placeholder="현 소속부서명", key="june_dept")
+
+            can_submit = t1_done and t2_done and event_answered_now
+            if not can_submit:
+                st.warning("Theme 1·Theme 2·Summer Event를 모두 CLEAR해야 수료 제출이 가능합니다.")
+
+            left_nav, right_submit = st.columns([0.22, 0.78])
+            with left_nav:
+                if st.button("◀ Event로", use_container_width=True, key="june_v2_submit_prev", type="secondary"):
+                    st.session_state["june_v2_view"] = "event"
+                    st.rerun()
+            with right_submit:
+                submit_june_training = st.button(
+                    "📨 6월 컴플라이언스 교육 수료 제출",
+                    use_container_width=True,
+                    disabled=(not can_submit or st.session_state.get("june_training_saved", False)),
+                    key="june_training_submit",
+                    type="primary"
+                )
+
+            if submit_june_training:
+                if not emp_id or not name or not unit or not dept:
+                    st.warning("⚠️ 사번, 성명, 총괄/본부/단, 상세 부서명을 모두 입력해 주세요.")
+                else:
+                    ok, msg = validate_emp_id(emp_id)
+                    if not ok:
+                        st.warning(msg)
+                    else:
+                        record = {
+                            "사번": emp_id.strip(),
+                            "성명": name.strip(),
+                            "총괄/본부/단": unit,
+                            "부서": dept.strip(),
+                            "교육대상": "전 임직원",
+                            "Theme1_청렴공정_확인": "완료" if t1_done else "미완료",
+                            "Theme1_점수": t1_score_now,
+                            "Theme2_협력정보_확인": "완료" if t2_done else "미완료",
+                            "Theme2_점수": t2_score_now,
+                            "이벤트퀴즈_선택": event_answer_now,
+                            "이벤트퀴즈_정답여부": "정답" if event_correct_now else "오답",
+                            "퀴즈점수": quiz_score_now,
+                            "참여점수": participation_score,
+                            "최종점수": final_score,
+                            "수료상태": "수료",
+                            "이벤트추첨대상": "대상",
+                            "비고": "감사실 주관 2026년 6월 컴플라이언스 인식제고 자율점검 교육 / 모바일 쿠폰 추첨 대상 포함 / Final V3 단계별 100초·체크항목 10초 확인형 교육",
+                        }
+                        with st.spinner("6월 컴플라이언스 교육 수료 내역을 저장 중입니다..."):
+                            success, save_msg = save_june_compliance_training_result(record)
+                        if success:
+                            st.session_state["june_training_saved"] = True
+                            st.success(f"✅ {name}님, 최종 수료 제출이 완료되었습니다.")
+                            st.balloons()
+                            st.info("교육 수료 및 이벤트 퀴즈 정보가 Google Sheet에 저장되었습니다. 5초 후 교육 초기 화면으로 이동합니다.")
+                            reset_ph = st.empty()
+                            for sec in range(5, 0, -1):
+                                reset_ph.markdown(
+                                    f"<div class='timer-panel timer-panel-clear'>✅ 최종 제출 완료 · {sec}초 후 초기 화면으로 이동합니다.</div>",
+                                    unsafe_allow_html=True,
+                                )
+                                time.sleep(1)
+                            st.session_state["june_force_reset_after_submit"] = True
+                            st.rerun()
+                        else:
+                            st.error(f"❌ 제출 실패: {save_msg}")
 
 # --- [Tab 2: 법률 리스크/규정/계약 검토 & 감사보고서 작성] ---
 # --- [Tab 2: 법률 리스크/규정/계약 검토 & 감사보고서 작성] ---
