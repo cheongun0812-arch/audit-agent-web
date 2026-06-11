@@ -1198,584 +1198,612 @@ with tab_audit:
 
     st.markdown("---")
 
+
     # =========================================================
-    # 2026년 6월 컴플라이언스 인식제고 자율점검 교육 - Premium
+    # 2026년 6월 컴플라이언스 인식제고 자율점검 교육 - Premium V2
     # - 기존 윤리경영 실천서약 보관함은 유지
     # - 현장대리인 등록 모듈 위치에 고품질 교육 모듈 배치
-    # - Theme 1: 부패방지 + 공정거래
-    # - Theme 2: 하도급 + 정보보호
+    # - 순차형 Quest 구조 / Previous·Next 이동 / Step별 Clear 표시
+    # - Theme별 최소 학습시간 90초 적용
+    # - Theme 1: 부패방지 + 공정거래 / Theme 2: 하도급 + 정보보호
     # =========================================================
     st.markdown("""
         <style>
-        .premium-hero {
-            background: linear-gradient(135deg, #0F172A 0%, #1E3A8A 42%, #0EA5E9 100%);
+        .premium-hero-v2 {
+            position: relative;
+            overflow: hidden;
+            background:
+              radial-gradient(circle at 12% 10%, rgba(255,255,255,0.23), transparent 28%),
+              radial-gradient(circle at 90% 12%, rgba(125,211,252,0.45), transparent 30%),
+              linear-gradient(135deg, #06152F 0%, #123B7A 42%, #0EA5E9 100%);
             color: #FFFFFF;
-            padding: 30px 32px;
-            border-radius: 24px;
-            box-shadow: 0 14px 34px rgba(15, 23, 42, 0.22);
+            padding: 34px 36px;
+            border-radius: 28px;
+            box-shadow: 0 18px 44px rgba(15, 23, 42, 0.28);
             margin: 10px 0 18px 0;
-            border: 1px solid rgba(255,255,255,0.16);
-        }
-        .premium-hero h2 {
-            margin: 0 0 8px 0;
-            font-size: 1.72rem;
-            font-weight: 950;
-            letter-spacing: -0.02em;
-        }
-        .premium-hero p {
-            margin: 0;
-            color: rgba(255,255,255,0.90);
-            line-height: 1.68;
-            font-weight: 650;
-            font-size: 1.02rem;
-        }
-        .premium-badge {
-            display: inline-block;
-            padding: 6px 12px;
-            border-radius: 999px;
-            background: rgba(255,255,255,0.16);
-            color: #E0F2FE;
-            font-weight: 950;
-            margin-bottom: 12px;
             border: 1px solid rgba(255,255,255,0.18);
         }
-        .audit-message {
-            background: #FFFFFF;
-            border: 1px solid #E2E8F0;
-            border-left: 7px solid #2563EB;
-            border-radius: 18px;
-            padding: 18px 20px;
-            box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
+        .premium-hero-v2 h2 {
+            margin: 0 0 8px 0;
+            font-size: 1.92rem;
+            font-weight: 950;
+            letter-spacing: -0.03em;
+        }
+        .premium-hero-v2 p {
+            margin: 0;
+            color: rgba(255,255,255,0.92);
+            line-height: 1.68;
+            font-weight: 700;
+            font-size: 1.03rem;
+            max-width: 1120px;
+        }
+        .premium-badge-v2 {
+            display: inline-block;
+            padding: 7px 14px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.17);
+            color: #E0F2FE;
+            font-weight: 950;
+            margin-bottom: 13px;
+            border: 1px solid rgba(255,255,255,0.22);
+            letter-spacing: 0.02em;
+        }
+        .audit-message-v2 {
+            background: linear-gradient(135deg, #FFFFFF 0%, #F8FBFF 100%);
+            border: 1px solid #D7E3F4;
+            border-left: 8px solid #2563EB;
+            border-radius: 20px;
+            padding: 19px 21px;
+            box-shadow: 0 10px 26px rgba(15, 23, 42, 0.07);
             margin: 14px 0;
         }
-        .audit-message h4 {
-            margin: 0 0 8px 0;
-            color: #1E3A8A;
-            font-weight: 950;
-            font-size: 1.10rem;
-        }
-        .audit-message p {
-            margin: 0;
-            color: #334155;
-            line-height: 1.65;
-            font-weight: 650;
-        }
-        .learning-flow {
-            display: grid;
-            grid-template-columns: repeat(6, minmax(100px, 1fr));
-            gap: 10px;
-            margin: 15px 0 20px 0;
-        }
-        .learning-flow div {
-            background: #FFFFFF;
-            border: 1px solid #DCE7F3;
-            border-radius: 18px;
-            padding: 12px 10px;
-            text-align: center;
-            font-weight: 900;
-            color: #0F172A;
-            box-shadow: 0 5px 14px rgba(15, 23, 42, 0.05);
-        }
-        .theme-hero {
-            padding: 22px 24px;
+        .audit-message-v2 h4 { margin: 0 0 8px 0; color: #1E3A8A; font-weight: 950; font-size: 1.12rem; }
+        .audit-message-v2 p { margin: 0; color: #334155; line-height: 1.65; font-weight: 700; }
+        .quest-card {
+            min-height: 126px;
             border-radius: 22px;
-            margin: 8px 0 16px 0;
-            box-shadow: 0 10px 26px rgba(15, 23, 42, 0.10);
+            padding: 18px 18px;
+            border: 1px solid #DDE7F5;
+            box-shadow: 0 9px 24px rgba(15, 23, 42, 0.08);
+            margin-bottom: 10px;
         }
-        .theme-hero h3 {
-            margin: 0 0 8px 0;
-            font-weight: 950;
-            font-size: 1.45rem;
-            letter-spacing: -0.02em;
+        .quest-card h4 { margin: 0 0 8px 0; font-weight: 950; font-size: 1.08rem; }
+        .quest-card p { margin: 0; line-height: 1.50; font-weight: 700; font-size: 0.94rem; }
+        .quest-clear { background: linear-gradient(135deg, #DCFCE7 0%, #ECFDF5 100%); border-color: #86EFAC; color: #14532D; }
+        .quest-active { background: linear-gradient(135deg, #DBEAFE 0%, #EFF6FF 100%); border-color: #60A5FA; color: #1E3A8A; transform: translateY(-1px); }
+        .quest-lock { background: linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%); border-color: #CBD5E1; color: #64748B; }
+        .quest-event { background: linear-gradient(135deg, #E0F2FE 0%, #ECFEFF 100%); border-color: #7DD3FC; color: #075985; }
+        .status-chip {
+            display:inline-block;
+            margin-top:10px;
+            padding:6px 10px;
+            border-radius:999px;
+            font-size:0.83rem;
+            font-weight:950;
+            background:rgba(255,255,255,0.72);
+            border:1px solid rgba(15,23,42,0.08);
         }
-        .theme-hero p {
-            margin: 0;
-            line-height: 1.65;
-            font-weight: 650;
+        .step-road {
+            display:grid;
+            grid-template-columns: repeat(6, minmax(110px, 1fr));
+            gap: 10px;
+            margin: 16px 0 20px 0;
         }
-        .theme-one { background: linear-gradient(135deg, #FFF7ED 0%, #FEF3C7 100%); border:1px solid #FED7AA; color:#78350F; }
-        .theme-two { background: linear-gradient(135deg, #ECFEFF 0%, #DBEAFE 100%); border:1px solid #A5F3FC; color:#0F172A; }
-        .premium-card {
+        .step-node {
+            position:relative;
+            min-height:86px;
+            border-radius: 20px;
+            padding: 13px 10px;
+            text-align:center;
+            font-weight:950;
+            box-shadow: 0 7px 18px rgba(15, 23, 42, 0.06);
+            border:1px solid #E2E8F0;
+        }
+        .step-node .num { display:block; font-size:1.18rem; margin-bottom:2px; }
+        .step-node .label { display:block; font-size:0.91rem; line-height:1.32; }
+        .step-clear { background: linear-gradient(135deg, #DCFCE7 0%, #F0FDF4 100%); color:#166534; border-color:#86EFAC; }
+        .step-current { background: linear-gradient(135deg, #1D4ED8 0%, #0EA5E9 100%); color:white; border-color:#60A5FA; transform: translateY(-2px); box-shadow: 0 11px 26px rgba(37,99,235,0.24); }
+        .step-lock { background: #F8FAFC; color:#94A3B8; border-color:#E2E8F0; }
+        .timer-panel {
+            background: linear-gradient(135deg, #FFF7ED 0%, #FEFCE8 100%);
+            border: 1px solid #FDBA74;
+            border-radius: 18px;
+            padding: 14px 16px;
+            color: #7C2D12;
+            font-weight: 850;
+            margin: 10px 0 12px 0;
+        }
+        .timer-bar-bg { width:100%; background:#FFEDD5; height:12px; border-radius:999px; overflow:hidden; margin-top:8px; }
+        .timer-bar-fill { height:12px; border-radius:999px; background: linear-gradient(90deg, #F97316, #22C55E); }
+        .theme-title-panel {
+            border-radius: 26px;
+            padding: 24px 25px;
+            margin: 12px 0 15px 0;
+            box-shadow: 0 13px 30px rgba(15, 23, 42, 0.12);
+        }
+        .theme-title-panel h3 { margin:0 0 8px 0; font-size:1.55rem; font-weight:950; letter-spacing:-0.02em; }
+        .theme-title-panel p { margin:0; font-size:1.01rem; line-height:1.66; font-weight:700; }
+        .theme-one-v2 { background: linear-gradient(135deg, #FFF7ED 0%, #FEF3C7 50%, #FFFBEB 100%); border:1px solid #FBBF24; color:#78350F; }
+        .theme-two-v2 { background: linear-gradient(135deg, #ECFEFF 0%, #DBEAFE 55%, #F0FDFA 100%); border:1px solid #38BDF8; color:#0F172A; }
+        .content-card-v2 {
             background: #FFFFFF;
             border: 1px solid #E2E8F0;
-            border-radius: 20px;
-            padding: 20px 22px;
+            border-radius: 24px;
+            padding: 23px 24px;
             margin: 12px 0;
-            box-shadow: 0 7px 20px rgba(15, 23, 42, 0.06);
+            box-shadow: 0 10px 26px rgba(15, 23, 42, 0.07);
         }
-        .premium-card h4 {
-            margin: 0 0 10px 0;
-            color: #1E3A8A;
-            font-size: 1.17rem;
-            font-weight: 950;
-        }
-        .premium-card p {
-            color: #334155;
-            line-height: 1.65;
-            font-weight: 620;
-        }
-        .page-pill {
+        .content-card-v2 h4 { margin:0 0 10px 0; color:#1E3A8A; font-size:1.24rem; font-weight:950; }
+        .content-card-v2 p { color:#334155; line-height:1.68; font-weight:700; }
+        .page-pill-v2 {
             display: inline-block;
-            padding: 6px 12px;
+            padding: 7px 13px;
             border-radius: 999px;
             background: #DBEAFE;
             color: #1D4ED8;
             font-weight: 950;
             font-size: 0.88rem;
-            margin-bottom: 10px;
+            margin-bottom: 11px;
         }
-        .principle-grid {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(180px, 1fr));
-            gap: 12px;
-            margin-top: 12px;
+        .infographic-grid {
+            display:grid;
+            grid-template-columns: repeat(4, minmax(150px, 1fr));
+            gap: 13px;
+            margin-top:14px;
         }
-        .principle-box {
-            background: #F8FAFC;
-            border: 1px solid #E2E8F0;
-            border-radius: 16px;
-            padding: 15px 16px;
-        }
-        .principle-box b { color:#0F172A; font-size:1.02rem; }
-        .principle-box span { display:block; color:#475569; margin-top:6px; line-height:1.55; font-weight:600; }
-        .risk-grid {
-            display: grid;
-            grid-template-columns: repeat(3, minmax(170px, 1fr));
-            gap: 11px;
-            margin-top: 12px;
-        }
-        .risk-card {
-            background: #FFF7ED;
-            border: 1px solid #FDBA74;
-            border-radius: 16px;
-            padding: 14px 14px;
-            color: #7C2D12;
-            font-weight: 900;
-            min-height: 68px;
-        }
-        .case-box {
-            background: linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 100%);
-            border: 1px solid #BFDBFE;
-            border-radius: 18px;
-            padding: 16px 18px;
-            margin: 12px 0;
-        }
-        .case-box b { color:#1E3A8A; }
-        .answer-box {
-            background:#F0FDF4;
-            border:1px solid #BBF7D0;
-            border-radius:16px;
-            padding:14px 16px;
-            margin:12px 0;
-            color:#14532D;
-            font-weight:700;
-            line-height:1.6;
-        }
-        .quote-line {
-            font-size: 1.18rem;
-            color: #0F172A;
-            font-weight: 950;
-            line-height: 1.55;
-            margin: 8px 0 12px 0;
-        }
-        .score-pill {
-            display:inline-block;
-            padding:7px 12px;
-            border-radius:999px;
-            background:#F0FDF4;
-            color:#166534;
-            border:1px solid #BBF7D0;
-            font-weight:950;
-            margin:4px 6px 4px 0;
-        }
-        .score-pill-warn {
-            display:inline-block;
-            padding:7px 12px;
-            border-radius:999px;
-            background:#FFF7ED;
-            color:#9A3412;
-            border:1px solid #FED7AA;
-            font-weight:950;
-            margin:4px 6px 4px 0;
-        }
-        .summer-zone {
-            background: linear-gradient(135deg, #E0F2FE 0%, #BAE6FD 45%, #ECFEFF 100%);
-            border: 1px solid #7DD3FC;
+        .info-tile {
             border-radius: 22px;
-            padding: 22px 24px;
-            box-shadow:0 10px 26px rgba(14, 165, 233, 0.16);
-            margin: 10px 0 16px 0;
+            padding: 18px 14px;
+            min-height: 142px;
+            text-align:center;
+            border:1px solid rgba(255,255,255,0.50);
+            box-shadow: 0 9px 22px rgba(15, 23, 42, 0.08);
         }
-        .summer-zone h3 { margin:0 0 8px 0; color:#075985; font-weight:950; font-size:1.40rem; }
-        .summer-zone p { margin:0; color:#0F172A; line-height:1.65; font-weight:650; }
+        .info-tile .icon { font-size: 2.15rem; display:block; margin-bottom:7px; }
+        .info-tile b { display:block; font-size:1.02rem; font-weight:950; margin-bottom:6px; }
+        .info-tile span { display:block; font-size:0.88rem; line-height:1.45; font-weight:720; }
+        .tile-orange { background:linear-gradient(135deg,#FFEDD5,#FEF3C7); color:#7C2D12; }
+        .tile-blue { background:linear-gradient(135deg,#DBEAFE,#E0F2FE); color:#1E3A8A; }
+        .tile-green { background:linear-gradient(135deg,#DCFCE7,#ECFDF5); color:#14532D; }
+        .tile-purple { background:linear-gradient(135deg,#F3E8FF,#EEF2FF); color:#4C1D95; }
+        .principle-grid-v2 { display:grid; grid-template-columns: repeat(2, minmax(230px, 1fr)); gap:14px; margin-top:13px; }
+        .principle-box-v2 { background:#F8FAFC; border:1px solid #E2E8F0; border-radius:18px; padding:17px 18px; }
+        .principle-box-v2 b { color:#0F172A; font-size:1.03rem; }
+        .principle-box-v2 span { display:block; color:#475569; margin-top:7px; line-height:1.56; font-weight:700; }
+        .risk-grid-v2 { display:grid; grid-template-columns: repeat(3, minmax(190px, 1fr)); gap:12px; margin-top:13px; }
+        .risk-card-v2 { background:#FFF7ED; border:1px solid #FDBA74; border-radius:18px; padding:15px; color:#7C2D12; font-weight:950; min-height:78px; box-shadow:0 7px 17px rgba(249,115,22,0.08); }
+        .case-box-v2 { background:linear-gradient(135deg,#F8FAFC 0%,#EFF6FF 100%); border:1px solid #BFDBFE; border-radius:20px; padding:18px 19px; margin:14px 0; color:#334155; line-height:1.65; font-weight:720; }
+        .case-box-v2 b { color:#1E3A8A; }
+        .answer-box-v2 { background:#F0FDF4; border:1px solid #BBF7D0; border-radius:18px; padding:15px 17px; margin:12px 0; color:#14532D; font-weight:780; line-height:1.62; }
+        .quote-line-v2 { font-size:1.34rem; color:#0F172A; font-weight:950; line-height:1.50; margin:8px 0 12px 0; letter-spacing:-0.02em; }
+        .score-pill-v2 { display:inline-block; padding:8px 13px; border-radius:999px; background:#F0FDF4; color:#166534; border:1px solid #BBF7D0; font-weight:950; margin:5px 6px 5px 0; }
+        .score-pill-warn-v2 { display:inline-block; padding:8px 13px; border-radius:999px; background:#FFF7ED; color:#9A3412; border:1px solid #FED7AA; font-weight:950; margin:5px 6px 5px 0; }
+        .nav-help { color:#475569; font-weight:760; font-size:0.92rem; margin-top:3px; }
+        .summer-zone-v2 {
+            background: radial-gradient(circle at 10% 12%, rgba(255,255,255,0.9), transparent 22%), linear-gradient(135deg,#E0F2FE 0%,#BAE6FD 45%,#ECFEFF 100%);
+            border:1px solid #7DD3FC;
+            border-radius:26px;
+            padding:25px;
+            box-shadow:0 14px 32px rgba(14,165,233,0.18);
+            margin:12px 0 16px 0;
+        }
+        .summer-zone-v2 h3 { margin:0 0 8px 0; color:#075985; font-weight:950; font-size:1.52rem; }
+        .summer-zone-v2 p { margin:0; color:#0F172A; line-height:1.66; font-weight:700; }
         @media (max-width: 900px) {
-            .learning-flow { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
-            .principle-grid { grid-template-columns: 1fr; }
-            .risk-grid { grid-template-columns: 1fr; }
+            .step-road { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+            .infographic-grid { grid-template-columns: 1fr; }
+            .principle-grid-v2 { grid-template-columns: 1fr; }
+            .risk-grid-v2 { grid-template-columns: 1fr; }
         }
         </style>
+    """, unsafe_allow_html=True)
 
-        <div class="premium-hero">
-            <div class="premium-badge">Audit Office · June Compliance Self-Inspection</div>
+    st.markdown("""
+        <div class="premium-hero-v2">
+            <div class="premium-badge-v2">Audit Office · June Compliance Self-Inspection</div>
             <h2>🌊 2026년 6월 컴플라이언스 인식제고 자율점검 교육</h2>
             <p>
                 본 과정은 전 임직원을 대상으로 하는 감사실 주관 정기 자율점검 교육입니다.
                 부패방지·공정거래·하도급·정보보호 리스크를 사례 중심으로 학습하고,
-                실제 업무에서 바로 적용할 수 있는 실천 기준을 확인합니다.
+                실제 업무에서 바로 적용할 수 있는 실천 기준을 순서대로 확인합니다.
             </p>
         </div>
-
-        <div class="audit-message">
+        <div class="audit-message-v2">
             <h4>감사실 안내</h4>
             <p>
-                컴플라이언스는 특정 부서만의 업무가 아니라, 임직원 모두의 업무 방식입니다.
-                이번 교육은 짧게 끝나는 확인 절차가 아니라, 현장에서 자주 마주치는 판단 상황을 스스로 점검하기 위한 과정입니다.
-                각 테마의 인포그래픽, 핵심 원칙, 위험 신호, 사례 판단, 실천 체크, 퀴즈를 순서대로 진행해 주세요.
+                교육은 순차형 Quest 방식으로 진행됩니다. 현재 단계를 완료해야 다음 단계로 이동할 수 있으며,
+                각 주요 테마는 최소 90초 이상 학습해야 수료 조건으로 인정됩니다.
+                이는 단순 클릭형 수료를 방지하고, 전 임직원이 핵심 기준을 충분히 확인하기 위한 장치입니다.
             </p>
         </div>
     """, unsafe_allow_html=True)
 
-    st.markdown("""
-        <div class="learning-flow">
-            <div>STEP 1<br>인포그래픽</div>
-            <div>STEP 2<br>핵심 원칙</div>
-            <div>STEP 3<br>위험 신호</div>
-            <div>STEP 4<br>사례 판단</div>
-            <div>STEP 5<br>실천 체크</div>
-            <div>STEP 6<br>퀴즈·완료</div>
-        </div>
-    """, unsafe_allow_html=True)
-
-    if "june_training_saved" not in st.session_state:
-        st.session_state["june_training_saved"] = False
-
-    # 선택값/정답 정의
     SELECT_PLACEHOLDER = "선택하세요"
-    t1_answer_map = {
-        "t1_premium_q1": "컴플라이언스 사전심의 등 내부 절차를 확인한다",
-        "t1_premium_q2": "담합 리스크가 있으므로 대화를 중단하고 내부 기준을 확인한다",
-        "t1_premium_q3": "기준을 확인하고 필요 시 신고·반환·상담한다",
-        "t1_premium_q4": "거래상 지위 남용 소지가 있으므로 합리적 사유와 절차를 확인한다",
+    THEME_MIN_SECONDS = 90
+    STEPS = [
+        (1, "인포그래픽", "핵심 리스크를 한눈에 봅니다"),
+        (2, "핵심 원칙", "업무 기준을 정리합니다"),
+        (3, "위험 신호", "멈춰야 할 문장을 확인합니다"),
+        (4, "사례 판단", "실제 상황을 판단합니다"),
+        (5, "실천 체크", "내 행동 기준을 확인합니다"),
+        (6, "퀴즈·완료", "이해도를 점검합니다"),
+    ]
+
+    T1_Q = {
+        "t1_v2_q1": "컴플라이언스 사전심의 등 내부 절차를 확인한다",
+        "t1_v2_q2": "담합 리스크가 있으므로 대화를 중단하고 내부 기준을 확인한다",
+        "t1_v2_q3": "기준을 확인하고 필요 시 신고·반환·상담한다",
+        "t1_v2_q4": "거래상 지위 남용 소지가 있으므로 합리적 사유와 절차를 확인한다",
     }
-    t2_answer_map = {
-        "t2_premium_q1": "법정기재사항이 포함된 서면을 먼저 발급한다",
-        "t2_premium_q2": "10일 이내 서면으로 통지한다",
-        "t2_premium_q3": "정당한 사유와 절차에 따라 요구하고 목적 범위 내에서만 사용한다",
-        "t2_premium_q4": "원칙적으로 금지되며 내부 보안 기준을 따라야 한다",
-        "t2_premium_q5": "공유하지 않고 개인별 계정과 권한 기준을 준수한다",
+    T2_Q = {
+        "t2_v2_q1": "법정기재사항이 포함된 서면을 먼저 발급한다",
+        "t2_v2_q2": "10일 이내 서면으로 통지한다",
+        "t2_v2_q3": "정당한 사유와 절차에 따라 요구하고 목적 범위 내에서만 사용한다",
+        "t2_v2_q4": "원칙적으로 금지되며 내부 보안 기준을 따라야 한다",
+        "t2_v2_q5": "공유하지 않고 개인별 계정과 권한 기준을 준수한다",
+    }
+    T1_CHECKS = {
+        "t1_v2_c1": "나는 공직자 등에게 부정청탁을 하지 않는다.",
+        "t1_v2_c2": "나는 직무 관련 금품·향응 제공 기준을 반드시 확인한다.",
+        "t1_v2_c3": "나는 제3자를 통한 우회 제공도 부패 리스크가 될 수 있음을 이해한다.",
+        "t1_v2_c4": "나는 경쟁사와 가격·입찰·거래조건 정보를 교환하지 않는다.",
+        "t1_v2_c5": "나는 거래상 지위를 이용해 불리한 조건을 강요하지 않는다.",
+    }
+    T2_CHECKS = {
+        "t2_v2_c1": "나는 위탁업무 시작 전 서면 발급 필요성을 확인한다.",
+        "t2_v2_c2": "나는 하도급대금 지급기한과 검사결과 통지기한을 확인한다.",
+        "t2_v2_c3": "나는 정당한 사유 없이 기술자료나 경영정보를 요구하지 않는다.",
+        "t2_v2_c4": "나는 업무용 PC 내 불필요한 개인정보를 삭제한다.",
+        "t2_v2_c5": "나는 고객정보를 목적 외로 조회하거나 활용하지 않는다.",
+        "t2_v2_c6": "나는 ID/PW를 공유하지 않는다.",
+        "t2_v2_c7": "나는 기업비밀을 암호화하고 목적 완료 후 파기한다.",
     }
 
-    t1_check_keys = ["t1_premium_c1", "t1_premium_c2", "t1_premium_c3", "t1_premium_c4", "t1_premium_c5"]
-    t2_check_keys = ["t2_premium_c1", "t2_premium_c2", "t2_premium_c3", "t2_premium_c4", "t2_premium_c5", "t2_premium_c6", "t2_premium_c7"]
+    def _init_june_v2_state():
+        st.session_state.setdefault("june_v2_view", "theme1")
+        st.session_state.setdefault("june_v2_theme", 1)
+        st.session_state.setdefault("june_v2_step", 1)
+        st.session_state.setdefault("june_v2_theme1_done", False)
+        st.session_state.setdefault("june_v2_theme2_done", False)
+        st.session_state.setdefault("june_v2_event_done", False)
+        st.session_state.setdefault("june_training_saved", False)
+        st.session_state.setdefault("june_v2_completed_steps_1", [])
+        st.session_state.setdefault("june_v2_completed_steps_2", [])
+        st.session_state.setdefault("june_v2_theme1_started_at", time.time())
+        if st.session_state.get("june_v2_view") == "theme2":
+            st.session_state.setdefault("june_v2_theme2_started_at", time.time())
 
-    theme1_tab, theme2_tab, event_tab, submit_tab = st.tabs([
-        "① 청렴·공정경영", "② 협력사·정보보호", "🌊 Summer Event", "✅ 수료 제출"
-    ])
+    def _theme_elapsed(theme_no: int) -> int:
+        key = f"june_v2_theme{theme_no}_started_at"
+        if key not in st.session_state:
+            st.session_state[key] = time.time()
+        return int(time.time() - float(st.session_state[key]))
 
-    # ------------------------------------------------------
-    # Theme 1: 청렴·공정경영
-    # ------------------------------------------------------
-    with theme1_tab:
-        st.markdown("""
-            <div class="theme-hero theme-one">
-                <h3>Theme 1. 청렴·공정경영 Zone</h3>
-                <p>
-                    부패방지와 공정거래는 회사의 신뢰를 지키는 가장 기본적인 내부통제입니다.
-                    공직자 관련 요청, 금품·향응, 제3자 우회 제공, 경쟁사 정보교환, 거래상 지위 남용은
-                    모두 사전에 멈추고 확인해야 할 신호입니다.
-                </p>
+    def _theme_remaining(theme_no: int) -> int:
+        return max(0, THEME_MIN_SECONDS - _theme_elapsed(theme_no))
+
+    def _completed_steps(theme_no: int) -> list[int]:
+        return list(st.session_state.get(f"june_v2_completed_steps_{theme_no}", []))
+
+    def _mark_step_done(theme_no: int, step_no: int) -> None:
+        key = f"june_v2_completed_steps_{theme_no}"
+        steps = set(st.session_state.get(key, []))
+        steps.add(step_no)
+        st.session_state[key] = sorted(steps)
+
+    def _max_unlocked_step(theme_no: int) -> int:
+        completed = set(_completed_steps(theme_no))
+        unlocked = 1
+        for i in range(1, 7):
+            if i in completed:
+                unlocked = min(6, i + 1)
+            else:
+                break
+        return unlocked
+
+    def _checks_done(theme_no: int) -> bool:
+        checks = T1_CHECKS if theme_no == 1 else T2_CHECKS
+        return all(bool(st.session_state.get(k, False)) for k in checks)
+
+    def _quiz_answered(theme_no: int) -> bool:
+        qmap = T1_Q if theme_no == 1 else T2_Q
+        return all(st.session_state.get(k, SELECT_PLACEHOLDER) != SELECT_PLACEHOLDER for k in qmap)
+
+    def _quiz_correct_count(theme_no: int) -> int:
+        qmap = T1_Q if theme_no == 1 else T2_Q
+        return sum(1 for k, ans in qmap.items() if st.session_state.get(k) == ans)
+
+    def _theme_ready_to_complete(theme_no: int) -> tuple[bool, str]:
+        if not all(s in set(_completed_steps(theme_no)) for s in [1,2,3,4,5]):
+            return False, "이전 학습 단계를 먼저 완료해야 합니다."
+        if not _checks_done(theme_no):
+            return False, "실천 체크 항목을 모두 확인해야 합니다."
+        if not _quiz_answered(theme_no):
+            return False, "퀴즈 문항을 모두 응답해야 합니다."
+        remain = _theme_remaining(theme_no)
+        if remain > 0:
+            return False, f"최소 학습시간이 남아 있습니다. {remain}초 후 완료할 수 있습니다."
+        return True, "완료 가능"
+
+    def _set_theme(theme_no: int):
+        if theme_no == 2 and not st.session_state.get("june_v2_theme1_done", False):
+            st.warning("현재 교육을 완료해야 다음 단계로 이동할 수 있습니다. Theme 1을 먼저 완료해 주세요.")
+            return
+        st.session_state["june_v2_view"] = f"theme{theme_no}"
+        st.session_state["june_v2_theme"] = theme_no
+        st.session_state["june_v2_step"] = 1
+        st.session_state.setdefault(f"june_v2_theme{theme_no}_started_at", time.time())
+        st.rerun()
+
+    def _set_event():
+        if not st.session_state.get("june_v2_theme2_done", False):
+            st.warning("현재 교육을 완료해야 다음 단계로 이동할 수 있습니다. Theme 2를 먼저 완료해 주세요.")
+            return
+        st.session_state["june_v2_view"] = "event"
+        st.rerun()
+
+    def _set_submit():
+        if not st.session_state.get("june_v2_event_done", False):
+            st.warning("현재 교육을 완료해야 다음 단계로 이동할 수 있습니다. Summer Event까지 완료해 주세요.")
+            return
+        st.session_state["june_v2_view"] = "submit"
+        st.rerun()
+
+    def _theme_score(theme_no: int) -> int:
+        if theme_no == 1:
+            return (15 if _checks_done(1) else 0) + (_quiz_correct_count(1) * 5)
+        return (15 if _checks_done(2) else 0) + (_quiz_correct_count(2) * 6)
+
+    _init_june_v2_state()
+
+    # Quest Menu
+    q1_state = "quest-clear" if st.session_state.get("june_v2_theme1_done") else ("quest-active" if st.session_state.get("june_v2_view") == "theme1" else "quest-lock")
+    q2_state = "quest-clear" if st.session_state.get("june_v2_theme2_done") else ("quest-active" if st.session_state.get("june_v2_view") == "theme2" else "quest-lock")
+    ev_state = "quest-clear" if st.session_state.get("june_v2_event_done") else ("quest-event" if st.session_state.get("june_v2_view") == "event" else "quest-lock")
+    sub_state = "quest-active" if st.session_state.get("june_v2_view") == "submit" else "quest-lock"
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        st.markdown(f"""<div class="quest-card {q1_state}"><h4>① 청렴·공정경영</h4><p>부패방지·공정거래 리스크를 확인합니다.</p><span class="status-chip">{'CLEAR' if st.session_state.get('june_v2_theme1_done') else 'IN PROGRESS'}</span></div>""", unsafe_allow_html=True)
+        if st.button("청렴·공정경영 열기", use_container_width=True, key="june_v2_open_t1"):
+            _set_theme(1)
+    with c2:
+        status2 = 'CLEAR' if st.session_state.get('june_v2_theme2_done') else ('LOCKED' if not st.session_state.get('june_v2_theme1_done') else 'READY')
+        st.markdown(f"""<div class="quest-card {q2_state}"><h4>② 협력사·정보보호</h4><p>하도급·정보보호 기준을 점검합니다.</p><span class="status-chip">{status2}</span></div>""", unsafe_allow_html=True)
+        if st.button("협력사·정보보호 열기", use_container_width=True, key="june_v2_open_t2"):
+            _set_theme(2)
+    with c3:
+        status_ev = 'CLEAR' if st.session_state.get('june_v2_event_done') else ('LOCKED' if not st.session_state.get('june_v2_theme2_done') else 'READY')
+        st.markdown(f"""<div class="quest-card {ev_state}"><h4>🌊 Summer Event</h4><p>수료자 모바일 쿠폰 추첨 대상 이벤트입니다.</p><span class="status-chip">{status_ev}</span></div>""", unsafe_allow_html=True)
+        if st.button("이벤트 열기", use_container_width=True, key="june_v2_open_event"):
+            _set_event()
+    with c4:
+        status_sub = 'READY' if st.session_state.get('june_v2_event_done') else 'LOCKED'
+        st.markdown(f"""<div class="quest-card {sub_state}"><h4>✅ 수료 제출</h4><p>교육 완료 정보를 Google Sheet에 저장합니다.</p><span class="status-chip">{status_sub}</span></div>""", unsafe_allow_html=True)
+        if st.button("수료 제출 열기", use_container_width=True, key="june_v2_open_submit"):
+            _set_submit()
+
+    def _render_step_road(theme_no: int):
+        current = int(st.session_state.get("june_v2_step", 1))
+        completed = set(_completed_steps(theme_no))
+        max_unlocked = _max_unlocked_step(theme_no)
+        cols = st.columns(6)
+        for idx, (num, label, sub) in enumerate(STEPS):
+            if num in completed:
+                cls = "step-clear"
+                mark = "✓"
+            elif num == current:
+                cls = "step-current"
+                mark = str(num)
+            else:
+                cls = "step-lock"
+                mark = "·" if num <= max_unlocked else "🔒"
+            with cols[idx]:
+                st.markdown(f"""<div class="step-node {cls}"><span class="num">{mark}</span><span class="label">STEP {num}<br>{label}</span></div>""", unsafe_allow_html=True)
+                if st.button("이동", key=f"june_v2_step_go_{theme_no}_{num}", use_container_width=True):
+                    if num <= max_unlocked or num in completed:
+                        st.session_state["june_v2_step"] = num
+                        st.rerun()
+                    else:
+                        st.warning("현재 교육을 완료해야 다음 단계로 이동할 수 있습니다.")
+        st.markdown("<div class='nav-help'>완료된 단계는 초록색, 현재 단계는 파란색, 아직 진행할 수 없는 단계는 회색으로 표시됩니다.</div>", unsafe_allow_html=True)
+
+    def _render_timer(theme_no: int):
+        elapsed = _theme_elapsed(theme_no)
+        remain = _theme_remaining(theme_no)
+        pct = min(100, int(elapsed / THEME_MIN_SECONDS * 100))
+        msg = f"최소 학습시간 충족 완료 · {elapsed}초 학습" if remain == 0 else f"최소 학습시간 적용 중 · {remain}초 남음 / 현재 {elapsed}초 학습"
+        st.markdown(f"""
+            <div class="timer-panel">
+                ⏱️ {msg}
+                <div class="timer-bar-bg"><div class="timer-bar-fill" style="width:{pct}%;"></div></div>
             </div>
         """, unsafe_allow_html=True)
 
-        t1_page1, t1_page2, t1_page3, t1_page4, t1_page5, t1_page6 = st.tabs([
-            "1 인포그래픽", "2 핵심 원칙", "3 위험 신호", "4 사례 판단", "5 실천 체크", "6 퀴즈"
-        ])
+    def _render_theme_step(theme_no: int):
+        step = int(st.session_state.get("june_v2_step", 1))
+        if theme_no == 1:
+            title_cls = "theme-one-v2"
+            title = "Theme 1. 청렴·공정경영 Quest"
+            desc = "부패방지와 공정거래는 회사의 신뢰를 지키는 가장 기본적인 내부통제입니다. 공직자 관련 요청, 금품·향응, 제3자 우회 제공, 경쟁사 정보교환, 거래상 지위 남용은 모두 사전에 멈추고 확인해야 할 신호입니다."
+        else:
+            title_cls = "theme-two-v2"
+            title = "Theme 2. 협력사·정보보호 Quest"
+            desc = "협력사와 정보는 절차로 보호됩니다. 서면 발급, 대금 지급, 검사 통지, 기술자료 보호, 개인정보·기업비밀 관리는 업무 편의보다 먼저 확인해야 할 기준입니다."
 
-        with t1_page1:
-            st.markdown("""
-                <div class="premium-card">
-                    <span class="page-pill">STEP 1 · Infographic</span>
-                    <h4>청렴한 판단은 가장 강한 내부통제입니다</h4>
-                    <div class="quote-line">“관행이라고 생각한 작은 판단이 회사 전체의 리스크가 될 수 있습니다.”</div>
-                    <div class="principle-grid">
-                        <div class="principle-box"><b>🚫 부정청탁 NO</b><span>공직자 등에게 직접 또는 제3자를 통한 부정청탁을 하지 않습니다.</span></div>
-                        <div class="principle-box"><b>🎁 금품·향응 NO</b><span>직무 관련 금품, 향응, 편의 제공 또는 약속은 사전 기준 확인이 필요합니다.</span></div>
-                        <div class="principle-box"><b>🤝 담합 NO</b><span>가격, 입찰, 거래조건 등에 관한 경쟁사 합의 또는 정보교환을 하지 않습니다.</span></div>
-                        <div class="principle-box"><b>⚖️ 거래상 지위 남용 NO</b><span>거래상대방에게 구입 강제, 불이익한 조건, 경제상 이익 제공을 강요하지 않습니다.</span></div>
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
+        st.markdown(f"""<div class="theme-title-panel {title_cls}"><h3>{title}</h3><p>{desc}</p></div>""", unsafe_allow_html=True)
+        _render_step_road(theme_no)
+        _render_timer(theme_no)
 
-        with t1_page2:
-            st.markdown("""
-                <div class="premium-card">
-                    <span class="page-pill">STEP 2 · Core Principles</span>
-                    <h4>기억해야 할 5가지 기준</h4>
-                    <div class="principle-grid">
-                        <div class="principle-box"><b>1. 청탁 금지</b><span>법령상 허용된 경우가 아닌 한 공직자 등에게 부정청탁을 하지 않습니다.</span></div>
-                        <div class="principle-box"><b>2. 금품 제공 금지</b><span>공직자 등에게 직무 관련 금품 등을 제공하거나 제공 의사표시를 하지 않습니다.</span></div>
-                        <div class="principle-box"><b>3. 제3자 리스크 관리</b><span>에이전트, 하도급사 등 제3자를 통한 우회 제공도 부패 리스크가 될 수 있습니다.</span></div>
-                        <div class="principle-box"><b>4. 회계 투명성</b><span>비용집행은 실제에 맞게 처리하고 증빙자료를 정확하게 보관합니다.</span></div>
-                        <div class="principle-box"><b>5. 공정거래 준수</b><span>담합, 구입 강제, 거래조건 일방 변경 등 불공정 행위를 하지 않습니다.</span></div>
+        if step == 1:
+            if theme_no == 1:
+                st.markdown("""
+                    <div class="content-card-v2">
+                        <span class="page-pill-v2">STEP 1 · Infographic</span>
+                        <h4>청렴한 판단은 가장 강한 내부통제입니다</h4>
+                        <div class="quote-line-v2">“관행처럼 보이는 작은 편의가 회사 전체의 리스크가 될 수 있습니다.”</div>
+                        <div class="infographic-grid">
+                            <div class="info-tile tile-orange"><span class="icon">🚫</span><b>부정청탁 NO</b><span>공직자 등에게 직접 또는 제3자를 통한 부정청탁 금지</span></div>
+                            <div class="info-tile tile-blue"><span class="icon">🎁</span><b>금품·향응 NO</b><span>직무 관련 금품, 편의, 약속 또는 의사표시 금지</span></div>
+                            <div class="info-tile tile-green"><span class="icon">🤝</span><b>담합 NO</b><span>가격, 입찰, 거래조건에 관한 경쟁사 합의 금지</span></div>
+                            <div class="info-tile tile-purple"><span class="icon">⚖️</span><b>지위남용 NO</b><span>거래상대방에게 불리한 조건 강요 금지</span></div>
+                        </div>
                     </div>
-                </div>
-            """, unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown("""
+                    <div class="content-card-v2">
+                        <span class="page-pill-v2">STEP 1 · Infographic</span>
+                        <h4>협력사와 정보는 ‘절차’로 보호합니다</h4>
+                        <div class="quote-line-v2">“급한 업무일수록 계약·정보보호 절차를 먼저 확인해야 합니다.”</div>
+                        <div class="infographic-grid">
+                            <div class="info-tile tile-blue"><span class="icon">📝</span><b>서면 발급</b><span>위탁업무 시작 전 계약서 등 법정기재사항 확인</span></div>
+                            <div class="info-tile tile-green"><span class="icon">⏳</span><b>기한 준수</b><span>대금 지급, 검사결과 통지 기한 관리</span></div>
+                            <div class="info-tile tile-orange"><span class="icon">🔐</span><b>자료 보호</b><span>기술자료·경영정보 요구와 사용은 절차에 따라</span></div>
+                            <div class="info-tile tile-purple"><span class="icon">🛡️</span><b>개인정보 보호</b><span>목적 외 조회·제공·공유 금지, 계정관리 준수</span></div>
+                        </div>
+                    </div>
+                """, unsafe_allow_html=True)
 
-        with t1_page3:
-            st.markdown("""
-                <div class="premium-card">
-                    <span class="page-pill">STEP 3 · Red Flags</span>
-                    <h4>이런 말이 나오면 멈추고 확인하세요</h4>
-                    <div class="risk-grid">
-                        <div class="risk-card">🚩 “이번에는 관행대로 처리하시죠.”</div>
-                        <div class="risk-card">🚩 “식사 한 번 하시죠. 별일 아닙니다.”</div>
-                        <div class="risk-card">🚩 “경쟁사는 얼마에 들어온대요?”</div>
-                        <div class="risk-card">🚩 “협력사를 통해 전달하면 괜찮지 않을까요?”</div>
-                        <div class="risk-card">🚩 “증빙은 나중에 맞추면 됩니다.”</div>
-                        <div class="risk-card">🚩 “목표 미달이면 조건을 바꿔야죠.”</div>
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
+        elif step == 2:
+            if theme_no == 1:
+                items = [
+                    ("청탁 금지", "공직자 등에게 법령상 허용되지 않는 청탁을 하지 않습니다."),
+                    ("금품 제공 금지", "직무 관련 금품·향응·편의 제공 또는 약속을 금지합니다."),
+                    ("제3자 리스크", "에이전트, 협력사, 하도급사를 통한 우회 제공도 부패 리스크입니다."),
+                    ("담합 금지", "가격, 입찰, 거래조건에 관한 경쟁사 간 합의나 정보교환을 금지합니다."),
+                ]
+            else:
+                items = [
+                    ("서면 발급", "위탁업무 시작 전 계약서 등 법정기재사항 포함 서면을 발급합니다."),
+                    ("대금·검사 기한", "대금 지급기한과 검사결과 통지기한을 준수합니다."),
+                    ("기술자료 보호", "정당한 사유와 절차 없이 기술자료·경영정보를 요구하지 않습니다."),
+                    ("정보보호", "개인정보 목적 외 이용, 제3자 제공, ID/PW 공유를 금지합니다."),
+                ]
+            html = ''.join([f"<div class='principle-box-v2'><b>{a}</b><span>{b}</span></div>" for a,b in items])
+            st.markdown(f"""<div class="content-card-v2"><span class="page-pill-v2">STEP 2 · Core Principles</span><h4>기억해야 할 핵심 원칙</h4><div class="principle-grid-v2">{html}</div></div>""", unsafe_allow_html=True)
 
-        with t1_page4:
-            st.markdown("""
-                <div class="premium-card">
-                    <span class="page-pill">STEP 4 · Case Study</span>
-                    <h4>사례로 판단하기</h4>
-                    <div class="case-box">
-                        <b>사례 A · 공직자 관련 요청</b><br>
-                        공공기관 관계자가 특정 협회비 또는 협찬을 요청했습니다. 담당자는 관계 유지를 위해 바로 진행하려고 합니다.
-                    </div>
-                    <div class="answer-box">
-                        <b>판단 포인트</b><br>
-                        공직자 등으로부터 직·간접적으로 청탁·권유·요청받은 기부, 협찬, 협회비 등은 내부 사전심의 대상인지 확인해야 합니다.
-                        관계 유지나 관행보다 절차 확인이 먼저입니다.
-                    </div>
-                    <div class="case-box">
-                        <b>사례 B · 경쟁사 정보교환</b><br>
-                        입찰 전 경쟁사 담당자가 “이번에는 어느 정도 가격대로 들어가나요?”라고 묻습니다.
-                    </div>
-                    <div class="answer-box">
-                        <b>판단 포인트</b><br>
-                        가격, 입찰, 거래조건에 관한 경쟁사 간 논의는 담합 리스크가 될 수 있습니다.
-                        가벼운 대화처럼 보여도 업무 관련 정보교환은 즉시 중단하고 내부 기준을 확인해야 합니다.
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
+        elif step == 3:
+            if theme_no == 1:
+                risks = ["🚩 ‘관행대로 처리하시죠’", "🚩 ‘식사 한 번 하시죠’", "🚩 ‘경쟁사는 얼마에 들어왔나요?’", "🚩 ‘협력사를 통해 전달하면 괜찮습니다’", "🚩 ‘증빙은 나중에 맞추면 됩니다’", "🚩 ‘이번 건은 기록을 남기지 맙시다’"]
+            else:
+                risks = ["🚩 ‘계약서는 나중에 쓰고 일단 시작합시다’", "🚩 ‘검사 통지는 굳이 안 해도 됩니다’", "🚩 ‘원가자료 좀 받아주세요’", "🚩 ‘고객정보를 개인 메일로 보내겠습니다’", "🚩 ‘비밀번호는 팀 공용으로 쓰면 편합니다’", "🚩 ‘업무 끝난 파일은 그냥 보관해 둡시다’"]
+            html = ''.join([f"<div class='risk-card-v2'>{r}</div>" for r in risks])
+            st.markdown(f"""<div class="content-card-v2"><span class="page-pill-v2">STEP 3 · Red Flags</span><h4>이런 말이 나오면 멈추고 확인하세요</h4><div class="risk-grid-v2">{html}</div></div>""", unsafe_allow_html=True)
 
-        with t1_page5:
-            st.markdown("#### STEP 5. 실천 체크")
-            st.caption("아래 항목을 직접 확인해야 Theme 1을 완료할 수 있습니다.")
-            t1_checks = {
-                "t1_premium_c1": "나는 공직자 등에게 부정청탁을 하지 않는다.",
-                "t1_premium_c2": "나는 직무 관련 금품·향응·편의 제공 기준을 반드시 확인한다.",
-                "t1_premium_c3": "나는 제3자를 통한 우회 제공도 부패 리스크가 될 수 있음을 이해한다.",
-                "t1_premium_c4": "나는 경쟁사와 가격·입찰·거래조건 정보를 교환하지 않는다.",
-                "t1_premium_c5": "나는 거래상 지위를 이용해 불리한 조건을 강요하지 않는다.",
-            }
-            for key, label in t1_checks.items():
+        elif step == 4:
+            if theme_no == 1:
+                st.markdown("""
+                    <div class="content-card-v2"><span class="page-pill-v2">STEP 4 · Case Judgment</span><h4>사례로 판단해 보기</h4>
+                    <div class="case-box-v2"><b>사례 A</b><br>공공기관 관계자가 특정 협회비 또는 협찬을 요청했습니다. 담당자는 관계 유지를 위해 신속히 진행하려고 합니다.</div>
+                    <div class="answer-box-v2"><b>판단 포인트</b><br>공직자 등으로부터 직·간접적으로 청탁·권유·요청받은 기부, 협찬, 협회비 등은 내부 사전심의 대상인지 먼저 확인해야 합니다.</div>
+                    <div class="case-box-v2"><b>사례 B</b><br>입찰 전 경쟁사 담당자가 ‘이번에는 어느 정도 금액으로 들어가느냐’고 묻습니다.</div>
+                    <div class="answer-box-v2"><b>판단 포인트</b><br>가격, 입찰, 거래조건에 관한 경쟁사 정보교환은 담합 리스크가 있으므로 대화를 중단하고 내부 기준을 확인해야 합니다.</div></div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown("""
+                    <div class="content-card-v2"><span class="page-pill-v2">STEP 4 · Case Judgment</span><h4>사례로 판단해 보기</h4>
+                    <div class="case-box-v2"><b>사례 A</b><br>협력사 업무가 급해 계약서 발급 전 먼저 작업을 시작했습니다.</div>
+                    <div class="answer-box-v2"><b>판단 포인트</b><br>위탁업무 시작 전 서면 발급은 협력사와 회사를 함께 보호하는 기본 절차입니다. 급한 업무라도 절차를 생략하면 리스크가 커집니다.</div>
+                    <div class="case-box-v2"><b>사례 B</b><br>고객정보가 포함된 엑셀 파일을 개인 이메일로 보내 야간에 처리하려고 합니다.</div>
+                    <div class="answer-box-v2"><b>판단 포인트</b><br>개인정보와 기업비밀은 목적, 권한, 보관, 파기 기준을 지켜야 하며 개인 메일 등 비인가 경로 사용은 원칙적으로 금지됩니다.</div></div>
+                """, unsafe_allow_html=True)
+
+        elif step == 5:
+            st.markdown("<div class='content-card-v2'><span class='page-pill-v2'>STEP 5 · Practice Check</span><h4>실천 체크</h4><p>아래 항목을 모두 확인해야 다음 단계로 이동할 수 있습니다.</p></div>", unsafe_allow_html=True)
+            checks = T1_CHECKS if theme_no == 1 else T2_CHECKS
+            for key, label in checks.items():
                 st.checkbox(label, key=key)
 
-        with t1_page6:
-            st.markdown("#### STEP 6. 청렴·공정경영 퀴즈")
-            st.caption("단순 암기보다 실제 업무 판단을 확인하는 사례형 문항입니다.")
-            st.radio(
-                "Q1. 공직자 등으로부터 기부·협찬 요청을 받은 경우 가장 적절한 조치는?",
-                [SELECT_PLACEHOLDER, "요청기관이 공공성이 있으므로 바로 진행한다", "컴플라이언스 사전심의 등 내부 절차를 확인한다", "거래처를 통해 우회 지원한다"],
-                key="t1_premium_q1"
-            )
-            st.radio(
-                "Q2. 경쟁사 담당자가 입찰가격 수준을 묻는 경우 가장 적절한 조치는?",
-                [SELECT_PLACEHOLDER, "업계 관행이므로 가볍게 답한다", "담합 리스크가 있으므로 대화를 중단하고 내부 기준을 확인한다", "구두 대화는 기록이 없으므로 괜찮다"],
-                key="t1_premium_q2"
-            )
-            st.radio(
-                "Q3. 협력사 선물·식사 제안이 있을 때 우선해야 할 태도는?",
-                [SELECT_PLACEHOLDER, "개인적 친분이면 받아도 된다", "기준을 확인하고 필요 시 신고·반환·상담한다", "소액이면 확인하지 않아도 된다"],
-                key="t1_premium_q3"
-            )
-            st.radio(
-                "Q4. 대리점에 합리적 사유 없이 불리한 거래조건을 일방 변경하려는 경우 적절한 판단은?",
-                [SELECT_PLACEHOLDER, "회사 정책이면 언제든 가능하다", "거래상 지위 남용 소지가 있으므로 합리적 사유와 절차를 확인한다", "구두 안내만 하면 충분하다"],
-                key="t1_premium_q4"
-            )
+        elif step == 6:
+            st.markdown("<div class='content-card-v2'><span class='page-pill-v2'>STEP 6 · Quiz & Clear</span><h4>이해도 확인 퀴즈</h4><p>정답률은 교육 이해도 확인용입니다. 모든 문항에 응답해야 테마를 완료할 수 있습니다.</p></div>", unsafe_allow_html=True)
+            if theme_no == 1:
+                st.radio("Q1. 공공기관 관계자가 협찬을 요청했습니다. 가장 적절한 조치는?", [SELECT_PLACEHOLDER, "관계 유지를 위해 바로 진행한다", "컴플라이언스 사전심의 등 내부 절차를 확인한다", "개인적으로 처리한다"], key="t1_v2_q1")
+                st.radio("Q2. 경쟁사가 입찰가격을 묻습니다. 가장 적절한 조치는?", [SELECT_PLACEHOLDER, "대략적인 가격 수준만 알려준다", "담합 리스크가 있으므로 대화를 중단하고 내부 기준을 확인한다", "서로 도움 되는 정보라면 공유한다"], key="t1_v2_q2")
+                st.radio("Q3. 협력사로부터 선물을 받았습니다. 가장 적절한 조치는?", [SELECT_PLACEHOLDER, "금액이 작으면 보관한다", "기준을 확인하고 필요 시 신고·반환·상담한다", "상급자에게만 구두 보고한다"], key="t1_v2_q3")
+                st.radio("Q4. 거래상대방에게 합리적 이유 없이 불리한 조건을 요구했습니다. 가장 적절한 판단은?", [SELECT_PLACEHOLDER, "회사에 유리하면 가능하다", "거래상 지위 남용 소지가 있으므로 합리적 사유와 절차를 확인한다", "상대방이 수용하면 문제없다"], key="t1_v2_q4")
+            else:
+                st.radio("Q5. 중소기업에게 위탁업무를 시작하기 전 원칙적으로 필요한 것은?", [SELECT_PLACEHOLDER, "구두 합의 후 사후 정리한다", "법정기재사항이 포함된 서면을 먼저 발급한다", "업무 완료 후 정산 메모만 남긴다"], key="t2_v2_q1")
+                st.radio("Q6. 목적물 수령 후 검사결과 통지는 원칙적으로 언제까지 해야 할까요?", [SELECT_PLACEHOLDER, "10일 이내 서면으로 통지한다", "30일 이내 구두로 통지한다", "문제가 있을 때만 통지한다"], key="t2_v2_q2")
+                st.radio("Q7. 협력사의 기술자료를 요구할 때 가장 적절한 기준은?", [SELECT_PLACEHOLDER, "업무에 필요하면 자유롭게 요구한다", "정당한 사유와 절차에 따라 요구하고 목적 범위 내에서만 사용한다", "받은 자료는 유사 업무에도 사용할 수 있다"], key="t2_v2_q3")
+                st.radio("Q8. 고객 개인정보가 포함된 파일을 개인 메일로 보내는 행위에 대한 가장 적절한 판단은?", [SELECT_PLACEHOLDER, "편의를 위해 가능하다", "원칙적으로 금지되며 내부 보안 기준을 따라야 한다", "암호 없이 보내도 된다"], key="t2_v2_q4")
+                st.radio("Q9. 정보시스템 ID/PW 관리 기준으로 가장 적절한 것은?", [SELECT_PLACEHOLDER, "팀 업무 편의를 위해 공유한다", "공용 메모장에 적어둔다", "공유하지 않고 개인별 계정과 권한 기준을 준수한다"], key="t2_v2_q5")
 
-        t1_checked = all(bool(st.session_state.get(k, False)) for k in t1_check_keys)
-        t1_quiz_answered = all(st.session_state.get(k, SELECT_PLACEHOLDER) != SELECT_PLACEHOLDER for k in t1_answer_map)
-        t1_quiz_correct_count = sum(1 for k, ans in t1_answer_map.items() if st.session_state.get(k) == ans)
-        t1_quiz_score = t1_quiz_correct_count * 5
-        t1_check_score = 15 if t1_checked else 0
+        # Status pills
+        checked = _checks_done(theme_no)
+        answered = _quiz_answered(theme_no)
+        score = _theme_score(theme_no)
+        max_score = 35 if theme_no == 1 else 45
         st.markdown(
-            f"<span class='score-pill'>Theme 1 실천 체크: {'완료' if t1_checked else '진행 중'}</span>"
-            f"<span class='score-pill'>Theme 1 퀴즈 응시: {'완료' if t1_quiz_answered else '진행 중'}</span>"
-            f"<span class='score-pill'>Theme 1 점수: {t1_check_score + t1_quiz_score}/35점</span>",
+            f"<span class='score-pill-v2'>실천 체크: {'완료' if checked else '진행 중'}</span>"
+            f"<span class='score-pill-v2'>퀴즈 응시: {'완료' if answered else '진행 중'}</span>"
+            f"<span class='score-pill-v2'>테마 점수: {score}/{max_score}점</span>",
             unsafe_allow_html=True
         )
 
-    # ------------------------------------------------------
-    # Theme 2: 협력사·정보보호
-    # ------------------------------------------------------
-    with theme2_tab:
+        st.markdown("---")
+        prev_col, msg_col, next_col = st.columns([0.18, 0.54, 0.28])
+        with prev_col:
+            if st.button("◀ 이전", use_container_width=True, key=f"june_v2_prev_{theme_no}_{step}"):
+                if step > 1:
+                    st.session_state["june_v2_step"] = step - 1
+                elif theme_no == 2:
+                    st.session_state["june_v2_view"] = "theme1"
+                    st.session_state["june_v2_theme"] = 1
+                    st.session_state["june_v2_step"] = 6
+                st.rerun()
+        with msg_col:
+            st.markdown("<div class='nav-help'>하단 버튼으로 순서대로 이동합니다. 완료된 단계는 상단 Quest Road에서 초록색으로 표시됩니다.</div>", unsafe_allow_html=True)
+        with next_col:
+            next_label = "다음 ▶" if step < 6 else ("Theme 1 CLEAR → 다음 Quest" if theme_no == 1 else "Theme 2 CLEAR → Event")
+            if st.button(next_label, use_container_width=True, key=f"june_v2_next_{theme_no}_{step}", type="primary"):
+                if step == 5 and not _checks_done(theme_no):
+                    st.warning("실천 체크 항목을 모두 확인해야 다음 단계로 이동할 수 있습니다.")
+                elif step == 6:
+                    ok, msg = _theme_ready_to_complete(theme_no)
+                    if not ok:
+                        st.warning(msg)
+                    else:
+                        _mark_step_done(theme_no, 6)
+                        if theme_no == 1:
+                            st.session_state["june_v2_theme1_done"] = True
+                            st.session_state["june_v2_view"] = "theme2"
+                            st.session_state["june_v2_theme"] = 2
+                            st.session_state["june_v2_step"] = 1
+                            st.session_state.setdefault("june_v2_theme2_started_at", time.time())
+                        else:
+                            st.session_state["june_v2_theme2_done"] = True
+                            st.session_state["june_v2_view"] = "event"
+                        st.rerun()
+                else:
+                    _mark_step_done(theme_no, step)
+                    st.session_state["june_v2_step"] = min(6, step + 1)
+                    st.rerun()
+
+    # Main content view
+    if st.session_state.get("june_v2_view") in ["theme1", "theme2"]:
+        current_theme = 1 if st.session_state.get("june_v2_view") == "theme1" else 2
+        _render_theme_step(current_theme)
+
+    elif st.session_state.get("june_v2_view") == "event":
         st.markdown("""
-            <div class="theme-hero theme-two">
-                <h3>Theme 2. 협력사·정보보호 Zone</h3>
-                <p>
-                    협력사와 정보는 ‘절차’로 보호됩니다. 계약 전 서면, 대금 지급, 검사 통지,
-                    기술자료 보호, 개인정보 목적 외 이용 금지, 계정 보안은 현장에서 반드시 지켜야 할 기본 기준입니다.
-                </p>
-            </div>
-        """, unsafe_allow_html=True)
-
-        t2_page1, t2_page2, t2_page3, t2_page4, t2_page5, t2_page6 = st.tabs([
-            "1 인포그래픽", "2 핵심 원칙", "3 위험 신호", "4 사례 판단", "5 실천 체크", "6 퀴즈"
-        ])
-
-        with t2_page1:
-            st.markdown("""
-                <div class="premium-card">
-                    <span class="page-pill">STEP 1 · Infographic</span>
-                    <h4>협력사와 정보는 ‘절차’로 보호합니다</h4>
-                    <div class="quote-line">“업무가 급할수록 계약·정보보호 절차가 회사와 임직원을 보호합니다.”</div>
-                    <div class="principle-grid">
-                        <div class="principle-box"><b>📄 계약 전 서면</b><span>위탁업무 시작 전 법정기재사항이 포함된 서면을 발급합니다.</span></div>
-                        <div class="principle-box"><b>⏱️ 대금·검사 기한</b><span>대금 지급과 검사결과 통지 기한을 준수합니다.</span></div>
-                        <div class="principle-box"><b>🔐 기술자료 보호</b><span>정당한 사유, 절차, 목적 범위 내에서만 요구·사용합니다.</span></div>
-                        <div class="principle-box"><b>🛡️ 개인정보·기업비밀</b><span>목적 외 이용, 무단 제공, 계정 공유, 방치를 금지합니다.</span></div>
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
-
-        with t2_page2:
-            st.markdown("""
-                <div class="premium-card">
-                    <span class="page-pill">STEP 2 · Core Principles</span>
-                    <h4>기억해야 할 6가지 기준</h4>
-                    <div class="principle-grid">
-                        <div class="principle-box"><b>1. 서면 발급</b><span>중소기업 위탁업무 시작 전 계약서 등 법정기재사항 포함 서면을 발급합니다.</span></div>
-                        <div class="principle-box"><b>2. 대금 지급</b><span>목적물 수령일 또는 용역수행 종료일 등 기준일로부터 법정 기한을 준수합니다.</span></div>
-                        <div class="principle-box"><b>3. 검사 통지</b><span>검사결과는 정해진 기한 내 서면으로 통지합니다.</span></div>
-                        <div class="principle-box"><b>4. 기술자료 보호</b><span>정당한 사유와 절차 없이 기술자료나 경영정보를 요구하지 않습니다.</span></div>
-                        <div class="principle-box"><b>5. 개인정보 보호</b><span>업무 목적 외 조회, 활용, 제3자 제공을 하지 않습니다.</span></div>
-                        <div class="principle-box"><b>6. 계정·기업비밀 관리</b><span>ID/PW를 공유하지 않고 기업비밀은 암호화·접근권한·파기 기준을 준수합니다.</span></div>
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
-
-        with t2_page3:
-            st.markdown("""
-                <div class="premium-card">
-                    <span class="page-pill">STEP 3 · Red Flags</span>
-                    <h4>이런 말이 나오면 절차를 확인하세요</h4>
-                    <div class="risk-grid">
-                        <div class="risk-card">🚩 “계약서는 나중에 쓰고 일단 시작합시다.”</div>
-                        <div class="risk-card">🚩 “검사는 했는데 통지는 굳이 안 해도 되겠죠.”</div>
-                        <div class="risk-card">🚩 “원가자료 좀 보내달라고 하세요.”</div>
-                        <div class="risk-card">🚩 “고객정보 파일을 개인 메일로 보내두겠습니다.”</div>
-                        <div class="risk-card">🚩 “비밀번호는 팀 공용으로 쓰면 편합니다.”</div>
-                        <div class="risk-card">🚩 “업무 끝난 파일이지만 그냥 보관해 두겠습니다.”</div>
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
-
-        with t2_page4:
-            st.markdown("""
-                <div class="premium-card">
-                    <span class="page-pill">STEP 4 · Case Study</span>
-                    <h4>사례로 판단하기</h4>
-                    <div class="case-box">
-                        <b>사례 C · 계약 전 업무 착수</b><br>
-                        협력사 업무가 급해서 계약서 발급 전에 먼저 작업을 시작했습니다.
-                    </div>
-                    <div class="answer-box">
-                        <b>판단 포인트</b><br>
-                        위탁업무는 시작 전 서면 발급이 핵심 절차입니다. 업무가 급하더라도 서면, 대금, 검사, 기술자료 관련 기준을 먼저 확인해야 합니다.
-                    </div>
-                    <div class="case-box">
-                        <b>사례 D · 고객정보 외부 반출</b><br>
-                        고객정보가 포함된 엑셀 파일을 개인 이메일로 보내 야간에 처리하려고 합니다.
-                    </div>
-                    <div class="answer-box">
-                        <b>판단 포인트</b><br>
-                        개인정보와 기업비밀은 편의보다 보호가 먼저입니다. 목적, 권한, 암호화, 저장 위치, 보관기간, 파기 기준을 지켜야 합니다.
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
-
-        with t2_page5:
-            st.markdown("#### STEP 5. 실천 체크")
-            st.caption("아래 항목을 직접 확인해야 Theme 2를 완료할 수 있습니다.")
-            t2_checks = {
-                "t2_premium_c1": "나는 위탁업무 시작 전 서면 발급 필요성을 확인한다.",
-                "t2_premium_c2": "나는 하도급대금 지급기한과 검사결과 통지기한을 확인한다.",
-                "t2_premium_c3": "나는 정당한 사유 없이 기술자료나 경영정보를 요구하지 않는다.",
-                "t2_premium_c4": "나는 업무용 PC 내 불필요한 개인정보를 삭제한다.",
-                "t2_premium_c5": "나는 고객정보를 목적 외로 조회하거나 활용하지 않는다.",
-                "t2_premium_c6": "나는 ID/PW를 공유하지 않는다.",
-                "t2_premium_c7": "나는 기업비밀을 암호화하고 목적 완료 후 파기한다.",
-            }
-            for key, label in t2_checks.items():
-                st.checkbox(label, key=key)
-
-        with t2_page6:
-            st.markdown("#### STEP 6. 협력사·정보보호 퀴즈")
-            st.caption("현장 업무에서 자주 발생할 수 있는 상황 중심 문항입니다.")
-            st.radio(
-                "Q5. 중소기업에게 위탁업무를 시작하기 전 원칙적으로 필요한 것은?",
-                [SELECT_PLACEHOLDER, "구두 합의 후 사후 정리한다", "법정기재사항이 포함된 서면을 먼저 발급한다", "업무 완료 후 정산 메모만 남긴다"],
-                key="t2_premium_q1"
-            )
-            st.radio(
-                "Q6. 목적물 수령 후 검사결과 통지는 원칙적으로 언제까지 해야 할까요?",
-                [SELECT_PLACEHOLDER, "10일 이내 서면으로 통지한다", "30일 이내 구두로 통지한다", "문제가 있을 때만 통지한다"],
-                key="t2_premium_q2"
-            )
-            st.radio(
-                "Q7. 협력사의 기술자료를 요구할 때 가장 적절한 기준은?",
-                [SELECT_PLACEHOLDER, "업무에 필요하면 자유롭게 요구한다", "정당한 사유와 절차에 따라 요구하고 목적 범위 내에서만 사용한다", "받은 자료는 유사 업무에도 사용할 수 있다"],
-                key="t2_premium_q3"
-            )
-            st.radio(
-                "Q8. 고객 개인정보가 포함된 파일을 개인 메일로 보내는 행위에 대한 가장 적절한 판단은?",
-                [SELECT_PLACEHOLDER, "편의를 위해 가능하다", "원칙적으로 금지되며 내부 보안 기준을 따라야 한다", "암호 없이 보내도 된다"],
-                key="t2_premium_q4"
-            )
-            st.radio(
-                "Q9. 정보시스템 ID/PW 관리 기준으로 가장 적절한 것은?",
-                [SELECT_PLACEHOLDER, "팀 업무 편의를 위해 공유한다", "공용 메모장에 적어둔다", "공유하지 않고 개인별 계정과 권한 기준을 준수한다"],
-                key="t2_premium_q5"
-            )
-
-        t2_checked = all(bool(st.session_state.get(k, False)) for k in t2_check_keys)
-        t2_quiz_answered = all(st.session_state.get(k, SELECT_PLACEHOLDER) != SELECT_PLACEHOLDER for k in t2_answer_map)
-        t2_quiz_correct_count = sum(1 for k, ans in t2_answer_map.items() if st.session_state.get(k) == ans)
-        t2_quiz_score = t2_quiz_correct_count * 6
-        t2_check_score = 15 if t2_checked else 0
-        st.markdown(
-            f"<span class='score-pill'>Theme 2 실천 체크: {'완료' if t2_checked else '진행 중'}</span>"
-            f"<span class='score-pill'>Theme 2 퀴즈 응시: {'완료' if t2_quiz_answered else '진행 중'}</span>"
-            f"<span class='score-pill'>Theme 2 점수: {t2_check_score + t2_quiz_score}/45점</span>",
-            unsafe_allow_html=True
-        )
-
-    # ------------------------------------------------------
-    # Summer Event
-    # ------------------------------------------------------
-    with event_tab:
-        st.markdown("""
-            <div class="summer-zone">
+            <div class="summer-zone-v2">
                 <h3>🌊 Summer Compliance Event</h3>
                 <p>
                     무더운 6월, 컴플라이언스도 시원하게 점검해 주세요.
                     본 교육을 정상 수료한 임직원은 추후 별도 추첨을 통해 모바일 쿠폰 지급 대상에 포함됩니다.
-                    이벤트 퀴즈는 교육의 품격을 해치지 않도록 정보보호 핵심 수칙과 연결했습니다.
+                    이벤트 퀴즈는 정보보호 핵심 수칙과 연결했습니다.
                 </p>
             </div>
-        """, unsafe_allow_html=True)
-        st.markdown("""
-            <div class="premium-card">
-                <span class="page-pill">Special Event · 참여형 퀴즈</span>
+            <div class="content-card-v2">
+                <span class="page-pill-v2">Special Event · 참여형 퀴즈</span>
                 <h4>여름철 휴가·외근 중에도 기준은 그대로입니다</h4>
-                <p>휴가철에는 외근, 재택, 이동 중 업무처리 등으로 정보보호 리스크가 커질 수 있습니다. 가장 안전한 행동을 선택해 주세요.</p>
+                <div class="infographic-grid">
+                    <div class="info-tile tile-blue"><span class="icon">🏖️</span><b>휴가철</b><span>업무 자료 반출·저장 경로 확인</span></div>
+                    <div class="info-tile tile-green"><span class="icon">🔑</span><b>계정관리</b><span>ID/PW 공유 금지, 개인별 권한 준수</span></div>
+                    <div class="info-tile tile-orange"><span class="icon">📁</span><b>파일보호</b><span>개인정보·기업비밀 암호화 및 파기</span></div>
+                    <div class="info-tile tile-purple"><span class="icon">🎁</span><b>추첨대상</b><span>정상 수료자 중 모바일 쿠폰 추첨</span></div>
+                </div>
             </div>
         """, unsafe_allow_html=True)
         event_answer = st.radio(
@@ -1786,55 +1814,59 @@ with tab_audit:
                 "기업비밀·개인정보 파일은 암호화하고, 목적 완료 후 안전하게 파기한다",
                 "비밀번호는 동료와 공유해 두면 업무 공백을 줄일 수 있다"
             ],
-            key="event_premium_q1"
+            key="event_v2_q1"
         )
-        event_answered = event_answer != SELECT_PLACEHOLDER
-        event_correct = event_answer == "기업비밀·개인정보 파일은 암호화하고, 목적 완료 후 안전하게 파기한다"
-        if event_answered and event_correct:
+        if event_answer == "기업비밀·개인정보 파일은 암호화하고, 목적 완료 후 안전하게 파기한다":
             st.success("정답입니다. 시원한 여름에도 정보보호 기준은 그대로 유지됩니다. 🌊")
-        elif event_answered:
+        elif event_answer != SELECT_PLACEHOLDER:
             st.info("힌트: 개인정보·기업비밀은 암호화, 접근권한, 목적 완료 후 안전한 파기가 핵심입니다.")
-        else:
-            st.caption("이벤트 퀴즈에 참여하면 수료 제출 단계로 이동할 수 있습니다.")
+        ev_prev, ev_msg, ev_next = st.columns([0.18, 0.54, 0.28])
+        with ev_prev:
+            if st.button("◀ Theme 2로", use_container_width=True, key="june_v2_event_prev"):
+                st.session_state["june_v2_view"] = "theme2"
+                st.session_state["june_v2_theme"] = 2
+                st.session_state["june_v2_step"] = 6
+                st.rerun()
+        with ev_msg:
+            st.markdown("<div class='nav-help'>이벤트 퀴즈에 응답하면 수료 제출 단계로 이동할 수 있습니다.</div>", unsafe_allow_html=True)
+        with ev_next:
+            if st.button("Event CLEAR → 수료 제출", use_container_width=True, key="june_v2_event_next", type="primary"):
+                if st.session_state.get("event_v2_q1", SELECT_PLACEHOLDER) == SELECT_PLACEHOLDER:
+                    st.warning("이벤트 퀴즈에 응답해야 수료 제출 단계로 이동할 수 있습니다.")
+                else:
+                    st.session_state["june_v2_event_done"] = True
+                    st.session_state["june_v2_view"] = "submit"
+                    st.rerun()
 
-    # ------------------------------------------------------
-    # Completion Submit
-    # ------------------------------------------------------
-    with submit_tab:
+    elif st.session_state.get("june_v2_view") == "submit":
         st.markdown("### ✅ 수료 제출")
         st.caption("아래 정보를 입력하고 제출하면 6월 컴플라이언스 인식제고 교육 수료 내역이 Google Sheet에 저장됩니다.")
-
-        # 최신 상태 재계산
-        t1_checked_now = all(bool(st.session_state.get(k, False)) for k in t1_check_keys)
-        t2_checked_now = all(bool(st.session_state.get(k, False)) for k in t2_check_keys)
-        t1_quiz_answered_now = all(st.session_state.get(k, SELECT_PLACEHOLDER) != SELECT_PLACEHOLDER for k in t1_answer_map)
-        t2_quiz_answered_now = all(st.session_state.get(k, SELECT_PLACEHOLDER) != SELECT_PLACEHOLDER for k in t2_answer_map)
-        t1_quiz_correct_now = sum(1 for k, ans in t1_answer_map.items() if st.session_state.get(k) == ans)
-        t2_quiz_correct_now = sum(1 for k, ans in t2_answer_map.items() if st.session_state.get(k) == ans)
-        t1_score_now = (15 if t1_checked_now else 0) + (t1_quiz_correct_now * 5)
-        t2_score_now = (15 if t2_checked_now else 0) + (t2_quiz_correct_now * 6)
-        event_answer_now = st.session_state.get("event_premium_q1", SELECT_PLACEHOLDER)
+        t1_done = st.session_state.get("june_v2_theme1_done", False)
+        t2_done = st.session_state.get("june_v2_theme2_done", False)
+        event_answer_now = st.session_state.get("event_v2_q1", SELECT_PLACEHOLDER)
         event_answered_now = event_answer_now != SELECT_PLACEHOLDER
         event_correct_now = event_answer_now == "기업비밀·개인정보 파일은 암호화하고, 목적 완료 후 안전하게 파기한다"
+        t1_score_now = _theme_score(1)
+        t2_score_now = _theme_score(2)
+        quiz_score_now = (_quiz_correct_count(1) * 5) + (_quiz_correct_count(2) * 6)
         event_score_now = 10 if event_answered_now else 0
-        final_submit_score = 10 if (t1_checked_now and t1_quiz_answered_now and t2_checked_now and t2_quiz_answered_now and event_answered_now) else 0
-        quiz_score_now = (t1_quiz_correct_now * 5) + (t2_quiz_correct_now * 6)
-        participation_score = (15 if t1_checked_now else 0) + (15 if t2_checked_now else 0) + event_score_now + final_submit_score
+        final_submit_score = 10 if (t1_done and t2_done and event_answered_now) else 0
+        participation_score = (15 if _checks_done(1) else 0) + (15 if _checks_done(2) else 0) + event_score_now + final_submit_score
         final_score = t1_score_now + t2_score_now + event_score_now + final_submit_score
 
         cstat1, cstat2, cstat3, cstat4 = st.columns(4)
-        cstat1.metric("Theme 1", "완료" if (t1_checked_now and t1_quiz_answered_now) else "진행 중")
-        cstat2.metric("Theme 2", "완료" if (t2_checked_now and t2_quiz_answered_now) else "진행 중")
-        cstat3.metric("이벤트", "참여" if event_answered_now else "미참여")
+        cstat1.metric("Theme 1", "CLEAR" if t1_done else "진행 중")
+        cstat2.metric("Theme 2", "CLEAR" if t2_done else "진행 중")
+        cstat3.metric("이벤트", "CLEAR" if event_answered_now else "미참여")
         cstat4.metric("최종점수", f"{final_score}/100")
 
         st.markdown("""
-            <div class="premium-card">
-                <span class="page-pill">Completion Standard</span>
+            <div class="content-card-v2">
+                <span class="page-pill-v2">Completion Standard</span>
                 <h4>수료 기준</h4>
                 <p>
-                    Theme 1 실천 체크와 퀴즈, Theme 2 실천 체크와 퀴즈, Summer Event 참여를 모두 완료한 후
-                    사번·성명·소속을 입력해야 수료 제출이 가능합니다. 점수는 이해도 확인용이며, 수료자는 모바일 쿠폰 추첨 대상에 포함됩니다.
+                    Theme 1, Theme 2, Summer Event를 순서대로 완료하고 사번·성명·소속을 입력해야 수료 제출이 가능합니다.
+                    점수는 이해도 확인용이며, 정상 수료자는 추후 모바일 쿠폰 추첨 대상에 포함됩니다.
                 </p>
             </div>
         """, unsafe_allow_html=True)
@@ -1847,17 +1879,23 @@ with tab_audit:
         unit = c3.selectbox("총괄 / 본부 / 단", ordered_units, index=None, placeholder="선택", key="june_unit")
         dept = c4.text_input("상세 부서명", placeholder="현 소속부서명", key="june_dept")
 
-        can_submit = t1_checked_now and t1_quiz_answered_now and t2_checked_now and t2_quiz_answered_now and event_answered_now
+        can_submit = t1_done and t2_done and event_answered_now
         if not can_submit:
-            st.warning("Theme 1·Theme 2의 실천 체크와 퀴즈, Summer Event 퀴즈 참여까지 완료해야 수료 제출이 가능합니다.")
+            st.warning("Theme 1·Theme 2·Summer Event를 모두 CLEAR해야 수료 제출이 가능합니다.")
 
-        submit_june_training = st.button(
-            "📨 6월 컴플라이언스 교육 수료 제출",
-            use_container_width=True,
-            disabled=(not can_submit or st.session_state.get("june_training_saved", False)),
-            key="june_training_submit",
-            type="primary"
-        )
+        left_nav, right_submit = st.columns([0.22, 0.78])
+        with left_nav:
+            if st.button("◀ Event로", use_container_width=True, key="june_v2_submit_prev"):
+                st.session_state["june_v2_view"] = "event"
+                st.rerun()
+        with right_submit:
+            submit_june_training = st.button(
+                "📨 6월 컴플라이언스 교육 수료 제출",
+                use_container_width=True,
+                disabled=(not can_submit or st.session_state.get("june_training_saved", False)),
+                key="june_training_submit",
+                type="primary"
+            )
 
         if submit_june_training:
             if not emp_id or not name or not unit or not dept:
@@ -1873,9 +1911,9 @@ with tab_audit:
                         "총괄/본부/단": unit,
                         "부서": dept.strip(),
                         "교육대상": "전 임직원",
-                        "Theme1_청렴공정_확인": "완료" if t1_checked_now else "미완료",
+                        "Theme1_청렴공정_확인": "완료" if t1_done else "미완료",
                         "Theme1_점수": t1_score_now,
-                        "Theme2_협력정보_확인": "완료" if t2_checked_now else "미완료",
+                        "Theme2_협력정보_확인": "완료" if t2_done else "미완료",
                         "Theme2_점수": t2_score_now,
                         "이벤트퀴즈_선택": event_answer_now,
                         "이벤트퀴즈_정답여부": "정답" if event_correct_now else "오답",
@@ -1884,7 +1922,7 @@ with tab_audit:
                         "최종점수": final_score,
                         "수료상태": "수료",
                         "이벤트추첨대상": "대상",
-                        "비고": "감사실 주관 2026년 6월 컴플라이언스 인식제고 자율점검 교육 / 모바일 쿠폰 추첨 대상 포함",
+                        "비고": "감사실 주관 2026년 6월 컴플라이언스 인식제고 자율점검 교육 / 모바일 쿠폰 추첨 대상 포함 / Premium V2 순차형 교육",
                     }
                     with st.spinner("6월 컴플라이언스 교육 수료 내역을 저장 중입니다..."):
                         success, save_msg = save_june_compliance_training_result(record)
