@@ -1219,7 +1219,7 @@ with tab_audit:
     # - 기존 윤리경영 실천서약 보관함은 유지
     # - 현장대리인 등록 모듈 위치에 고품질 교육 모듈 배치
     # - 순차형 Quest 구조 / Previous·Next 이동 / Step별 Clear 표시
-    # - Theme별 최소 학습시간 90초 적용
+    # - STEP 1~4 단계별 최소 학습시간 100초 적용 / STEP 5 체크항목별 10초 확인
     # - Theme 1: 부패방지 + 공정거래 / Theme 2: 하도급 + 정보보호
     # =========================================================
     st.markdown("""
@@ -1320,16 +1320,45 @@ with tab_audit:
         .step-current { background: linear-gradient(135deg, #1D4ED8 0%, #0EA5E9 100%); color:white; border-color:#60A5FA; transform: translateY(-2px); box-shadow: 0 11px 26px rgba(37,99,235,0.24); }
         .step-lock { background: #F8FAFC; color:#94A3B8; border-color:#E2E8F0; }
         .timer-panel {
-            background: linear-gradient(135deg, #FFF7ED 0%, #FEFCE8 100%);
-            border: 1px solid #FDBA74;
+            background: linear-gradient(135deg, #EFF6FF 0%, #F8FAFC 100%);
+            border: 1px solid #93C5FD;
             border-radius: 18px;
-            padding: 14px 16px;
-            color: #7C2D12;
+            padding: 15px 17px;
+            color: #1E3A8A;
             font-weight: 850;
-            margin: 10px 0 12px 0;
+            margin: 14px 0 12px 0;
+            box-shadow: 0 8px 20px rgba(37,99,235,0.08);
         }
-        .timer-bar-bg { width:100%; background:#FFEDD5; height:12px; border-radius:999px; overflow:hidden; margin-top:8px; }
-        .timer-bar-fill { height:12px; border-radius:999px; background: linear-gradient(90deg, #F97316, #22C55E); }
+        .timer-panel-clear { background: linear-gradient(135deg, #ECFDF5 0%, #F0FDF4 100%); border-color:#86EFAC; color:#14532D; }
+        .timer-bar-bg { width:100%; background:#DBEAFE; height:14px; border-radius:999px; overflow:hidden; margin-top:9px; }
+        .timer-bar-fill { height:14px; border-radius:999px; background: linear-gradient(90deg, #2563EB, #06B6D4, #22C55E); transition: width 0.3s ease; }
+        .check-timer-card {
+            background: linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 100%);
+            border: 1px solid #BFDBFE;
+            border-radius: 16px;
+            padding: 12px 14px;
+            margin: 7px 0 9px 0;
+            font-weight: 850;
+            color:#1E3A8A;
+        }
+        .check-timer-done {
+            color:#166534;
+            font-weight:950;
+            background:#F0FDF4;
+            border:1px solid #BBF7D0;
+            border-radius:999px;
+            padding:5px 10px;
+            display:inline-block;
+        }
+        .check-timer-wait {
+            color:#92400E;
+            font-weight:950;
+            background:#FFFBEB;
+            border:1px solid #FDE68A;
+            border-radius:999px;
+            padding:5px 10px;
+            display:inline-block;
+        }
         .theme-title-panel {
             border-radius: 26px;
             padding: 24px 25px;
@@ -1427,7 +1456,8 @@ with tab_audit:
             <h4>감사실 안내</h4>
             <p>
                 교육은 순차형 Quest 방식으로 진행됩니다. 현재 단계를 완료해야 다음 단계로 이동할 수 있으며,
-                각 주요 테마는 최소 90초 이상 학습해야 수료 조건으로 인정됩니다.
+                각 테마의 STEP 1~4는 단계별 최소 100초 이상 학습해야 다음 단계로 이동할 수 있습니다.
+                STEP 5 실천 체크는 항목별 10초 확인 카운트다운을 통해 실질적인 확인 절차를 거칩니다.
                 이는 단순 클릭형 수료를 방지하고, 전 임직원이 핵심 기준을 충분히 확인하기 위한 장치입니다.
             </p>
         </div>
@@ -1448,7 +1478,10 @@ with tab_audit:
             )
 
     SELECT_PLACEHOLDER = "선택하세요"
-    THEME_MIN_SECONDS = 90
+    STEP_MIN_SECONDS = 100
+    CHECK_ITEM_SECONDS = 10
+    CHECK_ITEM_DELAY_SECONDS = 1
+    TIMED_STEPS = {1, 2, 3, 4}
     STEPS = [
         (1, "인포그래픽", "핵심 리스크를 한눈에 봅니다"),
         (2, "핵심 원칙", "업무 기준을 정리합니다"),
@@ -1488,6 +1521,20 @@ with tab_audit:
         "t2_v2_c7": "나는 기업비밀을 암호화하고 목적 완료 후 파기한다.",
     }
 
+    def _clear_june_training_state() -> None:
+        """최종 제출 후 교육 화면을 초기 상태로 되돌리기 위한 전용 초기화입니다."""
+        reset_prefixes = ("june_v2_", "t1_v2_", "t2_v2_", "event_v2_", "june_")
+        reset_exact = {"june_training_saved", "show_legacy_pledge_archive"}
+        for k in list(st.session_state.keys()):
+            if k in reset_exact or any(k.startswith(p) for p in reset_prefixes):
+                try:
+                    del st.session_state[k]
+                except Exception:
+                    pass
+
+    if st.session_state.pop("june_force_reset_after_submit", False):
+        _clear_june_training_state()
+
     def _init_june_v2_state():
         st.session_state.setdefault("june_v2_view", "theme1")
         st.session_state.setdefault("june_v2_theme", 1)
@@ -1502,14 +1549,26 @@ with tab_audit:
         if st.session_state.get("june_v2_view") == "theme2":
             st.session_state.setdefault("june_v2_theme2_started_at", time.time())
 
-    def _theme_elapsed(theme_no: int) -> int:
-        key = f"june_v2_theme{theme_no}_started_at"
-        if key not in st.session_state:
-            st.session_state[key] = time.time()
-        return int(time.time() - float(st.session_state[key]))
+    def _step_timer_key(theme_no: int, step_no: int) -> str:
+        return f"june_v2_theme{theme_no}_step{step_no}_started_at"
 
-    def _theme_remaining(theme_no: int) -> int:
-        return max(0, THEME_MIN_SECONDS - _theme_elapsed(theme_no))
+    def _ensure_step_timer(theme_no: int, step_no: int) -> None:
+        if step_no in TIMED_STEPS:
+            st.session_state.setdefault(_step_timer_key(theme_no, step_no), time.time())
+
+    def _step_elapsed(theme_no: int, step_no: int) -> int:
+        if step_no not in TIMED_STEPS:
+            return 0
+        _ensure_step_timer(theme_no, step_no)
+        return int(time.time() - float(st.session_state[_step_timer_key(theme_no, step_no)]))
+
+    def _step_remaining(theme_no: int, step_no: int) -> int:
+        if step_no not in TIMED_STEPS:
+            return 0
+        return max(0, STEP_MIN_SECONDS - _step_elapsed(theme_no, step_no))
+
+    def _step_time_met(theme_no: int, step_no: int) -> bool:
+        return step_no not in TIMED_STEPS or _step_remaining(theme_no, step_no) <= 0
 
     def _completed_steps(theme_no: int) -> list[int]:
         return list(st.session_state.get(f"june_v2_completed_steps_{theme_no}", []))
@@ -1532,7 +1591,7 @@ with tab_audit:
 
     def _checks_done(theme_no: int) -> bool:
         checks = T1_CHECKS if theme_no == 1 else T2_CHECKS
-        return all(bool(st.session_state.get(k, False)) for k in checks)
+        return all(_check_is_done(k) for k in checks)
 
     def _quiz_answered(theme_no: int) -> bool:
         qmap = T1_Q if theme_no == 1 else T2_Q
@@ -1549,9 +1608,6 @@ with tab_audit:
             return False, "실천 체크 항목을 모두 확인해야 합니다."
         if not _quiz_answered(theme_no):
             return False, "퀴즈 문항을 모두 응답해야 합니다."
-        remain = _theme_remaining(theme_no)
-        if remain > 0:
-            return False, f"최소 학습시간이 남아 있습니다. {remain}초 후 완료할 수 있습니다."
         return True, "완료 가능"
 
     def _set_theme(theme_no: int):
@@ -1632,22 +1688,75 @@ with tab_audit:
                 if st.button("이동", key=f"june_v2_step_go_{theme_no}_{num}", use_container_width=True):
                     if num <= max_unlocked or num in completed:
                         st.session_state["june_v2_step"] = num
+                        _ensure_step_timer(theme_no, num)
                         st.rerun()
                     else:
                         st.warning("현재 교육을 완료해야 다음 단계로 이동할 수 있습니다.")
         st.markdown("<div class='nav-help'>완료된 단계는 초록색, 현재 단계는 파란색, 아직 진행할 수 없는 단계는 회색으로 표시됩니다.</div>", unsafe_allow_html=True)
 
-    def _render_timer(theme_no: int):
-        elapsed = _theme_elapsed(theme_no)
-        remain = _theme_remaining(theme_no)
-        pct = min(100, int(elapsed / THEME_MIN_SECONDS * 100))
-        msg = f"최소 학습시간 충족 완료 · {elapsed}초 학습" if remain == 0 else f"최소 학습시간 적용 중 · {remain}초 남음 / 현재 {elapsed}초 학습"
+    def _render_step_timer(theme_no: int, step_no: int) -> None:
+        """STEP 1~4에 적용되는 100초 최소 학습시간 게이지입니다."""
+        if step_no not in TIMED_STEPS:
+            return
+        elapsed = _step_elapsed(theme_no, step_no)
+        remain = _step_remaining(theme_no, step_no)
+        pct = min(100, int(elapsed / STEP_MIN_SECONDS * 100))
+        if remain == 0:
+            msg = f"최소 학습시간 충족 · STEP {step_no}에서 {elapsed}초 학습 완료"
+            panel_cls = "timer-panel timer-panel-clear"
+        else:
+            msg = f"최소 학습시간 충족까지 {STEP_MIN_SECONDS}초 카운트다운 · {remain}초 남음 / 현재 {elapsed}초 학습"
+            panel_cls = "timer-panel"
         st.markdown(f"""
-            <div class="timer-panel">
+            <div class="{panel_cls}">
                 ⏱️ {msg}
                 <div class="timer-bar-bg"><div class="timer-bar-fill" style="width:{pct}%;"></div></div>
             </div>
         """, unsafe_allow_html=True)
+
+    def _check_done_key(check_key: str) -> str:
+        return f"{check_key}_timed_done"
+
+    def _check_is_done(check_key: str) -> bool:
+        return bool(st.session_state.get(_check_done_key(check_key), False))
+
+    def _render_timed_checks(theme_no: int) -> None:
+        """STEP 5 실천 체크 항목별 10초 모래시계 확인 절차입니다."""
+        checks = T1_CHECKS if theme_no == 1 else T2_CHECKS
+        st.markdown(
+            "<div class='check-timer-card'>⌛ 각 항목은 체크 후 1초 뒤 10초 모래시계 카운트다운이 시작됩니다. "
+            "카운트다운이 끝난 뒤 다음 항목을 체크해 주세요.</div>",
+            unsafe_allow_html=True,
+        )
+        for idx, (key, label) in enumerate(checks.items(), start=1):
+            done_key = _check_done_key(key)
+            is_done = _check_is_done(key)
+            c_box, c_status = st.columns([0.78, 0.22], vertical_alignment="center")
+            with c_box:
+                st.checkbox(
+                    f"{idx}. {label}",
+                    key=key,
+                    disabled=is_done,
+                )
+            with c_status:
+                ph = st.empty()
+                if is_done:
+                    ph.markdown("<span class='check-timer-done'>✅ 확인 완료</span>", unsafe_allow_html=True)
+                elif bool(st.session_state.get(key, False)):
+                    ph.markdown("<span class='check-timer-wait'>⌛ 준비 중...</span>", unsafe_allow_html=True)
+                    time.sleep(CHECK_ITEM_DELAY_SECONDS)
+                    for sec in range(CHECK_ITEM_SECONDS, 0, -1):
+                        ph.markdown(
+                            f"<span class='check-timer-wait'>{HOURGLASS_SVG} {sec}초</span>",
+                            unsafe_allow_html=True,
+                        )
+                        time.sleep(1)
+                    st.session_state[done_key] = True
+                    st.session_state[key] = True
+                    ph.markdown("<span class='check-timer-done'>✅ 확인 완료</span>", unsafe_allow_html=True)
+                    st.rerun()
+                else:
+                    ph.markdown("<span style='color:#64748B;font-weight:800;'>대기</span>", unsafe_allow_html=True)
 
     def _render_theme_step(theme_no: int):
         step = int(st.session_state.get("june_v2_step", 1))
@@ -1662,7 +1771,7 @@ with tab_audit:
 
         st.markdown(f"""<div class="theme-title-panel {title_cls}"><h3>{title}</h3><p>{desc}</p></div>""", unsafe_allow_html=True)
         _render_step_road(theme_no)
-        _render_timer(theme_no)
+        _ensure_step_timer(theme_no, step)
 
         if step == 1:
             if theme_no == 1:
@@ -1747,10 +1856,8 @@ with tab_audit:
                 """, unsafe_allow_html=True)
 
         elif step == 5:
-            st.markdown("<div class='content-card-v2'><span class='page-pill-v2'>STEP 5 · Practice Check</span><h4>실천 체크</h4><p>아래 항목을 모두 확인해야 다음 단계로 이동할 수 있습니다.</p></div>", unsafe_allow_html=True)
-            checks = T1_CHECKS if theme_no == 1 else T2_CHECKS
-            for key, label in checks.items():
-                st.checkbox(label, key=key)
+            st.markdown("<div class='content-card-v2'><span class='page-pill-v2'>STEP 5 · Practice Check</span><h4>실천 체크</h4><p>아래 항목을 모두 확인해야 다음 단계로 이동할 수 있습니다. 각 항목은 10초 확인 카운트다운을 거친 뒤 완료 처리됩니다.</p></div>", unsafe_allow_html=True)
+            _render_timed_checks(theme_no)
 
         elif step == 6:
             st.markdown("<div class='content-card-v2'><span class='page-pill-v2'>STEP 6 · Quiz & Clear</span><h4>이해도 확인 퀴즈</h4><p>정답률은 교육 이해도 확인용입니다. 모든 문항에 응답해야 테마를 완료할 수 있습니다.</p></div>", unsafe_allow_html=True)
@@ -1765,6 +1872,9 @@ with tab_audit:
                 st.radio("Q7. 협력사의 기술자료를 요구할 때 가장 적절한 기준은?", [SELECT_PLACEHOLDER, "업무에 필요하면 자유롭게 요구한다", "정당한 사유와 절차에 따라 요구하고 목적 범위 내에서만 사용한다", "받은 자료는 유사 업무에도 사용할 수 있다"], key="t2_v2_q3")
                 st.radio("Q8. 고객 개인정보가 포함된 파일을 개인 메일로 보내는 행위에 대한 가장 적절한 판단은?", [SELECT_PLACEHOLDER, "편의를 위해 가능하다", "원칙적으로 금지되며 내부 보안 기준을 따라야 한다", "암호 없이 보내도 된다"], key="t2_v2_q4")
                 st.radio("Q9. 정보시스템 ID/PW 관리 기준으로 가장 적절한 것은?", [SELECT_PLACEHOLDER, "팀 업무 편의를 위해 공유한다", "공용 메모장에 적어둔다", "공유하지 않고 개인별 계정과 권한 기준을 준수한다"], key="t2_v2_q5")
+
+        if step in TIMED_STEPS:
+            _render_step_timer(theme_no, step)
 
         # Status pills
         checked = _checks_done(theme_no)
@@ -1784,6 +1894,7 @@ with tab_audit:
             if st.button("◀ 이전", use_container_width=True, key=f"june_v2_prev_{theme_no}_{step}"):
                 if step > 1:
                     st.session_state["june_v2_step"] = step - 1
+                    _ensure_step_timer(theme_no, step - 1)
                 elif theme_no == 2:
                     st.session_state["june_v2_view"] = "theme1"
                     st.session_state["june_v2_theme"] = 1
@@ -1807,15 +1918,21 @@ with tab_audit:
                             st.session_state["june_v2_view"] = "theme2"
                             st.session_state["june_v2_theme"] = 2
                             st.session_state["june_v2_step"] = 1
-                            st.session_state.setdefault("june_v2_theme2_started_at", time.time())
+                            _ensure_step_timer(2, 1)
                         else:
                             st.session_state["june_v2_theme2_done"] = True
                             st.session_state["june_v2_view"] = "event"
                         st.rerun()
                 else:
-                    _mark_step_done(theme_no, step)
-                    st.session_state["june_v2_step"] = min(6, step + 1)
-                    st.rerun()
+                    if step in TIMED_STEPS and not _step_time_met(theme_no, step):
+                        remain = _step_remaining(theme_no, step)
+                        st.warning(f"최소 학습시간 100초를 충족해야 다음 단계로 이동할 수 있습니다. 현재 {remain}초 남았습니다.")
+                    else:
+                        _mark_step_done(theme_no, step)
+                        next_step = min(6, step + 1)
+                        st.session_state["june_v2_step"] = next_step
+                        _ensure_step_timer(theme_no, next_step)
+                        st.rerun()
 
     # Main content view
     if st.session_state.get("june_v2_view") in ["theme1", "theme2"]:
@@ -1963,15 +2080,24 @@ with tab_audit:
                         "최종점수": final_score,
                         "수료상태": "수료",
                         "이벤트추첨대상": "대상",
-                        "비고": "감사실 주관 2026년 6월 컴플라이언스 인식제고 자율점검 교육 / 모바일 쿠폰 추첨 대상 포함 / Premium V2 순차형 교육",
+                        "비고": "감사실 주관 2026년 6월 컴플라이언스 인식제고 자율점검 교육 / 모바일 쿠폰 추첨 대상 포함 / Premium V3 단계별 100초·체크항목 10초 확인형 교육",
                     }
                     with st.spinner("6월 컴플라이언스 교육 수료 내역을 저장 중입니다..."):
                         success, save_msg = save_june_compliance_training_result(record)
                     if success:
                         st.session_state["june_training_saved"] = True
-                        st.success(f"✅ {name}님, {save_msg}")
+                        st.success(f"✅ {name}님, 최종 수료 제출이 완료되었습니다.")
                         st.balloons()
-                        st.info("수료자는 추후 별도 추첨을 통해 모바일 쿠폰 지급 대상에 포함됩니다. 감사실 교육에 참여해 주셔서 감사합니다.")
+                        st.info("교육 수료 및 이벤트 퀴즈 정보가 Google Sheet에 저장되었습니다. 5초 후 교육 초기 화면으로 이동합니다.")
+                        reset_ph = st.empty()
+                        for sec in range(5, 0, -1):
+                            reset_ph.markdown(
+                                f"<div class='timer-panel timer-panel-clear'>✅ 최종 제출 완료 · {sec}초 후 초기 화면으로 이동합니다.</div>",
+                                unsafe_allow_html=True,
+                            )
+                            time.sleep(1)
+                        st.session_state["june_force_reset_after_submit"] = True
+                        st.rerun()
                     else:
                         st.error(f"❌ 제출 실패: {save_msg}")
 
