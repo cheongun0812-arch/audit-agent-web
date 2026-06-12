@@ -1281,6 +1281,107 @@ with tab_audit:
 
     st.markdown("""
     <style>
+    /* =========================================================
+       ✅ 자율점검 탭 전용 서브메뉴: 외부 연계 시스템 바로가기
+       - 메인 탭과 구분되는 카드형 디자인
+       - 링크는 새 창(target=_blank)으로 열림
+       - 교육 진행/저장/타이머 로직에는 영향 없음
+       ========================================================= */
+    .selfcheck-link-panel {
+        background: linear-gradient(135deg, #F8FAFF 0%, #F0FDF4 100%);
+        border: 1px solid #C7D2FE;
+        border-left: 8px solid #7C3AED;
+        border-radius: 22px;
+        padding: 18px 20px;
+        margin: 12px 0 18px 0;
+        box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
+    }
+    .selfcheck-link-panel-title {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        margin-bottom: 12px;
+        color: #312E81;
+        font-weight: 950;
+        font-size: 1.08rem;
+        letter-spacing: -0.01em;
+    }
+    .selfcheck-submenu-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(220px, 1fr));
+        gap: 14px;
+    }
+    .selfcheck-submenu-card {
+        display: block;
+        min-height: 92px;
+        padding: 17px 18px;
+        border-radius: 20px;
+        text-decoration: none !important;
+        border: 1px solid rgba(255,255,255,0.72);
+        box-shadow: 0 8px 20px rgba(30, 41, 59, 0.09);
+        transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
+    }
+    .selfcheck-submenu-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 14px 30px rgba(30, 41, 59, 0.14);
+        filter: brightness(1.02);
+        text-decoration: none !important;
+    }
+    .selfcheck-submenu-card.risk {
+        background: linear-gradient(135deg, #EEF2FF 0%, #DBEAFE 100%);
+        color: #1E3A8A !important;
+    }
+    .selfcheck-submenu-card.qna {
+        background: linear-gradient(135deg, #ECFDF5 0%, #E0F2FE 100%);
+        color: #065F46 !important;
+    }
+    .selfcheck-submenu-card .submenu-eyebrow {
+        display: inline-block;
+        padding: 4px 9px;
+        border-radius: 999px;
+        background: rgba(255,255,255,0.68);
+        border: 1px solid rgba(15,23,42,0.06);
+        font-size: 0.78rem;
+        font-weight: 950;
+        margin-bottom: 8px;
+    }
+    .selfcheck-submenu-card .submenu-title {
+        font-size: 1.08rem;
+        font-weight: 950;
+        line-height: 1.35;
+        margin-bottom: 4px;
+    }
+    .selfcheck-submenu-card .submenu-desc {
+        font-size: 0.88rem;
+        font-weight: 750;
+        line-height: 1.42;
+        opacity: 0.86;
+    }
+    @media (max-width: 760px) {
+        .selfcheck-submenu-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+    </style>
+    <div class="selfcheck-link-panel">
+        <div class="selfcheck-link-panel-title">🔗 자율점검 연계 시스템 바로가기</div>
+        <div class="selfcheck-submenu-grid">
+            <a class="selfcheck-submenu-card risk" href="https://third-party-risk-assessment-9.netlify.app/" target="_blank" rel="noopener noreferrer">
+                <span class="submenu-eyebrow">External Link · New Window</span>
+                <div class="submenu-title">Third Party Risk Assessment</div>
+                <div class="submenu-desc">제3자 리스크 평가 시스템을 새 창에서 실행합니다.</div>
+            </a>
+            <a class="selfcheck-submenu-card qna" href="https://compliance-qna-search-portal.netlify.app/" target="_blank" rel="noopener noreferrer">
+                <span class="submenu-eyebrow">External Link · New Window</span>
+                <div class="submenu-title">Compliance Q&amp;A Portal</div>
+                <div class="submenu-desc">컴플라이언스 Q&amp;A 검색 포털을 새 창에서 실행합니다.</div>
+            </a>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("""
+    <style>
     /* 현장대리인 신고서 전용 화면 정돈 */
     .field-agent-hero {
         background: linear-gradient(135deg, #E8F5E9 0%, #E3F2FD 100%);
