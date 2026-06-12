@@ -2122,30 +2122,50 @@ with tab_audit:
         st.session_state["june_v2_scroll_top_requested"] = True
 
     def _render_training_scroll_top_if_requested() -> None:
-        """단계/테마 이동 후 이전 스크롤 위치가 남지 않도록 브라우저 화면을 상단으로 이동합니다."""
+        """단계/테마 이동 후 이전 스크롤 위치가 남지 않도록 현재 교육 화면의 시작점으로 이동합니다.
+
+        개선 포인트:
+        - 기존에는 페이지 최상단으로 smooth 이동하여 화면 중간이 잠깐 노출될 수 있었습니다.
+        - 이제는 교육 화면 시작 앵커(#june-v2-active-screen-top)를 우선 찾아 즉시 이동합니다.
+        - DOM 렌더링 지연에 대비해 여러 번 보정합니다.
+        """
         if st.session_state.pop("june_v2_scroll_top_requested", False):
             components.html(
                 """
                 <script>
-                const scrollTop = () => {
-                  try {
-                    const doc = window.parent.document;
-                    const candidates = [
-                      doc.querySelector('section.main'),
-                      doc.querySelector('[data-testid="stAppViewContainer"]'),
-                      doc.documentElement,
-                      doc.body
-                    ].filter(Boolean);
-                    candidates.forEach(el => {
-                      try { el.scrollTo({top: 0, left: 0, behavior: 'smooth'}); } catch(e) { el.scrollTop = 0; }
-                    });
-                    window.parent.scrollTo({top: 0, left: 0, behavior: 'smooth'});
-                  } catch(e) {
-                    try { window.scrollTo({top: 0, left: 0, behavior: 'smooth'}); } catch(err) {}
-                  }
-                };
-                setTimeout(scrollTop, 80);
-                setTimeout(scrollTop, 280);
+                (function() {
+                  const scrollToTrainingStart = () => {
+                    try {
+                      const doc = window.parent.document;
+                      const target = doc.getElementById('june-v2-active-screen-top');
+
+                      if (target) {
+                        try {
+                          target.scrollIntoView({behavior: 'auto', block: 'start', inline: 'nearest'});
+                          return;
+                        } catch(e) {}
+                      }
+
+                      const candidates = [
+                        doc.querySelector('section.main'),
+                        doc.querySelector('[data-testid="stAppViewContainer"]'),
+                        doc.documentElement,
+                        doc.body
+                      ].filter(Boolean);
+
+                      candidates.forEach(el => {
+                        try { el.scrollTo({top: 0, left: 0, behavior: 'auto'}); }
+                        catch(e) { try { el.scrollTop = 0; } catch(err) {} }
+                      });
+                      try { window.parent.scrollTo({top: 0, left: 0, behavior: 'auto'}); } catch(e) {}
+                    } catch(e) {
+                      try { window.scrollTo({top: 0, left: 0, behavior: 'auto'}); } catch(err) {}
+                    }
+                  };
+
+                  // Streamlit rerender 완료 시점 편차 보정
+                  [60, 180, 420, 800, 1200].forEach(delay => setTimeout(scrollToTrainingStart, delay));
+                })();
                 </script>
                 """,
                 height=0,
@@ -2175,7 +2195,8 @@ with tab_audit:
         started = st.session_state.get(_step_timer_key(theme_no, step_no))
         if not started:
             return 0
-        return int(time.time() - float(started))
+        # countdown_started_at을 warm-up 종료 시점으로 잡기 때문에 초기에는 미래 시간이 될 수 있습니다.
+        return max(0, int(time.time() - float(started)))
 
     def _step_remaining(theme_no: int, step_no: int) -> int:
         if step_no not in TIMED_STEPS:
@@ -2322,9 +2343,16 @@ with tab_audit:
         st.markdown("<div class='nav-help'>완료된 단계는 초록색, 현재 단계는 파란색, 아직 진행할 수 없는 단계는 회색으로 표시됩니다.</div>", unsafe_allow_html=True)
 
     def _render_step_timer(theme_no: int, step_no: int) -> None:
-        """STEP 1~4에 적용되는 60초 자동 카운트다운 게이지입니다."""
+        """STEP 1~4에 적용되는 60초 카운트다운 게이지입니다.
+
+        기존 구현은 Python time.sleep 루프가 60초 동안 스크립트를 붙잡아
+        Streamlit 화면이 이전 페이지를 회색/흐림 상태로 보여주는 현상이 있었습니다.
+        현재 구현은 브라우저에서 카운트다운을 표시하고, 서버는 시작 시간만 기록합니다.
+        따라서 Theme 1에서 Theme 2로 넘어갈 때 새 Theme 화면이 즉시 노출됩니다.
+        """
         if step_no not in TIMED_STEPS:
             return
+
         if step_no in set(_completed_steps(theme_no)):
             st.markdown(f"""
                 <div class="timer-live-wrap clear">
@@ -2337,46 +2365,140 @@ with tab_audit:
             """, unsafe_allow_html=True)
             return
 
-        ph = st.empty()
-        if not st.session_state.get(_step_warmup_key(theme_no, step_no), False):
-            for sec in range(STEP_WARMUP_SECONDS, 0, -1):
-                ph.markdown(f"""
-                    <div class="timer-live-wrap timer-warmup">
-                        <div class="timer-live-head">
-                            <div class="timer-live-left">{HOURGLASS_SVG}<span>STEP {step_no} 카운트다운 준비 중입니다.</span></div>
-                            <span class="timer-live-count">{sec}초 후 시작</span>
-                        </div>
-                        <div class="timer-bar-bg"><div class="timer-bar-fill" style="width:0%;"></div></div>
-                    </div>
-                """, unsafe_allow_html=True)
-                time.sleep(1)
-            st.session_state[_step_warmup_key(theme_no, step_no)] = True
-            st.session_state[_step_timer_key(theme_no, step_no)] = time.time()
+        now = time.time()
+        load_key = _step_load_key(theme_no, step_no)
+        timer_key = _step_timer_key(theme_no, step_no)
 
-        st.session_state.setdefault(_step_timer_key(theme_no, step_no), time.time())
-        while _step_remaining(theme_no, step_no) > 0:
-            elapsed = _step_elapsed(theme_no, step_no)
-            remain = _step_remaining(theme_no, step_no)
-            pct = min(100, int(elapsed / STEP_MIN_SECONDS * 100))
-            ph.markdown(f"""
-                <div class="timer-live-wrap">
-                    <div class="timer-live-head">
-                        <div class="timer-live-left">{HOURGLASS_SVG}<span>최소 학습시간 충족을 위한 60초 카운트다운</span></div>
-                        <span class="timer-live-count">{remain}초 남음</span>
-                    </div>
-                    <div class="timer-bar-bg"><div class="timer-bar-fill" style="width:{pct}%;"></div></div>
-                </div>
-            """, unsafe_allow_html=True)
-            time.sleep(1)
-        ph.markdown(f"""
-            <div class="timer-live-wrap clear">
-                <div class="timer-live-head">
-                    <div class="timer-live-left">✅ 최소 학습시간 충족 · STEP {step_no} 60초 학습 완료</div>
-                    <span class="timer-live-count">CLEAR</span>
-                </div>
-                <div class="timer-bar-bg"><div class="timer-bar-fill" style="width:100%;"></div></div>
+        load_at = float(st.session_state.setdefault(load_key, now))
+        countdown_start = float(st.session_state.setdefault(timer_key, load_at + STEP_WARMUP_SECONDS))
+        countdown_end = countdown_start + STEP_MIN_SECONDS
+
+        # warm-up이 이미 지난 상태로 재진입한 경우 표시 상태를 맞춰 둡니다.
+        if now >= countdown_start:
+            st.session_state[_step_warmup_key(theme_no, step_no)] = True
+
+        target_id = f"june_v2_timer_{theme_no}_{step_no}"
+        warmup_end_ms = int(countdown_start * 1000)
+        target_end_ms = int(countdown_end * 1000)
+        total_countdown_ms = int(STEP_MIN_SECONDS * 1000)
+        warmup_icon = HOURGLASS_SVG
+
+        components.html(f"""
+        <div id="{target_id}" class="timer-live-wrap timer-warmup">
+            <style>
+                #{target_id} {{
+                    background: linear-gradient(135deg, #EFF6FF 0%, #F8FAFC 100%);
+                    border: 1px solid #93C5FD;
+                    border-radius: 18px;
+                    padding: 15px 17px;
+                    color: #1E3A8A;
+                    font-weight: 850;
+                    margin: 14px 0 12px 0;
+                    box-shadow: 0 8px 20px rgba(37,99,235,0.08);
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+                    box-sizing: border-box;
+                }}
+                #{target_id}.clear {{
+                    background: linear-gradient(135deg, #ECFDF5 0%, #F0FDF4 100%);
+                    border-color:#86EFAC;
+                    color:#14532D;
+                }}
+                #{target_id} .timer-live-head {{
+                    display:flex;
+                    align-items:center;
+                    justify-content:space-between;
+                    gap:12px;
+                }}
+                #{target_id} .timer-live-left {{
+                    display:flex;
+                    align-items:center;
+                    gap:8px;
+                    font-weight:900;
+                    line-height:1.4;
+                }}
+                #{target_id} .timer-live-count {{
+                    background:#FFFFFF;
+                    color:#1D4ED8;
+                    border:1px solid #BFDBFE;
+                    border-radius:999px;
+                    padding:7px 12px;
+                    font-weight:950;
+                    min-width:78px;
+                    text-align:center;
+                    white-space:nowrap;
+                }}
+                #{target_id}.clear .timer-live-count {{
+                    color:#166534;
+                    border-color:#BBF7D0;
+                }}
+                #{target_id} .timer-bar-bg {{
+                    width:100%;
+                    background:#DBEAFE;
+                    height:14px;
+                    border-radius:999px;
+                    overflow:hidden;
+                    margin-top:9px;
+                }}
+                #{target_id} .timer-bar-fill {{
+                    height:14px;
+                    border-radius:999px;
+                    background: linear-gradient(90deg, #2563EB, #06B6D4, #22C55E);
+                    width:0%;
+                    transition: width 0.3s ease;
+                }}
+            </style>
+            <div class="timer-live-head">
+                <div class="timer-live-left"><span class="timer-icon">{warmup_icon}</span><span class="timer-title">STEP {step_no} 카운트다운 준비 중입니다.</span></div>
+                <span class="timer-live-count">준비 중</span>
             </div>
-        """, unsafe_allow_html=True)
+            <div class="timer-bar-bg"><div class="timer-bar-fill"></div></div>
+        </div>
+        <script>
+        (function() {{
+            const root = document.getElementById("{target_id}");
+            if (!root) return;
+            const title = root.querySelector('.timer-title');
+            const count = root.querySelector('.timer-live-count');
+            const bar = root.querySelector('.timer-bar-fill');
+            const warmupEnd = {warmup_end_ms};
+            const targetEnd = {target_end_ms};
+            const total = {total_countdown_ms};
+
+            function update() {{
+                const now = Date.now();
+                if (now < warmupEnd) {{
+                    const left = Math.max(1, Math.ceil((warmupEnd - now) / 1000));
+                    root.classList.remove('clear');
+                    title.textContent = `STEP {step_no} 카운트다운 준비 중입니다.`;
+                    count.textContent = `${{left}}초 후 시작`;
+                    bar.style.width = '0%';
+                    return;
+                }}
+
+                const remainMs = Math.max(0, targetEnd - now);
+                const remain = Math.ceil(remainMs / 1000);
+                const pct = Math.min(100, Math.max(0, Math.round(((total - remainMs) / total) * 100)));
+
+                if (remainMs <= 0) {{
+                    root.classList.add('clear');
+                    title.textContent = `✅ 최소 학습시간 충족 · STEP {step_no} 60초 학습 완료`;
+                    count.textContent = 'CLEAR';
+                    bar.style.width = '100%';
+                }} else {{
+                    root.classList.remove('clear');
+                    title.textContent = '최소 학습시간 충족을 위한 60초 카운트다운';
+                    count.textContent = `${{remain}}초 남음`;
+                    bar.style.width = `${{pct}}%`;
+                }}
+            }}
+            update();
+            const interval = setInterval(() => {{
+                update();
+                if (Date.now() >= targetEnd) clearInterval(interval);
+            }}, 500);
+        }})();
+        </script>
+        """, height=92)
 
     def _render_timed_checks(theme_no: int) -> None:
         """STEP 5 실천 체크 항목별 10초 모래시계 확인 절차입니다."""
@@ -2768,6 +2890,9 @@ with tab_audit:
                 st.rerun()
 
     else:
+        # 단계/테마 전환 시 브라우저가 이 지점을 교육 화면의 시작점으로 인식하도록 하는 앵커입니다.
+        # 특히 Theme 1 CLEAR 후 Theme 2 시작 시, 이전 퀴즈 화면의 중간 위치가 남지 않도록 합니다.
+        st.markdown("<div id='june-v2-active-screen-top' style='height:1px; scroll-margin-top:16px;'></div>", unsafe_allow_html=True)
         _render_quest_cards(show_buttons=True)
 
         if st.session_state.get("june_v2_view") in ["theme1", "theme2"]:
