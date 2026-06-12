@@ -15,6 +15,8 @@ import base64
 import datetime
 import pytz
 import pandas as pd
+import re
+from urllib.parse import urlparse, parse_qs
 
 import plotly.graph_objects as go
 import plotly.express as px
@@ -392,7 +394,7 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown(
-        "<div style='color:white; text-align:center; font-size:12px; opacity:0.8;'>ktMOS북부 Audit AI Solution © 2026<br>Engine: Gemini 1.5 Pro</div>",
+        "<div style='color:white; text-align:center; font-size:12px; opacity:0.8;'>ktMOS북부 Audit AI Solution © 2026<br>Engine: Gemini 2.5 / Search Grounding Ready</div>",
         unsafe_allow_html=True,
     )
 
@@ -545,38 +547,177 @@ def save_audit_result(emp_id, name, unit, dept, answer, sheet_name):
     except Exception as e:
         return False, str(e)
 
-def get_model():
+def _clean_model_name(model_name: str) -> str:
+    """Gemini SDK가 반환하는 'models/...' 형식과 순수 모델명을 모두 안전하게 처리합니다."""
+    return str(model_name or "").replace("models/", "").strip()
+
+
+def _select_available_model(task: str = "balanced") -> str:
+    """업무 성격별 우선 모델을 선택하되, 계정에서 지원하지 않으면 자동 fallback 합니다."""
+    task = (task or "balanced").lower()
+    preference_map = {
+        "legal": ["gemini-2.5-pro", "gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"],
+        "report": ["gemini-2.5-pro", "gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"],
+        "summary": ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"],
+        "chat": ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"],
+        "balanced": ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"],
+    }
+    preferred = preference_map.get(task, preference_map["balanced"])
+
+    try:
+        available_models = [
+            _clean_model_name(m.name)
+            for m in genai.list_models()
+            if "generateContent" in getattr(m, "supported_generation_methods", [])
+        ]
+        for target in preferred:
+            for model_name in available_models:
+                if target in model_name:
+                    return model_name
+        if available_models:
+            return available_models[0]
+    except Exception:
+        # list_models 실패 시에도 아래 기본값으로 시도합니다.
+        pass
+
+    return preferred[-1]
+
+
+def get_model(task: str = "balanced", temperature: float = 0.2):
+    """기존 get_model 호환성을 유지하면서 최신 Gemini 모델을 우선 사용합니다."""
     if "api_key" in st.session_state:
         genai.configure(api_key=st.session_state["api_key"])
+
+    model_name = _select_available_model(task)
     try:
-        available_models = [m.name for m in genai.list_models() if "generateContent" in m.supported_generation_methods]
-        for m in available_models:
-            if "1.5-pro" in m:
-                return genai.GenerativeModel(m)
-        for m in available_models:
-            if "1.5-flash" in m:
-                return genai.GenerativeModel(m)
-        if available_models:
-            return genai.GenerativeModel(available_models[0])
+        return genai.GenerativeModel(
+            model_name,
+            generation_config={
+                "temperature": temperature,
+                "top_p": 0.9,
+                "max_output_tokens": 8192,
+            },
+        )
+    except Exception:
+        return genai.GenerativeModel("gemini-1.5-flash")
+
+
+def _extract_response_text(response) -> str:
+    """Gemini 응답 객체에서 텍스트를 최대한 안전하게 추출합니다."""
+    try:
+        return response.text or ""
     except Exception:
         pass
-    return genai.GenerativeModel("gemini-1.5-flash")
+    try:
+        parts = response.candidates[0].content.parts
+        return "\n".join(str(getattr(p, "text", "")) for p in parts if getattr(p, "text", ""))
+    except Exception:
+        return ""
+
+
+def _extract_grounding_sources(response) -> list[dict]:
+    """Google Search Grounding 결과의 출처를 사용자에게 보여주기 좋은 형태로 정리합니다."""
+    sources = []
+    try:
+        metadata = getattr(response.candidates[0], "grounding_metadata", None)
+        chunks = getattr(metadata, "grounding_chunks", []) if metadata else []
+        for chunk in chunks:
+            web = getattr(chunk, "web", None)
+            if not web:
+                continue
+            title = getattr(web, "title", "") or "출처"
+            uri = getattr(web, "uri", "") or ""
+            if uri and not any(s.get("uri") == uri for s in sources):
+                sources.append({"title": title, "uri": uri})
+    except Exception:
+        pass
+    return sources[:8]
+
+
+def generate_ai_response(content, task: str = "balanced", use_search: bool = False, temperature: float = 0.2):
+    """공통 AI 호출 함수: 검색 보강 요청 시 Google Search Grounding을 우선 시도하고 실패하면 일반 생성으로 fallback 합니다."""
+    model = get_model(task=task, temperature=temperature)
+    search_warning = None
+
+    if use_search:
+        # google-generativeai 구버전/신버전 호환을 위해 두 가지 표기를 순차 시도합니다.
+        for tool_name in ("google_search_retrieval", "google_search"):
+            try:
+                response = model.generate_content(content, tools=tool_name)
+                return response, True, None
+            except Exception as e:
+                search_warning = str(e)
+
+    response = model.generate_content(content)
+    return response, False, search_warning
+
+
+def render_ai_response(response, grounded: bool = False, warning: str | None = None) -> None:
+    """AI 결과와 검색 출처를 공통 UI로 출력합니다."""
+    answer = _extract_response_text(response)
+    if answer:
+        st.markdown(answer)
+    else:
+        st.warning("AI 응답 텍스트를 추출하지 못했습니다. 입력 자료나 모델 응답 제한 여부를 확인해 주세요.")
+
+    sources = _extract_grounding_sources(response)
+    if grounded and sources:
+        with st.expander("🔎 검색 기반 참고 출처", expanded=False):
+            for i, src in enumerate(sources, 1):
+                st.markdown(f"{i}. [{src['title']}]({src['uri']})")
+    elif warning:
+        st.caption("ℹ️ 검색 보강 호출이 실패하여 일반 AI 분석으로 대체되었습니다. 패키지 버전 또는 API 권한을 확인해 주세요.")
+
+
+def truncate_text(text: str, limit: int = 45000) -> str:
+    text = str(text or "")
+    if len(text) <= limit:
+        return text
+    return text[:limit] + "\n\n[※ 입력 자료가 길어 앞부분 기준으로 일부만 반영되었습니다.]"
+
 
 def read_file(uploaded_file):
     content = ""
     try:
-        if uploaded_file.name.endswith(".txt"):
-            content = uploaded_file.getvalue().decode("utf-8")
-        elif uploaded_file.name.endswith(".pdf"):
+        name = uploaded_file.name.lower()
+        if name.endswith(".txt"):
+            raw = uploaded_file.getvalue()
+            for enc in ("utf-8", "cp949", "euc-kr"):
+                try:
+                    content = raw.decode(enc)
+                    break
+                except Exception:
+                    continue
+        elif name.endswith(".pdf"):
             reader = PyPDF2.PdfReader(uploaded_file)
-            for page in reader.pages:
-                content += (page.extract_text() or "") + "\n"
-        elif uploaded_file.name.endswith(".docx"):
+            for idx, page in enumerate(reader.pages, 1):
+                page_text = page.extract_text() or ""
+                content += f"\n\n[Page {idx}]\n{page_text}"
+        elif name.endswith(".docx"):
             doc = Document(uploaded_file)
-            content = "\n".join([para.text for para in doc.paragraphs])
+            content = "\n".join([para.text for para in doc.paragraphs if para.text])
+        elif name.endswith(".csv"):
+            df = pd.read_csv(uploaded_file)
+            content = df.head(200).to_markdown(index=False)
+        elif name.endswith((".xlsx", ".xls")):
+            df = pd.read_excel(uploaded_file)
+            content = df.head(200).to_markdown(index=False)
     except Exception:
         return None
-    return content
+    return content.strip() if content else None
+
+
+def read_multiple_files(files, max_each: int = 12000) -> str:
+    """여러 파일을 감사보고서/법률검토 프롬프트에 안전하게 합칩니다."""
+    chunks = []
+    for f in files or []:
+        body = read_file(f)
+        if body:
+            chunks.append(f"\n\n===== 파일: {getattr(f, 'name', 'uploaded')} =====\n{truncate_text(body, max_each)}")
+        else:
+            chunks.append(f"\n\n===== 파일: {getattr(f, 'name', 'uploaded')} =====\n[텍스트 추출 실패 또는 지원되지 않는 형식]")
+    return "\n".join(chunks).strip()
+
 
 def process_media_file(uploaded_file):
     try:
@@ -597,6 +738,7 @@ def process_media_file(uploaded_file):
         return myfile
     except Exception:
         return None
+
 
 def download_and_upload_youtube_audio(url):
     if yt_dlp is None:
@@ -619,24 +761,195 @@ def download_and_upload_youtube_audio(url):
     except Exception:
         return None
 
+
+def extract_youtube_id(url: str) -> str | None:
+    """watch?v=, youtu.be, shorts, embed 형식까지 처리합니다."""
+    try:
+        parsed = urlparse(url)
+        host = parsed.netloc.lower()
+        path = parsed.path.strip("/")
+        if "youtube.com" in host:
+            qs = parse_qs(parsed.query)
+            if qs.get("v"):
+                return qs["v"][0]
+            parts = path.split("/")
+            if parts and parts[0] in {"shorts", "embed", "live"} and len(parts) > 1:
+                return parts[1]
+        if "youtu.be" in host and path:
+            return path.split("/")[0]
+    except Exception:
+        pass
+    m = re.search(r"(?:v=|youtu\.be/|shorts/|embed/)([A-Za-z0-9_-]{8,})", url or "")
+    return m.group(1) if m else None
+
+
 def get_youtube_transcript(url):
     try:
-        video_id = url.split("v=")[-1].split("&")[0]
+        video_id = extract_youtube_id(url)
+        if not video_id:
+            return None
         transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=["ko", "en"])
-        return " ".join([t["text"] for t in transcript])
+        return " ".join([t.get("text", "") for t in transcript])
     except Exception:
         return None
 
+
 def get_web_content(url):
     try:
-        headers = {"User-Agent": "Mozilla/5.0"}
-        response = requests.get(url, headers=headers, timeout=15)
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"
+        }
+        response = requests.get(url, headers=headers, timeout=20)
+        response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
-        for script in soup(["script", "style"]):
-            script.decompose()
-        return soup.get_text()[:10000]
+        for tag in soup(["script", "style", "noscript", "header", "footer", "nav", "aside"]):
+            tag.decompose()
+        title = soup.title.get_text(" ", strip=True) if soup.title else ""
+        meta_desc = ""
+        desc = soup.find("meta", attrs={"name": "description"})
+        if desc and desc.get("content"):
+            meta_desc = desc.get("content", "")
+        text = soup.get_text("\n", strip=True)
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        return f"URL: {url}\n제목: {title}\n설명: {meta_desc}\n\n본문:\n{text[:25000]}"
     except Exception:
         return None
+
+
+def build_legal_review_prompt(content: str, analysis_depth: str, doc_type: str, focus_area: str, company_position: str) -> str:
+    return f"""[역할]
+당신은 대한민국 기업 감사실을 보조하는 법률·컴플라이언스 검토 전문가입니다.
+
+[검토 대상]
+- 문서 유형: {doc_type}
+- 회사 입장: {company_position}
+- 분석 수준: {analysis_depth}
+- 중점 검토: {focus_area}
+
+[작성 원칙]
+1. 업로드 문서에서 확인되는 사실과 AI의 법률적 판단/추정을 명확히 구분하세요.
+2. 대한민국 법령·판례·공정거래/하도급/개인정보/근로관계 등 관련 기준을 고려하되, 근거가 불충분하면 '추가 확인 필요'로 표시하세요.
+3. 실무자가 바로 사용할 수 있도록 '위험 조항', '리스크 이유', '개선 문안'을 구체적으로 제시하세요.
+4. 과도하게 단정하지 말고, 감사·법무 검토 문서에 적합한 객관적 문체로 작성하세요.
+
+[출력 형식]
+## 1. 핵심 결론
+- 즉시 수정 필요 / 협의 필요 / 수용 가능 항목을 요약
+
+## 2. 조항별 리스크 검토표
+| 우선순위 | 원문 또는 쟁점 | 리스크 등급 | 문제점 | 관련 법령·판례·가이드라인 방향 | 개선 의견 |
+
+## 3. 상대방에게 제시할 수정 문안
+- 조항별로 대체 문구 작성
+
+## 4. 내부 검토 메모
+- 감사실/법무/사업부가 추가 확인해야 할 사항
+
+## 5. 한계 및 추가 확인 필요사항
+- 문서에 없는 사실, 최신 법령 확인 필요사항, 외부 변호사 검토 필요사항
+
+[입력 문서]
+{truncate_text(content, 55000)}
+"""
+
+
+def build_audit_report_prompt(mode: str, case_title: str, case_scope: str, report_tone: str, materials: str, regulations_text: str, refs_text: str) -> str:
+    if "초안" in mode:
+        task = "감사보고서 초안을 생성"
+        output = "사건개요, 확인자료, 주요 사실관계, 쟁점, 판단, 리스크, 조치의견, 후속관리 항목을 포함한 공식 감사보고서 초안"
+    else:
+        task = "감사보고서 초안을 검증·교정"
+        output = "오탈자·논리비약·근거부족·표현위험·형식오류를 지적하고, 개선본과 수정 사유표를 제시"
+
+    return f"""[역할]
+당신은 기업 감사실의 감사보고서 품질관리 담당자입니다.
+
+[작업]
+- 작업 모드: {mode}
+- 수행 작업: {task}
+- 사건명: {case_title}
+- 문서 톤: {report_tone}
+
+[사건 개요]
+{case_scope}
+
+[작성 원칙]
+1. 사실관계, 판단, 의견을 구분하세요.
+2. 업로드 자료에 없는 사실은 새로 만들지 말고 '자료상 확인 불가'로 표시하세요.
+3. 피조사자·관련자의 명예, 개인정보, 노동관계 리스크를 고려하여 표현을 중립적으로 조정하세요.
+4. 내부 결재문서로 활용 가능한 수준의 문장으로 작성하세요.
+5. 불리한 단정 표현은 '확인됨/확인 필요/소명 필요/자료상 불명확' 등으로 정리하세요.
+
+[출력 형식]
+## 1. {output}
+## 2. 핵심 쟁점 및 증거 연결표
+| 쟁점 | 확인자료 | 판단 가능 수준 | 보완 필요자료 |
+## 3. 표현 리스크 점검
+| 문장/표현 | 리스크 | 권장 표현 |
+## 4. 후속 조치안
+## 5. 추가 확인 필요사항
+
+[감사 자료]
+{truncate_text(materials, 50000)}
+
+[회사 규정/판단 기준]
+{truncate_text(regulations_text, 25000)}
+
+[참고 보고서 형식]
+{truncate_text(refs_text, 15000)}
+"""
+
+
+def build_chat_prompt(user_input: str, history: list[dict], mode: str) -> str:
+    recent = history[-10:] if history else []
+    history_text = "\n".join([f"{m.get('role')}: {m.get('content')}" for m in recent])
+    return f"""[시스템 역할]
+당신은 대한민국 기업 감사실을 지원하는 Professional Legal & Audit Assistant입니다.
+감사, 컴플라이언스, 계약 검토, 개인정보, 하도급, 공정거래, 직장 내 괴롭힘, 내부통제 이슈에 대해 실무형으로 답변합니다.
+
+[응답 원칙]
+1. 결론을 먼저 제시하고, 근거와 실무 조치 순서로 설명하세요.
+2. 법률·판례·행정해석이 필요한 질문은 '확인된 근거'와 '추가 확인 필요'를 구분하세요.
+3. 단정이 위험한 사안은 리스크와 방어 전략을 함께 제시하세요.
+4. 최종 법률 판단은 사내 법무/외부 변호사 검토가 필요하다는 점을 짧게 고지하세요.
+5. 답변 마지막에는 '추가 확인 필요사항'을 1~2문장 포함하세요.
+
+[현재 모드]
+{mode}
+
+[최근 대화]
+{history_text}
+
+[사용자 질문]
+{user_input}
+"""
+
+
+def build_summary_prompt(summary_mode: str, output_style: str, source_hint: str, body_text: str) -> str:
+    return f"""[역할]
+당신은 기업 감사실과 컴플라이언스 부서를 위한 스마트 브리핑 분석가입니다.
+
+[요약 대상]
+- 요약 모드: {summary_mode}
+- 출력 방식: {output_style}
+- 출처/입력: {source_hint}
+
+[작성 원칙]
+1. 사실, 주장, 의견, 추정을 구분하세요.
+2. 날짜·기관·당사자·수치가 있으면 빠뜨리지 마세요.
+3. 회사 업무상 영향, 컴플라이언스 리스크, 후속 조치 필요사항을 별도로 정리하세요.
+4. 원문에서 확인되지 않는 내용은 만들지 말고 '원문상 확인 불가'로 표시하세요.
+
+[출력 형식]
+## 1. 5줄 핵심 요약
+## 2. 상세 내용
+## 3. 업무상 의미/리스크
+## 4. 후속 조치 체크리스트
+## 5. 원문 한계 및 추가 확인사항
+
+[입력 내용]
+{truncate_text(body_text, 55000)}
+"""
 
 # ==========================================
 # ✅ (요청 2) 사번 검증 유틸
@@ -764,6 +1077,63 @@ try:
         campaign_info = get_current_campaign_info(_ss_for_campaign, _now_kst)
 except Exception:
     pass
+
+# ✅ 상단 메뉴 카드형 디자인: 선택된 탭이 명확하게 보이도록 개선
+st.markdown("""
+<style>
+/* Streamlit 탭을 카드형 메뉴처럼 보이게 개선 */
+div[data-testid="stTabs"] > div[role="tablist"] {
+    gap: 10px !important;
+    background: linear-gradient(135deg, #EEF4FF 0%, #F8FAFC 100%) !important;
+    border: 1px solid #D8E3F2 !important;
+    border-radius: 20px !important;
+    padding: 10px !important;
+    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08) !important;
+}
+div[data-testid="stTabs"] button[role="tab"] {
+    min-height: 54px !important;
+    padding: 10px 16px !important;
+    border-radius: 16px !important;
+    border: 1px solid #D8E3F2 !important;
+    background: #FFFFFF !important;
+    color: #334155 !important;
+    font-weight: 900 !important;
+    box-shadow: 0 5px 14px rgba(15, 23, 42, 0.06) !important;
+    transition: all 0.18s ease-in-out !important;
+}
+div[data-testid="stTabs"] button[role="tab"] p {
+    font-size: 1.02rem !important;
+    font-weight: 950 !important;
+    margin: 0 !important;
+}
+div[data-testid="stTabs"] button[role="tab"]:hover {
+    transform: translateY(-1px) !important;
+    border-color: #60A5FA !important;
+    box-shadow: 0 9px 20px rgba(37, 99, 235, 0.13) !important;
+}
+div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
+    background: linear-gradient(135deg, #1D4ED8 0%, #0EA5E9 100%) !important;
+    color: #FFFFFF !important;
+    border-color: #38BDF8 !important;
+    box-shadow: 0 12px 28px rgba(37, 99, 235, 0.28) !important;
+    transform: translateY(-2px) !important;
+}
+div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] p,
+div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] * {
+    color: #FFFFFF !important;
+    -webkit-text-fill-color: #FFFFFF !important;
+}
+div[data-testid="stTabs"] button[role="tab"][aria-selected="false"] p,
+div[data-testid="stTabs"] button[role="tab"][aria-selected="false"] * {
+    color: #334155 !important;
+    -webkit-text-fill-color: #334155 !important;
+}
+/* 선택된 탭 하단 기본 라인 숨김 */
+div[data-testid="stTabs"] button[role="tab"]::after {
+    display: none !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
 tab_audit, tab_doc, tab_chat, tab_summary, tab_admin = st.tabs([
     "✅ 자율점검", "📄 법률 검토", "💬 AI 에이전트(챗봇)", "📰 스마트 요약", "🔒 관리자 모드"
@@ -2474,65 +2844,82 @@ with tab_audit:
 # --- [Tab 2: 법률 리스크/규정/계약 검토 & 감사보고서 작성] ---
 # --- [Tab 2: 법률 리스크/규정/계약 검토 & 감사보고서 작성] ---
 with tab_doc:
-    st.markdown("### 📄 법률 리스크(계약서)·규정 검토 / 감사보고서 작성·검증")
+    st.markdown("### 📄 법률 검토 · 감사보고서 작성/검증")
 
     if "api_key" not in st.session_state:
         st.warning("🔒 로그인 후 이용 가능합니다.")
     else:
-        # 2-레벨 메뉴: 커리큘럼 1(법률 리스크) / 커리큘럼 2(감사보고서)
-        cur1, cur2 = st.tabs(["⚖️ 커리큘럼 1: 법률 리스크 심층 검토", "🔍 커리큘럼 2: 감사보고서 작성·검증"])
+        st.markdown("""
+        <div class="audit-message-v2">
+            <h4>🧭 AI 검토 품질 업그레이드 적용</h4>
+            <p>최신 Gemini 모델 우선 선택, 검색 보강 옵션, 조항별 리스크 표, 수정문안, 감사보고서 품질검증 구조를 적용했습니다. 자율점검 기능은 수정하지 않았습니다.</p>
+        </div>
+        """, unsafe_allow_html=True)
 
-        # -------------------------
-        # ⚖️ 커리큘럼 1: 법률 리스크 심층 검토
-        # -------------------------
+        cur1, cur2 = st.tabs(["⚖️ 법률 리스크 심층 검토", "🔍 감사보고서 작성·검증"])
+
         with cur1:
             st.markdown("#### ⚖️ 법률 리스크 정밀 검토")
-            st.caption("PDF/Word/TXT 파일을 업로드하면, 핵심 쟁점·리스크·개선안을 구조적으로 정리합니다.")
+            st.caption("계약서·규정·공문·검토자료를 업로드하면 쟁점, 리스크, 근거 방향, 수정문안을 구조적으로 정리합니다.")
 
             uploaded_file = st.file_uploader("파일 업로드 (PDF, Word, TXT)", type=["txt", "pdf", "docx"], key="cur1_file")
 
-            analysis_depth = st.selectbox(
-                "분석 수준",
-                ["핵심 요약", "리스크 식별(중점)", "조항/근거 중심(가능 범위 내)"],
-                index=1,
-                key="cur1_depth"
+            col_a, col_b = st.columns(2)
+            with col_a:
+                doc_type = st.selectbox(
+                    "문서 유형",
+                    ["계약서", "약관/일반조건", "사내 규정", "공문/통지문", "감사·조사 자료", "기타"],
+                    index=0,
+                    key="cur1_doc_type"
+                )
+                analysis_depth = st.selectbox(
+                    "분석 수준",
+                    ["핵심 요약", "리스크 식별(중점)", "조항/근거 중심(심층)", "수정문안 중심"],
+                    index=2,
+                    key="cur1_depth"
+                )
+            with col_b:
+                company_position = st.selectbox(
+                    "검토 관점",
+                    ["우리 회사 입장", "갑/발주자 입장", "을/수급자 입장", "중립 검토"],
+                    index=0,
+                    key="cur1_position"
+                )
+                focus_area = st.selectbox(
+                    "중점 분야",
+                    ["전체 리스크", "계약대금/지급조건", "손해배상/면책", "하도급/공정거래", "개인정보/정보보호", "노무/안전보건", "부패방지/이해충돌"],
+                    index=0,
+                    key="cur1_focus"
+                )
+
+            use_search = st.toggle(
+                "🔎 최신 법령·판례·가이드 검색 보강 사용",
+                value=True,
+                key="cur1_search",
+                help="Gemini API의 Google Search Grounding을 우선 시도합니다. 패키지/계정에서 지원되지 않으면 일반 분석으로 대체됩니다."
             )
 
-            if st.button("🚀 분석 시작", use_container_width=True, key="cur1_run"):
+            if st.button("🚀 법률 리스크 분석 시작", use_container_width=True, key="cur1_run"):
                 if not uploaded_file:
                     st.warning("⚠️ 먼저 파일을 업로드해주세요.")
                 else:
                     content = read_file(uploaded_file)
                     if not content:
-                        st.error("❌ 파일에서 텍스트를 추출하지 못했습니다.")
+                        st.error("❌ 파일에서 텍스트를 추출하지 못했습니다. 스캔 PDF인 경우 OCR 처리 후 다시 업로드해 주세요.")
                     else:
-                        with st.spinner("🧠 AI가 분석 중입니다..."):
+                        with st.spinner("🧠 법률·컴플라이언스 관점에서 심층 분석 중입니다..."):
                             try:
-                                prompt = f"""[역할] 법률/준법 리스크 심층 검토 전문가
-[작업] 법률 리스크 정밀 검토
-[분석 수준] {analysis_depth}
-
-[작성 원칙]
-- 사실과 의견을 구분해 작성
-- 근거가 부족하면 '근거 미확인'으로 표시
-- 회사에 불리할 수 있는 문구(단정/추정)는 피하고, 조건부 표현 사용
-
-[입력 문서]
-{content[:30000]}
-"""
-                                res = get_model().generate_content(prompt)
+                                prompt = build_legal_review_prompt(content, analysis_depth, doc_type, focus_area, company_position)
+                                response, grounded, warning = generate_ai_response(prompt, task="legal", use_search=use_search, temperature=0.15)
                                 st.success("✅ 분석 완료")
-                                st.markdown(res.text)
+                                render_ai_response(response, grounded=grounded, warning=warning)
                             except Exception as e:
                                 st.error(f"오류: {e}")
 
-        # -------------------------
-        # 🔍 커리큘럼 2: 감사보고서 작성·검증 (Multi-Source Upload)
-        # -------------------------
         with cur2:
-            st.markdown("#### 🔍 감사보고서 작성·검증 (Multi-Source Upload)")
+            st.markdown("#### 🔍 감사보고서 작성·검증")
+            st.caption("면담자료, 증거자료, 회사 규정, 기존 보고서를 바탕으로 감사보고서 초안 작성 또는 품질검증을 수행합니다.")
 
-            # ✅ 작업 모드 선택(선택에 따라 필요한 입력만 노출/활성화)
             mode = st.radio(
                 "작업 모드",
                 ["🧾 감사보고서 초안 생성", "✅ 감사보고서 검증·교정(오탈자/논리/형식)"],
@@ -2541,94 +2928,61 @@ with tab_doc:
             )
             is_draft_mode = "초안" in mode
 
-            # ✅ (초기화) 모드별로 정의되지 않을 수 있는 변수들
+            with st.expander("🔐 보안·주의사항", expanded=False):
+                st.markdown(
+                    "- 민감정보는 업로드 전 내부 보안 기준에 따라 비식별 처리하는 것이 안전합니다.\n"
+                    "- 본 기능은 감사 판단을 보조하는 도구이며, 최종 판단·결재 책임은 감사실에 있습니다.\n"
+                    "- 자료에 없는 사실은 생성하지 않도록 프롬프트에 제한을 두었습니다."
+                )
+
             interview_audio = None
             interview_transcript = None
             evidence_files = []
             draft_text = ""
             draft_file = None
 
-            st.caption("선택한 작업 모드에 따라 아래 입력 항목이 자동으로 바뀝니다.")
-            with st.expander("🔐 보안·주의사항(필독)", expanded=False):
-                st.markdown(
-                    "- 민감정보(주민등록번호/계좌/건강/징계대상 실명 등)는 업로드 전 **내부 보안 기준**을 반드시 확인하세요.\n"
-                    "- 본 기능은 **감사 판단을 보조**하는 도구이며, 최종 판단·결재 책임은 감사실에 있습니다.\n"
-                    "- 규정 근거는 업로드된 자료에서 확인되는 내용만 인용하도록 설계되었습니다."
-                )
-
             if is_draft_mode:
-                st.markdown("### ① 감사 자료 입력 (초안 생성에 사용)")
+                st.markdown("### ① 감사 자료 입력")
                 cL, cR = st.columns(2)
-
                 with cL:
-                    interview_audio = st.file_uploader(
-                        "🎧 면담 음성 (mp3/wav/mp4) — 선택",
-                        type=["mp3", "wav", "mp4"],
-                        key="cur2_audio"
-                    )
-                    interview_transcript = st.file_uploader(
-                        "📝 면담 녹취(텍스트/문서) — 권장",
-                        type=["txt", "pdf", "docx"],
-                        key="cur2_transcript"
-                    )
-
+                    interview_audio = st.file_uploader("🎧 면담 음성(mp3/wav/mp4) — 선택", type=["mp3", "wav", "mp4"], key="cur2_audio")
+                    interview_transcript = st.file_uploader("📝 면담 녹취/메모(PDF/DOCX/TXT) — 권장", type=["txt", "pdf", "docx"], key="cur2_transcript")
                 with cR:
                     evidence_files = st.file_uploader(
-                        "📂 조사·증거/확인 자료 — 권장(복수 업로드 가능)",
-                        type=["pdf", "png", "jpg", "jpeg", "xlsx", "csv", "txt", "docx"],
+                        "📂 조사·증거/확인 자료 — 복수 업로드 가능",
+                        type=["pdf", "png", "jpg", "jpeg", "xlsx", "xls", "csv", "txt", "docx"],
                         accept_multiple_files=True,
                         key="cur2_evidence"
                     ) or []
-
             else:
-                st.markdown("### ① 검증 대상 보고서 입력 (검증·교정에 사용)")
+                st.markdown("### ① 검증 대상 보고서 입력")
                 cL, cR = st.columns(2)
-
                 with cL:
-                    draft_text = st.text_area(
-                        "검증할 감사보고서(초안/기존본) — 붙여넣기",
-                        height=220,
-                        key="cur2_draft"
-                    )
-
+                    draft_text = st.text_area("검증할 감사보고서 붙여넣기", height=230, key="cur2_draft")
                 with cR:
-                    draft_file = st.file_uploader(
-                        "또는 파일 업로드(PDF/DOCX/TXT) — 선택",
-                        type=["pdf", "docx", "txt"],
-                        key="cur2_draft_file"
-                    )
+                    draft_file = st.file_uploader("또는 파일 업로드(PDF/DOCX/TXT)", type=["pdf", "docx", "txt"], key="cur2_draft_file")
 
-            st.markdown("### ② 회사 규정/판단 기준  ·  ③ 표준 감사보고서 형식(참고)")
+            st.markdown("### ② 회사 규정/판단 기준 · ③ 표준 보고서 형식")
             left, right = st.columns(2)
-
             with left:
                 regulations = st.file_uploader(
                     "📘 회사 규정/기준(인사규정·징계기준·윤리지침 등)",
                     type=["pdf", "docx", "txt"],
                     accept_multiple_files=True,
                     key="cur2_regs"
-                )
-                st.caption("초안/검증 모두에 유용합니다. (특히 ‘근거 인용’ 필요 시 권장)")
-
+                ) or []
             with right:
                 reference_reports = st.file_uploader(
-                    "📑 표준 감사보고서 형식(정부·공공·기업) — 선택",
+                    "📑 참고 보고서 형식 — 선택",
                     type=["pdf", "docx", "txt"],
                     accept_multiple_files=True,
                     key="cur2_refs"
-                )
-                st.caption("문서 형식/톤을 맞추고 싶을 때만 넣어도 됩니다.")
+                ) or []
 
-            st.markdown("### ④ 사건 개요(필수) 및 작성 옵션")
+            st.markdown("### ④ 사건 개요 및 작성 옵션")
             row1, row2 = st.columns(2)
-
             with row1:
-                case_title = st.text_input(
-                    "사건명/건명(필수)",
-                    placeholder="예: 법인카드 사적 사용 의혹 조사",
-                    key="cur2_title"
-                )
-
+                case_title = st.text_input("사건명/건명", placeholder="예: 법인카드 사적 사용 의혹 조사", key="cur2_title")
             with row2:
                 report_tone = st.selectbox(
                     "문서 톤",
@@ -2636,35 +2990,106 @@ with tab_doc:
                     index=0,
                     key="cur2_tone"
                 )
+            case_scope = st.text_area("사건 개요 요약 — 무엇을/언제/누가/어떤 경위로", height=120, key="cur2_scope")
 
-            case_scope = st.text_area(
-                "사건 개요 요약(필수) — 무엇을/언제/누가/어떤 경위로",
-                height=110,
-                key="cur2_scope"
-            )
+            if st.button("🧠 감사보고서 AI 실행", use_container_width=True, key="cur2_run"):
+                materials = []
 
-            # (이하 기존 코드 그대로 유지: 사용자가 올려준 파일의 원문 로직이 이어짐)
-            st.info("※ 이하(감사보고서 생성/검증 로직)는 기존 코드 흐름을 그대로 유지합니다. (이번 요청 범위: 자율점검 UI/검증만)")
+                if is_draft_mode:
+                    if interview_transcript:
+                        transcript_text = read_file(interview_transcript)
+                        if transcript_text:
+                            materials.append(f"[면담 녹취/메모]\n{transcript_text}")
+                    if evidence_files:
+                        materials.append("[조사·증거 자료]\n" + read_multiple_files(evidence_files))
+                    if interview_audio:
+                        audio_file = process_media_file(interview_audio)
+                        if audio_file:
+                            materials.append("[면담 음성 파일]\nAI 업로드 파일이 함께 전달됩니다.")
+                else:
+                    if draft_text.strip():
+                        materials.append("[검증 대상 보고서 - 붙여넣기]\n" + draft_text.strip())
+                    if draft_file:
+                        extracted = read_file(draft_file)
+                        if extracted:
+                            materials.append("[검증 대상 보고서 - 파일]\n" + extracted)
+
+                regulations_text = read_multiple_files(regulations) if regulations else ""
+                refs_text = read_multiple_files(reference_reports) if reference_reports else ""
+                materials_text = "\n\n".join(materials).strip()
+
+                if not case_title.strip():
+                    st.warning("⚠️ 사건명/건명을 입력해 주세요.")
+                elif not case_scope.strip() and not materials_text:
+                    st.warning("⚠️ 사건 개요 또는 감사 자료 중 하나 이상은 입력해야 합니다.")
+                else:
+                    with st.spinner("📑 감사보고서 품질 기준에 맞춰 처리 중입니다..."):
+                        try:
+                            prompt = build_audit_report_prompt(mode, case_title, case_scope, report_tone, materials_text, regulations_text, refs_text)
+                            if is_draft_mode and interview_audio:
+                                # 음성 파일이 있는 경우 멀티모달 입력을 시도합니다.
+                                audio_file = process_media_file(interview_audio)
+                                if audio_file:
+                                    response, grounded, warning = generate_ai_response([prompt, audio_file], task="report", use_search=False, temperature=0.12)
+                                else:
+                                    response, grounded, warning = generate_ai_response(prompt, task="report", use_search=False, temperature=0.12)
+                            else:
+                                response, grounded, warning = generate_ai_response(prompt, task="report", use_search=False, temperature=0.12)
+                            st.success("✅ 처리 완료")
+                            render_ai_response(response, grounded=grounded, warning=warning)
+                        except Exception as e:
+                            st.error(f"오류: {e}")
 
 # --- [Tab 3: AI 에이전트] ---
 with tab_chat:
-    st.markdown("### 💬 AI 법률/챗봇")
+    st.markdown("### 💬 AI 에이전트(챗봇)")
     if "api_key" not in st.session_state:
         st.warning("🔒 로그인 후 이용 가능합니다.")
     else:
+        st.markdown("""
+        <div class="audit-message-v2">
+            <h4>🤝 감사·법률·컴플라이언스 전용 챗봇</h4>
+            <p>질문을 그대로 전달하지 않고, 감사실 업무 기준에 맞춘 역할·답변 구조·한계 고지를 적용합니다. 최신 이슈는 검색 보강 모드를 사용할 수 있습니다.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
         if "messages" not in st.session_state:
             st.session_state.messages = []
 
-        with st.form(key="chat_input_form", clear_on_submit=True):
-            user_input = st.text_input("질문 입력")
-            send_btn = st.form_submit_button("전송 📤", use_container_width=True)
+        chat_mode = st.selectbox(
+            "상담 모드",
+            ["감사·컴플라이언스 일반 상담", "최신 법령·판례·뉴스 검색 보강", "문서/보고서 문안 개선"],
+            index=0,
+            key="chat_mode"
+        )
+        use_chat_search = "최신" in chat_mode
+
+        c1, c2 = st.columns([0.78, 0.22])
+        with c1:
+            with st.form(key="chat_input_form", clear_on_submit=True):
+                user_input = st.text_input("질문 입력", placeholder="예: 계약서 지급조건 100일 조항의 리스크를 검토해줘")
+                send_btn = st.form_submit_button("전송 📤", use_container_width=True)
+        with c2:
+            st.markdown("<div style='height:29px'></div>", unsafe_allow_html=True)
+            if st.button("대화 초기화", use_container_width=True, key="chat_clear"):
+                st.session_state.messages = []
+                st.rerun()
 
         if send_btn and user_input:
+            history_before = st.session_state.messages.copy()
             st.session_state.messages.append({"role": "user", "content": user_input})
             with st.spinner("답변 생성 중..."):
                 try:
-                    res = get_model().generate_content(user_input)
-                    st.session_state.messages.append({"role": "assistant", "content": res.text})
+                    prompt = build_chat_prompt(user_input, history_before, chat_mode)
+                    response, grounded, warning = generate_ai_response(prompt, task="chat", use_search=use_chat_search, temperature=0.2)
+                    answer = _extract_response_text(response) or "응답을 생성하지 못했습니다."
+                    sources = _extract_grounding_sources(response)
+                    if grounded and sources:
+                        src_text = "\n\n---\n**참고 출처**\n" + "\n".join([f"- [{s['title']}]({s['uri']})" for s in sources])
+                        answer += src_text
+                    elif warning:
+                        answer += "\n\nℹ️ 검색 보강 호출이 실패하여 일반 AI 답변으로 대체되었습니다."
+                    st.session_state.messages.append({"role": "assistant", "content": answer})
                 except Exception as e:
                     st.error(f"오류: {e}")
 
@@ -2678,42 +3103,79 @@ with tab_summary:
     if "api_key" not in st.session_state:
         st.warning("🔒 로그인 후 이용 가능합니다.")
     else:
-        st_type = st.radio("입력 방식", ["URL (유튜브/웹)", "미디어 파일", "텍스트"])
+        st.markdown("""
+        <div class="audit-message-v2">
+            <h4>🧩 출처·리스크 중심 스마트 요약</h4>
+            <p>뉴스, 웹페이지, 유튜브, 회의 음성, 텍스트를 업무 브리핑 형식으로 요약합니다. 필요 시 Google Search Grounding을 사용해 최신성도 보강합니다.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st_type = st.radio("입력 방식", ["URL (유튜브/웹)", "미디어 파일", "텍스트"], horizontal=True)
+        summary_mode = st.selectbox(
+            "요약 모드",
+            ["뉴스·보도자료 브리핑", "유튜브·교육영상 요약", "회의·면담 녹취 요약", "감사자료·증거자료 요약", "일반 요약"],
+            index=0,
+            key="summary_mode"
+        )
+        output_style = st.selectbox(
+            "출력 방식",
+            ["임원 보고용", "실무 체크리스트형", "교육자료 재가공용", "상세 분석형"],
+            index=1,
+            key="summary_style"
+        )
+        use_summary_search = st.toggle(
+            "🔎 최신 검색 보강 사용(URL/뉴스 요약 권장)",
+            value=("URL" in st_type),
+            key="summary_search"
+        )
+
         final_input = None
         is_multimodal = False
+        source_hint = "직접 입력"
 
         if "URL" in st_type:
-            url = st.text_input("URL 입력")
+            url = st.text_input("URL 입력", placeholder="https:// 또는 유튜브 링크")
+            source_hint = url or "URL"
             if url and "youtu" in url:
                 with st.spinner("자막 추출 중..."):
                     final_input = get_youtube_transcript(url)
                     if not final_input:
+                        st.info("자막을 찾지 못해 음성 분석을 시도합니다. 영상 길이와 권한에 따라 시간이 걸릴 수 있습니다.")
                         final_input = download_and_upload_youtube_audio(url)
-                        is_multimodal = True
+                        is_multimodal = True if final_input else False
             elif url:
-                with st.spinner("웹페이지 분석 중..."):
+                with st.spinner("웹페이지 본문을 추출 중..."):
                     final_input = get_web_content(url)
+                    if not final_input:
+                        st.warning("웹페이지 본문을 직접 추출하지 못했습니다. 검색 보강 모드를 켠 상태로 URL 중심 요약을 시도할 수 있습니다.")
+                        final_input = f"다음 URL의 공개 정보를 검색해 업무 브리핑 형식으로 요약하세요: {url}"
 
         elif "미디어" in st_type:
             mf = st.file_uploader("파일 업로드", type=["mp3", "wav", "mp4"])
+            source_hint = getattr(mf, "name", "미디어 파일") if mf else "미디어 파일"
             if mf:
                 final_input = process_media_file(mf)
                 is_multimodal = True
         else:
-            final_input = st.text_area("텍스트 입력", height=200)
+            final_input = st.text_area("텍스트 입력", height=230)
+            source_hint = "붙여넣은 텍스트"
 
         if st.button("⚡ 요약 실행", use_container_width=True):
             if final_input:
                 with st.spinner("요약 중..."):
                     try:
-                        p = "다음 내용을 핵심 요약, 상세 내용, 인사이트로 정리해줘."
                         if is_multimodal:
-                            res = get_model().generate_content([p, final_input])
+                            prompt = build_summary_prompt(summary_mode, output_style, source_hint, "첨부된 미디어 파일의 내용을 분석하세요.")
+                            response, grounded, warning = generate_ai_response([prompt, final_input], task="summary", use_search=False, temperature=0.18)
                         else:
-                            res = get_model().generate_content(f"{p}\n\n{str(final_input)[:30000]}")
-                        st.markdown(res.text)
+                            prompt = build_summary_prompt(summary_mode, output_style, source_hint, str(final_input))
+                            response, grounded, warning = generate_ai_response(prompt, task="summary", use_search=use_summary_search, temperature=0.18)
+                        st.success("✅ 요약 완료")
+                        render_ai_response(response, grounded=grounded, warning=warning)
                     except Exception as e:
                         st.error(f"오류: {e}")
+            else:
+                st.warning("⚠️ 요약할 URL, 파일 또는 텍스트를 입력해 주세요.")
 
 # --- [Tab 5: 관리자 대시보드 최종 버전] ---
 with tab_admin:
