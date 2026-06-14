@@ -2124,7 +2124,7 @@ with tab_audit:
     """, unsafe_allow_html=True)
 
     SELECT_PLACEHOLDER = "선택하세요"
-    STEP_MIN_SECONDS = 60
+    STEP_MIN_SECONDS = 3
     STEP_WARMUP_SECONDS = 3
     CHECK_ITEM_SECONDS = 10
     CHECK_ITEM_DELAY_SECONDS = 1
