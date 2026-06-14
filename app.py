@@ -2689,7 +2689,7 @@ with tab_audit:
             # - 숫자를 작게 하면 카드가 화면에서 더 위로 올라갑니다.
             # - 현재 공통 기준값은 16px이며, 화면을 보면서 STEP별로 아래 숫자만 조정하면 됩니다.
             step_scroll_margin = {
-                2: 14,  # STEP 2 · Core Principles
+                2: 15,  # STEP 2 · Core Principles
                 3: 16,  # STEP 3 · Case / Red Flags
                 4: 16,  # STEP 4 · Quiz / Case Judgment
                 5: 16,  # STEP 5 · Practice Check
