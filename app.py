@@ -2124,50 +2124,69 @@ with tab_audit:
     def _render_training_scroll_top_if_requested() -> None:
         """단계/테마 이동 후 이전 스크롤 위치가 남지 않도록 현재 교육 화면의 시작점으로 이동합니다.
 
-        개선 포인트:
-        - 기존에는 페이지 최상단으로 smooth 이동하여 화면 중간이 잠깐 노출될 수 있었습니다.
-        - 이제는 실제 학습 콘텐츠 시작 앵커(#june-v2-active-screen-top)를 우선 찾아 즉시 이동합니다.
-        - Quest 진행 카드와 실제 학습 화면 사이에 앵커를 두어, STEP 1~6 및 Theme 전환 시 항상 같은 지점에서 시작합니다.
-        - DOM 렌더링 지연과 브라우저 스크롤 복원 동작에 대비해 여러 번 보정합니다.
+        수정 범위:
+        - 기존 교육 콘텐츠, 타이머, 버튼, CI 카드 디자인은 건드리지 않습니다.
+        - 화면 전환 시 브라우저가 반드시 현재 Theme 제목 + STEP Road 시작 지점을
+          화면 상단에 맞추도록 스크롤 보정만 수행합니다.
         """
         if st.session_state.pop("june_v2_scroll_top_requested", False):
             components.html(
                 """
                 <script>
                 (function() {
-                  try { if ('scrollRestoration' in history) history.scrollRestoration = 'manual'; } catch(e) {}
+                  const TARGET_ID = 'june-v2-active-screen-top';
+
+                  const getScrollContainers = (doc) => {
+                    return [
+                      doc.querySelector('section.main'),
+                      doc.querySelector('[data-testid="stAppViewContainer"]'),
+                      doc.querySelector('.main'),
+                      doc.scrollingElement,
+                      doc.documentElement,
+                      doc.body
+                    ].filter(Boolean);
+                  };
 
                   const scrollToTrainingStart = () => {
                     try {
-                      const doc = window.parent.document;
-                      const target = doc.getElementById('june-v2-active-screen-top') || doc.getElementById('june-v2-outer-screen-top');
+                      const doc = window.parent?.document || document;
+                      const target = doc.getElementById(TARGET_ID);
 
                       if (target) {
                         try {
                           target.scrollIntoView({behavior: 'auto', block: 'start', inline: 'nearest'});
-                          return;
                         } catch(e) {}
+
+                        // Streamlit/브라우저별 스크롤 컨테이너가 다를 수 있어 추가 보정
+                        try {
+                          const rect = target.getBoundingClientRect();
+                          const containers = getScrollContainers(doc);
+                          containers.forEach(el => {
+                            try {
+                              const currentTop = el.scrollTop || 0;
+                              const elRect = el.getBoundingClientRect ? el.getBoundingClientRect() : {top: 0};
+                              const desiredTop = currentTop + rect.top - elRect.top - 12;
+                              el.scrollTo({top: Math.max(0, desiredTop), left: 0, behavior: 'auto'});
+                            } catch(err) {}
+                          });
+                        } catch(e) {}
+
+                        try { target.scrollIntoView({behavior: 'auto', block: 'start', inline: 'nearest'}); } catch(e) {}
+                        return;
                       }
 
-                      const candidates = [
-                        doc.querySelector('section.main'),
-                        doc.querySelector('[data-testid="stAppViewContainer"]'),
-                        doc.documentElement,
-                        doc.body
-                      ].filter(Boolean);
-
-                      candidates.forEach(el => {
+                      // target이 아직 렌더링 전인 아주 짧은 순간에는 상단으로만 보정
+                      getScrollContainers(doc).forEach(el => {
                         try { el.scrollTo({top: 0, left: 0, behavior: 'auto'}); }
                         catch(e) { try { el.scrollTop = 0; } catch(err) {} }
                       });
-                      try { window.parent.scrollTo({top: 0, left: 0, behavior: 'auto'}); } catch(e) {}
                     } catch(e) {
                       try { window.scrollTo({top: 0, left: 0, behavior: 'auto'}); } catch(err) {}
                     }
                   };
 
-                  // Streamlit rerender 완료 시점 편차 보정: 짧은/긴 지연 모두 보정
-                  [0, 40, 100, 220, 420, 700, 1000, 1400, 1900].forEach(delay => setTimeout(scrollToTrainingStart, delay));
+                  // Streamlit rerender 완료 시점 편차 보정: target 생성 후에도 몇 차례 같은 위치로 고정
+                  [40, 120, 260, 520, 900, 1400, 2000].forEach(delay => setTimeout(scrollToTrainingStart, delay));
                 })();
                 </script>
                 """,
@@ -2594,6 +2613,8 @@ with tab_audit:
             title = "Theme 2. 협력사·정보보호 Quest"
             desc = "협력사와 정보는 절차로 보호됩니다. 서면 발급, 대금 지급, 검사 통지, 기술자료 보호, 개인정보·기업비밀 관리는 업무 편의보다 먼저 확인해야 할 기준입니다."
 
+        # ✅ 화면 전환 기준점: 모든 STEP은 반드시 이 지점(Theme 제목 + STEP Road 시작부)부터 보이도록 고정
+        st.markdown("<div id='june-v2-active-screen-top' style='height:1px; scroll-margin-top:18px;'></div>", unsafe_allow_html=True)
         st.markdown(f"""<div class="theme-title-panel {title_cls}"><h3>{title}</h3><p>{desc}</p></div>""", unsafe_allow_html=True)
         _render_step_road(theme_no)
         _ensure_step_timer(theme_no, step)
@@ -2893,17 +2914,17 @@ with tab_audit:
                 st.rerun()
 
     else:
-        # 전체 Quest 진행 현황은 위에 보존하되, 실제 화면 전환 시에는 아래 active-screen 앵커부터 보이게 합니다.
-        # 이렇게 해야 STEP 1~6, Theme 1→Theme 2, Event→Submit 전환 시 교육 콘텐츠 시작 위치가 통일됩니다.
-        st.markdown("<div id='june-v2-outer-screen-top' style='height:1px; scroll-margin-top:8px;'></div>", unsafe_allow_html=True)
+        # 전체 Quest 진행 카드는 유지하되, 실제 스크롤 기준점은 각 Theme 내부의
+        # "Theme 제목 + STEP Road" 위치로 분리합니다. 기존 카드 디자인/버튼 로직은 변경하지 않습니다.
+        st.markdown("<div id='june-v2-quest-overview-top' style='height:1px;'></div>", unsafe_allow_html=True)
         _render_quest_cards(show_buttons=True)
-        st.markdown("<div id='june-v2-active-screen-top' style='height:1px; scroll-margin-top:8px;'></div>", unsafe_allow_html=True)
 
         if st.session_state.get("june_v2_view") in ["theme1", "theme2"]:
             current_theme = 1 if st.session_state.get("june_v2_view") == "theme1" else 2
             _render_theme_step(current_theme)
 
         elif st.session_state.get("june_v2_view") == "event":
+            st.markdown("<div id='june-v2-active-screen-top' style='height:1px; scroll-margin-top:18px;'></div>", unsafe_allow_html=True)
             st.markdown("""
                 <div class="summer-zone-v2">
                     <h3>🌊 Summer Compliance Event</h3>
@@ -2965,6 +2986,7 @@ with tab_audit:
                         st.rerun()
 
         elif st.session_state.get("june_v2_view") == "submit":
+            st.markdown("<div id='june-v2-active-screen-top' style='height:1px; scroll-margin-top:18px;'></div>", unsafe_allow_html=True)
             st.markdown("### ✅ 수료 제출")
             st.caption("아래 정보를 입력하고 제출하면 교육 수료 및 이벤트 퀴즈 정보가 Google Sheet에 저장됩니다.")
             t1_done = st.session_state.get("june_v2_theme1_done", False)
