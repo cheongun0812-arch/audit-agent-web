@@ -2688,16 +2688,16 @@ with tab_audit:
             #    숫자를 크게 하면 화면 시작 위치가 더 아래로 내려오고,
             #    숫자를 작게 하면 화면 시작 위치가 더 위로 올라갑니다.
             theme_step_scroll_margin = {
-                (1, 2): 16,  # Theme 1 · STEP 2
-                (1, 3): 16,  # Theme 1 · STEP 3
-                (1, 4): 16,  # Theme 1 · STEP 4
-                (1, 5): 16,  # Theme 1 · STEP 5
-                (1, 6): 16,  # Theme 1 · STEP 6
-                (2, 2): 16,  # Theme 2 · STEP 2
-                (2, 3): 16,  # Theme 2 · STEP 3
-                (2, 4): 16,  # Theme 2 · STEP 4
-                (2, 5): 16,  # Theme 2 · STEP 5
-                (2, 6): 16,  # Theme 2 · STEP 6
+                (1, 2): 14,  # Theme 1 · STEP 2
+                (1, 3): 13,  # Theme 1 · STEP 3
+                (1, 4): 13,  # Theme 1 · STEP 4
+                (1, 5): 14,  # Theme 1 · STEP 5
+                (1, 6): 14,  # Theme 1 · STEP 6
+                (2, 2): 14,  # Theme 2 · STEP 2
+                (2, 3): 13,  # Theme 2 · STEP 3
+                (2, 4): 13,  # Theme 2 · STEP 4
+                (2, 5): 14,  # Theme 2 · STEP 5
+                (2, 6): 14,  # Theme 2 · STEP 6
             }
             step_scroll_margin = theme_step_scroll_margin.get((theme_no, step), 16)
             st.markdown(
