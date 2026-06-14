@@ -1762,7 +1762,7 @@ with tab_audit:
     # - 기존 윤리경영 실천서약 보관함은 유지
     # - 현장대리인 등록 모듈 위치에 고품질 교육 모듈 배치
     # - 순차형 Quest 구조 / Previous·Next 이동 / Step별 Clear 표시
-    # - STEP 1~4 단계별 최소 학습시간 60초 적용 / STEP 5 체크항목별 10초 확인
+    # - STEP 1~4 단계별 최소 학습시간 5초 적용(테스트용) / STEP 5 체크항목별 10초 확인
     # - Theme 1: 부패방지 + 공정거래 / Theme 2: 하도급 + 정보보호
     # =========================================================
     st.markdown("""
@@ -2015,7 +2015,7 @@ with tab_audit:
     # =========================================================
     # 2026년 6월 컴플라이언스 인식제고 교육 - Final V3
     # - 초기 안내 화면 분리
-    # - STEP 1~4: 단계별 60초 자동 카운트다운 + 게이지
+    # - STEP 1~4: 단계별 5초 자동 카운트다운(테스트용) + 게이지
     # - STEP 5: 체크 항목별 10초 모래시계 확인, 체크 유지, 순차 활성화
     # - STEP 6: 시간제한 제외
     # =========================================================
@@ -2124,7 +2124,7 @@ with tab_audit:
     """, unsafe_allow_html=True)
 
     SELECT_PLACEHOLDER = "선택하세요"
-    STEP_MIN_SECONDS = 3
+    STEP_MIN_SECONDS = 5  # ✅ 테스트용: 운영 배포 전 60으로 복원
     STEP_WARMUP_SECONDS = 3
     CHECK_ITEM_SECONDS = 10
     CHECK_ITEM_DELAY_SECONDS = 1
@@ -2212,12 +2212,18 @@ with tab_audit:
                   const scrollToTrainingStart = () => {
                     try {
                       const doc = window.parent.document;
-                      // STEP 2 이후에는 카드형 콘텐츠 시작점으로, STEP 1/테마 시작은 기존 교육 화면 시작점으로 이동합니다.
-                      const target = doc.getElementById('june-v2-step-content-top') || doc.getElementById('june-v2-active-screen-top');
+                      // ✅ 모든 교육 화면 스크롤 기준은 #june-v2-active-screen-top 하나로 통일합니다.
+                      //    data-scroll-offset 값만큼 TOP 기준점에서 아래로 이동합니다.
+                      const target = doc.getElementById('june-v2-active-screen-top');
 
                       if (target) {
+                        const rawOffset = target.getAttribute('data-scroll-offset') || '0';
+                        const offset = Number.parseInt(rawOffset, 10) || 0;
                         try {
                           target.scrollIntoView({behavior: 'auto', block: 'start', inline: 'nearest'});
+                          if (offset !== 0) {
+                            window.parent.scrollBy({top: offset, left: 0, behavior: 'auto'});
+                          }
                           return;
                         } catch(e) {}
                       }
@@ -2419,9 +2425,9 @@ with tab_audit:
         st.markdown("<div class='nav-help'>완료된 단계는 초록색, 현재 단계는 파란색, 아직 진행할 수 없는 단계는 회색으로 표시됩니다.</div>", unsafe_allow_html=True)
 
     def _render_step_timer(theme_no: int, step_no: int) -> None:
-        """STEP 1~4에 적용되는 60초 카운트다운 게이지입니다.
+        """STEP 1~4에 적용되는 카운트다운 게이지입니다.
 
-        기존 구현은 Python time.sleep 루프가 60초 동안 스크립트를 붙잡아
+        기존 구현은 Python time.sleep 루프가 장시간 스크립트를 붙잡아
         Streamlit 화면이 이전 페이지를 회색/흐림 상태로 보여주는 현상이 있었습니다.
         현재 구현은 브라우저에서 카운트다운을 표시하고, 서버는 시작 시간만 기록합니다.
         따라서 Theme 1에서 Theme 2로 넘어갈 때 새 Theme 화면이 즉시 노출됩니다.
@@ -2557,7 +2563,7 @@ with tab_audit:
 
                 if (remainMs <= 0) {{
                     root.classList.add('clear');
-                    title.textContent = `✅ 최소 학습시간 충족 · STEP {step_no} 60초 학습 완료`;
+                    title.textContent = `✅ 최소 학습시간 충족 · STEP {step_no} {STEP_MIN_SECONDS}초 학습 완료`;
                     count.textContent = 'CLEAR';
                     bar.style.width = '100%';
                     try {{
@@ -2565,7 +2571,7 @@ with tab_audit:
                         const buttons = Array.from(doc.querySelectorAll('button'));
                         buttons.forEach(btn => {{
                             const txt = (btn.innerText || '').trim();
-                            if (txt.includes('60초 학습 후 활성화') || txt.includes('학습시간 충족 후 활성화')) {{
+                            if (txt.includes('{STEP_MIN_SECONDS}초 학습 후 활성화') || txt.includes('학습시간 충족 후 활성화')) {{
                                 btn.innerText = '다음 ▶';
                                 btn.classList.add('next-ready-client');
                             }}
@@ -2573,7 +2579,7 @@ with tab_audit:
                     }} catch(e) {{}}
                 }} else {{
                     root.classList.remove('clear');
-                    title.textContent = '최소 학습시간 충족을 위한 60초 카운트다운';
+                    title.textContent = '최소 학습시간 충족을 위한 {STEP_MIN_SECONDS}초 카운트다운';
                     count.textContent = `${{remain}}초 남음`;
                     bar.style.width = `${{pct}}%`;
                 }}
@@ -2683,27 +2689,9 @@ with tab_audit:
         _ensure_step_timer(theme_no, step)
 
         if step >= 2:
-            # STEP 2부터는 상단 Quest Road가 아니라 실제 카드형 학습 콘텐츠 상단에 스크롤을 고정합니다.
-            # ✅ Theme별 · Step별로 scroll margin을 개별 조정할 수 있도록 세분화했습니다.
-            #    숫자를 크게 하면 화면 시작 위치가 더 아래로 내려오고,
-            #    숫자를 작게 하면 화면 시작 위치가 더 위로 올라갑니다.
-            theme_step_scroll_margin = {
-                (1, 2): -20,  # Theme 1 · STEP 2
-                (1, 3): 13,  # Theme 1 · STEP 3
-                (1, 4): 13,  # Theme 1 · STEP 4
-                (1, 5): 5,  # Theme 1 · STEP 5
-                (1, 6): 14,  # Theme 1 · STEP 6
-                (2, 2): 14,  # Theme 2 · STEP 2
-                (2, 3): 13,  # Theme 2 · STEP 3
-                (2, 4): 13,  # Theme 2 · STEP 4
-                (2, 5): 14,  # Theme 2 · STEP 5
-                (2, 6): 14,  # Theme 2 · STEP 6
-            }
-            step_scroll_margin = theme_step_scroll_margin.get((theme_no, step), 16)
-            st.markdown(
-                f"<div id='june-v2-step-content-top' style='height:1px; scroll-margin-top:{step_scroll_margin}px;'></div>",
-                unsafe_allow_html=True
-            )
+            # STEP 2부터 실제 카드형 학습 콘텐츠 시작점을 표시하는 보이지 않는 기준점입니다.
+            # 실제 스크롤 위치 조정은 아래 #june-v2-active-screen-top 기준값에서 일괄 관리합니다.
+            st.markdown("<div id='june-v2-step-content-top' style='height:1px;'></div>", unsafe_allow_html=True)
 
         if step == 1:
             if theme_no == 1:
@@ -2901,7 +2889,7 @@ with tab_audit:
         with next_col:
             base_next_label = "다음 ▶" if step < 6 else ("Theme 1 CLEAR → 다음 Quest" if theme_no == 1 else "Theme 2 CLEAR → Event")
             if step in TIMED_STEPS and not _step_time_met(theme_no, step):
-                next_label = "🔒 60초 학습 후 활성화"
+                next_label = f"🔒 {STEP_MIN_SECONDS}초 학습 후 활성화"
             elif step == 5 and not _checks_done(theme_no):
                 next_label = "🔒 실천 체크 완료 후 활성화"
             else:
@@ -2929,7 +2917,7 @@ with tab_audit:
                 else:
                     if step in TIMED_STEPS and not _step_time_met(theme_no, step):
                         remain = _step_remaining(theme_no, step)
-                        st.warning(f"최소 학습시간 60초를 충족해야 다음 단계로 이동할 수 있습니다. 현재 {remain}초 남았습니다.")
+                        st.warning(f"최소 학습시간 {STEP_MIN_SECONDS}초를 충족해야 다음 단계로 이동할 수 있습니다. 현재 {remain}초 남았습니다.")
                     else:
                         _mark_step_done(theme_no, step)
                         next_step = min(6, step + 1)
@@ -2958,7 +2946,7 @@ with tab_audit:
                 <h4>감사실 안내</h4>
                 <p>
                     교육은 순차형 Quest 방식으로 진행됩니다. 현재 단계를 완료해야 다음 단계로 이동할 수 있으며,
-                    각 테마의 STEP 1~4는 단계별 최소 60초 이상 학습해야 다음 단계로 이동할 수 있습니다.
+                    각 테마의 STEP 1~4는 단계별 최소 5초 이상 학습해야 다음 단계로 이동할 수 있습니다.
                     STEP 5 실천 체크는 항목별 10초 확인 카운트다운을 통해 실질적인 확인 절차를 거칩니다.
                     이는 단순 클릭형 수료를 방지하고, 전 임직원이 핵심 기준을 충분히 확인하기 위한 장치입니다.
                 </p>
@@ -3006,9 +2994,35 @@ with tab_audit:
                 st.rerun()
 
     else:
-        # 단계/테마 전환 시 브라우저가 이 지점을 교육 화면의 시작점으로 인식하도록 하는 앵커입니다.
+        # 단계/테마 전환 시 브라우저가 이 지점을 교육 화면의 TOP 기준점으로 인식하도록 하는 앵커입니다.
         # 특히 Theme 1 CLEAR 후 Theme 2 시작 시, 이전 퀴즈 화면의 중간 위치가 남지 않도록 합니다.
-        st.markdown("<div id='june-v2-active-screen-top' style='height:1px; scroll-margin-top:16px;'></div>", unsafe_allow_html=True)
+        # ✅ 아래 값은 모두 #june-v2-active-screen-top 기준으로 '얼마나 아래로 이동할지(px)'를 의미합니다.
+        #    값을 크게 하면 더 아래 화면으로 이동하고, 값을 작게 하면 더 위 화면으로 이동합니다.
+        ACTIVE_SCREEN_TOP_SCROLL_OFFSET = 16  # 메인 교육 접근 화면 / Theme 시작 / STEP 1 기본 위치
+        THEME_STEP_SCROLL_FROM_TOP = {
+            (1, 2): 420,  # Theme 1 · STEP 2
+            (1, 3): 420,  # Theme 1 · STEP 3
+            (1, 4): 420,  # Theme 1 · STEP 4
+            (1, 5): 420,  # Theme 1 · STEP 5
+            (1, 6): 420,  # Theme 1 · STEP 6
+            (2, 2): 420,  # Theme 2 · STEP 2
+            (2, 3): 420,  # Theme 2 · STEP 3
+            (2, 4): 420,  # Theme 2 · STEP 4
+            (2, 5): 420,  # Theme 2 · STEP 5
+            (2, 6): 420,  # Theme 2 · STEP 6
+        }
+
+        active_screen_scroll_offset = ACTIVE_SCREEN_TOP_SCROLL_OFFSET
+        if st.session_state.get("june_v2_view") in ["theme1", "theme2"]:
+            _scroll_theme = 1 if st.session_state.get("june_v2_view") == "theme1" else 2
+            _scroll_step = int(st.session_state.get("june_v2_step", 1))
+            if _scroll_step >= 2:
+                active_screen_scroll_offset = THEME_STEP_SCROLL_FROM_TOP.get((_scroll_theme, _scroll_step), ACTIVE_SCREEN_TOP_SCROLL_OFFSET)
+
+        st.markdown(
+            f"<div id='june-v2-active-screen-top' data-scroll-offset='{active_screen_scroll_offset}' style='height:1px; scroll-margin-top:0px;'></div>",
+            unsafe_allow_html=True
+        )
         _render_quest_cards(show_buttons=True)
 
         if st.session_state.get("june_v2_view") in ["theme1", "theme2"]:
@@ -3161,7 +3175,7 @@ with tab_audit:
                             "최종점수": final_score,
                             "수료상태": "수료",
                             "이벤트추첨대상": "대상",
-                            "비고": "감사실 주관 2026년 6월 컴플라이언스 인식제고 자율점검 교육 / 모바일 쿠폰 추첨 대상 포함 / Final V3 단계별 60초·체크항목 10초 확인형 교육",
+                            "비고": "감사실 주관 2026년 6월 컴플라이언스 인식제고 자율점검 교육 / 모바일 쿠폰 추첨 대상 포함 / Final V3 단계별 5초(테스트용)·체크항목 10초 확인형 교육",
                         }
                         with st.spinner("6월 컴플라이언스 교육 수료 내역을 저장 중입니다..."):
                             success, save_msg = save_june_compliance_training_result(record)
