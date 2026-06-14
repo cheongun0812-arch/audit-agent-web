@@ -2212,7 +2212,8 @@ with tab_audit:
                   const scrollToTrainingStart = () => {
                     try {
                       const doc = window.parent.document;
-                      const target = doc.getElementById('june-v2-active-screen-top');
+                      // STEP 2 이후에는 카드형 콘텐츠 시작점으로, STEP 1/테마 시작은 기존 교육 화면 시작점으로 이동합니다.
+                      const target = doc.getElementById('june-v2-step-content-top') || doc.getElementById('june-v2-active-screen-top');
 
                       if (target) {
                         try {
@@ -2680,6 +2681,10 @@ with tab_audit:
         st.markdown(f"""<div class="theme-title-panel {title_cls}"><h3>{title}</h3><p>{desc}</p></div>""", unsafe_allow_html=True)
         _render_step_road(theme_no)
         _ensure_step_timer(theme_no, step)
+
+        if step >= 2:
+            # STEP 2부터는 상단 Quest Road가 아니라 실제 카드형 학습 콘텐츠 상단에 스크롤을 고정합니다.
+            st.markdown("<div id='june-v2-step-content-top' style='height:1px; scroll-margin-top:14px;'></div>", unsafe_allow_html=True)
 
         if step == 1:
             if theme_no == 1:
