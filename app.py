@@ -3000,7 +3000,7 @@ with tab_audit:
         #    값을 크게 하면 더 아래 화면으로 이동하고, 값을 작게 하면 더 위 화면으로 이동합니다.
         ACTIVE_SCREEN_TOP_SCROLL_OFFSET = 16  # 메인 교육 접근 화면 / Theme 시작 / STEP 1 기본 위치
         THEME_STEP_SCROLL_FROM_TOP = {
-            (1, 2): 500,  # Theme 1 · STEP 2
+            (1, 2): 550,  # Theme 1 · STEP 2
             (1, 3): 420,  # Theme 1 · STEP 3
             (1, 4): 420,  # Theme 1 · STEP 4
             (1, 5): 420,  # Theme 1 · STEP 5
