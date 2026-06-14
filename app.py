@@ -2684,18 +2684,22 @@ with tab_audit:
 
         if step >= 2:
             # STEP 2부터는 상단 Quest Road가 아니라 실제 카드형 학습 콘텐츠 상단에 스크롤을 고정합니다.
-            # ✅ STEP별 화면 시작 위치 조정값(px)
-            # - 숫자를 크게 하면 카드가 화면에서 더 아래로 내려옵니다.
-            # - 숫자를 작게 하면 카드가 화면에서 더 위로 올라갑니다.
-            # - 현재 공통 기준값은 16px이며, 화면을 보면서 STEP별로 아래 숫자만 조정하면 됩니다.
-            step_scroll_margin = {
-                2: 15,  # STEP 2 · Core Principles
-                3: 16,  # STEP 3 · Case / Red Flags
-                4: 16,  # STEP 4 · Quiz / Case Judgment
-                5: 16,  # STEP 5 · Practice Check
-                6: 16,  # STEP 6 · Summary
-            }.get(step, 16)
-
+            # ✅ Theme별 · Step별로 scroll margin을 개별 조정할 수 있도록 세분화했습니다.
+            #    숫자를 크게 하면 화면 시작 위치가 더 아래로 내려오고,
+            #    숫자를 작게 하면 화면 시작 위치가 더 위로 올라갑니다.
+            theme_step_scroll_margin = {
+                (1, 2): 16,  # Theme 1 · STEP 2
+                (1, 3): 16,  # Theme 1 · STEP 3
+                (1, 4): 16,  # Theme 1 · STEP 4
+                (1, 5): 16,  # Theme 1 · STEP 5
+                (1, 6): 16,  # Theme 1 · STEP 6
+                (2, 2): 16,  # Theme 2 · STEP 2
+                (2, 3): 16,  # Theme 2 · STEP 3
+                (2, 4): 16,  # Theme 2 · STEP 4
+                (2, 5): 16,  # Theme 2 · STEP 5
+                (2, 6): 16,  # Theme 2 · STEP 6
+            }
+            step_scroll_margin = theme_step_scroll_margin.get((theme_no, step), 16)
             st.markdown(
                 f"<div id='june-v2-step-content-top' style='height:1px; scroll-margin-top:{step_scroll_margin}px;'></div>",
                 unsafe_allow_html=True
