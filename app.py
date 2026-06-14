@@ -2688,7 +2688,7 @@ with tab_audit:
             #    숫자를 크게 하면 화면 시작 위치가 더 아래로 내려오고,
             #    숫자를 작게 하면 화면 시작 위치가 더 위로 올라갑니다.
             theme_step_scroll_margin = {
-                (1, 2): -5,  # Theme 1 · STEP 2
+                (1, 2): -10,  # Theme 1 · STEP 2
                 (1, 3): 13,  # Theme 1 · STEP 3
                 (1, 4): 13,  # Theme 1 · STEP 4
                 (1, 5): 5,  # Theme 1 · STEP 5
