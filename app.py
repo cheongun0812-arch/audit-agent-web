@@ -1283,169 +1283,98 @@ with tab_audit:
     <style>
     /* =========================================================
        ✅ 자율점검 탭 전용 서브메뉴: 외부 연계 시스템 바로가기
-       - ktMOS북부 CI 감성(Black · Red · White)을 반영한 클릭 유도형 카드
+       - 메인 탭과 구분되는 카드형 디자인
        - 링크는 새 창(target=_blank)으로 열림
        - 교육 진행/저장/타이머 로직에는 영향 없음
        ========================================================= */
     .selfcheck-link-panel {
-        position: relative;
-        overflow: hidden;
-        background:
-            radial-gradient(circle at 14% 20%, rgba(237,28,36,0.12), transparent 30%),
-            radial-gradient(circle at 92% 18%, rgba(15,23,42,0.10), transparent 28%),
-            linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 52%, #FFF1F2 100%);
-        border: 1px solid #E5E7EB;
-        border-left: 10px solid #ED1C24;
-        border-radius: 28px;
-        padding: 22px 24px 24px 24px;
-        margin: 14px 0 22px 0;
-        box-shadow: 0 18px 42px rgba(15, 23, 42, 0.12);
-    }
-    .selfcheck-link-panel::after {
-        content: "kt MOS 북부";
-        position: absolute;
-        right: 22px;
-        top: 16px;
-        font-size: 0.88rem;
-        font-weight: 950;
-        letter-spacing: 0.01em;
-        color: rgba(15, 23, 42, 0.34);
+        background: linear-gradient(135deg, #F8FAFF 0%, #F0FDF4 100%);
+        border: 1px solid #C7D2FE;
+        border-left: 8px solid #7C3AED;
+        border-radius: 22px;
+        padding: 18px 20px;
+        margin: 12px 0 18px 0;
+        box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
     }
     .selfcheck-link-panel-title {
         display: flex;
         align-items: center;
-        gap: 10px;
-        margin-bottom: 15px;
-        color: #0F172A;
+        gap: 9px;
+        margin-bottom: 12px;
+        color: #312E81;
         font-weight: 950;
-        font-size: 1.20rem;
-        letter-spacing: -0.02em;
-    }
-    .selfcheck-link-panel-title .ci-dot {
-        width: 12px;
-        height: 12px;
-        border-radius: 999px;
-        display: inline-block;
-        background: #ED1C24;
-        box-shadow: 0 0 0 6px rgba(237,28,36,0.10);
-    }
-    .selfcheck-link-panel-sub {
-        margin: -6px 0 16px 22px;
-        color: #475569;
-        font-size: 0.92rem;
-        line-height: 1.5;
-        font-weight: 760;
+        font-size: 1.08rem;
+        letter-spacing: -0.01em;
     }
     .selfcheck-submenu-grid {
         display: grid;
-        grid-template-columns: repeat(2, minmax(240px, 1fr));
-        gap: 16px;
+        grid-template-columns: repeat(2, minmax(220px, 1fr));
+        gap: 14px;
     }
     .selfcheck-submenu-card {
-        position: relative;
         display: block;
-        min-height: 126px;
-        padding: 22px 22px 20px 22px;
-        border-radius: 24px;
+        min-height: 92px;
+        padding: 17px 18px;
+        border-radius: 20px;
         text-decoration: none !important;
         border: 1px solid rgba(255,255,255,0.72);
-        box-shadow: 0 12px 26px rgba(15, 23, 42, 0.12);
-        transition: transform .18s ease, box-shadow .18s ease, filter .18s ease, border-color .18s ease;
-        overflow: hidden;
-    }
-    .selfcheck-submenu-card::before {
-        content: "";
-        position: absolute;
-        inset: 0;
-        background: linear-gradient(135deg, rgba(255,255,255,0.34), transparent 55%);
-        pointer-events: none;
+        box-shadow: 0 8px 20px rgba(30, 41, 59, 0.09);
+        transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
     }
     .selfcheck-submenu-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 20px 42px rgba(15, 23, 42, 0.18);
+        transform: translateY(-3px);
+        box-shadow: 0 14px 30px rgba(30, 41, 59, 0.14);
         filter: brightness(1.02);
         text-decoration: none !important;
-        border-color: rgba(237,28,36,0.25);
     }
     .selfcheck-submenu-card.risk {
-        background: linear-gradient(135deg, #111827 0%, #1F2937 46%, #ED1C24 100%);
-        color: #FFFFFF !important;
+        background: linear-gradient(135deg, #EEF2FF 0%, #DBEAFE 100%);
+        color: #1E3A8A !important;
     }
     .selfcheck-submenu-card.qna {
-        background: linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 48%, #FEE2E2 100%);
-        color: #111827 !important;
-        border: 1px solid #FECACA;
+        background: linear-gradient(135deg, #ECFDF5 0%, #E0F2FE 100%);
+        color: #065F46 !important;
     }
     .selfcheck-submenu-card .submenu-eyebrow {
-        position: relative;
-        z-index: 1;
         display: inline-block;
-        padding: 6px 11px;
+        padding: 4px 9px;
         border-radius: 999px;
-        background: rgba(255,255,255,0.86);
-        border: 1px solid rgba(15,23,42,0.08);
+        background: rgba(255,255,255,0.68);
+        border: 1px solid rgba(15,23,42,0.06);
         font-size: 0.78rem;
         font-weight: 950;
-        margin-bottom: 12px;
-        color: #B91C1C;
-    }
-    .selfcheck-submenu-card.risk .submenu-eyebrow {
-        background: rgba(255,255,255,0.94);
-        color: #111827;
+        margin-bottom: 8px;
     }
     .selfcheck-submenu-card .submenu-title {
-        position: relative;
-        z-index: 1;
-        font-size: 1.22rem;
+        font-size: 1.08rem;
         font-weight: 950;
         line-height: 1.35;
-        margin-bottom: 7px;
-        letter-spacing: -0.02em;
+        margin-bottom: 4px;
     }
     .selfcheck-submenu-card .submenu-desc {
-        position: relative;
-        z-index: 1;
-        font-size: 0.94rem;
-        font-weight: 780;
-        line-height: 1.48;
-        opacity: 0.92;
-    }
-    .selfcheck-submenu-card .submenu-arrow {
-        position: absolute;
-        right: 20px;
-        bottom: 18px;
-        z-index: 1;
-        width: 38px;
-        height: 38px;
-        border-radius: 999px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: rgba(255,255,255,0.86);
-        color: #ED1C24;
-        font-weight: 950;
-        box-shadow: 0 8px 18px rgba(15,23,42,0.14);
+        font-size: 0.88rem;
+        font-weight: 750;
+        line-height: 1.42;
+        opacity: 0.86;
     }
     @media (max-width: 760px) {
-        .selfcheck-submenu-grid { grid-template-columns: 1fr; }
-        .selfcheck-link-panel::after { display:none; }
+        .selfcheck-submenu-grid {
+            grid-template-columns: 1fr;
+        }
     }
     </style>
     <div class="selfcheck-link-panel">
-        <div class="selfcheck-link-panel-title"><span class="ci-dot"></span>자율점검 연계 시스템 바로가기</div>
-        <div class="selfcheck-link-panel-sub">필요한 업무 시스템을 새 창에서 바로 실행합니다. 아래 카드를 클릭해 진행해 주세요.</div>
+        <div class="selfcheck-link-panel-title">🔗 자율점검 연계 시스템 바로가기</div>
         <div class="selfcheck-submenu-grid">
-            <a class="selfcheck-submenu-card risk" href="https://third-party-risk-assessment-9.netlify.app/" target="_blank" rel="noopener noreferrer" title="제3자 리스크 평가 시스템 새 창 열기">
+            <a class="selfcheck-submenu-card risk" href="https://third-party-risk-assessment-9.netlify.app/" target="_blank" rel="noopener noreferrer">
                 <span class="submenu-eyebrow">External Link · New Window</span>
                 <div class="submenu-title">Third Party Risk Assessment</div>
                 <div class="submenu-desc">제3자 리스크 평가 시스템을 새 창에서 실행합니다.</div>
-                <div class="submenu-arrow">↗</div>
             </a>
-            <a class="selfcheck-submenu-card qna" href="https://compliance-qna-search-portal.netlify.app/" target="_blank" rel="noopener noreferrer" title="컴플라이언스 Q&A 포털 새 창 열기">
+            <a class="selfcheck-submenu-card qna" href="https://compliance-qna-search-portal.netlify.app/" target="_blank" rel="noopener noreferrer">
                 <span class="submenu-eyebrow">External Link · New Window</span>
                 <div class="submenu-title">Compliance Q&amp;A Portal</div>
                 <div class="submenu-desc">컴플라이언스 Q&amp;A 검색 포털을 새 창에서 실행합니다.</div>
-                <div class="submenu-arrow">↗</div>
             </a>
         </div>
     </div>
@@ -1973,11 +1902,6 @@ with tab_audit:
         .score-pill-v2 { display:inline-block; padding:8px 13px; border-radius:999px; background:#F0FDF4; color:#166534; border:1px solid #BBF7D0; font-weight:950; margin:5px 6px 5px 0; }
         .score-pill-warn-v2 { display:inline-block; padding:8px 13px; border-radius:999px; background:#FFF7ED; color:#9A3412; border:1px solid #FED7AA; font-weight:950; margin:5px 6px 5px 0; }
         .nav-help { color:#475569; font-weight:760; font-size:0.92rem; margin-top:3px; }
-        .next-ready-client {
-            background: linear-gradient(135deg, #16A34A 0%, #2563EB 100%) !important;
-            box-shadow: 0 12px 26px rgba(37,99,235,0.22) !important;
-        }
-
         .summer-zone-v2 {
             background: radial-gradient(circle at 10% 12%, rgba(255,255,255,0.9), transparent 22%), linear-gradient(135deg,#E0F2FE 0%,#BAE6FD 45%,#ECFEFF 100%);
             border:1px solid #7DD3FC;
@@ -2202,18 +2126,21 @@ with tab_audit:
 
         개선 포인트:
         - 기존에는 페이지 최상단으로 smooth 이동하여 화면 중간이 잠깐 노출될 수 있었습니다.
-        - 이제는 교육 화면 시작 앵커(#june-v2-active-screen-top)를 우선 찾아 즉시 이동합니다.
-        - DOM 렌더링 지연에 대비해 여러 번 보정합니다.
+        - 이제는 실제 학습 콘텐츠 시작 앵커(#june-v2-active-screen-top)를 우선 찾아 즉시 이동합니다.
+        - Quest 진행 카드와 실제 학습 화면 사이에 앵커를 두어, STEP 1~6 및 Theme 전환 시 항상 같은 지점에서 시작합니다.
+        - DOM 렌더링 지연과 브라우저 스크롤 복원 동작에 대비해 여러 번 보정합니다.
         """
         if st.session_state.pop("june_v2_scroll_top_requested", False):
             components.html(
                 """
                 <script>
                 (function() {
+                  try { if ('scrollRestoration' in history) history.scrollRestoration = 'manual'; } catch(e) {}
+
                   const scrollToTrainingStart = () => {
                     try {
                       const doc = window.parent.document;
-                      const target = doc.getElementById('june-v2-active-screen-top');
+                      const target = doc.getElementById('june-v2-active-screen-top') || doc.getElementById('june-v2-outer-screen-top');
 
                       if (target) {
                         try {
@@ -2239,8 +2166,8 @@ with tab_audit:
                     }
                   };
 
-                  // Streamlit rerender 완료 시점 편차 보정
-                  [30, 90, 180, 360, 700, 1100, 1600].forEach(delay => setTimeout(scrollToTrainingStart, delay));
+                  // Streamlit rerender 완료 시점 편차 보정: 짧은/긴 지연 모두 보정
+                  [0, 40, 100, 220, 420, 700, 1000, 1400, 1900].forEach(delay => setTimeout(scrollToTrainingStart, delay));
                 })();
                 </script>
                 """,
@@ -2560,17 +2487,6 @@ with tab_audit:
                     title.textContent = `✅ 최소 학습시간 충족 · STEP {step_no} 60초 학습 완료`;
                     count.textContent = 'CLEAR';
                     bar.style.width = '100%';
-                    try {{
-                        const doc = window.parent.document;
-                        const buttons = Array.from(doc.querySelectorAll('button'));
-                        buttons.forEach(btn => {{
-                            const txt = (btn.innerText || '').trim();
-                            if (txt.includes('60초 학습 후 활성화') || txt.includes('학습시간 충족 후 활성화')) {{
-                                btn.innerText = '다음 ▶';
-                                btn.classList.add('next-ready-client');
-                            }}
-                        }});
-                    }} catch(e) {{}}
                 }} else {{
                     root.classList.remove('clear');
                     title.textContent = '최소 학습시간 충족을 위한 60초 카운트다운';
@@ -2876,13 +2792,7 @@ with tab_audit:
         with msg_col:
             st.markdown("<div class='nav-help'>하단 버튼으로 순서대로 이동합니다. 완료된 단계는 상단 Quest Road에서 초록색으로 표시됩니다.</div>", unsafe_allow_html=True)
         with next_col:
-            base_next_label = "다음 ▶" if step < 6 else ("Theme 1 CLEAR → 다음 Quest" if theme_no == 1 else "Theme 2 CLEAR → Event")
-            if step in TIMED_STEPS and not _step_time_met(theme_no, step):
-                next_label = "🔒 60초 학습 후 활성화"
-            elif step == 5 and not _checks_done(theme_no):
-                next_label = "🔒 실천 체크 완료 후 활성화"
-            else:
-                next_label = base_next_label
+            next_label = "다음 ▶" if step < 6 else ("Theme 1 CLEAR → 다음 Quest" if theme_no == 1 else "Theme 2 CLEAR → Event")
             if st.button(next_label, use_container_width=True, key=f"june_v2_next_{theme_no}_{step}", type="primary"):
                 if step == 5 and not _checks_done(theme_no):
                     st.warning("실천 체크 항목을 모두 확인해야 다음 단계로 이동할 수 있습니다.")
@@ -2983,10 +2893,11 @@ with tab_audit:
                 st.rerun()
 
     else:
-        # 단계/테마 전환 시 브라우저가 이 지점을 교육 화면의 시작점으로 인식하도록 하는 앵커입니다.
-        # 특히 Theme 1 CLEAR 후 Theme 2 시작 시, 이전 퀴즈 화면의 중간 위치가 남지 않도록 합니다.
-        st.markdown("<div id='june-v2-active-screen-top' style='height:1px; scroll-margin-top:0px;'></div>", unsafe_allow_html=True)
+        # 전체 Quest 진행 현황은 위에 보존하되, 실제 화면 전환 시에는 아래 active-screen 앵커부터 보이게 합니다.
+        # 이렇게 해야 STEP 1~6, Theme 1→Theme 2, Event→Submit 전환 시 교육 콘텐츠 시작 위치가 통일됩니다.
+        st.markdown("<div id='june-v2-outer-screen-top' style='height:1px; scroll-margin-top:8px;'></div>", unsafe_allow_html=True)
         _render_quest_cards(show_buttons=True)
+        st.markdown("<div id='june-v2-active-screen-top' style='height:1px; scroll-margin-top:8px;'></div>", unsafe_allow_html=True)
 
         if st.session_state.get("june_v2_view") in ["theme1", "theme2"]:
             current_theme = 1 if st.session_state.get("june_v2_view") == "theme1" else 2
