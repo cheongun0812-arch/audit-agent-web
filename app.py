@@ -2691,7 +2691,7 @@ with tab_audit:
                 (1, 2): 20,  # Theme 1 · STEP 2
                 (1, 3): 13,  # Theme 1 · STEP 3
                 (1, 4): 13,  # Theme 1 · STEP 4
-                (1, 5): 14,  # Theme 1 · STEP 5
+                (1, 5): 10,  # Theme 1 · STEP 5
                 (1, 6): 14,  # Theme 1 · STEP 6
                 (2, 2): 14,  # Theme 2 · STEP 2
                 (2, 3): 13,  # Theme 2 · STEP 3
