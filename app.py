@@ -1564,14 +1564,18 @@ with tab_audit:
     </style>
     """, unsafe_allow_html=True)
 
-    # ✅ 기존 실천서약은 기본 화면에서 완전히 렌더링하지 않습니다.
-    #    버튼을 켰을 때만 아래 보관함에 기존 코드를 그대로 표시합니다.
-    show_legacy_pledge = st.checkbox(
-        "📁 (안내) 아래 2026년 6월 컴플라이언스 인식제고 교육을 하시면 됩니다. 기존 ‘2026 임직원 윤리경영원칙 실천지침 실천서약’ 보관함 열기",
-        value=False,
-        key="show_legacy_pledge_archive",
-        help="내년에도 사용할 기존 실천서약 화면입니다. 기본 화면에서는 표시하지 않습니다."
-    )
+    # ✅ 기존 실천서약은 직원 혼동 방지를 위해 화면에서 문구를 완전히 숨깁니다.
+    #    감사실에서 필요할 때만 좌측의 작은 » 아이콘으로 열 수 있습니다.
+    if "show_legacy_pledge_archive" not in st.session_state:
+        st.session_state["show_legacy_pledge_archive"] = False
+
+    _legacy_icon_col, _legacy_blank_col = st.columns([0.025, 0.975])
+    with _legacy_icon_col:
+        if st.button("»", key="legacy_pledge_hidden_toggle", help="기존 윤리경영 실천서약 보관함"):
+            st.session_state["show_legacy_pledge_archive"] = not bool(st.session_state.get("show_legacy_pledge_archive", False))
+            st.rerun()
+
+    show_legacy_pledge = bool(st.session_state.get("show_legacy_pledge_archive", False))
 
     if show_legacy_pledge:
         with st.container(border=True):
@@ -1746,9 +1750,6 @@ with tab_audit:
             # ✅ 자율점검 탭 전용 스타일 범위 종료
             st.markdown("</div>", unsafe_allow_html=True)
 
-
-    else:
-        st.info("📁 기존 실천서약은 보관함에 숨겨져 있습니다. 필요할 때만 위 체크박스를 눌러 열어 주세요.")
 
     st.markdown("---")
 
@@ -3531,10 +3532,10 @@ with tab_summary:
             else:
                 st.warning("⚠️ 요약할 URL, 파일 또는 텍스트를 입력해 주세요.")
 
-# --- [Tab 5: 관리자 대시보드 최종 버전] ---
+# --- [Tab 5: 관리자 대시보드 - 수동 로딩형 현황판] ---
 with tab_admin:
     st.markdown("### 🔒 관리자 전용 대시보드")
-    st.caption("6월 컴플라이언스 인식제고 교육 수료 현황을 실시간으로 확인하고 CSV/Excel로 다운로드할 수 있습니다.")
+    st.caption("교육 수료 제출 안정성을 우선하기 위해, 관리자 화면은 자동으로 Google Sheet 데이터를 읽지 않습니다. 필요한 시점에만 현재 데이터를 불러옵니다.")
 
     # 1. 관리자 비밀번호 검증
     admin_pw = st.text_input("관리자 비밀번호", type="password", key="admin_dash_pw")
@@ -3543,200 +3544,235 @@ with tab_admin:
         st.stop()
 
     st.success("✅ 접속 성공")
-    st.info("현재 전 임직원 교육 수료 제출이 집중되는 기간이므로, Google Sheets API 읽기 한도 보호를 위해 관리자 모드의 데이터 조회 기능을 일시적으로 중지했습니다. 수료 여부는 Google Sheet에서 직접 확인해 주세요.")
-    st.stop()
 
-    # 2. 구글 시트 연결
-    client = init_google_sheet_connection()
-    if not client:
-        st.error("❌ 구글 시트 연결 실패. API 권한 및 Secrets 설정을 확인하세요.")
-        st.stop()
+    st.markdown("""
+    <div style="background:#FFF7ED; border:1px solid #FED7AA; border-left:6px solid #F97316; border-radius:16px; padding:16px 18px; margin:10px 0 18px 0;">
+      <div style="font-weight:950; color:#9A3412; font-size:1.02rem; margin-bottom:6px;">운영 안정화 안내</div>
+      <div style="color:#7C2D12; font-weight:750; line-height:1.65;">
+        전 임직원 교육 수료 제출이 집중되는 기간에는 수료 저장을 최우선으로 보호합니다.<br>
+        이 관리자 대시보드는 자동 조회를 하지 않으며, 감사실에서 필요할 때 <b>현재 데이터 불러오기</b> 버튼을 누른 경우에만 Google Sheet를 1회 조회합니다.
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    try:
+    TOTAL_STAFF_MAP = {
+        "감사실": 3,
+        "경영총괄": 27,
+        "사업총괄": 39,
+        "강북본부": 221,
+        "강남본부": 173,
+        "서부본부": 278,
+        "강원본부": 101,
+        "품질지원단": 137,
+    }
+
+    if "june_admin_df" not in st.session_state:
+        st.session_state["june_admin_df"] = None
+    if "june_admin_loaded_at" not in st.session_state:
+        st.session_state["june_admin_loaded_at"] = ""
+    if "june_admin_load_error" not in st.session_state:
+        st.session_state["june_admin_load_error"] = ""
+
+    def _load_june_admin_df_once() -> pd.DataFrame:
+        """관리자가 버튼을 누른 경우에만 Google Sheet를 1회 읽습니다."""
+        client = init_google_sheet_connection()
+        if not client:
+            raise RuntimeError("구글 시트 연결 실패. API 권한 및 Secrets 설정을 확인하세요.")
         spreadsheet = client.open("Audit_Result_2026")
-    except Exception as e:
-        st.error(f"데이터 로드 중 오류 발생: {e}")
+        try:
+            ws = spreadsheet.worksheet(JUNE_TRAINING_SHEET_NAME)
+            values = ws.get_all_values()
+        except Exception:
+            values = []
+        if not values or len(values) < 2:
+            return pd.DataFrame(columns=JUNE_TRAINING_HEADERS)
+        headers = values[0]
+        rows = values[1:]
+        return pd.DataFrame(rows, columns=headers)
+
+    load_col, clear_col, stamp_col = st.columns([0.22, 0.18, 0.60], vertical_alignment="center")
+    with load_col:
+        load_clicked = st.button("📊 현재 데이터 불러오기", type="primary", use_container_width=True, key="june_admin_load_current")
+    with clear_col:
+        clear_clicked = st.button("🧹 화면 데이터 초기화", use_container_width=True, key="june_admin_clear_loaded")
+    with stamp_col:
+        if st.session_state.get("june_admin_loaded_at"):
+            st.caption(f"마지막 조회 시각: {st.session_state['june_admin_loaded_at']}  ·  검색/필터/다운로드는 저장된 조회 결과 기준으로 동작합니다.")
+        else:
+            st.caption("아직 데이터를 불러오지 않았습니다. 버튼을 누르기 전에는 Google Sheet 읽기 요청이 발생하지 않습니다.")
+
+    if clear_clicked:
+        st.session_state["june_admin_df"] = None
+        st.session_state["june_admin_loaded_at"] = ""
+        st.session_state["june_admin_load_error"] = ""
+        st.rerun()
+
+    if load_clicked:
+        with st.spinner("Google Sheet에서 현재 수료 현황을 1회 불러오는 중입니다..."):
+            try:
+                st.session_state["june_admin_df"] = _load_june_admin_df_once()
+                st.session_state["june_admin_loaded_at"] = _korea_now().strftime("%Y-%m-%d %H:%M:%S")
+                st.session_state["june_admin_load_error"] = ""
+            except Exception as e:
+                st.session_state["june_admin_load_error"] = str(e)
+                st.session_state["june_admin_df"] = None
+
+    if st.session_state.get("june_admin_load_error"):
+        st.error(f"현재 데이터 로드 중 오류가 발생했습니다: {st.session_state['june_admin_load_error']}")
+        st.info("잠시 후 다시 '현재 데이터 불러오기' 버튼을 눌러 주세요. 이 화면은 자동 재조회하지 않습니다.")
         st.stop()
 
-    # =========================================================
-    # ✅ 6월 컴플라이언스 교육 수료 내역: 실시간 확인 / CSV 다운로드
-    # =========================================================
+    june_df = st.session_state.get("june_admin_df")
+    if june_df is None:
+        st.markdown("""
+        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:18px; padding:22px; margin-top:12px; box-shadow:0 10px 26px rgba(15,23,42,0.06);">
+          <div style="font-size:1.18rem; font-weight:950; color:#0F172A; margin-bottom:8px;">수동 조회 대기 상태</div>
+          <div style="color:#475569; font-weight:750; line-height:1.65;">
+            현재 관리자 모드는 Google Sheet를 자동으로 읽지 않습니다.<br>
+            현황 공유가 필요할 때만 <b>📊 현재 데이터 불러오기</b>를 눌러 최신 수료 현황을 확인해 주세요.
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.stop()
+
     st.markdown("---")
     st.markdown("#### 🌊 6월 컴플라이언스 인식제고 교육 수료 현황")
-    st.caption("Google Sheet에 저장된 수료 내역을 그대로 불러옵니다. 필요 시 새로고침 후 CSV/Excel로 내려받아 활용하세요.")
 
-    refresh_col, info_col = st.columns([0.16, 0.84])
-    with refresh_col:
-        if st.button("🔄 새로고침", use_container_width=True, key="june_admin_refresh"):
-            st.cache_data.clear()
-            _request_training_scroll_top()
-            st.rerun()
-    with info_col:
-        st.caption("제출 직후 화면에 바로 보이지 않으면 새로고침을 눌러 최신 Google Sheet 데이터를 다시 불러오세요.")
+    # 숫자형/문자형 안전 처리
+    if "사번" in june_df.columns:
+        unique_emp_count = int(june_df["사번"].astype(str).str.strip().replace("", pd.NA).dropna().nunique())
+        duplicate_count = max(int(len(june_df) - unique_emp_count), 0)
+    else:
+        unique_emp_count = int(len(june_df))
+        duplicate_count = 0
 
-    try:
-        try:
-            june_ws = spreadsheet.worksheet(JUNE_TRAINING_SHEET_NAME)
-            june_values = june_ws.get_all_values()
-        except Exception:
-            june_values = []
+    total_completion_rows = int(len(june_df))
+    total_target = int(sum(TOTAL_STAFF_MAP.values()))
+    overall_rate = (unique_emp_count / total_target * 100) if total_target else 0
 
-        if not june_values or len(june_values) < 2:
-            st.warning("아직 저장된 6월 컴플라이언스 교육 수료 내역이 없습니다.")
-            june_df = pd.DataFrame(columns=JUNE_TRAINING_HEADERS)
+    event_count = 0
+    if not june_df.empty and "이벤트추첨대상" in june_df.columns:
+        event_count = int((june_df["이벤트추첨대상"].astype(str).str.strip() == "대상").sum())
+
+    latest_time = "-"
+    if not june_df.empty and "저장시간" in june_df.columns:
+        latest_time = str(june_df["저장시간"].iloc[-1])
+
+    kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(5)
+    kpi1.metric("전체 대상자", f"{total_target:,}명")
+    kpi2.metric("고유 수료자", f"{unique_emp_count:,}명")
+    kpi3.metric("전체 수료율", f"{overall_rate:.1f}%")
+    kpi4.metric("이벤트 추첨 대상", f"{event_count:,}명")
+    kpi5.metric("최근 저장시간", latest_time)
+
+    if duplicate_count > 0:
+        st.caption(f"참고: 사번 기준 중복 제출로 추정되는 행이 {duplicate_count:,}건 있습니다. 최종 수료자 산정 시 Google Sheet에서 사번 기준으로 정리해 주세요.")
+
+    # 조직별 참여율 산정
+    org_stats_df = pd.DataFrame()
+    if not june_df.empty and "총괄/본부/단" in june_df.columns:
+        tmp = june_df.copy()
+        tmp["총괄/본부/단"] = tmp["총괄/본부/단"].astype(str).str.strip()
+        if "사번" in tmp.columns:
+            tmp["사번"] = tmp["사번"].astype(str).str.strip()
+            org_counts = tmp.drop_duplicates(subset=["사번"], keep="last")["총괄/본부/단"].value_counts().to_dict()
         else:
-            june_df = pd.DataFrame(june_values[1:], columns=june_values[0])
+            org_counts = tmp["총괄/본부/단"].value_counts().to_dict()
+        org_rows = []
+        for org, target in TOTAL_STAFF_MAP.items():
+            done = int(org_counts.get(org, 0))
+            rate = (done / target * 100) if target else 0
+            org_rows.append({"조직": org, "대상자": target, "수료자": done, "미수료자": max(target - done, 0), "수료율(%)": round(rate, 1)})
+        org_stats_df = pd.DataFrame(org_rows)
 
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("총 수료자", f"{len(june_df)}명")
-        if not june_df.empty and "이벤트추첨대상" in june_df.columns:
-            event_count = int((june_df["이벤트추첨대상"].astype(str) == "대상").sum())
-            m2.metric("이벤트 추첨 대상", f"{event_count}명")
-        else:
-            m2.metric("이벤트 추첨 대상", "0명")
-        if not june_df.empty and "최종점수" in june_df.columns:
-            score_series = pd.to_numeric(june_df["최종점수"], errors="coerce")
-            avg_score = score_series.mean() if not score_series.dropna().empty else 0
-            m3.metric("평균 점수", f"{avg_score:.1f}점")
-        else:
-            m3.metric("평균 점수", "0점")
-        if not june_df.empty and "저장시간" in june_df.columns:
-            m4.metric("최근 저장시간", str(june_df["저장시간"].iloc[-1]))
-        else:
-            m4.metric("최근 저장시간", "-")
-
-        search_term = st.text_input("🔍 수료 내역 검색", placeholder="성명, 사번, 부서, 본부 등", key="june_admin_search")
-        if search_term and not june_df.empty:
-            june_display_df = june_df[june_df.apply(lambda row: row.astype(str).str.contains(search_term, case=False, na=False).any(), axis=1)]
-        else:
-            june_display_df = june_df
-
-        st.dataframe(june_display_df, use_container_width=True, hide_index=True)
-
-        dl1, dl2 = st.columns(2)
-        with dl1:
-            june_csv_bytes = june_display_df.to_csv(index=False).encode("utf-8-sig")
-            st.download_button(
-                "📥 현재 조회내역 CSV 다운로드",
-                june_csv_bytes,
-                f"{JUNE_TRAINING_SHEET_NAME}.csv",
-                "text/csv",
-                use_container_width=True,
-                key="june_csv_download"
+    if not org_stats_df.empty:
+        st.markdown("#### 📈 조직별 수료 현황")
+        chart_col1, chart_col2 = st.columns(2)
+        with chart_col1:
+            fig_rate = px.bar(
+                org_stats_df,
+                x="조직",
+                y="수료율(%)",
+                text="수료율(%)",
+                title="조직별 수료율(%)",
+                color="수료율(%)",
+                color_continuous_scale="Blues",
+                range_y=[0, 100],
             )
-        with dl2:
-            try:
-                from io import BytesIO
-                output = BytesIO()
-                with pd.ExcelWriter(output, engine="openpyxl") as writer:
-                    june_display_df.to_excel(writer, index=False, sheet_name="6월_컴플라이언스교육")
-                st.download_button(
-                    "📥 현재 조회내역 Excel 다운로드",
-                    output.getvalue(),
-                    f"{JUNE_TRAINING_SHEET_NAME}.xlsx",
-                    use_container_width=True,
-                    key="june_xlsx_download"
-                )
-            except Exception:
-                st.info("Excel 엔진 미설치로 CSV 다운로드를 이용하세요.")
-    except Exception as e:
-        st.error(f"6월 교육 수료 내역 로드 중 오류 발생: {e}")
+            fig_rate.add_hline(y=100, line_dash="dash", line_color="red")
+            fig_rate.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
+            fig_rate.update_layout(margin=dict(l=10, r=10, t=58, b=10))
+            st.plotly_chart(fig_rate, use_container_width=True, config=PLOTLY_CONFIG)
+        with chart_col2:
+            fig_count = px.bar(
+                org_stats_df,
+                x="조직",
+                y=["수료자", "미수료자"],
+                title="조직별 수료/미수료 현황",
+                barmode="stack",
+                text_auto=True,
+            )
+            fig_count.update_layout(margin=dict(l=10, r=10, t=58, b=10), legend_title_text="구분")
+            st.plotly_chart(fig_count, use_container_width=True, config=PLOTLY_CONFIG)
 
-    # =========================================================
-    # 기존 자율점검 참여율 대시보드는 숨김 보관함으로 이동
-    # =========================================================
-    with st.expander("📁 기존 자율점검 참여율 대시보드 열기", expanded=False):
-        st.caption("기존 윤리경영 실천서약 참여율 및 제출 데이터 조회 기능입니다. 필요할 때만 펼쳐서 확인하세요.")
+        st.markdown("#### 🧾 조직별 공유용 요약표")
+        st.dataframe(org_stats_df, use_container_width=True, hide_index=True)
 
+        summary_csv = org_stats_df.to_csv(index=False).encode("utf-8-sig")
+        st.download_button(
+            "📥 조직별 수료율 요약 CSV 다운로드",
+            summary_csv,
+            "2026_06_컴플라이언스_조직별_수료율.csv",
+            "text/csv",
+            use_container_width=True,
+            key="june_org_summary_csv_download",
+        )
+    else:
+        st.warning("조직별 통계를 생성할 수 없습니다. 아직 수료 데이터가 없거나 '총괄/본부/단' 컬럼이 없습니다.")
+
+    st.markdown("---")
+    st.markdown("#### 🔍 수료 내역 확인 및 다운로드")
+    search_term = st.text_input("수료 내역 검색", placeholder="성명, 사번, 부서, 본부 등", key="june_admin_search")
+    if search_term and not june_df.empty:
+        june_display_df = june_df[june_df.apply(lambda row: row.astype(str).str.contains(search_term, case=False, na=False).any(), axis=1)]
+    else:
+        june_display_df = june_df
+
+    st.dataframe(june_display_df, use_container_width=True, hide_index=True)
+
+    dl1, dl2 = st.columns(2)
+    with dl1:
+        june_csv_bytes = june_display_df.to_csv(index=False).encode("utf-8-sig")
+        st.download_button(
+            "📥 현재 조회내역 CSV 다운로드",
+            june_csv_bytes,
+            f"{JUNE_TRAINING_SHEET_NAME}.csv",
+            "text/csv",
+            use_container_width=True,
+            key="june_csv_download",
+        )
+    with dl2:
         try:
-            ws_list = spreadsheet.worksheets()
-            excluded_sheets = ["Campaign_Config", JUNE_TRAINING_SHEET_NAME, "2026_현장대리인_선임신고"]
-            sheet_names = [ws.title for ws in ws_list if ws.title not in excluded_sheets]
+            from io import BytesIO
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine="openpyxl") as writer:
+                june_display_df.to_excel(writer, index=False, sheet_name="6월_컴플라이언스교육")
+                if not org_stats_df.empty:
+                    org_stats_df.to_excel(writer, index=False, sheet_name="조직별_수료율")
+            st.download_button(
+                "📥 현재 조회내역 Excel 다운로드",
+                output.getvalue(),
+                f"{JUNE_TRAINING_SHEET_NAME}.xlsx",
+                use_container_width=True,
+                key="june_xlsx_download",
+            )
+        except Exception:
+            st.info("Excel 엔진 미설치로 CSV 다운로드를 이용하세요.")
 
-            if not sheet_names:
-                st.warning("분석 가능한 기존 자율점검 시트가 없습니다.")
-            else:
-                selected_sheet = st.selectbox("📊 분석 대상 시트 선택", sheet_names, key="admin_sheet_select")
-                ws = spreadsheet.worksheet(selected_sheet)
-                values = ws.get_all_values()
-
-                if not values or len(values) < 2:
-                    st.warning("선택한 시트에 데이터가 없습니다.")
-                else:
-                    df = pd.DataFrame(values[1:], columns=values[0])
-
-                    st.markdown("---")
-                    st.markdown("#### 📈 실시간 참여 현황 분석")
-
-                    total_staff_map = {
-                        "감사실": 3,
-                        "경영총괄": 27,
-                        "사업총괄": 39,
-                        "강북본부": 221,
-                        "강남본부": 173,
-                        "서부본부": 278,
-                        "강원본부": 101,
-                        "품질지원단": 137
-                    }
-
-                    if "총괄/본부/단" not in df.columns:
-                        st.warning("선택한 시트에 '총괄/본부/단' 컬럼이 없어 참여율 차트를 생성할 수 없습니다.")
-                    else:
-                        unit_counts = df["총괄/본부/단"].value_counts().to_dict()
-                        stats_data = []
-                        for unit, total in total_staff_map.items():
-                            current = unit_counts.get(unit, 0)
-                            ratio = (current / total) * 100 if total > 0 else 0
-                            stats_data.append({
-                                "조직": unit,
-                                "정원": total,
-                                "참여인원": current,
-                                "참여율(%)": round(ratio, 1)
-                            })
-
-                        stats_df = pd.DataFrame(stats_data)
-                        total_target = sum(total_staff_map.values())
-                        total_current = len(df)
-                        total_ratio = (total_current / total_target) * 100 if total_target else 0
-
-                        m1, m2, m3 = st.columns(3)
-                        m1.metric("전체 대상자", f"{total_target}명")
-                        m2.metric("현재 참여자", f"{total_current}명")
-                        m3.metric("전체 참여율", f"{total_ratio:.1f}%")
-
-                        c1, c2 = st.columns(2)
-                        with c1:
-                            fig1 = px.bar(stats_df, x="조직", y="참여인원", text="참여인원",
-                                          title="조직별 참여 인원", color="참여인원", color_continuous_scale="Blues")
-                            st.plotly_chart(fig1, use_container_width=True, config=PLOTLY_CONFIG)
-                        with c2:
-                            fig2 = px.bar(stats_df, x="조직", y="참여율(%)", text="참여율(%)",
-                                          title="조직별 참여율(%)", color="참여율(%)", color_continuous_scale="Viridis")
-                            fig2.add_hline(y=100, line_dash="dash", line_color="red")
-                            st.plotly_chart(fig2, use_container_width=True, config=PLOTLY_CONFIG)
-
-                    with st.expander("📄 제출 데이터 상세 보기 / 검색", expanded=False):
-                        search_term_old = st.text_input("🔍 성명 또는 부서 검색", "", key="old_admin_search")
-                        if search_term_old:
-                            display_df = df[df.apply(lambda row: row.astype(str).str.contains(search_term_old, case=False, na=False).any(), axis=1)]
-                        else:
-                            display_df = df
-                        st.dataframe(display_df, use_container_width=True, hide_index=True)
-
-                    st.markdown("---")
-                    st.markdown("#### ⬇️ 기존 자율점검 데이터 내보내기")
-                    d1, d2 = st.columns(2)
-                    with d1:
-                        csv_bytes = df.to_csv(index=False).encode("utf-8-sig")
-                        st.download_button("📥 CSV 다운로드", csv_bytes, f"{selected_sheet}.csv", "text/csv", use_container_width=True, key="old_csv_download")
-                    with d2:
-                        try:
-                            from io import BytesIO
-                            output = BytesIO()
-                            with pd.ExcelWriter(output, engine="openpyxl") as writer:
-                                df.to_excel(writer, index=False, sheet_name="참여현황")
-                            st.download_button("📥 Excel 다운로드", output.getvalue(), f"{selected_sheet}.xlsx", use_container_width=True, key="old_xlsx_download")
-                        except Exception:
-                            st.info("Excel 엔진 미설치로 CSV 이용을 권장합니다.")
-        except Exception as e:
-            st.error(f"기존 자율점검 데이터 로드 중 오류 발생: {e}")
+    with st.expander("📌 운영 메모", expanded=False):
+        st.markdown("""
+        - 이 화면은 버튼을 누른 시점의 Google Sheet 데이터를 기준으로 표시합니다.
+        - 검색, 그래프 확인, 다운로드는 이미 불러온 데이터로 처리되므로 추가 Google Sheet 읽기 요청이 발생하지 않습니다.
+        - 최신 현황이 필요할 때만 다시 **현재 데이터 불러오기** 버튼을 눌러 주세요.
+        - 최종 수료자 확정 시에는 중복 제출 가능성을 고려하여 사번 기준으로 정리하는 것을 권장합니다.
+        """)
