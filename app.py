@@ -3716,7 +3716,9 @@ with tab_admin:
             st.plotly_chart(fig_count, use_container_width=True, config=PLOTLY_CONFIG)
 
         st.markdown("#### 🧾 조직별 공유용 요약표")
-        st.dataframe(org_stats_df, use_container_width=True, hide_index=True)
+        org_stats_display_df = org_stats_df.copy()
+        org_stats_display_df["명단 다운로드"] = "아래 조직별 버튼 사용"
+        st.dataframe(org_stats_display_df, use_container_width=True, hide_index=True)
 
         summary_csv = org_stats_df.to_csv(index=False).encode("utf-8-sig")
         st.download_button(
@@ -3727,6 +3729,141 @@ with tab_admin:
             use_container_width=True,
             key="june_org_summary_csv_download",
         )
+
+        # =========================================================
+        # ✅ 조직별 참여/미참여 명단 다운로드
+        # - Google Sheet 추가 조회 없음: 이미 '현재 데이터 불러오기'로 가져온 june_df만 사용
+        # - 미참여자 실명 확인은 전체 대상자 명부가 있을 때만 가능
+        # =========================================================
+        st.markdown("#### 📋 조직별 참여·미참여 명단 다운로드")
+        st.caption(
+            "완료자 명단은 현재 불러온 수료 데이터 기준으로 바로 생성됩니다. "
+            "미참여자 실명 명단은 전체 교육 대상자 명부를 업로드한 경우에만 생성됩니다. "
+            "대상자 명부 업로드는 Google Sheet를 추가로 읽지 않습니다."
+        )
+
+        roster_file = st.file_uploader(
+            "전체 교육 대상자 명부 업로드(선택 · CSV/XLSX) - 권장 컬럼: 사번, 성명, 총괄/본부/단, 부서 또는 상세 부서명",
+            type=["csv", "xlsx", "xls"],
+            key="june_target_roster_upload",
+        )
+
+        def _normalize_admin_colname(col) -> str:
+            return str(col or "").strip().replace(" ", "")
+
+        def _read_uploaded_roster(uploaded_file) -> pd.DataFrame:
+            if uploaded_file is None:
+                return pd.DataFrame()
+            name = str(getattr(uploaded_file, "name", "")).lower()
+            if name.endswith(".csv"):
+                df = pd.read_csv(uploaded_file, dtype=str)
+            else:
+                df = pd.read_excel(uploaded_file, dtype=str)
+            df = df.fillna("")
+            col_map = {}
+            for col in df.columns:
+                norm = _normalize_admin_colname(col)
+                if norm in {"사번", "직원번호", "사원번호", "EMPID", "EMPLOYEEID"}:
+                    col_map[col] = "사번"
+                elif norm in {"성명", "이름", "직원명", "사원명", "NAME"}:
+                    col_map[col] = "성명"
+                elif norm in {"총괄/본부/단", "총괄본부단", "조직", "본부", "소속", "ORG"}:
+                    col_map[col] = "총괄/본부/단"
+                elif norm in {"부서", "상세부서명", "상세부서", "팀", "DEPT", "DEPARTMENT"}:
+                    col_map[col] = "부서"
+            df = df.rename(columns=col_map)
+            for required in ["사번", "성명", "총괄/본부/단", "부서"]:
+                if required not in df.columns:
+                    df[required] = ""
+            df["사번"] = df["사번"].astype(str).str.strip()
+            df["성명"] = df["성명"].astype(str).str.strip()
+            df["총괄/본부/단"] = df["총괄/본부/단"].astype(str).str.strip()
+            df["부서"] = df["부서"].astype(str).str.strip()
+            return df[["사번", "성명", "총괄/본부/단", "부서"]].drop_duplicates(subset=["사번", "성명", "총괄/본부/단"], keep="last")
+
+        def _unique_completed_df(source_df: pd.DataFrame) -> pd.DataFrame:
+            if source_df is None or source_df.empty:
+                return pd.DataFrame(columns=["사번", "성명", "총괄/본부/단", "부서", "저장시간"])
+            df = source_df.copy().fillna("")
+            for col in ["사번", "성명", "총괄/본부/단", "부서", "저장시간"]:
+                if col not in df.columns:
+                    df[col] = ""
+            df["사번"] = df["사번"].astype(str).str.strip()
+            df["성명"] = df["성명"].astype(str).str.strip()
+            df["총괄/본부/단"] = df["총괄/본부/단"].astype(str).str.strip()
+            df["부서"] = df["부서"].astype(str).str.strip()
+            if "사번" in df.columns:
+                df = df.sort_values("저장시간").drop_duplicates(subset=["사번"], keep="last")
+            return df[["사번", "성명", "총괄/본부/단", "부서", "저장시간"]]
+
+        def _build_org_list_df(org_name: str, completed_df: pd.DataFrame, roster_df: pd.DataFrame | None = None) -> pd.DataFrame:
+            completed_org = completed_df[completed_df["총괄/본부/단"] == org_name].copy()
+            completed_org["참여상태"] = "수료"
+            completed_org = completed_org.rename(columns={"저장시간": "수료저장시간"})
+
+            if roster_df is not None and not roster_df.empty:
+                roster_org = roster_df[roster_df["총괄/본부/단"] == org_name].copy()
+                completed_keys = set(completed_org["사번"].astype(str).str.strip())
+                roster_org["참여상태"] = roster_org["사번"].astype(str).str.strip().apply(lambda x: "수료" if x in completed_keys else "미수료")
+                saved_time_map = completed_org.set_index("사번")["수료저장시간"].to_dict() if not completed_org.empty else {}
+                roster_org["수료저장시간"] = roster_org["사번"].map(saved_time_map).fillna("")
+                result = roster_org[["총괄/본부/단", "부서", "사번", "성명", "참여상태", "수료저장시간"]]
+                result = result.sort_values(["참여상태", "부서", "성명"], ascending=[True, True, True])
+                return result
+
+            result = completed_org[["총괄/본부/단", "부서", "사번", "성명", "참여상태", "수료저장시간"]]
+            if result.empty:
+                return pd.DataFrame(columns=["총괄/본부/단", "부서", "사번", "성명", "참여상태", "수료저장시간"])
+            return result.sort_values(["부서", "성명"])
+
+        try:
+            roster_df = _read_uploaded_roster(roster_file)
+        except Exception as roster_error:
+            roster_df = pd.DataFrame()
+            st.warning(f"대상자 명부를 읽지 못했습니다. 파일 컬럼과 형식을 확인해 주세요: {roster_error}")
+
+        completed_unique_df = _unique_completed_df(june_df)
+        if roster_df.empty:
+            st.info("현재는 수료자 명단만 다운로드할 수 있습니다. 미수료자 실명 명단까지 필요하면 전체 교육 대상자 명부를 업로드해 주세요.")
+        else:
+            st.success("대상자 명부가 적용되었습니다. 조직별 파일에 수료/미수료 상태가 함께 표시됩니다.")
+
+        org_button_cols = st.columns(4)
+        for idx, org_name in enumerate(TOTAL_STAFF_MAP.keys()):
+            org_list_df = _build_org_list_df(org_name, completed_unique_df, roster_df)
+            if roster_df.empty:
+                filename = f"2026_06_컴플라이언스_{org_name}_수료자명단.csv"
+                label = f"📥 {org_name} 수료자"
+            else:
+                filename = f"2026_06_컴플라이언스_{org_name}_참여미참여명단.csv"
+                label = f"📥 {org_name} 참여/미참여"
+            with org_button_cols[idx % 4]:
+                st.download_button(
+                    label,
+                    org_list_df.to_csv(index=False).encode("utf-8-sig"),
+                    filename,
+                    "text/csv",
+                    use_container_width=True,
+                    key=f"june_org_list_download_{org_name}",
+                )
+
+        try:
+            from io import BytesIO
+            all_output = BytesIO()
+            with pd.ExcelWriter(all_output, engine="openpyxl") as writer:
+                org_stats_df.to_excel(writer, index=False, sheet_name="조직별_요약")
+                for org_name in TOTAL_STAFF_MAP.keys():
+                    sheet_name = re.sub(r"[\/*?:\[\]]", "", org_name)[:31]
+                    _build_org_list_df(org_name, completed_unique_df, roster_df).to_excel(writer, index=False, sheet_name=sheet_name)
+            st.download_button(
+                "📥 전체 조직별 명단 Excel 다운로드",
+                all_output.getvalue(),
+                "2026_06_컴플라이언스_전체조직별_참여현황.xlsx",
+                use_container_width=True,
+                key="june_all_org_list_excel_download",
+            )
+        except Exception:
+            st.caption("Excel 다운로드 생성이 어려운 경우 위 조직별 CSV 다운로드를 이용해 주세요.")
     else:
         st.warning("조직별 통계를 생성할 수 없습니다. 아직 수료 데이터가 없거나 '총괄/본부/단' 컬럼이 없습니다.")
 
