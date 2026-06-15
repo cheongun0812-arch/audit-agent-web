@@ -993,37 +993,50 @@ JUNE_TRAINING_HEADERS = [
 ]
 
 
-def save_june_compliance_training_result(record: dict) -> tuple[bool, str]:
-    """6월 컴플라이언스 인식제고 교육 수료 내역을 Google Sheet에 저장합니다."""
+@st.cache_resource(show_spinner=False)
+def _get_june_training_sheet_for_append_only():
+    """
+    [긴급 안정화]
+    교육 수료 저장 전용 Worksheet를 1회만 찾아 캐시합니다.
+    - 수료 제출 때마다 get_all_records()/get_all_values()를 호출하지 않습니다.
+    - 관리자 조회/중복 조회 없이 append_row만 수행해 Sheets API Read quota 사용을 최소화합니다.
+    """
     client = init_google_sheet_connection()
     if not client:
-        return False, "구글 시트 연결 실패 (Secrets 확인)"
+        return None
 
+    spreadsheet = client.open("Audit_Result_2026")
     try:
-        spreadsheet = client.open("Audit_Result_2026")
-        try:
-            sheet = spreadsheet.worksheet(JUNE_TRAINING_SHEET_NAME)
-        except Exception:
-            sheet = spreadsheet.add_worksheet(title=JUNE_TRAINING_SHEET_NAME, rows=3000, cols=len(JUNE_TRAINING_HEADERS) + 2)
-            sheet.append_row(JUNE_TRAINING_HEADERS)
+        return spreadsheet.worksheet(JUNE_TRAINING_SHEET_NAME)
+    except Exception:
+        sheet = spreadsheet.add_worksheet(
+            title=JUNE_TRAINING_SHEET_NAME,
+            rows=5000,
+            cols=len(JUNE_TRAINING_HEADERS) + 2
+        )
+        sheet.append_row(JUNE_TRAINING_HEADERS, value_input_option="USER_ENTERED")
+        return sheet
 
-        all_records = sheet.get_all_records()
+
+def save_june_compliance_training_result(record: dict) -> tuple[bool, str]:
+    """
+    6월 컴플라이언스 인식제고 교육 수료 내역을 Google Sheet에 저장합니다.
+
+    [긴급 안정화 원칙]
+    - 전 임직원 동시 접속 상황에서는 저장 전 전체 데이터 읽기/중복 검사를 하지 않습니다.
+    - Google Sheet에는 수료 정보만 append 저장합니다.
+    - 중복 제출 여부는 사후에 Google Sheet에서 사번 기준으로 확인합니다.
+    """
+    try:
+        sheet = _get_june_training_sheet_for_append_only()
+        if sheet is None:
+            return False, "구글 시트 연결 실패 (Secrets 확인)"
+
+        now = _korea_now().strftime("%Y-%m-%d %H:%M:%S")
         emp_id_str = str(record.get("사번", "")).strip()
         name_str = str(record.get("성명", "")).strip()
         dept_str = str(record.get("부서", "")).strip()
 
-        for existing in all_records:
-            existing_emp_id = str(existing.get("사번", "")).strip()
-            existing_name = str(existing.get("성명", "")).strip()
-            existing_dept = str(existing.get("부서", "")).strip()
-            if emp_id_str == "00000000":
-                if existing_emp_id == "00000000" and existing_name == name_str and existing_dept == dept_str:
-                    return False, f"'{name_str}'님은 이미 6월 컴플라이언스 교육 수료 기록이 있습니다."
-            else:
-                if existing_emp_id == emp_id_str:
-                    return False, f"사번 {emp_id_str}은(는) 이미 6월 컴플라이언스 교육 수료 기록이 있습니다."
-
-        now = _korea_now().strftime("%Y-%m-%d %H:%M:%S")
         completion_seed = f"{now}|{emp_id_str}|{name_str}|{dept_str}|2026-06-compliance"
         completion_id = hashlib.sha256(completion_seed.encode("utf-8")).hexdigest()[:12]
 
@@ -1048,10 +1061,26 @@ def save_june_compliance_training_result(record: dict) -> tuple[bool, str]:
             record.get("이벤트추첨대상", "대상"),
             record.get("비고", ""),
         ]
-        sheet.append_row(row, value_input_option="USER_ENTERED")
-        return True, "6월 컴플라이언스 인식제고 교육 수료 내역이 저장되었습니다."
+
+        # 동시 제출이 몰릴 때 일시적 429가 발생할 수 있어 짧은 재시도 적용
+        last_error = None
+        for attempt in range(5):
+            try:
+                sheet.append_row(row, value_input_option="USER_ENTERED")
+                return True, "6월 컴플라이언스 인식제고 교육 수료 내역이 저장되었습니다."
+            except Exception as e:
+                last_error = e
+                err_text = str(e)
+                if "429" in err_text or "Quota exceeded" in err_text:
+                    time.sleep(1.5 * (attempt + 1))
+                    continue
+                return False, err_text
+
+        return False, f"Google Sheet 저장 요청이 일시적으로 집중되어 저장에 실패했습니다. 잠시 후 다시 제출해 주세요. ({last_error})"
+
     except Exception as e:
         return False, str(e)
+
 
 # ==========================================
 # 9. 메인 화면 및 탭 구성
@@ -1070,13 +1099,9 @@ campaign_info = {
     "start_date": _now_kst.strftime("%Y.%m.%d"),
 }
 
-try:
-    _client_for_campaign = init_google_sheet_connection()
-    if _client_for_campaign:
-        _ss_for_campaign = _client_for_campaign.open("Audit_Result_2026")
-        campaign_info = get_current_campaign_info(_ss_for_campaign, _now_kst)
-except Exception:
-    pass
+# ✅ [긴급 안정화] 전 임직원 동시 접속 기간에는 초기 화면 로딩 시 Google Sheet를 읽지 않습니다.
+# - Google Sheets API Read quota 초과 방지를 위해 campaign_info는 기본값을 사용합니다.
+# - 교육 수료 저장 시점에만 Google Sheet append를 수행합니다.
 
 # ✅ 상단 메뉴 카드형 디자인: 선택된 탭이 명확하게 보이도록 개선
 st.markdown("""
@@ -3515,210 +3540,18 @@ with tab_summary:
             else:
                 st.warning("⚠️ 요약할 URL, 파일 또는 텍스트를 입력해 주세요.")
 
-# --- [Tab 5: 관리자 대시보드 최종 버전] ---
+# --- [Tab 5: 관리자 모드 임시 비활성화] ---
 with tab_admin:
-    st.markdown("### 🔒 관리자 전용 대시보드")
-    st.caption("6월 컴플라이언스 인식제고 교육 수료 현황을 실시간으로 확인하고 CSV/Excel로 다운로드할 수 있습니다.")
-
-    # 1. 관리자 비밀번호 검증
-    admin_pw = st.text_input("관리자 비밀번호", type="password", key="admin_dash_pw")
-    if admin_pw.strip() != "ktmos0402!":
-        st.info("관리자 비밀번호를 입력하세요.")
-        st.stop()
-
-    st.success("✅ 접속 성공")
-
-    # 2. 구글 시트 연결
-    client = init_google_sheet_connection()
-    if not client:
-        st.error("❌ 구글 시트 연결 실패. API 권한 및 Secrets 설정을 확인하세요.")
-        st.stop()
-
-    try:
-        spreadsheet = client.open("Audit_Result_2026")
-    except Exception as e:
-        st.error(f"데이터 로드 중 오류 발생: {e}")
-        st.stop()
-
-    # =========================================================
-    # ✅ 6월 컴플라이언스 교육 수료 내역: 실시간 확인 / CSV 다운로드
-    # =========================================================
-    st.markdown("---")
-    st.markdown("#### 🌊 6월 컴플라이언스 인식제고 교육 수료 현황")
-    st.caption("Google Sheet에 저장된 수료 내역을 그대로 불러옵니다. 필요 시 새로고침 후 CSV/Excel로 내려받아 활용하세요.")
-
-    refresh_col, info_col = st.columns([0.16, 0.84])
-    with refresh_col:
-        if st.button("🔄 새로고침", use_container_width=True, key="june_admin_refresh"):
-            st.cache_data.clear()
-            _request_training_scroll_top()
-            st.rerun()
-    with info_col:
-        st.caption("제출 직후 화면에 바로 보이지 않으면 새로고침을 눌러 최신 Google Sheet 데이터를 다시 불러오세요.")
-
-    try:
-        try:
-            june_ws = spreadsheet.worksheet(JUNE_TRAINING_SHEET_NAME)
-            june_values = june_ws.get_all_values()
-        except Exception:
-            june_values = []
-
-        if not june_values or len(june_values) < 2:
-            st.warning("아직 저장된 6월 컴플라이언스 교육 수료 내역이 없습니다.")
-            june_df = pd.DataFrame(columns=JUNE_TRAINING_HEADERS)
-        else:
-            june_df = pd.DataFrame(june_values[1:], columns=june_values[0])
-
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("총 수료자", f"{len(june_df)}명")
-        if not june_df.empty and "이벤트추첨대상" in june_df.columns:
-            event_count = int((june_df["이벤트추첨대상"].astype(str) == "대상").sum())
-            m2.metric("이벤트 추첨 대상", f"{event_count}명")
-        else:
-            m2.metric("이벤트 추첨 대상", "0명")
-        if not june_df.empty and "최종점수" in june_df.columns:
-            score_series = pd.to_numeric(june_df["최종점수"], errors="coerce")
-            avg_score = score_series.mean() if not score_series.dropna().empty else 0
-            m3.metric("평균 점수", f"{avg_score:.1f}점")
-        else:
-            m3.metric("평균 점수", "0점")
-        if not june_df.empty and "저장시간" in june_df.columns:
-            m4.metric("최근 저장시간", str(june_df["저장시간"].iloc[-1]))
-        else:
-            m4.metric("최근 저장시간", "-")
-
-        search_term = st.text_input("🔍 수료 내역 검색", placeholder="성명, 사번, 부서, 본부 등", key="june_admin_search")
-        if search_term and not june_df.empty:
-            june_display_df = june_df[june_df.apply(lambda row: row.astype(str).str.contains(search_term, case=False, na=False).any(), axis=1)]
-        else:
-            june_display_df = june_df
-
-        st.dataframe(june_display_df, use_container_width=True, hide_index=True)
-
-        dl1, dl2 = st.columns(2)
-        with dl1:
-            june_csv_bytes = june_display_df.to_csv(index=False).encode("utf-8-sig")
-            st.download_button(
-                "📥 현재 조회내역 CSV 다운로드",
-                june_csv_bytes,
-                f"{JUNE_TRAINING_SHEET_NAME}.csv",
-                "text/csv",
-                use_container_width=True,
-                key="june_csv_download"
-            )
-        with dl2:
-            try:
-                from io import BytesIO
-                output = BytesIO()
-                with pd.ExcelWriter(output, engine="openpyxl") as writer:
-                    june_display_df.to_excel(writer, index=False, sheet_name="6월_컴플라이언스교육")
-                st.download_button(
-                    "📥 현재 조회내역 Excel 다운로드",
-                    output.getvalue(),
-                    f"{JUNE_TRAINING_SHEET_NAME}.xlsx",
-                    use_container_width=True,
-                    key="june_xlsx_download"
-                )
-            except Exception:
-                st.info("Excel 엔진 미설치로 CSV 다운로드를 이용하세요.")
-    except Exception as e:
-        st.error(f"6월 교육 수료 내역 로드 중 오류 발생: {e}")
-
-    # =========================================================
-    # 기존 자율점검 참여율 대시보드는 숨김 보관함으로 이동
-    # =========================================================
-    with st.expander("📁 기존 자율점검 참여율 대시보드 열기", expanded=False):
-        st.caption("기존 윤리경영 실천서약 참여율 및 제출 데이터 조회 기능입니다. 필요할 때만 펼쳐서 확인하세요.")
-
-        try:
-            ws_list = spreadsheet.worksheets()
-            excluded_sheets = ["Campaign_Config", JUNE_TRAINING_SHEET_NAME, "2026_현장대리인_선임신고"]
-            sheet_names = [ws.title for ws in ws_list if ws.title not in excluded_sheets]
-
-            if not sheet_names:
-                st.warning("분석 가능한 기존 자율점검 시트가 없습니다.")
-            else:
-                selected_sheet = st.selectbox("📊 분석 대상 시트 선택", sheet_names, key="admin_sheet_select")
-                ws = spreadsheet.worksheet(selected_sheet)
-                values = ws.get_all_values()
-
-                if not values or len(values) < 2:
-                    st.warning("선택한 시트에 데이터가 없습니다.")
-                else:
-                    df = pd.DataFrame(values[1:], columns=values[0])
-
-                    st.markdown("---")
-                    st.markdown("#### 📈 실시간 참여 현황 분석")
-
-                    total_staff_map = {
-                        "감사실": 3,
-                        "경영총괄": 27,
-                        "사업총괄": 39,
-                        "강북본부": 221,
-                        "강남본부": 173,
-                        "서부본부": 278,
-                        "강원본부": 101,
-                        "품질지원단": 137
-                    }
-
-                    if "총괄/본부/단" not in df.columns:
-                        st.warning("선택한 시트에 '총괄/본부/단' 컬럼이 없어 참여율 차트를 생성할 수 없습니다.")
-                    else:
-                        unit_counts = df["총괄/본부/단"].value_counts().to_dict()
-                        stats_data = []
-                        for unit, total in total_staff_map.items():
-                            current = unit_counts.get(unit, 0)
-                            ratio = (current / total) * 100 if total > 0 else 0
-                            stats_data.append({
-                                "조직": unit,
-                                "정원": total,
-                                "참여인원": current,
-                                "참여율(%)": round(ratio, 1)
-                            })
-
-                        stats_df = pd.DataFrame(stats_data)
-                        total_target = sum(total_staff_map.values())
-                        total_current = len(df)
-                        total_ratio = (total_current / total_target) * 100 if total_target else 0
-
-                        m1, m2, m3 = st.columns(3)
-                        m1.metric("전체 대상자", f"{total_target}명")
-                        m2.metric("현재 참여자", f"{total_current}명")
-                        m3.metric("전체 참여율", f"{total_ratio:.1f}%")
-
-                        c1, c2 = st.columns(2)
-                        with c1:
-                            fig1 = px.bar(stats_df, x="조직", y="참여인원", text="참여인원",
-                                          title="조직별 참여 인원", color="참여인원", color_continuous_scale="Blues")
-                            st.plotly_chart(fig1, use_container_width=True, config=PLOTLY_CONFIG)
-                        with c2:
-                            fig2 = px.bar(stats_df, x="조직", y="참여율(%)", text="참여율(%)",
-                                          title="조직별 참여율(%)", color="참여율(%)", color_continuous_scale="Viridis")
-                            fig2.add_hline(y=100, line_dash="dash", line_color="red")
-                            st.plotly_chart(fig2, use_container_width=True, config=PLOTLY_CONFIG)
-
-                    with st.expander("📄 제출 데이터 상세 보기 / 검색", expanded=False):
-                        search_term_old = st.text_input("🔍 성명 또는 부서 검색", "", key="old_admin_search")
-                        if search_term_old:
-                            display_df = df[df.apply(lambda row: row.astype(str).str.contains(search_term_old, case=False, na=False).any(), axis=1)]
-                        else:
-                            display_df = df
-                        st.dataframe(display_df, use_container_width=True, hide_index=True)
-
-                    st.markdown("---")
-                    st.markdown("#### ⬇️ 기존 자율점검 데이터 내보내기")
-                    d1, d2 = st.columns(2)
-                    with d1:
-                        csv_bytes = df.to_csv(index=False).encode("utf-8-sig")
-                        st.download_button("📥 CSV 다운로드", csv_bytes, f"{selected_sheet}.csv", "text/csv", use_container_width=True, key="old_csv_download")
-                    with d2:
-                        try:
-                            from io import BytesIO
-                            output = BytesIO()
-                            with pd.ExcelWriter(output, engine="openpyxl") as writer:
-                                df.to_excel(writer, index=False, sheet_name="참여현황")
-                            st.download_button("📥 Excel 다운로드", output.getvalue(), f"{selected_sheet}.xlsx", use_container_width=True, key="old_xlsx_download")
-                        except Exception:
-                            st.info("Excel 엔진 미설치로 CSV 이용을 권장합니다.")
-        except Exception as e:
-            st.error(f"기존 자율점검 데이터 로드 중 오류 발생: {e}")
+    st.markdown("### 🔒 관리자 모드 임시 비활성화")
+    st.info(
+        "현재 전 임직원 교육 수료 제출이 집중되는 기간이므로, "
+        "Google Sheets API 읽기 한도 보호를 위해 관리자 모드의 데이터 조회 기능을 일시적으로 중지했습니다."
+    )
+    st.markdown(
+        """
+        - 교육 참석자는 정상적으로 교육을 이수하고 수료 제출을 진행할 수 있습니다.
+        - 수료 정보는 Google Sheet에 저장됩니다.
+        - 참석 여부와 수료 현황은 Google Sheet에서 직접 확인해 주세요.
+        - 교육 집중 기간 종료 후 관리자 대시보드를 다시 활성화할 수 있습니다.
+        """
+    )
