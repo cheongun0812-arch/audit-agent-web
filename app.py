@@ -2362,8 +2362,15 @@ with tab_audit:
         st.rerun()
 
     def _theme_score(theme_no: int) -> int:
+        # ✅ 수료 완료 화면 점수 표시 개선
+        # - 직원 혼선을 줄이기 위해 각 Theme 완료 시 50점씩 부여합니다.
+        # - 교육 진행/제출/저장/관리자 기능 로직은 변경하지 않습니다.
         if theme_no == 1:
+            if st.session_state.get("june_v2_theme1_done", False):
+                return 50
             return (15 if _checks_done(1) else 0) + (_quiz_correct_count(1) * 5)
+        if st.session_state.get("june_v2_theme2_done", False):
+            return 50
         return (15 if _checks_done(2) else 0) + (_quiz_correct_count(2) * 6)
 
     def _render_quest_cards(show_buttons: bool = True):
@@ -2873,7 +2880,7 @@ with tab_audit:
         checked = _checks_done(theme_no)
         answered = _quiz_answered(theme_no)
         score = _theme_score(theme_no)
-        max_score = 35 if theme_no == 1 else 45
+        max_score = 50
         st.markdown(
             f"<span class='score-pill-v2'>실천 체크: {'완료' if checked else '진행 중'}</span>"
             f"<span class='score-pill-v2'>퀴즈 응시: {'완료' if answered else '진행 중'}</span>"
@@ -3100,10 +3107,11 @@ with tab_audit:
             t1_score_now = _theme_score(1)
             t2_score_now = _theme_score(2)
             quiz_score_now = (_quiz_correct_count(1) * 5) + (_quiz_correct_count(2) * 6)
-            event_score_now = 10 if event_answered_now else 0
-            final_submit_score = 10 if (t1_done and t2_done and event_answered_now) else 0
-            participation_score = (15 if _checks_done(1) else 0) + (15 if _checks_done(2) else 0) + event_score_now + final_submit_score
-            final_score = t1_score_now + t2_score_now + event_score_now + final_submit_score
+            event_score_now = 0
+            final_submit_score = 0
+            # ✅ 최종 수료 화면 점수 표시 개선: Theme 1 50점 + Theme 2 50점 = 100점 기준
+            participation_score = t1_score_now + t2_score_now
+            final_score = t1_score_now + t2_score_now
 
             cstat1, cstat2, cstat3, cstat4 = st.columns(4)
             cstat1.metric("Theme 1", "CLEAR" if t1_done else "진행 중")
