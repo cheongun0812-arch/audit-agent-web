@@ -1055,6 +1055,289 @@ def save_june_compliance_training_result(record: dict) -> tuple[bool, str]:
         return False, str(e)
 
 # ==========================================
+# 8-1. 현장 IP 자동 전환 및 Google Sheets 이력관리
+# ==========================================
+import json
+import platform
+import subprocess
+import socket
+import getpass
+import ipaddress
+
+IP_PROFILE_SHEET_NAME = "IP_Profiles"
+IP_HISTORY_SHEET_NAME = "IP_Change_History"
+IP_PROFILE_HEADERS = [
+    "profile_id", "프로필명", "어댑터명", "IP주소", "서브넷마스크", "기본게이트웨이",
+    "기본DNS", "보조DNS", "사용여부", "수정일시", "수정자사번", "수정자성명", "비고"
+]
+IP_HISTORY_HEADERS = [
+    "변경일시", "작업ID", "작업결과", "프로필ID", "프로필명", "PC명", "Windows사용자",
+    "수정자사번", "수정자성명", "어댑터명", "기존IP", "기존서브넷", "기존게이트웨이",
+    "기존DNS", "변경IP", "변경서브넷", "변경게이트웨이", "변경DNS", "오류내용", "비고"
+]
+
+
+def _open_ip_spreadsheet():
+    """기존 Google 서비스 계정 연결을 재사용하여 IP 관리 스프레드시트를 엽니다."""
+    client = init_google_sheet_connection()
+    if not client:
+        raise RuntimeError("Google Sheets 연결 실패: .streamlit/secrets.toml의 gcp_service_account 설정을 확인하세요.")
+    # 기존 앱이 사용하는 동일 파일을 활용하여 별도 자격증명 추가를 피합니다.
+    return client.open("Audit_Result_2026")
+
+
+def _ensure_ip_sheet(spreadsheet, title: str, headers: list[str], rows: int = 3000):
+    try:
+        ws = spreadsheet.worksheet(title)
+    except Exception:
+        ws = spreadsheet.add_worksheet(title=title, rows=rows, cols=max(len(headers) + 2, 20))
+        ws.append_row(headers)
+    values = ws.get_all_values()
+    if not values:
+        ws.append_row(headers)
+    elif values[0][:len(headers)] != headers:
+        # 기존 데이터 훼손 방지를 위해 헤더를 강제로 덮어쓰지 않고 오류로 중단합니다.
+        raise RuntimeError(f"'{title}' 시트의 헤더가 예상 형식과 다릅니다. 기존 시트를 백업한 후 확인하세요.")
+    return ws
+
+
+def load_ip_profiles() -> list[dict]:
+    spreadsheet = _open_ip_spreadsheet()
+    ws = _ensure_ip_sheet(spreadsheet, IP_PROFILE_SHEET_NAME, IP_PROFILE_HEADERS)
+    records = ws.get_all_records()
+    return [r for r in records if str(r.get("사용여부", "Y")).strip().upper() != "N"]
+
+
+def _profile_row_index(ws, profile_id: str) -> int | None:
+    rows = ws.get_all_values()
+    for idx, row in enumerate(rows[1:], start=2):
+        if row and str(row[0]).strip() == str(profile_id).strip():
+            return idx
+    return None
+
+
+def save_ip_profile(profile: dict, modifier_emp_id: str, modifier_name: str) -> tuple[bool, str]:
+    try:
+        validate_ip_profile(profile)
+        spreadsheet = _open_ip_spreadsheet()
+        ws = _ensure_ip_sheet(spreadsheet, IP_PROFILE_SHEET_NAME, IP_PROFILE_HEADERS)
+        profile_id = str(profile.get("profile_id") or "").strip()
+        now = _korea_now().strftime("%Y-%m-%d %H:%M:%S")
+        if not profile_id:
+            seed = f"{profile.get('프로필명')}|{profile.get('IP주소')}|{now}"
+            profile_id = hashlib.sha256(seed.encode("utf-8")).hexdigest()[:12]
+
+        row = [
+            profile_id, str(profile.get("프로필명", "")).strip(), str(profile.get("어댑터명", "")).strip(),
+            str(profile.get("IP주소", "")).strip(), str(profile.get("서브넷마스크", "")).strip(),
+            str(profile.get("기본게이트웨이", "")).strip(), str(profile.get("기본DNS", "")).strip(),
+            str(profile.get("보조DNS", "")).strip(), "Y", now, modifier_emp_id.strip(), modifier_name.strip(),
+            str(profile.get("비고", "")).strip(),
+        ]
+        row_idx = _profile_row_index(ws, profile_id)
+        if row_idx:
+            ws.update(f"A{row_idx}:M{row_idx}", [row])
+            return True, "IP 프로필이 수정되었습니다."
+        ws.append_row(row, value_input_option="USER_ENTERED")
+        return True, "IP 프로필이 등록되었습니다."
+    except Exception as e:
+        return False, str(e)
+
+
+def disable_ip_profile(profile_id: str, modifier_emp_id: str, modifier_name: str) -> tuple[bool, str]:
+    try:
+        spreadsheet = _open_ip_spreadsheet()
+        ws = _ensure_ip_sheet(spreadsheet, IP_PROFILE_SHEET_NAME, IP_PROFILE_HEADERS)
+        row_idx = _profile_row_index(ws, profile_id)
+        if not row_idx:
+            return False, "삭제할 프로필을 찾지 못했습니다."
+        now = _korea_now().strftime("%Y-%m-%d %H:%M:%S")
+        ws.update(f"I{row_idx}:L{row_idx}", [["N", now, modifier_emp_id.strip(), modifier_name.strip()]])
+        return True, "프로필을 비활성화했습니다. 기존 변경 이력은 유지됩니다."
+    except Exception as e:
+        return False, str(e)
+
+
+def _mask_to_prefix(mask: str) -> int:
+    try:
+        return ipaddress.IPv4Network(f"0.0.0.0/{mask}").prefixlen
+    except Exception as e:
+        raise ValueError("서브넷 마스크 형식이 올바르지 않습니다. 예: 255.255.255.0") from e
+
+
+def validate_ip_profile(profile: dict) -> None:
+    required = ["프로필명", "어댑터명", "IP주소", "서브넷마스크"]
+    missing = [k for k in required if not str(profile.get(k, "")).strip()]
+    if missing:
+        raise ValueError("필수값 누락: " + ", ".join(missing))
+
+    ip = ipaddress.IPv4Address(str(profile["IP주소"]).strip())
+    mask = str(profile["서브넷마스크"]).strip()
+    prefix = _mask_to_prefix(mask)
+    network = ipaddress.IPv4Network(f"{ip}/{prefix}", strict=False)
+    if ip in {network.network_address, network.broadcast_address}:
+        raise ValueError("IP 주소로 네트워크 주소 또는 브로드캐스트 주소를 사용할 수 없습니다.")
+
+    gateway_text = str(profile.get("기본게이트웨이", "")).strip()
+    if gateway_text:
+        gateway = ipaddress.IPv4Address(gateway_text)
+        if gateway not in network:
+            raise ValueError(f"기본 게이트웨이({gateway})가 IP 대역({network})에 포함되지 않습니다.")
+    for dns_key in ("기본DNS", "보조DNS"):
+        dns = str(profile.get(dns_key, "")).strip()
+        if dns:
+            ipaddress.IPv4Address(dns)
+
+
+def is_local_windows() -> bool:
+    return platform.system().lower() == "windows"
+
+
+def is_windows_admin() -> bool:
+    if not is_local_windows():
+        return False
+    try:
+        import ctypes
+        return bool(ctypes.windll.shell32.IsUserAnAdmin())
+    except Exception:
+        return False
+
+
+def list_windows_adapters() -> list[str]:
+    if not is_local_windows():
+        return []
+    command = [
+        "powershell", "-NoProfile", "-NonInteractive", "-Command",
+        "Get-NetAdapter -Physical | Where-Object {$_.Status -ne 'Disabled'} | Select-Object -ExpandProperty Name"
+    ]
+    result = subprocess.run(command, capture_output=True, text=True, timeout=15, check=False)
+    if result.returncode != 0:
+        return []
+    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
+def get_current_adapter_config(adapter_name: str) -> dict:
+    if not is_local_windows():
+        return {"ip": "", "subnet": "", "gateway": "", "dns": [], "dhcp": "", "error": "Windows 로컬 실행이 아닙니다."}
+    safe_name = adapter_name.replace("'", "''")
+    script = rf"""
+$alias = '{safe_name}'
+$cfg = Get-NetIPConfiguration -InterfaceAlias $alias -ErrorAction Stop
+$ipif = Get-NetIPInterface -InterfaceAlias $alias -AddressFamily IPv4 -ErrorAction Stop
+$ipv4 = $cfg.IPv4Address | Select-Object -First 1
+$prefix = if ($ipv4) {{ $ipv4.PrefixLength }} else {{ $null }}
+$mask = if ($prefix -ne $null) {{
+    $bits = ('1' * $prefix).PadRight(32, '0')
+    (($bits -split '(.{{8}})' | Where-Object {{$_}} | ForEach-Object {{[convert]::ToInt32($_,2)}}) -join '.')
+}} else {{ '' }}
+[PSCustomObject]@{{
+  ip = if ($ipv4) {{$ipv4.IPAddress}} else {{''}}
+  subnet = $mask
+  gateway = if ($cfg.IPv4DefaultGateway) {{$cfg.IPv4DefaultGateway.NextHop}} else {{''}}
+  dns = @($cfg.DNSServer.ServerAddresses | Where-Object {{$_ -match '^\d+\.\d+\.\d+\.\d+$'}})
+  dhcp = [string]$ipif.Dhcp
+}} | ConvertTo-Json -Compress
+"""
+    result = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script], capture_output=True, text=True, timeout=20, check=False)
+    if result.returncode != 0:
+        return {"ip": "", "subnet": "", "gateway": "", "dns": [], "dhcp": "", "error": result.stderr.strip() or "현재 설정 조회 실패"}
+    try:
+        data = json.loads(result.stdout.strip())
+        if isinstance(data.get("dns"), str):
+            data["dns"] = [data["dns"]]
+        return data
+    except Exception:
+        return {"ip": "", "subnet": "", "gateway": "", "dns": [], "dhcp": "", "error": "현재 설정 응답을 해석하지 못했습니다."}
+
+
+def apply_static_ip(profile: dict) -> tuple[bool, str, dict]:
+    """선택 어댑터의 IPv4 설정을 변경합니다. 관리자 권한이 없으면 실행하지 않습니다."""
+    if not is_local_windows():
+        return False, "이 기능은 해당 PC의 Windows에서 로컬 실행할 때만 사용할 수 있습니다.", {}
+    if not is_windows_admin():
+        return False, "관리자 권한이 없습니다. 명령 프롬프트 또는 PowerShell을 관리자 권한으로 실행한 뒤 Streamlit을 시작하세요.", {}
+    validate_ip_profile(profile)
+    adapter = str(profile["어댑터명"]).strip()
+    before = get_current_adapter_config(adapter)
+    prefix = _mask_to_prefix(str(profile["서브넷마스크"]).strip())
+    ip = str(profile["IP주소"]).strip()
+    gateway = str(profile.get("기본게이트웨이", "")).strip()
+    dns = [str(profile.get("기본DNS", "")).strip(), str(profile.get("보조DNS", "")).strip()]
+    dns = [x for x in dns if x]
+    q = lambda value: value.replace("'", "''")
+
+    script = rf"""
+$ErrorActionPreference = 'Stop'
+$alias = '{q(adapter)}'
+Set-NetIPInterface -InterfaceAlias $alias -AddressFamily IPv4 -Dhcp Disabled
+Get-NetIPAddress -InterfaceAlias $alias -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+    Where-Object {{$_.IPAddress -notlike '169.254.*'}} | Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
+Get-NetRoute -InterfaceAlias $alias -AddressFamily IPv4 -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue |
+    Remove-NetRoute -Confirm:$false -ErrorAction SilentlyContinue
+"""
+    if gateway:
+        script += f"New-NetIPAddress -InterfaceAlias $alias -IPAddress '{q(ip)}' -PrefixLength {prefix} -DefaultGateway '{q(gateway)}'\n"
+    else:
+        script += f"New-NetIPAddress -InterfaceAlias $alias -IPAddress '{q(ip)}' -PrefixLength {prefix}\n"
+    if dns:
+        dns_literal = ",".join([f"'{q(x)}'" for x in dns])
+        script += f"Set-DnsClientServerAddress -InterfaceAlias $alias -ServerAddresses @({dns_literal})\n"
+    else:
+        script += "Set-DnsClientServerAddress -InterfaceAlias $alias -ResetServerAddresses\n"
+    script += "Clear-DnsClientCache\n"
+
+    result = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script], capture_output=True, text=True, timeout=35, check=False)
+    if result.returncode != 0:
+        return False, result.stderr.strip() or "IP 설정 변경에 실패했습니다.", before
+    time.sleep(1)
+    after = get_current_adapter_config(adapter)
+    if str(after.get("ip", "")).strip() != ip:
+        return False, f"명령은 실행되었으나 적용된 IP({after.get('ip')})가 요청 IP({ip})와 다릅니다.", before
+    return True, "IP 설정이 정상적으로 적용되었습니다.", before
+
+
+def apply_dhcp(adapter_name: str) -> tuple[bool, str, dict]:
+    if not is_local_windows():
+        return False, "Windows 로컬 실행이 아닙니다.", {}
+    if not is_windows_admin():
+        return False, "관리자 권한이 없습니다.", {}
+    before = get_current_adapter_config(adapter_name)
+    safe = adapter_name.replace("'", "''")
+    script = rf"""
+$ErrorActionPreference = 'Stop'
+$alias = '{safe}'
+Set-NetIPInterface -InterfaceAlias $alias -AddressFamily IPv4 -Dhcp Enabled
+Set-DnsClientServerAddress -InterfaceAlias $alias -ResetServerAddresses
+Clear-DnsClientCache
+"""
+    result = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script], capture_output=True, text=True, timeout=30, check=False)
+    if result.returncode != 0:
+        return False, result.stderr.strip() or "DHCP 전환 실패", before
+    return True, "자동 IP(DHCP)로 전환했습니다.", before
+
+
+def save_ip_change_history(profile: dict, before: dict, result: str, modifier_emp_id: str, modifier_name: str, error: str = "", note: str = "") -> tuple[bool, str]:
+    try:
+        spreadsheet = _open_ip_spreadsheet()
+        ws = _ensure_ip_sheet(spreadsheet, IP_HISTORY_SHEET_NAME, IP_HISTORY_HEADERS, rows=10000)
+        now = _korea_now().strftime("%Y-%m-%d %H:%M:%S")
+        work_id = hashlib.sha256(f"{now}|{socket.gethostname()}|{modifier_emp_id}|{profile.get('IP주소')}".encode()).hexdigest()[:14]
+        old_dns = ", ".join(before.get("dns", []) or [])
+        new_dns = ", ".join([x for x in [str(profile.get("기본DNS", "")).strip(), str(profile.get("보조DNS", "")).strip()] if x])
+        row = [
+            now, work_id, result, profile.get("profile_id", ""), profile.get("프로필명", ""),
+            socket.gethostname(), getpass.getuser(), modifier_emp_id.strip(), modifier_name.strip(),
+            profile.get("어댑터명", ""), before.get("ip", ""), before.get("subnet", ""), before.get("gateway", ""), old_dns,
+            profile.get("IP주소", ""), profile.get("서브넷마스크", ""), profile.get("기본게이트웨이", ""), new_dns,
+            error, note,
+        ]
+        ws.append_row(row, value_input_option="USER_ENTERED")
+        return True, "변경 이력이 Google Sheets에 저장되었습니다."
+    except Exception as e:
+        return False, str(e)
+
+
+# ==========================================
 # 9. 메인 화면 및 탭 구성
 # ==========================================
 st.markdown("<h1 style='text-align: center; color: #2C3E50;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
@@ -1132,7 +1415,7 @@ div[data-testid="stTabs"] button[role="tab"]::after {
 """, unsafe_allow_html=True)
 
 tab_audit, tab_doc, tab_chat, tab_summary, tab_admin = st.tabs([
-    "✅ 자율점검", "📄 법률 검토", "💬 AI 에이전트(챗봇)", "📰 스마트 요약", "🔒 관리자 모드"
+    "🌐 IP 자동전환", "📄 법률 검토", "💬 AI 에이전트(챗봇)", "📰 스마트 요약", "🔒 관리자 모드"
 ])
 
 # ---------- (아이콘) 인라인 SVG: 애니메이션 모래시계 ----------
@@ -1270,1939 +1553,245 @@ def _render_pledge_group(
                 else:
                     ph.markdown("", unsafe_allow_html=True)
 
-# --- [Tab 1: 자율점검] ---
+# --- [Tab 1: 현장 IP 자동전환] ---
 with tab_audit:
-    st.markdown("### ✅ 자율점검")
-    st.caption("기존 윤리경영 실천서약은 보관 영역에 그대로 유지하고, 아래에서 6월 컴플라이언스 인식제고 자율점검 교육을 진행합니다.")
+    st.markdown("### 🌐 현장 IP 자동전환")
+    st.caption("장소별 고정 IP를 Google Sheets에 등록하고, 선택한 프로필을 현재 Windows PC에 적용합니다. 모든 변경·실패 이력은 별도로 기록됩니다.")
 
     st.markdown("""
     <style>
-    /* =========================================================
-       ✅ 자율점검 탭 전용 서브메뉴: 외부 연계 시스템 바로가기
-       - ktMOS북부 CI 감성(Black · Red · White)을 반영한 클릭 유도형 카드
-       - 링크는 새 창(target=_blank)으로 열림
-       - 교육 진행/저장/타이머 로직에는 영향 없음
-       ========================================================= */
-    .selfcheck-link-panel {
-        position: relative;
-        overflow: hidden;
-        background:
-            radial-gradient(circle at 14% 20%, rgba(237,28,36,0.12), transparent 30%),
-            radial-gradient(circle at 92% 18%, rgba(15,23,42,0.10), transparent 28%),
-            linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 52%, #FFF1F2 100%);
-        border: 1px solid #E5E7EB;
-        border-left: 10px solid #ED1C24;
-        border-radius: 28px;
-        padding: 22px 24px 24px 24px;
-        margin: 14px 0 22px 0;
-        box-shadow: 0 18px 42px rgba(15, 23, 42, 0.12);
+    .ip-hero {
+        background: linear-gradient(135deg, #E8F1FF 0%, #F8FAFC 55%, #E8FFF6 100%);
+        border: 1px solid #D7E3F4;
+        border-left: 9px solid #2563EB;
+        border-radius: 22px;
+        padding: 22px 24px;
+        margin: 10px 0 18px 0;
+        box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
     }
-    .selfcheck-link-panel::after {
-        content: "kt MOS 북부";
-        position: absolute;
-        right: 22px;
-        top: 16px;
-        font-size: 0.88rem;
-        font-weight: 950;
-        letter-spacing: 0.01em;
-        color: rgba(15, 23, 42, 0.34);
-    }
-    .selfcheck-link-panel-title {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        margin-bottom: 15px;
-        color: #0F172A;
-        font-weight: 950;
-        font-size: 1.20rem;
-        letter-spacing: -0.02em;
-    }
-    .selfcheck-link-panel-title .ci-dot {
-        width: 12px;
-        height: 12px;
-        border-radius: 999px;
-        display: inline-block;
-        background: #ED1C24;
-        box-shadow: 0 0 0 6px rgba(237,28,36,0.10);
-    }
-    .selfcheck-link-panel-sub {
-        margin: -6px 0 16px 22px;
-        color: #475569;
-        font-size: 0.92rem;
-        line-height: 1.5;
-        font-weight: 760;
-    }
-    .selfcheck-submenu-grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(240px, 1fr));
-        gap: 16px;
-    }
-    .selfcheck-submenu-card {
-        position: relative;
-        display: block;
-        min-height: 126px;
-        padding: 22px 22px 20px 22px;
-        border-radius: 24px;
-        text-decoration: none !important;
-        border: 1px solid rgba(255,255,255,0.72);
-        box-shadow: 0 12px 26px rgba(15, 23, 42, 0.12);
-        transition: transform .18s ease, box-shadow .18s ease, filter .18s ease, border-color .18s ease;
-        overflow: hidden;
-    }
-    .selfcheck-submenu-card::before {
-        content: "";
-        position: absolute;
-        inset: 0;
-        background: linear-gradient(135deg, rgba(255,255,255,0.34), transparent 55%);
-        pointer-events: none;
-    }
-    .selfcheck-submenu-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 20px 42px rgba(15, 23, 42, 0.18);
-        filter: brightness(1.02);
-        text-decoration: none !important;
-        border-color: rgba(237,28,36,0.25);
-    }
-    .selfcheck-submenu-card.risk {
-        background: linear-gradient(135deg, #111827 0%, #1F2937 46%, #ED1C24 100%);
-        color: #FFFFFF !important;
-    }
-    .selfcheck-submenu-card.qna {
-        background: linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 48%, #FEE2E2 100%);
-        color: #111827 !important;
-        border: 1px solid #FECACA;
-    }
-    .selfcheck-submenu-card .submenu-eyebrow {
-        position: relative;
-        z-index: 1;
-        display: inline-block;
-        padding: 6px 11px;
-        border-radius: 999px;
-        background: rgba(255,255,255,0.86);
-        border: 1px solid rgba(15,23,42,0.08);
-        font-size: 0.78rem;
-        font-weight: 950;
-        margin-bottom: 12px;
-        color: #B91C1C;
-    }
-    .selfcheck-submenu-card.risk .submenu-eyebrow {
-        background: rgba(255,255,255,0.94);
-        color: #111827;
-    }
-    .selfcheck-submenu-card .submenu-title {
-        position: relative;
-        z-index: 1;
-        font-size: 1.22rem;
-        font-weight: 950;
-        line-height: 1.35;
-        margin-bottom: 7px;
-        letter-spacing: -0.02em;
-    }
-    .selfcheck-submenu-card .submenu-desc {
-        position: relative;
-        z-index: 1;
-        font-size: 0.94rem;
-        font-weight: 780;
-        line-height: 1.48;
-        opacity: 0.92;
-    }
-    .selfcheck-submenu-card .submenu-arrow {
-        position: absolute;
-        right: 20px;
-        bottom: 18px;
-        z-index: 1;
-        width: 38px;
-        height: 38px;
-        border-radius: 999px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: rgba(255,255,255,0.86);
-        color: #ED1C24;
-        font-weight: 950;
-        box-shadow: 0 8px 18px rgba(15,23,42,0.14);
-    }
-    @media (max-width: 760px) {
-        .selfcheck-submenu-grid { grid-template-columns: 1fr; }
-        .selfcheck-link-panel::after { display:none; }
-    }
+    .ip-hero h3 { margin:0 0 8px 0; color:#0F172A; font-weight:950; }
+    .ip-hero p { margin:0; color:#475569; line-height:1.65; font-weight:650; }
+    .ip-status-ok { background:#ECFDF5; border:1px solid #A7F3D0; padding:12px 14px; border-radius:14px; }
+    .ip-status-warn { background:#FFF7ED; border:1px solid #FED7AA; padding:12px 14px; border-radius:14px; }
     </style>
-    <div class="selfcheck-link-panel">
-        <div class="selfcheck-link-panel-title"><span class="ci-dot"></span>자율점검 연계 시스템 바로가기</div>
-        <div class="selfcheck-link-panel-sub">필요한 업무 시스템을 새 창에서 바로 실행합니다. 아래 카드를 클릭해 진행해 주세요.</div>
-        <div class="selfcheck-submenu-grid">
-            <a class="selfcheck-submenu-card risk" href="https://third-party-risk-assessment-9.netlify.app/" target="_blank" rel="noopener noreferrer" title="제3자 리스크 평가 시스템 새 창 열기">
-                <span class="submenu-eyebrow">External Link · New Window</span>
-                <div class="submenu-title">Third Party Risk Assessment</div>
-                <div class="submenu-desc">제3자 리스크 평가 시스템을 새 창에서 실행합니다.</div>
-                <div class="submenu-arrow">↗</div>
-            </a>
-            <a class="selfcheck-submenu-card qna" href="https://compliance-qna-search-portal.netlify.app/" target="_blank" rel="noopener noreferrer" title="컴플라이언스 Q&A 포털 새 창 열기">
-                <span class="submenu-eyebrow">External Link · New Window</span>
-                <div class="submenu-title">Compliance Q&amp;A Portal</div>
-                <div class="submenu-desc">컴플라이언스 Q&amp;A 검색 포털을 새 창에서 실행합니다.</div>
-                <div class="submenu-arrow">↗</div>
-            </a>
-        </div>
+    <div class="ip-hero">
+      <h3>현장 네트워크 설정 오류를 줄이는 표준 IP 프로필</h3>
+      <p>본사·현장·장비망 등 장소별 설정을 미리 등록한 뒤 버튼 한 번으로 적용합니다. 기존 IP, 변경 IP, 일시, 작업자, 성공·실패 결과를 Google Sheets에 남겨 추적성을 확보합니다.</p>
     </div>
     """, unsafe_allow_html=True)
 
-    st.markdown("""
-    <style>
-    /* 현장대리인 신고서 전용 화면 정돈 */
-    .field-agent-hero {
-        background: linear-gradient(135deg, #E8F5E9 0%, #E3F2FD 100%);
-        padding: 24px 26px;
-        border-radius: 18px;
-        border: 1px solid #D7E8D8;
-        box-shadow: 0 8px 24px rgba(44, 62, 80, 0.08);
-        margin: 12px 0 18px 0;
-    }
-    .field-agent-hero h3 {
-        margin: 0 0 8px 0;
-        color: #1B5E20;
-        font-size: 1.45rem;
-        font-weight: 950;
-    }
-    .field-agent-hero p {
-        margin: 0;
-        color: #334155;
-        line-height: 1.65;
-        font-weight: 650;
-    }
-    .fa-mini-guide {
-        background: #FFFFFF;
-        padding: 14px 16px;
-        border-radius: 14px;
-        border: 1px solid #E2E8F0;
-        box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05);
-        margin-bottom: 12px;
-    }
-    .fa-section-title {
-        display: inline-block;
-        padding: 8px 12px;
-        border-radius: 999px;
-        font-weight: 950;
-        font-size: 0.98rem;
-        margin: 6px 0 10px 0;
-    }
-    .fa-kt-title { background:#E3F2FD; color:#0B5ED7; }
-    .fa-mos-title { background:#E0F2F1; color:#00695C; }
-    .fa-row-title {
-        font-size: 1.08rem;
-        font-weight: 950;
-        color:#1E293B;
-        margin-bottom: 4px;
-    }
-    .fa-required { color:#D32F2F; font-weight:900; }
-
-    /* ✅ 현장대리인 입력 버튼 크기/색상 균형
-       - primary: 전체 블록 추가/삭제용(조금 더 도톰하고 눈에 띄게)
-       - secondary: KT/MOS 개별 정보 행 추가/삭제용(작고 단정하게)
-       ※ Streamlit 기본 버튼 속성(kind)을 활용하므로 기능 로직은 그대로 유지됩니다. */
-    .stButton > button[kind="primary"] {
-        background: linear-gradient(135deg, #0B5ED7, #2C3E50) !important;
-        color: #FFFFFF !important;
-        border: 1px solid rgba(11, 94, 215, 0.35) !important;
-        border-radius: 999px !important;
-        padding: 0.38rem 0.62rem !important;
-        min-height: 38px !important;
-        font-size: 0.92rem !important;
-        font-weight: 950 !important;
-        box-shadow: 0 6px 14px rgba(11, 94, 215, 0.20) !important;
-    }
-    .stButton > button[kind="primary"]:hover {
-        transform: translateY(-1px);
-        filter: brightness(1.04) !important;
-        box-shadow: 0 8px 18px rgba(11, 94, 215, 0.25) !important;
-    }
-
-    .stButton > button[kind="secondary"] {
-        background: #FFFFFF !important;
-        color: #2563EB !important;
-        border: 1px solid #BFD7FF !important;
-        border-radius: 999px !important;
-        padding: 0.16rem 0.28rem !important;
-        min-height: 28px !important;
-        font-size: 0.82rem !important;
-        font-weight: 950 !important;
-        box-shadow: 0 3px 8px rgba(37, 99, 235, 0.10) !important;
-    }
-    /* ✅ 전역 버튼 CSS가 내부 span/p 텍스트를 흰색으로 만드는 문제 방지 */
-    .stButton > button[kind="secondary"] *,
-    .stButton > button[kind="secondary"] p,
-    .stButton > button[kind="secondary"] span {
-        color: #2563EB !important;
-        -webkit-text-fill-color: #2563EB !important;
-        opacity: 1 !important;
-    }
-    .stButton > button[kind="primary"] *,
-    .stButton > button[kind="primary"] p,
-    .stButton > button[kind="primary"] span {
-        color: #FFFFFF !important;
-        -webkit-text-fill-color: #FFFFFF !important;
-        opacity: 1 !important;
-    }
-    .stButton > button[kind="secondary"]:hover {
-        background: #EFF6FF !important;
-        border-color: #60A5FA !important;
-        transform: translateY(-1px);
-    }
-    .stButton > button:disabled {
-        opacity: 0.55 !important;
-        filter: grayscale(0.15) !important;
-        box-shadow: none !important;
-    }
-    div[data-testid="stCheckbox"] label p {
-        font-weight: 900 !important;
-        color: #1565C0 !important;
-        font-size: 1.02rem !important;
-    }
-    div[data-testid="stForm"] {
-        border-radius: 16px !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-    # ✅ 기존 실천서약은 직원 혼동 방지를 위해 화면에서 문구를 완전히 숨깁니다.
-    #    감사실에서 필요할 때만 좌측의 작은 » 아이콘으로 열 수 있습니다.
-    if "show_legacy_pledge_archive" not in st.session_state:
-        st.session_state["show_legacy_pledge_archive"] = False
-
-    _legacy_icon_col, _legacy_blank_col = st.columns([0.025, 0.975])
-    with _legacy_icon_col:
-        if st.button("»", key="legacy_pledge_hidden_toggle", help="기존 윤리경영 실천서약 보관함"):
-            st.session_state["show_legacy_pledge_archive"] = not bool(st.session_state.get("show_legacy_pledge_archive", False))
-            st.rerun()
-
-    show_legacy_pledge = bool(st.session_state.get("show_legacy_pledge_archive", False))
-
-    if show_legacy_pledge:
-        with st.container(border=True):
-            st.info("기존 실천서약 화면입니다. 필요할 때만 펼쳐서 기존 형식 그대로 사용할 수 있습니다.")
-            # ✅ 자율점검 탭 전용 스타일 범위 시작(#audit-tab)
-            st.markdown('<div id="audit-tab">', unsafe_allow_html=True)
-
-            current_sheet_name = campaign_info.get("sheet_name", "2026_윤리경영_실천서약")
-
-            # ✅ (UX) '서약 확인/임직원 정보 입력' 영역: 최초에는 접힘, 입력/체크 시 자동 펼침
-            if "pledge_box_open" not in st.session_state:
-                st.session_state["pledge_box_open"] = False
-
-            # ✅ (요청 1) 제목: Google Sheet 값과 무관하게 강제 고정
-            title_for_box = "2026 임직원 윤리경영원칙 실천지침 실천서약"
-
-            st.markdown(f"""
-                <div style='background-color: #E3F2FD; padding: 20px; border-radius: 10px; border-left: 5px solid #2196F3; margin-bottom: 20px;'>
-                    <h3 style='margin-top:0; color: #1565C0; font-weight:900;'>📜 {title_for_box}</h3>
-                </div>
-            """, unsafe_allow_html=True)
-
-            # 2) 실천지침 주요내용
-            with st.expander("※ 윤리경영원칙 실천지침 주요내용", expanded=True):
-                st.markdown(
-                    """
-                    <div style='background-color:#FFFDE7; padding: 18px; border-radius: 10px; border-left: 5px solid #FBC02D; margin-bottom: 12px;'>
-                        <div style='font-weight: 900; color:#6D4C41; font-size: 1.10rem; margin-bottom: 6px;'>📌 윤리경영 위반 주요 유형</div>
-                        <div style='color:#444; font-size: 0.97rem; line-height: 1.55;'>
-                            아래 항목은 <b>윤리경영원칙 실천지침</b>의 주요 위반 유형을 정리한 내용입니다.
-                            업무 수행 시 유사 사례가 발생하지 않도록 참고해 주세요.
-                        </div>
-                    </div>
-
-                    <div style='overflow-x:auto;'>
-                        <table style='width:100%; border-collapse: collapse; background:#FFFFFF; border:1px solid #E0E0E0; border-radius: 10px; overflow:hidden;'>
-                            <thead>
-                                <tr style='background:#FFF8E1;'>
-                                    <th style='text-align:center; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037; width:28%;'>구분</th>
-                                    <th style='text-align:center; padding:12px; border-bottom:1px solid #E0E0E0; color:#5D4037;'>윤리경영 위반사항</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; font-weight:900; color:#2C3E50;'>고객과의 관계</td>
-                                    <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>고객으로부터 금품 등 이익 수수, 고객만족 저해, 고객정보 유출</td>
-                                </tr>
-                                <tr>
-                                    <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; font-weight:900; color:#2C3E50;'>임직원과 회사의 관계</td>
-                                    <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>공금 유용 및 횡령, 회사재산의 사적 사용, 기업정보 유출, 경영왜곡</td>
-                                </tr>
-                                <tr>
-                                    <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; font-weight:900; color:#2C3E50;'>임직원 상호간의 관계</td>
-                                    <td style='text-align:center; padding:12px; border-bottom:1px solid #F0F0F0; color:#333;'>직장 내 괴롭힘, 성희롱, 조직질서 문란행위</td>
-                                </tr>
-                                <tr>
-                                    <td style='text-align:center; padding:12px; font-weight:900; color:#2C3E50;'>이해관계자와의 관계</td>
-                                    <td style='text-align:center; padding:12px; color:#333;'>이해관계자로부터 금품 등 이익 수수, 이해관계자에게 부당한 요구</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <div style='margin-top:10px; color:#666; font-size:0.88rem;'>
-                        ※ 위 내용은 안내 목적이며, 세부 기준은 사내 <b>윤리경영원칙 실천지침</b>을 따릅니다.
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-
-            # ✅ 서약 항목
-            exec_pledges = [
-                ("pledge_e1", "나는 회사 윤리경영원칙과 윤리경영원칙 실천지침에 따라 판단하고 행동한다."),
-                ("pledge_e2", "나는 윤리경영원칙 실천지침을 몰랐다는 이유로 면책을 주장하지 않는다."),
-                ("pledge_e3", "나는 직무수행 과정에서 윤리적 갈등 상황에 직면한 경우 감사부서의 해석에 따른다."),
-                ("pledge_e4", "나는 가족, 친·인척, 지인 등을 이용하여 회사 윤리경영원칙 실천지침을 위반하지 않는다."),
-            ]
-            mgr_pledges = [
-                ("pledge_m1", "나는 소속 구성원 및 업무상 이해관계자들이 지침을 준수할 수 있도록 지원하고 관리한다."),
-                ("pledge_m2", "나는 공정하고 깨끗한 의사결정을 통해 지침 준수를 솔선수범한다."),
-                ("pledge_m3", "나는 부서 내 위반 사안 발생 시 관리자로서의 책임을 다한다."),
-            ]
-
-            all_keys = [k for k, _ in exec_pledges] + [k for k, _ in mgr_pledges]
-            _init_pledge_runtime(all_keys)
-
-            with st.expander("✅ 서약 확인 및 임직원 정보 입력", expanded=st.session_state["pledge_box_open"]):
-
-                # ✅ 체크 순서 안내/경고 (관리자 서약을 먼저 체크하면 자동으로 되돌리고 토스트 표시)
-                if st.session_state.get("order_warning"):
-                    st.toast(st.session_state["order_warning"], icon="⚠️")
-                    st.session_state.pop("order_warning", None)
-
-                _render_pledge_group("임직원의 책임과 의무", exec_pledges, all_keys)
-                st.markdown("<br>", unsafe_allow_html=True)
-
-                st.info("📌 진행 순서 안내: **임직원의 책임과 의무(4개)**를 먼저 확인(체크)하신 후, **관리자의 책임과 의무(3개)**를 순서대로 진행해 주세요.")
-
-                _render_pledge_group(
-                    "관리자의 책임과 의무",
-                    mgr_pledges,
-                    all_keys,
-                    order_guard={
-                        "keys": ["pledge_m1", "pledge_m2", "pledge_m3"],
-                        "prereq": ["pledge_e1", "pledge_e2", "pledge_e3", "pledge_e4"],
-                        "message": "⚠️ 순서 안내: 먼저 '임직원의 책임과 의무' 4개 항목을 모두 체크한 뒤 '관리자의 책임과 의무'를 진행해 주세요."
-                    }
-                )
-
-                # ✅ prev 상태 업데이트 (탭 끝에서 1번)
-                st.session_state["pledge_prev"] = {k: bool(st.session_state.get(k, False)) for k in all_keys}
-
-                # ✅ 서약 문구를 현재 위치보다 약 20mm(≈76px) 아래로 내리기
-                st.markdown("<div style='height:76px;'></div>", unsafe_allow_html=True)
-                st.markdown(
-                    """
-                    <div style="font-size:1.05rem; font-weight:900; color:#2C3E50; line-height:1.7;">
-                    나는 <b>KT MOS 북부</b>의 지속적인 발전을 위하여 회사 윤리경영원칙 실천지침에 명시된
-                    <b>「임직원의 책임과 의무」 및 「관리자의 책임과 의무」</b>를
-                    <b>성실히 이행할 것을 서약합니다.</b>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-
-                # ✅ 임직원 서명(정보 입력) 영역을 15mm(≈57px) 더 아래로
-                st.markdown("<div style='height:57px;'></div>", unsafe_allow_html=True)
-
-                # 입력 박스 (한 박스 안)
-                c1, c2, c3, c4 = st.columns(4)
-                emp_id = c1.text_input("사번", placeholder="사번(1000****) 없으면 (00000000)")
-                name = c2.text_input("성명")
-                ordered_units = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
-                unit = c3.selectbox(
-            "총괄 / 본부 / 단",
-            ordered_units,
-            index=None,                     # ✅ 처음엔 아무것도 선택 안 됨(placeholder처럼 보이게)
-            placeholder="총괄 / 본부 / 단 선택",  # ✅ Streamlit 버전에 따라 지원(지원 안 되면 아래 CSS가 커버)
-            label_visibility="collapsed",
-            key="unit_select"
-            )
-                dept = c4.text_input("상세 부서명", placeholder="현 소속부서명 입력")
-
-                # ✅ 입력을 시작하면 expander가 다시 접히지 않도록 유지
-                if any([str(emp_id).strip(), str(name).strip(), str(dept).strip()]):
-                    st.session_state["pledge_box_open"] = True
-
-            st.markdown("---")
-
-            # 제출 버튼은 “체크 전부 완료”일 때만 활성화
-            all_checked = all(bool(st.session_state.get(k, False)) for k in all_keys)
-            submit = st.button("서약 제출", use_container_width=True, disabled=(not all_checked))
-
-            if submit:
-                if not emp_id or not name:
-                    st.warning("⚠️ 사번과 성명을 입력해주세요.")
-                else:
-                    # ✅ (요청 2) 사번 검증 로직
-                    ok, msg = validate_emp_id(emp_id)
-                    if not ok:
-                        st.warning(msg)
-                    else:
-                        answer = "윤리경영 서약서 제출 완료 (임직원 의무 4/4, 관리자 의무 3/3)"
-                        with st.spinner("제출 중..."):
-                            success, msg2 = save_audit_result(emp_id, name, unit, dept, answer, current_sheet_name)
-                        if success:
-                            st.success(f"✅ {name}님, 윤리경영 서약서 제출이 완료되었습니다!")
-                            st.balloons()
-                        else:
-                            st.error(f"❌ 제출 실패: {msg2}")
-
-            # ✅ 자율점검 탭 전용 스타일 범위 종료
-            st.markdown("</div>", unsafe_allow_html=True)
-
-
-    st.markdown("---")
-
-
-    # =========================================================
-    # 2026년 6월 컴플라이언스 인식제고 자율점검 교육 - Final Image Edition
-    # - 기존 윤리경영 실천서약 보관함은 유지
-    # - 현장대리인 등록 모듈 위치에 고품질 교육 모듈 배치
-    # - 순차형 Quest 구조 / Previous·Next 이동 / Step별 Clear 표시
-    # - STEP 1~4 단계별 최소 학습시간 60초 적용 / STEP 5 체크항목별 10초 확인
-    # - Theme 1: 부패방지 + 공정거래 / Theme 2: 하도급 + 정보보호
-    # =========================================================
-    st.markdown("""
-        <style>
-        .premium-hero-v2 {
-            position: relative;
-            overflow: hidden;
-            background:
-              radial-gradient(circle at 12% 10%, rgba(255,255,255,0.23), transparent 28%),
-              radial-gradient(circle at 90% 12%, rgba(125,211,252,0.45), transparent 30%),
-              linear-gradient(135deg, #06152F 0%, #123B7A 42%, #0EA5E9 100%);
-            color: #FFFFFF;
-            padding: 34px 36px;
-            border-radius: 28px;
-            box-shadow: 0 18px 44px rgba(15, 23, 42, 0.28);
-            margin: 10px 0 18px 0;
-            border: 1px solid rgba(255,255,255,0.18);
-        }
-        .premium-hero-v2 h2 {
-            margin: 0 0 8px 0;
-            font-size: 1.92rem;
-            font-weight: 950;
-            letter-spacing: -0.03em;
-        }
-        .premium-hero-v2 p {
-            margin: 0;
-            color: rgba(255,255,255,0.92);
-            line-height: 1.68;
-            font-weight: 700;
-            font-size: 1.03rem;
-            max-width: 1120px;
-        }
-        .premium-badge-v2 {
-            display: inline-block;
-            padding: 7px 14px;
-            border-radius: 999px;
-            background: rgba(255,255,255,0.17);
-            color: #E0F2FE;
-            font-weight: 950;
-            margin-bottom: 13px;
-            border: 1px solid rgba(255,255,255,0.22);
-            letter-spacing: 0.02em;
-        }
-        .audit-message-v2 {
-            background: linear-gradient(135deg, #FFFFFF 0%, #F8FBFF 100%);
-            border: 1px solid #D7E3F4;
-            border-left: 8px solid #2563EB;
-            border-radius: 20px;
-            padding: 19px 21px;
-            box-shadow: 0 10px 26px rgba(15, 23, 42, 0.07);
-            margin: 14px 0;
-        }
-        .audit-message-v2 h4 { margin: 0 0 8px 0; color: #1E3A8A; font-weight: 950; font-size: 1.12rem; }
-        .audit-message-v2 p { margin: 0; color: #334155; line-height: 1.65; font-weight: 700; }
-        .quest-card {
-            min-height: 126px;
-            border-radius: 22px;
-            padding: 18px 18px;
-            border: 1px solid #DDE7F5;
-            box-shadow: 0 9px 24px rgba(15, 23, 42, 0.08);
-            margin-bottom: 10px;
-        }
-        .quest-card h4 { margin: 0 0 8px 0; font-weight: 950; font-size: 1.08rem; }
-        .quest-card p { margin: 0; line-height: 1.50; font-weight: 700; font-size: 0.94rem; }
-        .quest-clear { background: linear-gradient(135deg, #DCFCE7 0%, #ECFDF5 100%); border-color: #86EFAC; color: #14532D; }
-        .quest-active { background: linear-gradient(135deg, #DBEAFE 0%, #EFF6FF 100%); border-color: #60A5FA; color: #1E3A8A; transform: translateY(-1px); }
-        .quest-lock { background: linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%); border-color: #CBD5E1; color: #64748B; }
-        .quest-event { background: linear-gradient(135deg, #E0F2FE 0%, #ECFEFF 100%); border-color: #7DD3FC; color: #075985; }
-        .status-chip {
-            display:inline-block;
-            margin-top:10px;
-            padding:6px 10px;
-            border-radius:999px;
-            font-size:0.83rem;
-            font-weight:950;
-            background:rgba(255,255,255,0.72);
-            border:1px solid rgba(15,23,42,0.08);
-        }
-        .step-road {
-            display:grid;
-            grid-template-columns: repeat(6, minmax(110px, 1fr));
-            gap: 10px;
-            margin: 16px 0 20px 0;
-        }
-        .step-node {
-            position:relative;
-            min-height:86px;
-            border-radius: 20px;
-            padding: 13px 10px;
-            text-align:center;
-            font-weight:950;
-            box-shadow: 0 7px 18px rgba(15, 23, 42, 0.06);
-            border:1px solid #E2E8F0;
-        }
-        .step-node .num { display:block; font-size:1.18rem; margin-bottom:2px; }
-        .step-node .label { display:block; font-size:0.91rem; line-height:1.32; }
-        .step-clear { background: linear-gradient(135deg, #DCFCE7 0%, #F0FDF4 100%); color:#166534; border-color:#86EFAC; }
-        .step-current { background: linear-gradient(135deg, #1D4ED8 0%, #0EA5E9 100%); color:white; border-color:#60A5FA; transform: translateY(-2px); box-shadow: 0 11px 26px rgba(37,99,235,0.24); }
-        .step-lock { background: #F8FAFC; color:#94A3B8; border-color:#E2E8F0; }
-        .timer-panel {
-            background: linear-gradient(135deg, #EFF6FF 0%, #F8FAFC 100%);
-            border: 1px solid #93C5FD;
-            border-radius: 18px;
-            padding: 15px 17px;
-            color: #1E3A8A;
-            font-weight: 850;
-            margin: 14px 0 12px 0;
-            box-shadow: 0 8px 20px rgba(37,99,235,0.08);
-        }
-        .timer-panel-clear { background: linear-gradient(135deg, #ECFDF5 0%, #F0FDF4 100%); border-color:#86EFAC; color:#14532D; }
-        .timer-bar-bg { width:100%; background:#DBEAFE; height:14px; border-radius:999px; overflow:hidden; margin-top:9px; }
-        .timer-bar-fill { height:14px; border-radius:999px; background: linear-gradient(90deg, #2563EB, #06B6D4, #22C55E); transition: width 0.3s ease; }
-        .check-timer-card {
-            background: linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 100%);
-            border: 1px solid #BFDBFE;
-            border-radius: 16px;
-            padding: 12px 14px;
-            margin: 7px 0 9px 0;
-            font-weight: 850;
-            color:#1E3A8A;
-        }
-        .check-timer-done {
-            color:#166534;
-            font-weight:950;
-            background:#F0FDF4;
-            border:1px solid #BBF7D0;
-            border-radius:999px;
-            padding:5px 10px;
-            display:inline-block;
-        }
-        .check-timer-wait {
-            color:#92400E;
-            font-weight:950;
-            background:#FFFBEB;
-            border:1px solid #FDE68A;
-            border-radius:999px;
-            padding:5px 10px;
-            display:inline-block;
-        }
-        .theme-title-panel {
-            border-radius: 26px;
-            padding: 24px 25px;
-            margin: 12px 0 15px 0;
-            box-shadow: 0 13px 30px rgba(15, 23, 42, 0.12);
-        }
-        .theme-title-panel h3 { margin:0 0 8px 0; font-size:1.55rem; font-weight:950; letter-spacing:-0.02em; }
-        .theme-title-panel p { margin:0; font-size:1.01rem; line-height:1.66; font-weight:700; }
-        .theme-one-v2 { background: linear-gradient(135deg, #FFF7ED 0%, #FEF3C7 50%, #FFFBEB 100%); border:1px solid #FBBF24; color:#78350F; }
-        .theme-two-v2 { background: linear-gradient(135deg, #ECFEFF 0%, #DBEAFE 55%, #F0FDFA 100%); border:1px solid #38BDF8; color:#0F172A; }
-        .content-card-v2 {
-            background: #FFFFFF;
-            border: 1px solid #E2E8F0;
-            border-radius: 24px;
-            padding: 23px 24px;
-            margin: 12px 0;
-            box-shadow: 0 10px 26px rgba(15, 23, 42, 0.07);
-        }
-        .content-card-v2 h4 { margin:0 0 10px 0; color:#1E3A8A; font-size:1.24rem; font-weight:950; }
-        .content-card-v2 p { color:#334155; line-height:1.68; font-weight:700; }
-        .page-pill-v2 {
-            display: inline-block;
-            padding: 7px 13px;
-            border-radius: 999px;
-            background: #DBEAFE;
-            color: #1D4ED8;
-            font-weight: 950;
-            font-size: 0.88rem;
-            margin-bottom: 11px;
-        }
-        .infographic-grid {
-            display:grid;
-            grid-template-columns: repeat(4, minmax(150px, 1fr));
-            gap: 13px;
-            margin-top:14px;
-        }
-        .info-tile {
-            border-radius: 22px;
-            padding: 18px 14px;
-            min-height: 142px;
-            text-align:center;
-            border:1px solid rgba(255,255,255,0.50);
-            box-shadow: 0 9px 22px rgba(15, 23, 42, 0.08);
-        }
-        .info-tile .icon { font-size: 2.15rem; display:block; margin-bottom:7px; }
-        .info-tile b { display:block; font-size:1.02rem; font-weight:950; margin-bottom:6px; }
-        .info-tile span { display:block; font-size:0.88rem; line-height:1.45; font-weight:720; }
-        .tile-orange { background:linear-gradient(135deg,#FFEDD5,#FEF3C7); color:#7C2D12; }
-        .tile-blue { background:linear-gradient(135deg,#DBEAFE,#E0F2FE); color:#1E3A8A; }
-        .tile-green { background:linear-gradient(135deg,#DCFCE7,#ECFDF5); color:#14532D; }
-        .tile-purple { background:linear-gradient(135deg,#F3E8FF,#EEF2FF); color:#4C1D95; }
-        .principle-grid-v2 { display:grid; grid-template-columns: repeat(2, minmax(230px, 1fr)); gap:14px; margin-top:13px; }
-        .principle-card-v2 { background:#F8FAFC; border:1px solid #E2E8F0; border-radius:18px; padding:18px 19px; box-shadow:0 7px 17px rgba(15,23,42,0.05); }
-        .principle-keyword-v2 { display:inline-block; color:#DC2626; font-size:1.08rem; font-weight:950; letter-spacing:-0.01em; margin-bottom:12px; padding:4px 10px; border-radius:999px; background:#FEF2F2; border:1px solid #FECACA; }
-        .principle-desc-v2 { display:block; color:#334155; line-height:1.62; font-weight:760; padding-top:2px; }
-        .risk-grid-v2 { display:grid; grid-template-columns: repeat(3, minmax(190px, 1fr)); gap:12px; margin-top:13px; }
-        .risk-card-v2 { background:#FFF7ED; border:1px solid #FDBA74; border-radius:18px; padding:16px 17px; color:#7C2D12; font-weight:950; min-height:122px; box-shadow:0 7px 17px rgba(249,115,22,0.08); }
-        .risk-phrase-v2 { display:block; font-size:1.02rem; font-weight:950; color:#7C2D12; line-height:1.42; margin-bottom:10px; }
-        .risk-response-v2 { display:block; border-top:1px dashed #FDBA74; padding-top:10px; margin-top:8px; color:#334155; font-size:0.88rem; line-height:1.48; font-weight:780; }
-        .risk-response-v2 b { color:#DC2626; font-weight:950; margin-right:4px; }
-        .case-box-v2 { background:linear-gradient(135deg,#F8FAFC 0%,#EFF6FF 100%); border:1px solid #BFDBFE; border-radius:20px; padding:18px 19px; margin:14px 0; color:#334155; line-height:1.65; font-weight:720; }
-        .case-box-v2 b { color:#1E3A8A; }
-        .answer-box-v2 { background:#F0FDF4; border:1px solid #BBF7D0; border-radius:18px; padding:15px 17px; margin:12px 0; color:#14532D; font-weight:780; line-height:1.62; }
-        .quiz-feedback-v2 { border-radius:18px; padding:14px 16px; margin:8px 0 18px 0; line-height:1.58; font-weight:760; }
-        .quiz-feedback-v2.correct { background:#ECFDF5; border:1px solid #86EFAC; color:#14532D; }
-        .quiz-feedback-v2.wrong { background:#FFF7ED; border:1px solid #FDBA74; color:#7C2D12; }
-        .quiz-feedback-v2 b { font-weight:950; }
-        .quote-line-v2 { font-size:1.34rem; color:#0F172A; font-weight:950; line-height:1.50; margin:8px 0 12px 0; letter-spacing:-0.02em; }
-        .score-pill-v2 { display:inline-block; padding:8px 13px; border-radius:999px; background:#F0FDF4; color:#166534; border:1px solid #BBF7D0; font-weight:950; margin:5px 6px 5px 0; }
-        .score-pill-warn-v2 { display:inline-block; padding:8px 13px; border-radius:999px; background:#FFF7ED; color:#9A3412; border:1px solid #FED7AA; font-weight:950; margin:5px 6px 5px 0; }
-        .nav-help { color:#475569; font-weight:760; font-size:0.92rem; margin-top:3px; }
-        .next-ready-client {
-            background: linear-gradient(135deg, #16A34A 0%, #2563EB 100%) !important;
-            box-shadow: 0 12px 26px rgba(37,99,235,0.22) !important;
-        }
-        .summer-zone-v2 {
-            background: radial-gradient(circle at 10% 12%, rgba(255,255,255,0.9), transparent 22%), linear-gradient(135deg,#E0F2FE 0%,#BAE6FD 45%,#ECFEFF 100%);
-            border:1px solid #7DD3FC;
-            border-radius:26px;
-            padding:25px;
-            box-shadow:0 14px 32px rgba(14,165,233,0.18);
-            margin:12px 0 16px 0;
-        }
-        .summer-zone-v2 h3 { margin:0 0 8px 0; color:#075985; font-weight:950; font-size:1.52rem; }
-        .summer-zone-v2 p { margin:0; color:#0F172A; line-height:1.66; font-weight:700; }
-        @media (max-width: 900px) {
-            .step-road { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
-            .infographic-grid { grid-template-columns: 1fr; }
-            .principle-grid-v2 { grid-template-columns: 1fr; }
-            .risk-grid-v2 { grid-template-columns: 1fr; }
-        }
-        </style>
-    """, unsafe_allow_html=True)
-    # ✅ 안내 히어로는 Final V3 intro 화면에서만 렌더링합니다.
-
-    # ✅ GitHub 저장소의 assets 폴더 이미지를 안전하게 표시하는 유틸
-    #    app.py와 같은 위치에 assets 폴더를 두고, 아래 3개 파일명을 사용하세요.
-    TRAINING_ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
-
-    def _show_training_asset(filename: str, caption: str = "") -> None:
-        image_path = os.path.join(TRAINING_ASSET_DIR, filename)
-        if os.path.exists(image_path):
-            st.image(image_path, use_container_width=True, caption=caption)
-        else:
-            st.warning(
-                f"이미지 파일을 찾을 수 없습니다: assets/{filename} · "
-                "GitHub의 assets 폴더와 파일명을 확인해 주세요."
-            )
-
-
-    # =========================================================
-    # 2026년 6월 컴플라이언스 인식제고 교육 - Final V3
-    # - 초기 안내 화면 분리
-    # - STEP 1~4: 단계별 60초 자동 카운트다운 + 게이지
-    # - STEP 5: 체크 항목별 10초 모래시계 확인, 체크 유지, 순차 활성화
-    # - STEP 6: 시간제한 제외
-    # =========================================================
-    st.markdown("""
-        <style>
-        .intro-sequence-title {
-            margin: 18px 0 12px 0;
-            padding: 17px 20px;
-            border-radius: 18px;
-            background: linear-gradient(135deg, #EEF6FF 0%, #FFFFFF 100%);
-            border: 1px solid #BFDBFE;
-            color: #1E3A8A;
-            font-weight: 950;
-            font-size: 1.18rem;
-            box-shadow: 0 8px 20px rgba(37, 99, 235, 0.08);
-        }
-        .start-training-box {
-            margin: 8px 0 16px 0;
-            padding: 18px 20px;
-            border-radius: 20px;
-            background: linear-gradient(135deg, #FFFBEB 0%, #FFF7ED 100%);
-            border: 1px solid #FCD34D;
-            color: #78350F;
-            font-weight: 850;
-            line-height: 1.62;
-        }
-        .start-training-box b { color:#92400E; font-weight:950; }
-        .timer-live-wrap {
-            background: linear-gradient(135deg, #EFF6FF 0%, #F8FAFC 100%);
-            border: 1px solid #93C5FD;
-            border-radius: 18px;
-            padding: 15px 17px;
-            color: #1E3A8A;
-            font-weight: 850;
-            margin: 14px 0 12px 0;
-            box-shadow: 0 8px 20px rgba(37,99,235,0.08);
-        }
-        .timer-live-wrap.clear {
-            background: linear-gradient(135deg, #ECFDF5 0%, #F0FDF4 100%);
-            border-color:#86EFAC;
-            color:#14532D;
-        }
-        .timer-live-head {
-            display:flex;
-            align-items:center;
-            justify-content:space-between;
-            gap:10px;
-            flex-wrap:wrap;
-        }
-        .timer-live-left { display:flex; align-items:center; gap:10px; }
-        .timer-live-count {
-            display:inline-block;
-            min-width:78px;
-            text-align:center;
-            padding:7px 12px;
-            border-radius:999px;
-            background:#FFFFFF;
-            border:1px solid #BFDBFE;
-            color:#1D4ED8;
-            font-weight:950;
-            box-shadow:0 3px 8px rgba(37,99,235,0.10);
-        }
-        .timer-warmup {
-            background: linear-gradient(135deg, #FFF7ED 0%, #FFFBEB 100%);
-            border: 1px solid #FDBA74;
-            color:#92400E;
-        }
-        .check-row-locked {
-            opacity: .52;
-        }
-        .check-next-guide {
-            color:#64748B;
-            font-weight:850;
-            font-size:0.92rem;
-        }
-        .summary-title-card {
-            margin-top: 18px;
-            padding: 18px 20px;
-            border-radius: 22px;
-            background: linear-gradient(135deg, #F8FAFC 0%, #FFFFFF 100%);
-            border: 1px solid #D7E3F4;
-            box-shadow: 0 10px 26px rgba(15,23,42,0.07);
-        }
-        .summary-title-card h4 {
-            margin: 0 0 6px 0;
-            color: #1E3A8A;
-            font-weight: 950;
-            font-size: 1.24rem;
-        }
-        .summary-title-card p {
-            margin: 0;
-            color:#334155;
-            font-weight:750;
-            line-height:1.6;
-        }
-        /* Previous / secondary button visibility reinforcement */
-        .stButton > button[kind="secondary"],
-        .stButton > button[kind="secondary"] *,
-        .stButton > button[kind="secondary"] p,
-        .stButton > button[kind="secondary"] span {
-            color: #1D4ED8 !important;
-            -webkit-text-fill-color: #1D4ED8 !important;
-            opacity: 1 !important;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-
-    SELECT_PLACEHOLDER = "선택하세요"
-    STEP_MIN_SECONDS = 60
-    STEP_WARMUP_SECONDS = 3
-    CHECK_ITEM_SECONDS = 10
-    CHECK_ITEM_DELAY_SECONDS = 1
-    TIMED_STEPS = {1, 2, 3, 4}
-    STEPS = [
-        (1, "인포그래픽", "핵심 리스크를 한눈에 봅니다"),
-        (2, "핵심 원칙", "업무 기준을 정리합니다"),
-        (3, "위험 신호", "멈춰야 할 문장을 확인합니다"),
-        (4, "사례 판단", "실제 상황을 판단합니다"),
-        (5, "실천 체크", "내 행동 기준을 확인합니다"),
-        (6, "퀴즈·완료", "이해도를 점검합니다"),
-    ]
-
-    T1_Q = {
-        "t1_v2_q1": "컴플라이언스 사전심의 등 내부 절차를 확인한다",
-        "t1_v2_q2": "담합 리스크가 있으므로 대화를 중단하고 내부 기준을 확인한다",
-        "t1_v2_q3": "기준을 확인하고 필요 시 신고·반환·상담한다",
-        "t1_v2_q4": "거래상 지위 남용 소지가 있으므로 합리적 사유와 절차를 확인한다",
-    }
-    T2_Q = {
-        "t2_v2_q1": "법정기재사항이 포함된 서면을 먼저 발급한다",
-        "t2_v2_q2": "10일 이내 서면으로 통지한다",
-        "t2_v2_q3": "정당한 사유와 절차에 따라 요구하고 목적 범위 내에서만 사용한다",
-        "t2_v2_q4": "원칙적으로 금지되며 내부 보안 기준을 따라야 한다",
-        "t2_v2_q5": "공유하지 않고 개인별 계정과 권한 기준을 준수한다",
-    }
-    T1_CHECKS = {
-        "t1_v2_c1": "나는 공직자 등에게 부정청탁을 하지 않는다.",
-        "t1_v2_c2": "나는 직무 관련 금품·향응 제공 기준을 반드시 확인한다.",
-        "t1_v2_c3": "나는 제3자를 통한 우회 제공도 부패 리스크가 될 수 있음을 이해한다.",
-        "t1_v2_c4": "나는 경쟁사와 가격·입찰·거래조건 정보를 교환하지 않는다.",
-        "t1_v2_c5": "나는 거래상 지위를 이용해 불리한 조건을 강요하지 않는다.",
-    }
-    T2_CHECKS = {
-        "t2_v2_c1": "나는 위탁업무 시작 전 서면 발급 필요성을 확인한다.",
-        "t2_v2_c2": "나는 하도급대금 지급기한과 검사결과 통지기한을 확인한다.",
-        "t2_v2_c3": "나는 정당한 사유 없이 기술자료나 경영정보를 요구하지 않는다.",
-        "t2_v2_c4": "나는 업무용 PC 내 불필요한 개인정보를 삭제한다.",
-        "t2_v2_c5": "나는 고객정보를 목적 외로 조회하거나 활용하지 않는다.",
-        "t2_v2_c6": "나는 ID/PW를 공유하지 않는다.",
-        "t2_v2_c7": "나는 기업비밀을 암호화하고 목적 완료 후 파기한다.",
-    }
-
-    def _clear_june_training_state() -> None:
-        """최종 제출 후 교육 화면을 초기 상태로 되돌리기 위한 전용 초기화입니다."""
-        reset_prefixes = ("june_v2_", "t1_v2_", "t2_v2_", "event_v2_", "june_")
-        reset_exact = {"june_training_saved"}
-        for k in list(st.session_state.keys()):
-            if k in reset_exact or any(k.startswith(p) for p in reset_prefixes):
-                try:
-                    del st.session_state[k]
-                except Exception:
-                    pass
-
-    if st.session_state.pop("june_force_reset_after_submit", False):
-        _clear_june_training_state()
-
-    def _init_june_v2_state():
-        st.session_state.setdefault("june_v2_view", "intro")
-        st.session_state.setdefault("june_v2_theme", 1)
-        st.session_state.setdefault("june_v2_step", 1)
-        st.session_state.setdefault("june_v2_theme1_done", False)
-        st.session_state.setdefault("june_v2_theme2_done", False)
-        st.session_state.setdefault("june_v2_event_done", False)
-        # ✅ Summer Event 퀴즈 답변은 radio 위젯(event_v2_q1)과 분리해 보관합니다.
-        # Streamlit은 해당 radio가 화면에 렌더링되지 않는 submit 화면에서 입력값 변경으로 rerun되면
-        # 위젯 키(event_v2_q1)를 정리할 수 있어, 이벤트 CLEAR 상태가 미참여처럼 보일 수 있습니다.
-        st.session_state.setdefault("june_v2_event_answer", SELECT_PLACEHOLDER)
-        st.session_state.setdefault("june_v2_event_correct", False)
-        st.session_state.setdefault("june_training_saved", False)
-        st.session_state.setdefault("june_v2_completed_steps_1", [])
-        st.session_state.setdefault("june_v2_completed_steps_2", [])
-
-    def _request_training_scroll_top() -> None:
-        st.session_state["june_v2_scroll_top_requested"] = True
-
-    def _render_training_scroll_top_if_requested() -> None:
-        """단계/테마 이동 후 이전 스크롤 위치가 남지 않도록 현재 교육 화면의 시작점으로 이동합니다.
-
-        개선 포인트:
-        - 기존에는 페이지 최상단으로 smooth 이동하여 화면 중간이 잠깐 노출될 수 있었습니다.
-        - 이제는 교육 화면 시작 앵커(#june-v2-active-screen-top)를 우선 찾아 즉시 이동합니다.
-        - DOM 렌더링 지연에 대비해 여러 번 보정합니다.
-        """
-        if st.session_state.pop("june_v2_scroll_top_requested", False):
-            components.html(
-                """
-                <script>
-                (function() {
-                  const scrollToTrainingStart = () => {
-                    try {
-                      const doc = window.parent.document;
-                      // STEP 2 이후에는 카드형 콘텐츠 시작점으로, STEP 1/테마 시작은 기존 교육 화면 시작점으로 이동합니다.
-                      const target = doc.getElementById('june-v2-step-content-top') || doc.getElementById('june-v2-active-screen-top');
-
-                      if (target) {
-                        try {
-                          target.scrollIntoView({behavior: 'auto', block: 'start', inline: 'nearest'});
-                          return;
-                        } catch(e) {}
-                      }
-
-                      const candidates = [
-                        doc.querySelector('section.main'),
-                        doc.querySelector('[data-testid="stAppViewContainer"]'),
-                        doc.documentElement,
-                        doc.body
-                      ].filter(Boolean);
-
-                      candidates.forEach(el => {
-                        try { el.scrollTo({top: 0, left: 0, behavior: 'auto'}); }
-                        catch(e) { try { el.scrollTop = 0; } catch(err) {} }
-                      });
-                      try { window.parent.scrollTo({top: 0, left: 0, behavior: 'auto'}); } catch(e) {}
-                    } catch(e) {
-                      try { window.scrollTo({top: 0, left: 0, behavior: 'auto'}); } catch(err) {}
-                    }
-                  };
-
-                  // Streamlit rerender 완료 시점 편차 보정
-                  [60, 180, 420, 800, 1200].forEach(delay => setTimeout(scrollToTrainingStart, delay));
-                })();
-                </script>
-                """,
-                height=0,
-            )
-
-    def _step_load_key(theme_no: int, step_no: int) -> str:
-        return f"june_v2_theme{theme_no}_step{step_no}_loaded_at"
-
-    def _step_timer_key(theme_no: int, step_no: int) -> str:
-        return f"june_v2_theme{theme_no}_step{step_no}_countdown_started_at"
-
-    def _step_warmup_key(theme_no: int, step_no: int) -> str:
-        return f"june_v2_theme{theme_no}_step{step_no}_warmup_done"
-
-    def _ensure_step_timer(theme_no: int, step_no: int) -> None:
-        if step_no in TIMED_STEPS:
-            st.session_state.setdefault(_step_load_key(theme_no, step_no), time.time())
-
-    def _completed_steps(theme_no: int) -> list[int]:
-        return list(st.session_state.get(f"june_v2_completed_steps_{theme_no}", []))
-
-    def _step_elapsed(theme_no: int, step_no: int) -> int:
-        if step_no not in TIMED_STEPS:
-            return 0
-        if step_no in set(_completed_steps(theme_no)):
-            return STEP_MIN_SECONDS
-        started = st.session_state.get(_step_timer_key(theme_no, step_no))
-        if not started:
-            return 0
-        # countdown_started_at을 warm-up 종료 시점으로 잡기 때문에 초기에는 미래 시간이 될 수 있습니다.
-        return max(0, int(time.time() - float(started)))
-
-    def _step_remaining(theme_no: int, step_no: int) -> int:
-        if step_no not in TIMED_STEPS:
-            return 0
-        return max(0, STEP_MIN_SECONDS - _step_elapsed(theme_no, step_no))
-
-    def _step_time_met(theme_no: int, step_no: int) -> bool:
-        return step_no not in TIMED_STEPS or step_no in set(_completed_steps(theme_no)) or _step_remaining(theme_no, step_no) <= 0
-
-    def _mark_step_done(theme_no: int, step_no: int) -> None:
-        key = f"june_v2_completed_steps_{theme_no}"
-        steps = set(st.session_state.get(key, []))
-        steps.add(step_no)
-        st.session_state[key] = sorted(steps)
-
-    def _max_unlocked_step(theme_no: int) -> int:
-        completed = set(_completed_steps(theme_no))
-        unlocked = 1
-        for i in range(1, 7):
-            if i in completed:
-                unlocked = min(6, i + 1)
-            else:
-                break
-        return unlocked
-
-    def _check_done_key(check_key: str) -> str:
-        return f"{check_key}_timed_done"
-
-    def _check_is_done(check_key: str) -> bool:
-        return bool(st.session_state.get(_check_done_key(check_key), False))
-
-    def _checks_done(theme_no: int) -> bool:
-        checks = T1_CHECKS if theme_no == 1 else T2_CHECKS
-        return all(_check_is_done(k) for k in checks)
-
-    def _quiz_answered(theme_no: int) -> bool:
-        qmap = T1_Q if theme_no == 1 else T2_Q
-        return all(st.session_state.get(k, SELECT_PLACEHOLDER) != SELECT_PLACEHOLDER for k in qmap)
-
-    def _quiz_correct_count(theme_no: int) -> int:
-        qmap = T1_Q if theme_no == 1 else T2_Q
-        return sum(1 for k, ans in qmap.items() if st.session_state.get(k) == ans)
-
-    def _theme_ready_to_complete(theme_no: int) -> tuple[bool, str]:
-        if not all(s in set(_completed_steps(theme_no)) for s in [1,2,3,4,5]):
-            return False, "이전 학습 단계를 먼저 완료해야 합니다."
-        if not _checks_done(theme_no):
-            return False, "실천 체크 항목을 모두 확인해야 합니다."
-        if not _quiz_answered(theme_no):
-            return False, "퀴즈 문항을 모두 응답해야 합니다."
-        return True, "완료 가능"
-
-    def _set_theme(theme_no: int):
-        if theme_no == 1:
-            st.session_state["june_v2_view"] = "theme1"
-            st.session_state["june_v2_theme"] = 1
-            st.session_state["june_v2_step"] = 1
-            _ensure_step_timer(1, 1)
-            _request_training_scroll_top()
-            st.rerun()
-        if theme_no == 2 and not st.session_state.get("june_v2_theme1_done", False):
-            st.warning("현재 교육을 완료해야 다음 단계로 이동할 수 있습니다. Theme 1을 먼저 완료해 주세요.")
-            return
-        st.session_state["june_v2_view"] = f"theme{theme_no}"
-        st.session_state["june_v2_theme"] = theme_no
-        st.session_state["june_v2_step"] = 1
-        _ensure_step_timer(theme_no, 1)
-        _request_training_scroll_top()
-        st.rerun()
-
-    def _set_event():
-        if not st.session_state.get("june_v2_theme2_done", False):
-            st.warning("현재 교육을 완료해야 다음 단계로 이동할 수 있습니다. Theme 2를 먼저 완료해 주세요.")
-            return
-        st.session_state["june_v2_view"] = "event"
-        _request_training_scroll_top()
-        st.rerun()
-
-    def _set_submit():
-        if not st.session_state.get("june_v2_event_done", False):
-            st.warning("현재 교육을 완료해야 다음 단계로 이동할 수 있습니다. Summer Event까지 완료해 주세요.")
-            return
-        st.session_state["june_v2_view"] = "submit"
-        _request_training_scroll_top()
-        st.rerun()
-
-    def _theme_score(theme_no: int) -> int:
-        # ✅ 수료 완료 화면 점수 표시 개선
-        # - 직원 혼선을 줄이기 위해 각 Theme 완료 시 50점씩 부여합니다.
-        # - 교육 진행/제출/저장/관리자 기능 로직은 변경하지 않습니다.
-        if theme_no == 1:
-            if st.session_state.get("june_v2_theme1_done", False):
-                return 50
-            return (15 if _checks_done(1) else 0) + (_quiz_correct_count(1) * 5)
-        if st.session_state.get("june_v2_theme2_done", False):
-            return 50
-        return (15 if _checks_done(2) else 0) + (_quiz_correct_count(2) * 6)
-
-    def _render_quest_cards(show_buttons: bool = True):
-        q1_state = "quest-clear" if st.session_state.get("june_v2_theme1_done") else ("quest-active" if st.session_state.get("june_v2_view") == "theme1" else "quest-lock")
-        q2_state = "quest-clear" if st.session_state.get("june_v2_theme2_done") else ("quest-active" if st.session_state.get("june_v2_view") == "theme2" else "quest-lock")
-        ev_state = "quest-clear" if st.session_state.get("june_v2_event_done") else ("quest-event" if st.session_state.get("june_v2_view") == "event" else "quest-lock")
-        sub_state = "quest-active" if st.session_state.get("june_v2_view") == "submit" else "quest-lock"
-        c1, c2, c3, c4 = st.columns(4)
-        with c1:
-            status1 = 'CLEAR' if st.session_state.get('june_v2_theme1_done') else ('IN PROGRESS' if st.session_state.get('june_v2_view') == 'theme1' else 'READY')
-            st.markdown(f"""<div class="quest-card {q1_state}"><h4>① 청렴·공정경영</h4><p>부패방지·공정거래 리스크를 확인합니다.</p><span class="status-chip">{status1}</span></div>""", unsafe_allow_html=True)
-            if show_buttons and st.button("청렴·공정경영 열기", use_container_width=True, key="june_v2_open_t1"):
-                _set_theme(1)
-        with c2:
-            status2 = 'CLEAR' if st.session_state.get('june_v2_theme2_done') else ('LOCKED' if not st.session_state.get('june_v2_theme1_done') else 'READY')
-            st.markdown(f"""<div class="quest-card {q2_state}"><h4>② 협력사·정보보호</h4><p>하도급·정보보호 기준을 점검합니다.</p><span class="status-chip">{status2}</span></div>""", unsafe_allow_html=True)
-            if show_buttons and st.button("협력사·정보보호 열기", use_container_width=True, key="june_v2_open_t2"):
-                _set_theme(2)
-        with c3:
-            status_ev = 'CLEAR' if st.session_state.get('june_v2_event_done') else ('LOCKED' if not st.session_state.get('june_v2_theme2_done') else 'READY')
-            st.markdown(f"""<div class="quest-card {ev_state}"><h4>🌊 Summer Event</h4><p>수료자 모바일 쿠폰 추첨 대상 이벤트입니다.</p><span class="status-chip">{status_ev}</span></div>""", unsafe_allow_html=True)
-            if show_buttons and st.button("이벤트 열기", use_container_width=True, key="june_v2_open_event"):
-                _set_event()
-        with c4:
-            status_sub = 'READY' if st.session_state.get('june_v2_event_done') else 'LOCKED'
-            st.markdown(f"""<div class="quest-card {sub_state}"><h4>✅ 수료 제출</h4><p>교육 수료 및 이벤트 퀴즈 정보를 저장합니다.</p><span class="status-chip">{status_sub}</span></div>""", unsafe_allow_html=True)
-            if show_buttons and st.button("수료 제출 열기", use_container_width=True, key="june_v2_open_submit"):
-                _set_submit()
-
-    def _render_step_road(theme_no: int):
-        current = int(st.session_state.get("june_v2_step", 1))
-        completed = set(_completed_steps(theme_no))
-        max_unlocked = _max_unlocked_step(theme_no)
-        cols = st.columns(6)
-        for idx, (num, label, sub) in enumerate(STEPS):
-            if num in completed:
-                cls = "step-clear"
-                mark = "✓"
-            elif num == current:
-                cls = "step-current"
-                mark = str(num)
-            else:
-                cls = "step-lock"
-                mark = "·" if num <= max_unlocked else "🔒"
-            with cols[idx]:
-                st.markdown(f"""<div class="step-node {cls}"><span class="num">{mark}</span><span class="label">STEP {num}<br>{label}</span></div>""", unsafe_allow_html=True)
-                if st.button("이동", key=f"june_v2_step_go_{theme_no}_{num}", use_container_width=True):
-                    if num <= max_unlocked or num in completed:
-                        st.session_state["june_v2_step"] = num
-                        _ensure_step_timer(theme_no, num)
-                        _request_training_scroll_top()
-                        st.rerun()
-                    else:
-                        st.warning("현재 교육을 완료해야 다음 단계로 이동할 수 있습니다.")
-        st.markdown("<div class='nav-help'>완료된 단계는 초록색, 현재 단계는 파란색, 아직 진행할 수 없는 단계는 회색으로 표시됩니다.</div>", unsafe_allow_html=True)
-
-    def _render_step_timer(theme_no: int, step_no: int) -> None:
-        """STEP 1~4에 적용되는 60초 카운트다운 게이지입니다.
-
-        기존 구현은 Python time.sleep 루프가 60초 동안 스크립트를 붙잡아
-        Streamlit 화면이 이전 페이지를 회색/흐림 상태로 보여주는 현상이 있었습니다.
-        현재 구현은 브라우저에서 카운트다운을 표시하고, 서버는 시작 시간만 기록합니다.
-        따라서 Theme 1에서 Theme 2로 넘어갈 때 새 Theme 화면이 즉시 노출됩니다.
-        """
-        if step_no not in TIMED_STEPS:
-            return
-
-        if step_no in set(_completed_steps(theme_no)):
-            st.markdown(f"""
-                <div class="timer-live-wrap clear">
-                    <div class="timer-live-head">
-                        <div class="timer-live-left">✅ STEP {step_no} 최소 학습시간 충족 완료</div>
-                        <span class="timer-live-count">CLEAR</span>
-                    </div>
-                    <div class="timer-bar-bg"><div class="timer-bar-fill" style="width:100%;"></div></div>
-                </div>
-            """, unsafe_allow_html=True)
-            return
-
-        now = time.time()
-        load_key = _step_load_key(theme_no, step_no)
-        timer_key = _step_timer_key(theme_no, step_no)
-
-        load_at = float(st.session_state.setdefault(load_key, now))
-        countdown_start = float(st.session_state.setdefault(timer_key, load_at + STEP_WARMUP_SECONDS))
-        countdown_end = countdown_start + STEP_MIN_SECONDS
-
-        # warm-up이 이미 지난 상태로 재진입한 경우 표시 상태를 맞춰 둡니다.
-        if now >= countdown_start:
-            st.session_state[_step_warmup_key(theme_no, step_no)] = True
-
-        target_id = f"june_v2_timer_{theme_no}_{step_no}"
-        warmup_end_ms = int(countdown_start * 1000)
-        target_end_ms = int(countdown_end * 1000)
-        total_countdown_ms = int(STEP_MIN_SECONDS * 1000)
-        warmup_icon = HOURGLASS_SVG
-
-        components.html(f"""
-        <div id="{target_id}" class="timer-live-wrap timer-warmup">
-            <style>
-                #{target_id} {{
-                    background: linear-gradient(135deg, #EFF6FF 0%, #F8FAFC 100%);
-                    border: 1px solid #93C5FD;
-                    border-radius: 18px;
-                    padding: 15px 17px;
-                    color: #1E3A8A;
-                    font-weight: 850;
-                    margin: 14px 0 12px 0;
-                    box-shadow: 0 8px 20px rgba(37,99,235,0.08);
-                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-                    box-sizing: border-box;
-                }}
-                #{target_id}.clear {{
-                    background: linear-gradient(135deg, #ECFDF5 0%, #F0FDF4 100%);
-                    border-color:#86EFAC;
-                    color:#14532D;
-                }}
-                #{target_id} .timer-live-head {{
-                    display:flex;
-                    align-items:center;
-                    justify-content:space-between;
-                    gap:12px;
-                }}
-                #{target_id} .timer-live-left {{
-                    display:flex;
-                    align-items:center;
-                    gap:8px;
-                    font-weight:900;
-                    line-height:1.4;
-                }}
-                #{target_id} .timer-live-count {{
-                    background:#FFFFFF;
-                    color:#1D4ED8;
-                    border:1px solid #BFDBFE;
-                    border-radius:999px;
-                    padding:7px 12px;
-                    font-weight:950;
-                    min-width:78px;
-                    text-align:center;
-                    white-space:nowrap;
-                }}
-                #{target_id}.clear .timer-live-count {{
-                    color:#166534;
-                    border-color:#BBF7D0;
-                }}
-                #{target_id} .timer-bar-bg {{
-                    width:100%;
-                    background:#DBEAFE;
-                    height:14px;
-                    border-radius:999px;
-                    overflow:hidden;
-                    margin-top:9px;
-                }}
-                #{target_id} .timer-bar-fill {{
-                    height:14px;
-                    border-radius:999px;
-                    background: linear-gradient(90deg, #2563EB, #06B6D4, #22C55E);
-                    width:0%;
-                    transition: width 0.3s ease;
-                }}
-            </style>
-            <div class="timer-live-head">
-                <div class="timer-live-left"><span class="timer-icon">{warmup_icon}</span><span class="timer-title">STEP {step_no} 카운트다운 준비 중입니다.</span></div>
-                <span class="timer-live-count">준비 중</span>
-            </div>
-            <div class="timer-bar-bg"><div class="timer-bar-fill"></div></div>
-        </div>
-        <script>
-        (function() {{
-            const root = document.getElementById("{target_id}");
-            if (!root) return;
-            const title = root.querySelector('.timer-title');
-            const count = root.querySelector('.timer-live-count');
-            const bar = root.querySelector('.timer-bar-fill');
-            const warmupEnd = {warmup_end_ms};
-            const targetEnd = {target_end_ms};
-            const total = {total_countdown_ms};
-
-            function update() {{
-                const now = Date.now();
-                if (now < warmupEnd) {{
-                    const left = Math.max(1, Math.ceil((warmupEnd - now) / 1000));
-                    root.classList.remove('clear');
-                    title.textContent = `STEP {step_no} 카운트다운 준비 중입니다.`;
-                    count.textContent = `${{left}}초 후 시작`;
-                    bar.style.width = '0%';
-                    return;
-                }}
-
-                const remainMs = Math.max(0, targetEnd - now);
-                const remain = Math.ceil(remainMs / 1000);
-                const pct = Math.min(100, Math.max(0, Math.round(((total - remainMs) / total) * 100)));
-
-                if (remainMs <= 0) {{
-                    root.classList.add('clear');
-                    title.textContent = `✅ 최소 학습시간 충족 · STEP {step_no} 60초 학습 완료`;
-                    count.textContent = 'CLEAR';
-                    bar.style.width = '100%';
-                    try {{
-                        const doc = window.parent.document;
-                        const buttons = Array.from(doc.querySelectorAll('button'));
-                        buttons.forEach(btn => {{
-                            const txt = (btn.innerText || '').trim();
-                            if (txt.includes('60초 학습 후 활성화') || txt.includes('학습시간 충족 후 활성화')) {{
-                                btn.innerText = '다음 ▶';
-                                btn.classList.add('next-ready-client');
-                            }}
-                        }});
-                    }} catch(e) {{}}
-                }} else {{
-                    root.classList.remove('clear');
-                    title.textContent = '최소 학습시간 충족을 위한 60초 카운트다운';
-                    count.textContent = `${{remain}}초 남음`;
-                    bar.style.width = `${{pct}}%`;
-                }}
-            }}
-            update();
-            const interval = setInterval(() => {{
-                update();
-                if (Date.now() >= targetEnd) clearInterval(interval);
-            }}, 500);
-        }})();
-        </script>
-        """, height=92)
-
-    def _render_timed_checks(theme_no: int) -> None:
-        """STEP 5 실천 체크 항목별 10초 모래시계 확인 절차입니다."""
-        checks = T1_CHECKS if theme_no == 1 else T2_CHECKS
-        items = list(checks.items())
-        st.markdown(
-            "<div class='check-timer-card'>⌛ 각 항목은 체크 후 1초 뒤 10초 모래시계 카운트다운이 시작됩니다. "
-            "카운트다운이 끝난 뒤 다음 항목이 활성화됩니다.</div>",
-            unsafe_allow_html=True,
-        )
-        first_not_done_idx = None
-        for i, (k, _) in enumerate(items):
-            if not _check_is_done(k):
-                first_not_done_idx = i
-                break
-
-        for idx, (key, label) in enumerate(items, start=1):
-            is_done = _check_is_done(key)
-            is_active = (first_not_done_idx is not None and idx - 1 == first_not_done_idx)
-            c_box, c_status = st.columns([0.76, 0.24], vertical_alignment="center")
-            with c_box:
-                if is_done:
-                    st.checkbox(f"{idx}. {label}", value=True, disabled=True, key=f"{key}_done_widget")
-                elif is_active:
-                    checked_now = st.checkbox(f"{idx}. {label}", value=False, key=f"{key}_active_widget")
-                else:
-                    st.checkbox(f"{idx}. {label}", value=False, disabled=True, key=f"{key}_locked_widget")
-                    checked_now = False
-            with c_status:
-                ph = st.empty()
-                if is_done:
-                    ph.markdown("<span class='check-timer-done'>✅ 확인 완료</span>", unsafe_allow_html=True)
-                elif not is_active:
-                    ph.markdown("<span class='check-next-guide'>이전 항목 완료 후 활성화</span>", unsafe_allow_html=True)
-                elif bool(checked_now):
-                    ph.markdown("<span class='check-timer-wait'>⌛ 1초 후 시작</span>", unsafe_allow_html=True)
-                    time.sleep(CHECK_ITEM_DELAY_SECONDS)
-                    for sec in range(CHECK_ITEM_SECONDS, 0, -1):
-                        ph.markdown(
-                            f"<span class='check-timer-wait'>{HOURGLASS_SVG} {sec}초</span>",
-                            unsafe_allow_html=True,
-                        )
-                        time.sleep(1)
-                    st.session_state[_check_done_key(key)] = True
-                    ph.markdown("<span class='check-timer-done'>✅ 확인 완료</span>", unsafe_allow_html=True)
-                    st.rerun()
-                else:
-                    ph.markdown("<span style='color:#64748B;font-weight:800;'>대기</span>", unsafe_allow_html=True)
-
-        if _checks_done(theme_no):
-            if theme_no == 1:
-                title = "Theme 1. 청렴·공정경영 Quest Summary"
-                desc = "실천 체크를 완료했습니다. 아래 요약 이미지를 통해 청렴·공정경영의 핵심 기준을 다시 한 번 정리해 주세요."
-                img = "theme1_integrity_fair.png"
-                cap = "Theme 1. 청렴·공정경영 Quest Summary"
-            else:
-                title = "Theme 2. 협력사·정보보호 Quest Summary"
-                desc = "실천 체크를 완료했습니다. 아래 요약 이미지를 통해 협력사·정보보호의 핵심 기준을 다시 한 번 정리해 주세요."
-                img = "theme2_partner_security.png"
-                cap = "Theme 2. 협력사·정보보호 Quest Summary"
-            st.markdown(f"""
-                <div class="summary-title-card">
-                    <h4>{title}</h4>
-                    <p>{desc}</p>
-                </div>
-            """, unsafe_allow_html=True)
-            _show_training_asset(img, cap)
-
-    def _render_quiz_question(label: str, options: list[str], key: str, correct: str, explanation: str) -> None:
-        """퀴즈 선택 직후 정답 여부와 구체 설명을 카드로 표시합니다."""
-        selected = st.radio(label, [SELECT_PLACEHOLDER] + options, key=key)
-        if selected != SELECT_PLACEHOLDER:
-            is_correct = (selected == correct)
-            cls = "correct" if is_correct else "wrong"
-            title = "✅ 정답입니다" if is_correct else "⚠️ 다시 확인해 주세요"
-            correct_line = "" if is_correct else f"<br><b>정답:</b> {correct}"
-            st.markdown(
-                f"<div class='quiz-feedback-v2 {cls}'><b>{title}</b>{correct_line}<br>{explanation}</div>",
-                unsafe_allow_html=True,
-            )
-
-    def _render_theme_step(theme_no: int):
-        step = int(st.session_state.get("june_v2_step", 1))
-        if theme_no == 1:
-            title_cls = "theme-one-v2"
-            title = "Theme 1. 청렴·공정경영 Quest"
-            desc = "부패방지와 공정거래는 회사의 신뢰를 지키는 가장 기본적인 내부통제입니다. 공직자 관련 요청, 금품·향응, 제3자 우회 제공, 경쟁사 정보교환, 거래상 지위 남용은 모두 사전에 멈추고 확인해야 할 신호입니다."
-        else:
-            title_cls = "theme-two-v2"
-            title = "Theme 2. 협력사·정보보호 Quest"
-            desc = "협력사와 정보는 절차로 보호됩니다. 서면 발급, 대금 지급, 검사 통지, 기술자료 보호, 개인정보·기업비밀 관리는 업무 편의보다 먼저 확인해야 할 기준입니다."
-
-        st.markdown(f"""<div class="theme-title-panel {title_cls}"><h3>{title}</h3><p>{desc}</p></div>""", unsafe_allow_html=True)
-        _render_step_road(theme_no)
-        _ensure_step_timer(theme_no, step)
-
-        if step >= 2:
-            # STEP 2부터는 상단 Quest Road가 아니라 실제 카드형 학습 콘텐츠 상단에 스크롤을 고정합니다.
-            # ✅ STEP별 화면 시작 위치 조정값(px)
-            # - 숫자를 크게 하면 카드가 화면에서 더 아래로 내려옵니다.
-            # - 숫자를 작게 하면 카드가 화면에서 더 위로 올라갑니다.
-            # - 현재 공통 기준값은 16px이며, 화면을 보면서 STEP별로 아래 숫자만 조정하면 됩니다.
-            step_scroll_margin = {
-                2: 16,  # STEP 2 · Core Principles
-                3: 16,  # STEP 3 · Case / Red Flags
-                4: 16,  # STEP 4 · Quiz / Case Judgment
-                5: 16,  # STEP 5 · Practice Check
-                6: 16,  # STEP 6 · Summary
-            }.get(step, 16)
-
-            st.markdown(
-                f"<div id='june-v2-step-content-top' style='height:1px; scroll-margin-top:{step_scroll_margin}px;'></div>",
-                unsafe_allow_html=True
-            )
-
-        if step == 1:
-            if theme_no == 1:
-                st.markdown("""
-                    <div class="content-card-v2">
-                        <span class="page-pill-v2">STEP 1 · Infographic</span>
-                        <h4>청렴한 판단은 가장 강한 내부통제입니다</h4>
-                        <div class="quote-line-v2">“관행처럼 보이는 작은 편의가 회사 전체의 리스크가 될 수 있습니다.”</div>
-                        <div class="infographic-grid">
-                            <div class="info-tile tile-orange"><span class="icon">🚫</span><b>부정청탁 NO</b><span>공직자 등에게 직접 또는 제3자를 통한 부정청탁 금지</span></div>
-                            <div class="info-tile tile-blue"><span class="icon">🎁</span><b>금품·향응 NO</b><span>직무 관련 금품, 편의, 약속 또는 의사표시 금지</span></div>
-                            <div class="info-tile tile-green"><span class="icon">🤝</span><b>담합 NO</b><span>가격, 입찰, 거래조건에 관한 경쟁사 합의 금지</span></div>
-                            <div class="info-tile tile-purple"><span class="icon">⚖️</span><b>지위남용 NO</b><span>거래상대방에게 불리한 조건 강요 금지</span></div>
-                        </div>
-                    </div>
-                """, unsafe_allow_html=True)
-            else:
-                st.markdown("""
-                    <div class="content-card-v2">
-                        <span class="page-pill-v2">STEP 1 · Infographic</span>
-                        <h4>협력사와 정보는 ‘절차’로 보호합니다</h4>
-                        <div class="quote-line-v2">“급한 업무일수록 계약·정보보호 절차를 먼저 확인해야 합니다.”</div>
-                        <div class="infographic-grid">
-                            <div class="info-tile tile-blue"><span class="icon">📝</span><b>서면 발급</b><span>위탁업무 시작 전 계약서 등 법정기재사항 확인</span></div>
-                            <div class="info-tile tile-green"><span class="icon">⏳</span><b>기한 준수</b><span>대금 지급, 검사결과 통지 기한 관리</span></div>
-                            <div class="info-tile tile-orange"><span class="icon">🔐</span><b>자료 보호</b><span>기술자료·경영정보 요구와 사용은 절차에 따라</span></div>
-                            <div class="info-tile tile-purple"><span class="icon">🛡️</span><b>개인정보 보호</b><span>목적 외 조회·제공·공유 금지, 계정관리 준수</span></div>
-                        </div>
-                    </div>
-                """, unsafe_allow_html=True)
-
-        elif step == 2:
-            if theme_no == 1:
-                principles = [
-                    ("청탁 금지", "금품 등을 받는 것이 금지된 공직자 등에게 직접 또는 제3자를 통해 부정청탁을 하지 않습니다."),
-                    ("금품 제공 금지", "직무 관련 여부를 확인하고, 금품·향응·편의 제공 또는 제공 약속·의사표시를 하지 않습니다."),
-                    ("제3자 우회 금지", "에이전트·협력사·하도급사를 통한 우회 제공도 회사의 부패 리스크가 될 수 있습니다."),
-                    ("담합 금지", "가격, 입찰, 거래조건 등에 관한 경쟁사 정보교환이나 합의를 하지 않습니다."),
-                ]
-            else:
-                principles = [
-                    ("서면 발급", "위탁업무 시작 전 계약서 등 법정기재사항이 포함된 서면을 발급하고 보존합니다."),
-                    ("대금·검사 기한", "대금 지급기한과 검사결과 통지기한을 지켜 협력사와 회사의 신뢰를 보호합니다."),
-                    ("기술자료 보호", "정당한 사유와 절차 없이 기술자료·경영정보를 요구하거나 목적 외로 사용하지 않습니다."),
-                    ("정보보호", "개인정보 목적 외 이용, ID/PW 공유, 기업비밀 방치·무단반출을 금지합니다."),
-                ]
-            html = ''.join([f"<div class='principle-card-v2'><div class='principle-keyword-v2'>{a}</div><div class='principle-desc-v2'>{b}</div></div>" for a,b in principles])
-            st.markdown(f"""<div class="content-card-v2"><span class="page-pill-v2">STEP 2 · Core Principles</span><h4>기억해야 할 핵심 원칙</h4><p style='margin-top:0;color:#475569;font-weight:740;'>빨간 핵심 키워드를 먼저 기억하고, 아래 설명으로 실제 업무 기준을 확인해 주세요.</p><div class="principle-grid-v2">{html}</div></div>""", unsafe_allow_html=True)
-
-        elif step == 3:
-            if theme_no == 1:
-                risks = [
-                    ("🚩 ‘관행대로 처리하시죠’", "관행이라는 표현이 나오면 기준이 흐려질 수 있습니다. 관련 규정, 승인권자, 기록 필요 여부를 먼저 확인하세요."),
-                    ("🚩 ‘식사 한 번 하시죠’", "직무 관련자가 제공하는 식사·편의는 금액보다 직무 관련성과 반복성이 중요합니다. 회사 기준과 신고 필요 여부를 확인하세요."),
-                    ("🚩 ‘경쟁사는 얼마에 들어왔나요?’", "입찰가격·거래조건 등 경쟁 민감 정보는 담합 리스크가 있습니다. 대화를 중단하고 내부에 공유·상담하세요."),
-                    ("🚩 ‘협력사를 통해 전달하면 괜찮습니다’", "제3자를 통한 우회 제공도 회사 행위로 평가될 수 있습니다. 직접 제공과 동일하게 사전심의·승인 절차를 확인하세요."),
-                    ("🚩 ‘증빙은 나중에 맞추면 됩니다’", "증빙과 회계처리는 실제 거래와 일치해야 합니다. 사후 맞춤, 허위기재, 누락은 회계투명성 리스크입니다."),
-                    ("🚩 ‘이번 건은 기록을 남기지 맙시다’", "기록을 남기지 말자는 말은 내부통제 경고 신호입니다. 이메일, 회의록, 승인내역 등 객관 자료를 보존하세요."),
-                ]
-            else:
-                risks = [
-                    ("🚩 ‘계약서는 나중에 쓰고 일단 시작합시다’", "거래 시작 전 서면 발급은 기본 절차입니다. 긴급하더라도 계약·발주·업무범위 문서화를 먼저 확인하세요."),
-                    ("🚩 ‘검사 통지는 굳이 안 해도 됩니다’", "검사결과 통지는 대금 지급과 분쟁 예방의 기준입니다. 정해진 기한과 방식에 따라 서면 통지해야 합니다."),
-                    ("🚩 ‘원가자료 좀 받아주세요’", "원가·매출·경영전략 자료는 경영정보에 해당할 수 있습니다. 정당한 사유와 법무·컴플라이언스 기준을 확인하세요."),
-                    ("🚩 ‘고객정보를 개인 메일로 보내겠습니다’", "개인 메일·메신저·개인 클라우드는 비인가 경로입니다. 승인된 시스템, 암호화, 접근권한 기준을 따라야 합니다."),
-                    ("🚩 ‘비밀번호는 팀 공용으로 쓰면 편합니다’", "ID/PW 공유는 책임 추적과 권한관리를 무너뜨립니다. 개인별 계정과 최소권한 원칙을 지켜야 합니다."),
-                    ("🚩 ‘업무 끝난 파일은 그냥 보관해 둡시다’", "목적이 끝난 개인정보·기업비밀은 보관 필요성을 확인하고, 불필요한 자료는 복구 불가능하게 파기해야 합니다."),
-                ]
-            html = ''.join([f"<div class='risk-card-v2'><span class='risk-phrase-v2'>{phrase}</span><span class='risk-response-v2'><b>대응</b>{response}</span></div>" for phrase, response in risks])
-            st.markdown(f"""<div class="content-card-v2"><span class="page-pill-v2">STEP 3 · Red Flags</span><h4>이런 말이 나오면 멈추고 확인하세요</h4><p style='margin-top:0;color:#475569;font-weight:740;'>위험 문구를 보았다면 즉시 멈추고, 아래 대응 방향에 따라 기록·승인·상담 절차를 확인해 주세요.</p><div class="risk-grid-v2">{html}</div></div>""", unsafe_allow_html=True)
-
-        elif step == 4:
-            if theme_no == 1:
-                st.markdown("""
-                    <div class="content-card-v2"><span class="page-pill-v2">STEP 4 · Case Judgment</span><h4>사례로 판단해 보기</h4>
-                    <div class="case-box-v2"><b>사례 A</b><br>공공기관 관계자가 특정 협회비 또는 협찬을 요청했습니다. 담당자는 관계 유지를 위해 신속히 진행하려고 합니다.</div>
-                    <div class="answer-box-v2"><b>판단 포인트</b><br>공직자 등으로부터 직·간접적으로 청탁·권유·요청받은 기부, 협찬, 협회비 등은 내부 사전심의 대상인지 먼저 확인해야 합니다.</div>
-                    <div class="case-box-v2"><b>사례 B</b><br>입찰 전 경쟁사 담당자가 ‘이번에는 어느 정도 금액으로 들어가느냐’고 묻습니다.</div>
-                    <div class="answer-box-v2"><b>판단 포인트</b><br>가격, 입찰, 거래조건에 관한 경쟁사 정보교환은 담합 리스크가 있으므로 대화를 중단하고 내부 기준을 확인해야 합니다.</div>
-                    <div class="case-box-v2"><b>사례 C</b><br>평소 업무 연락을 자주 하던 협력사 담당자가 감사의 의미라며 모바일 커피 쿠폰을 개인 메신저로 보냈습니다.</div>
-                    <div class="answer-box-v2"><b>판단 포인트</b><br>소액이라도 직무 관련성이 있으면 금품·편의 제공 리스크가 발생할 수 있습니다. 사내 기준을 확인하고 필요 시 반환·신고·상담 절차를 진행해야 합니다.</div></div>
-                """, unsafe_allow_html=True)
-            else:
-                st.markdown("""
-                    <div class="content-card-v2"><span class="page-pill-v2">STEP 4 · Case Judgment</span><h4>사례로 판단해 보기</h4>
-                    <div class="case-box-v2"><b>사례 A</b><br>협력사 업무가 급해 계약서 발급 전 먼저 작업을 시작했습니다.</div>
-                    <div class="answer-box-v2"><b>판단 포인트</b><br>위탁업무 시작 전 서면 발급은 협력사와 회사를 함께 보호하는 기본 절차입니다. 급한 업무라도 절차를 생략하면 리스크가 커집니다.</div>
-                    <div class="case-box-v2"><b>사례 B</b><br>고객정보가 포함된 엑셀 파일을 개인 이메일로 보내 야간에 처리하려고 합니다.</div>
-                    <div class="answer-box-v2"><b>판단 포인트</b><br>개인정보와 기업비밀은 목적, 권한, 보관, 파기 기준을 지켜야 하며 개인 메일 등 비인가 경로 사용은 원칙적으로 금지됩니다.</div>
-                    <div class="case-box-v2"><b>사례 C</b><br>보직이 변경된 직원이 이전 업무 시스템 권한을 계속 보유하고 있어, 필요할 때 과거 고객정보를 조회할 수 있는 상태입니다.</div>
-                    <div class="answer-box-v2"><b>판단 포인트</b><br>불필요한 시스템 접근 권한은 즉시 반납·회수되어야 합니다. 업무 필요성이 사라진 권한은 개인정보 오·남용과 내부통제 리스크로 이어질 수 있습니다.</div></div>
-                """, unsafe_allow_html=True)
-
-        elif step == 5:
-            st.markdown("<div class='content-card-v2'><span class='page-pill-v2'>STEP 5 · Practice Check</span><h4>실천 체크</h4><p>아래 항목을 모두 확인해야 다음 단계로 이동할 수 있습니다. 각 항목은 10초 확인 카운트다운을 거친 뒤 완료 처리됩니다.</p></div>", unsafe_allow_html=True)
-            _render_timed_checks(theme_no)
-
-        elif step == 6:
-            st.markdown("<div class='content-card-v2'><span class='page-pill-v2'>STEP 6 · Quiz & Clear</span><h4>이해도 확인 퀴즈</h4><p>정답률은 교육 이해도 확인용입니다. 모든 문항에 응답해야 테마를 완료할 수 있습니다.</p></div>", unsafe_allow_html=True)
-            if theme_no == 1:
-                _render_quiz_question(
-                    "Q1. 공공기관 관계자가 협찬을 요청했습니다. 가장 적절한 조치는?",
-                    ["관계 유지를 위해 바로 진행한다", "컴플라이언스 사전심의 등 내부 절차를 확인한다", "개인적으로 처리한다"],
-                    "t1_v2_q1",
-                    "컴플라이언스 사전심의 등 내부 절차를 확인한다",
-                    "공직자 등으로부터 요청받은 기부·협찬·협회비는 이해관계와 직무 관련성이 문제될 수 있으므로, 담당자가 임의로 진행하지 말고 내부 사전심의 대상 여부를 먼저 확인해야 합니다."
-                )
-                _render_quiz_question(
-                    "Q2. 경쟁사가 입찰가격을 묻습니다. 가장 적절한 조치는?",
-                    ["대략적인 가격 수준만 알려준다", "담합 리스크가 있으므로 대화를 중단하고 내부 기준을 확인한다", "서로 도움 되는 정보라면 공유한다"],
-                    "t1_v2_q2",
-                    "담합 리스크가 있으므로 대화를 중단하고 내부 기준을 확인한다",
-                    "입찰가격, 거래조건, 낙찰 예정자 등 경쟁 민감 정보의 교환은 담합 의심을 받을 수 있습니다. 대화를 중단하고 기록·보고·상담 절차를 검토하는 것이 안전합니다."
-                )
-                _render_quiz_question(
-                    "Q3. 협력사로부터 선물을 받았습니다. 가장 적절한 조치는?",
-                    ["금액이 작으면 보관한다", "기준을 확인하고 필요 시 신고·반환·상담한다", "상급자에게만 구두 보고한다"],
-                    "t1_v2_q3",
-                    "기준을 확인하고 필요 시 신고·반환·상담한다",
-                    "소액 선물이라도 직무 관련성이 있거나 반복·관행화되면 부패 리스크가 될 수 있습니다. 회사 기준에 따라 반환, 신고, 상담 등 객관적인 처리 절차를 남기는 것이 중요합니다."
-                )
-                _render_quiz_question(
-                    "Q4. 거래상대방에게 합리적 이유 없이 불리한 조건을 요구했습니다. 가장 적절한 판단은?",
-                    ["회사에 유리하면 가능하다", "거래상 지위 남용 소지가 있으므로 합리적 사유와 절차를 확인한다", "상대방이 수용하면 문제없다"],
-                    "t1_v2_q4",
-                    "거래상 지위 남용 소지가 있으므로 합리적 사유와 절차를 확인한다",
-                    "상대방이 수용하더라도 거래상 지위, 불이익 정도, 합리적 사유와 협의 절차가 부족하면 공정거래 리스크가 발생할 수 있습니다."
-                )
-            else:
-                _render_quiz_question(
-                    "Q5. 중소기업에게 위탁업무를 시작하기 전 원칙적으로 필요한 것은?",
-                    ["구두 합의 후 사후 정리한다", "법정기재사항이 포함된 서면을 먼저 발급한다", "업무 완료 후 정산 메모만 남긴다"],
-                    "t2_v2_q1",
-                    "법정기재사항이 포함된 서면을 먼저 발급한다",
-                    "위탁업무 시작 전 계약서 등 필요한 서면을 발급하고 보존하는 것은 협력사와 회사 모두를 보호하는 기본 절차입니다. 구두 합의나 사후 정리는 분쟁과 법 위반 리스크를 키울 수 있습니다."
-                )
-                _render_quiz_question(
-                    "Q6. 목적물 수령 후 검사결과 통지는 원칙적으로 언제까지 해야 할까요?",
-                    ["10일 이내 서면으로 통지한다", "30일 이내 구두로 통지한다", "문제가 있을 때만 통지한다"],
-                    "t2_v2_q2",
-                    "10일 이내 서면으로 통지한다",
-                    "검사결과는 정해진 기한 내 서면으로 통지해야 대금 지급과 후속 절차가 투명하게 관리됩니다. 구두 통지만으로는 분쟁 발생 시 입증이 어렵습니다."
-                )
-                _render_quiz_question(
-                    "Q7. 협력사의 기술자료를 요구할 때 가장 적절한 기준은?",
-                    ["업무에 필요하면 자유롭게 요구한다", "정당한 사유와 절차에 따라 요구하고 목적 범위 내에서만 사용한다", "받은 자료는 유사 업무에도 사용할 수 있다"],
-                    "t2_v2_q3",
-                    "정당한 사유와 절차에 따라 요구하고 목적 범위 내에서만 사용한다",
-                    "기술자료는 정당한 사유, 요구서, 비밀유지, 목적 범위 등 절차가 중요합니다. 제공받은 자료를 다른 목적에 쓰거나 제3자에게 제공하면 중대한 리스크가 됩니다."
-                )
-                _render_quiz_question(
-                    "Q8. 고객 개인정보가 포함된 파일을 개인 메일로 보내는 행위에 대한 가장 적절한 판단은?",
-                    ["편의를 위해 가능하다", "원칙적으로 금지되며 내부 보안 기준을 따라야 한다", "암호 없이 보내도 된다"],
-                    "t2_v2_q4",
-                    "원칙적으로 금지되며 내부 보안 기준을 따라야 한다",
-                    "개인정보와 기업비밀은 승인된 시스템과 보안 절차 안에서 처리해야 합니다. 개인 메일, 개인 클라우드, 메신저 등 비인가 경로는 유출 사고로 이어질 수 있습니다."
-                )
-                _render_quiz_question(
-                    "Q9. 정보시스템 ID/PW 관리 기준으로 가장 적절한 것은?",
-                    ["팀 업무 편의를 위해 공유한다", "공용 메모장에 적어둔다", "공유하지 않고 개인별 계정과 권한 기준을 준수한다"],
-                    "t2_v2_q5",
-                    "공유하지 않고 개인별 계정과 권한 기준을 준수한다",
-                    "ID/PW 공유는 책임 추적을 어렵게 하고 권한 오남용 위험을 높입니다. 개인별 계정, 최소 권한, 권한 회수 기준을 지켜야 합니다."
-                )
-
-        if step in TIMED_STEPS:
-            _render_step_timer(theme_no, step)
-
-        checked = _checks_done(theme_no)
-        answered = _quiz_answered(theme_no)
-        score = _theme_score(theme_no)
-        max_score = 50
-        st.markdown(
-            f"<span class='score-pill-v2'>실천 체크: {'완료' if checked else '진행 중'}</span>"
-            f"<span class='score-pill-v2'>퀴즈 응시: {'완료' if answered else '진행 중'}</span>"
-            f"<span class='score-pill-v2'>테마 점수: {score}/{max_score}점</span>",
-            unsafe_allow_html=True
-        )
-
-        st.markdown("---")
-        prev_col, msg_col, next_col = st.columns([0.18, 0.54, 0.28])
-        with prev_col:
-            if st.button("◀ 이전", use_container_width=True, key=f"june_v2_prev_{theme_no}_{step}", type="secondary"):
-                if step > 1:
-                    st.session_state["june_v2_step"] = step - 1
-                    _ensure_step_timer(theme_no, step - 1)
-                elif theme_no == 2:
-                    st.session_state["june_v2_view"] = "theme1"
-                    st.session_state["june_v2_theme"] = 1
-                    st.session_state["june_v2_step"] = 6
-                _request_training_scroll_top()
-                st.rerun()
-        with msg_col:
-            st.markdown("<div class='nav-help'>하단 버튼으로 순서대로 이동합니다. 완료된 단계는 상단 Quest Road에서 초록색으로 표시됩니다.</div>", unsafe_allow_html=True)
-        with next_col:
-            base_next_label = "다음 ▶" if step < 6 else ("Theme 1 CLEAR → 다음 Quest" if theme_no == 1 else "Theme 2 CLEAR → Event")
-            if step in TIMED_STEPS and not _step_time_met(theme_no, step):
-                next_label = "🔒 60초 학습 후 활성화"
-            elif step == 5 and not _checks_done(theme_no):
-                next_label = "🔒 실천 체크 완료 후 활성화"
-            else:
-                next_label = base_next_label
-            if st.button(next_label, use_container_width=True, key=f"june_v2_next_{theme_no}_{step}", type="primary"):
-                if step == 5 and not _checks_done(theme_no):
-                    st.warning("실천 체크 항목을 모두 확인해야 다음 단계로 이동할 수 있습니다.")
-                elif step == 6:
-                    ok, msg = _theme_ready_to_complete(theme_no)
-                    if not ok:
-                        st.warning(msg)
-                    else:
-                        _mark_step_done(theme_no, 6)
-                        if theme_no == 1:
-                            st.session_state["june_v2_theme1_done"] = True
-                            st.session_state["june_v2_view"] = "theme2"
-                            st.session_state["june_v2_theme"] = 2
-                            st.session_state["june_v2_step"] = 1
-                            _ensure_step_timer(2, 1)
-                        else:
-                            st.session_state["june_v2_theme2_done"] = True
-                            st.session_state["june_v2_view"] = "event"
-                        _request_training_scroll_top()
-                        st.rerun()
-                else:
-                    if step in TIMED_STEPS and not _step_time_met(theme_no, step):
-                        remain = _step_remaining(theme_no, step)
-                        st.warning(f"최소 학습시간 60초를 충족해야 다음 단계로 이동할 수 있습니다. 현재 {remain}초 남았습니다.")
-                    else:
-                        _mark_step_done(theme_no, step)
-                        next_step = min(6, step + 1)
-                        st.session_state["june_v2_step"] = next_step
-                        _ensure_step_timer(theme_no, next_step)
-                        _request_training_scroll_top()
-                        st.rerun()
-
-    _init_june_v2_state()
-    _render_training_scroll_top_if_requested()
-
-    # ✅ 첫 안내 화면에서만 과정 소개를 표시합니다.
-    #    학습 시작 후에는 Theme Quest 화면만 노출하여 중복·복잡도를 줄입니다.
-    if st.session_state.get("june_v2_view") == "intro":
-        st.markdown("""
-            <div class="premium-hero-v2">
-                <div class="premium-badge-v2">AUDIT OFFICE · 2026 JUNE COMPLIANCE</div>
-                <h2>2026년 6월 컴플라이언스 인식제고 자율점검 교육</h2>
-                <p>
-                    본 과정은 전 임직원을 대상으로 하는 감사실 주관 정기 자율점검 교육입니다.
-                    부패방지·공정거래·하도급·정보보호 리스크를 사례 중심으로 학습하고,
-                    실제 업무에서 바로 적용할 수 있는 실천 기준을 순서대로 확인합니다.
-                </p>
-            </div>
-            <div class="audit-message-v2">
-                <h4>감사실 안내</h4>
-                <p>
-                    교육은 순차형 Quest 방식으로 진행됩니다. 현재 단계를 완료해야 다음 단계로 이동할 수 있으며,
-                    각 테마의 STEP 1~4는 단계별 최소 60초 이상 학습해야 다음 단계로 이동할 수 있습니다.
-                    STEP 5 실천 체크는 항목별 10초 확인 카운트다운을 통해 실질적인 확인 절차를 거칩니다.
-                    이는 단순 클릭형 수료를 방지하고, 전 임직원이 핵심 기준을 충분히 확인하기 위한 장치입니다.
-                </p>
-            </div>
-        """, unsafe_allow_html=True)
-
-    # GitHub 저장소의 assets 폴더 이미지를 안전하게 표시하는 유틸
-    TRAINING_ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
-
-    def _show_training_asset(filename: str, caption: str = "") -> None:
-        image_path = os.path.join(TRAINING_ASSET_DIR, filename)
-        if os.path.exists(image_path):
-            st.image(image_path, use_container_width=True, caption=caption)
-        else:
-            st.warning(
-                f"이미지 파일을 찾을 수 없습니다: assets/{filename} · "
-                "GitHub의 assets 폴더와 파일명을 확인해 주세요."
-            )
-
-    if st.session_state.get("june_v2_view") == "intro":
-        st.markdown("<div class='intro-sequence-title'>컴플라이언스 인식제고 교육은 다음 순서로 진행됩니다.</div>", unsafe_allow_html=True)
-        st.markdown("""
-            <div class="content-card-v2" style="padding:18px 20px;">
-                <div style="display:grid; grid-template-columns:repeat(4, minmax(120px,1fr)); gap:10px; text-align:center;">
-                    <div class="score-pill-v2">① 청렴·공정경영</div>
-                    <div class="score-pill-v2">② 협력사·정보보호</div>
-                    <div class="score-pill-v2">③ Summer Event</div>
-                    <div class="score-pill-v2">④ 수료 제출</div>
-                </div>
-            </div>
-            <div class="start-training-box">
-                <b>교육을 시작하겠습니다.</b><br>
-                <b>확인 · 학습하기</b>를 누르면 다음 화면에서 <b>Theme 1. 청렴·공정경영 Quest</b>가 시작됩니다.
-                이후부터는 단계별 교육을 순서대로 완료해야 다음 단계로 이동할 수 있습니다.
-            </div>
-        """, unsafe_allow_html=True)
-        ok_col, _ = st.columns([0.24, 0.76])
-        with ok_col:
-            if st.button("확인 · 학습하기", use_container_width=True, key="june_v2_intro_start", type="primary"):
-                st.session_state["june_v2_view"] = "theme1"
-                st.session_state["june_v2_theme"] = 1
-                st.session_state["june_v2_step"] = 1
-                _ensure_step_timer(1, 1)
-                _request_training_scroll_top()
-                st.rerun()
-
+    local_windows = is_local_windows()
+    local_admin = is_windows_admin()
+    if local_windows and local_admin:
+        st.success("✅ Windows 로컬 실행 및 관리자 권한이 확인되었습니다. 실제 IP 변경이 가능합니다.")
+    elif local_windows:
+        st.warning("⚠️ Windows에서 실행 중이지만 관리자 권한이 없습니다. 관리자 권한 PowerShell에서 `streamlit run app.py`로 실행해 주세요.")
     else:
-        # 단계/테마 전환 시 브라우저가 이 지점을 교육 화면의 시작점으로 인식하도록 하는 앵커입니다.
-        # 특히 Theme 1 CLEAR 후 Theme 2 시작 시, 이전 퀴즈 화면의 중간 위치가 남지 않도록 합니다.
-        st.markdown("<div id='june-v2-active-screen-top' style='height:1px; scroll-margin-top:16px;'></div>", unsafe_allow_html=True)
-        _render_quest_cards(show_buttons=True)
+        st.info("ℹ️ 현재 앱은 Windows 로컬 환경이 아닙니다. Google Sheets 프로필 관리와 이력 조회는 가능하지만, 이 서버에서 사용자의 PC IP를 직접 변경할 수는 없습니다.")
 
-        if st.session_state.get("june_v2_view") in ["theme1", "theme2"]:
-            current_theme = 1 if st.session_state.get("june_v2_view") == "theme1" else 2
-            _render_theme_step(current_theme)
+    identity_col1, identity_col2 = st.columns(2)
+    with identity_col1:
+        ip_modifier_emp_id = st.text_input("작업자 사번 *", key="ip_modifier_emp_id", placeholder="예: 10123456")
+    with identity_col2:
+        ip_modifier_name = st.text_input("작업자 성명 *", key="ip_modifier_name", placeholder="예: 홍길동")
 
-        elif st.session_state.get("june_v2_view") == "event":
-            st.markdown("""
-                <div class="summer-zone-v2">
-                    <h3>🌊 Summer Compliance Event</h3>
-                    <p>
-                        무더운 6월, 컴플라이언스도 시원하게 점검해 주세요.
-                        본 교육을 정상 수료한 임직원은 추후 별도 추첨을 통해 모바일 쿠폰 지급 대상에 포함됩니다.
-                        이벤트 퀴즈는 정보보호 핵심 수칙과 연결했습니다.
-                    </p>
-                </div>
-            """, unsafe_allow_html=True)
-            _show_training_asset(
-                "summer_event_quiz.png",
-                "Summer Compliance Event Quiz"
-            )
-            st.markdown("""
-                <div class="content-card-v2">
-                    <span class="page-pill-v2">Special Event · 참여형 퀴즈</span>
-                    <h4>여름철 휴가·외근 중에도 기준은 그대로입니다</h4>
-                    <div class="infographic-grid">
-                        <div class="info-tile tile-blue"><span class="icon">🏖️</span><b>휴가철</b><span>업무 자료 반출·저장 경로 확인</span></div>
-                        <div class="info-tile tile-green"><span class="icon">🔑</span><b>계정관리</b><span>ID/PW 공유 금지, 개인별 권한 준수</span></div>
-                        <div class="info-tile tile-orange"><span class="icon">📁</span><b>파일보호</b><span>개인정보·기업비밀 암호화 및 파기</span></div>
-                        <div class="info-tile tile-purple"><span class="icon">🎁</span><b>추첨대상</b><span>정상 수료자 중 모바일 쿠폰 추첨</span></div>
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
-            event_answer = st.radio(
-                "이벤트 Q. 여름철 휴가·외근 중에도 지켜야 할 정보보호 수칙으로 가장 적절한 것은?",
-                [
-                    SELECT_PLACEHOLDER,
-                    "업무 편의를 위해 고객정보 파일을 개인 메일로 보내 둔다",
-                    "기업비밀·개인정보 파일은 암호화하고, 목적 완료 후 안전하게 파기한다",
-                    "비밀번호는 동료와 공유해 두면 업무 공백을 줄일 수 있다"
-                ],
-                key="event_v2_q1"
-            )
-            # ✅ radio 위젯 상태와 별도로 이벤트 답변을 영구 세션 키에 보관합니다.
-            # 수료 제출 화면에서 사번/성명/소속 입력 시 rerun되어도 이벤트 CLEAR가 유지됩니다.
-            if event_answer != SELECT_PLACEHOLDER:
-                st.session_state["june_v2_event_answer"] = event_answer
-                st.session_state["june_v2_event_correct"] = (event_answer == "기업비밀·개인정보 파일은 암호화하고, 목적 완료 후 안전하게 파기한다")
-            if event_answer == "기업비밀·개인정보 파일은 암호화하고, 목적 완료 후 안전하게 파기한다":
-                st.success("정답입니다. 시원한 여름에도 정보보호 기준은 그대로 유지됩니다. 🌊")
-            elif event_answer != SELECT_PLACEHOLDER:
-                st.info("힌트: 개인정보·기업비밀은 암호화, 접근권한, 목적 완료 후 안전한 파기가 핵심입니다.")
-            ev_prev, ev_msg, ev_next = st.columns([0.18, 0.54, 0.28])
-            with ev_prev:
-                if st.button("◀ Theme 2로", use_container_width=True, key="june_v2_event_prev", type="secondary"):
-                    st.session_state["june_v2_view"] = "theme2"
-                    st.session_state["june_v2_theme"] = 2
-                    st.session_state["june_v2_step"] = 6
-                    _request_training_scroll_top()
-                    st.rerun()
-            with ev_msg:
-                st.markdown("<div class='nav-help'>이벤트 퀴즈에 응답하면 수료 제출 단계로 이동할 수 있습니다.</div>", unsafe_allow_html=True)
-            with ev_next:
-                if st.button("Event CLEAR → 수료 제출", use_container_width=True, key="june_v2_event_next", type="primary"):
-                    if st.session_state.get("event_v2_q1", SELECT_PLACEHOLDER) == SELECT_PLACEHOLDER:
-                        st.warning("이벤트 퀴즈에 응답해야 수료 제출 단계로 이동할 수 있습니다.")
-                    else:
-                        selected_event_answer = st.session_state.get("event_v2_q1", SELECT_PLACEHOLDER)
-                        st.session_state["june_v2_event_answer"] = selected_event_answer
-                        st.session_state["june_v2_event_correct"] = (selected_event_answer == "기업비밀·개인정보 파일은 암호화하고, 목적 완료 후 안전하게 파기한다")
-                        st.session_state["june_v2_event_done"] = True
-                        st.session_state["june_v2_view"] = "submit"
-                        _request_training_scroll_top()
-                        st.rerun()
+    st.divider()
+    switch_tab, manage_tab, history_tab = st.tabs(["⚡ IP 전환", "🛠️ IP 오류 수정·프로필 관리", "📋 변경 이력"])
 
-        elif st.session_state.get("june_v2_view") == "submit":
-            st.markdown("### ✅ 수료 제출")
-            st.caption("아래 정보를 입력하고 제출하면 교육 수료 및 이벤트 퀴즈 정보가 Google Sheet에 저장됩니다.")
-            t1_done = st.session_state.get("june_v2_theme1_done", False)
-            t2_done = st.session_state.get("june_v2_theme2_done", False)
-            event_done_now = bool(st.session_state.get("june_v2_event_done", False))
-            event_answer_now = st.session_state.get("june_v2_event_answer", SELECT_PLACEHOLDER)
-            if event_answer_now == SELECT_PLACEHOLDER:
-                # 기존 세션/브라우저에서 submit 화면 진입 직후 위젯 키가 아직 살아있는 경우를 보정합니다.
-                event_answer_now = st.session_state.get("event_v2_q1", SELECT_PLACEHOLDER)
-                if event_answer_now != SELECT_PLACEHOLDER:
-                    st.session_state["june_v2_event_answer"] = event_answer_now
-                    st.session_state["june_v2_event_correct"] = (event_answer_now == "기업비밀·개인정보 파일은 암호화하고, 목적 완료 후 안전하게 파기한다")
-            event_answered_now = event_done_now and (event_answer_now != SELECT_PLACEHOLDER)
-            event_correct_now = bool(st.session_state.get("june_v2_event_correct", False))
-            t1_score_now = _theme_score(1)
-            t2_score_now = _theme_score(2)
-            quiz_score_now = (_quiz_correct_count(1) * 5) + (_quiz_correct_count(2) * 6)
-            event_score_now = 0
-            final_submit_score = 0
-            # ✅ 최종 수료 화면 점수 표시 개선: Theme 1 50점 + Theme 2 50점 = 100점 기준
-            participation_score = t1_score_now + t2_score_now
-            final_score = t1_score_now + t2_score_now
+    with switch_tab:
+        try:
+            profiles = load_ip_profiles()
+            profile_load_error = ""
+        except Exception as e:
+            profiles = []
+            profile_load_error = str(e)
+            st.error(f"Google Sheets 프로필 조회 실패: {e}")
 
-            cstat1, cstat2, cstat3, cstat4 = st.columns(4)
-            cstat1.metric("Theme 1", "CLEAR" if t1_done else "진행 중")
-            cstat2.metric("Theme 2", "CLEAR" if t2_done else "진행 중")
-            cstat3.metric("이벤트", "CLEAR" if event_answered_now else "미참여")
-            cstat4.metric("최종점수", f"{final_score}/100")
+        adapters = list_windows_adapters()
+        if profiles:
+            profile_map = {
+                f"{r.get('프로필명', '')} · {r.get('IP주소', '')} · {r.get('어댑터명', '')}": r
+                for r in profiles
+            }
+            selected_label = st.selectbox("적용할 장소/IP 프로필", list(profile_map.keys()), key="ip_apply_profile")
+            selected_profile = profile_map[selected_label]
 
-            st.markdown("""
-                <div class="content-card-v2">
-                    <span class="page-pill-v2">Completion Standard</span>
-                    <h4>수료 기준</h4>
-                    <p>
-                        Theme 1, Theme 2, Summer Event를 순서대로 완료하고 사번·성명·소속을 입력해야 수료 제출이 가능합니다.
-                        점수는 이해도 확인용이며, 정상 수료자는 추후 모바일 쿠폰 추첨 대상에 포함됩니다.
-                    </p>
-                </div>
-            """, unsafe_allow_html=True)
+            st.markdown("#### 선택 프로필")
+            preview_df = pd.DataFrame([{
+                "프로필": selected_profile.get("프로필명", ""),
+                "어댑터": selected_profile.get("어댑터명", ""),
+                "IP": selected_profile.get("IP주소", ""),
+                "서브넷": selected_profile.get("서브넷마스크", ""),
+                "게이트웨이": selected_profile.get("기본게이트웨이", ""),
+                "DNS": ", ".join([x for x in [str(selected_profile.get("기본DNS", "")).strip(), str(selected_profile.get("보조DNS", "")).strip()] if x]),
+            }])
+            st.dataframe(preview_df, use_container_width=True, hide_index=True)
 
-            st.markdown("---")
-            c1, c2, c3, c4 = st.columns(4)
-            emp_id = c1.text_input("사번", placeholder="사번(1000****) / 미부여 시 00000000", key="june_emp_id")
-            name = c2.text_input("성명", key="june_name")
-            ordered_units = ["경영총괄", "사업총괄", "강북본부", "강남본부", "서부본부", "강원본부", "품질지원단", "감사실"]
-            unit = c3.selectbox("총괄 / 본부 / 단", ordered_units, index=None, placeholder="선택", key="june_unit")
-            dept = c4.text_input("상세 부서명", placeholder="현 소속부서명", key="june_dept")
-
-            can_submit = t1_done and t2_done and event_answered_now
-            if not can_submit:
-                st.warning("Theme 1·Theme 2·Summer Event를 모두 CLEAR해야 수료 제출이 가능합니다.")
-
-            left_nav, right_submit = st.columns([0.22, 0.78])
-            with left_nav:
-                if st.button("◀ Event로", use_container_width=True, key="june_v2_submit_prev", type="secondary"):
-                    st.session_state["june_v2_view"] = "event"
-                    _request_training_scroll_top()
-                    st.rerun()
-            with right_submit:
-                submit_june_training = st.button(
-                    "📨 6월 컴플라이언스 교육 수료 제출",
-                    use_container_width=True,
-                    disabled=(not can_submit or st.session_state.get("june_training_saved", False)),
-                    key="june_training_submit",
-                    type="primary"
-                )
-
-            if submit_june_training:
-                if not emp_id or not name or not unit or not dept:
-                    st.warning("⚠️ 사번, 성명, 총괄/본부/단, 상세 부서명을 모두 입력해 주세요.")
+            adapter_for_check = str(selected_profile.get("어댑터명", "")).strip()
+            if local_windows and adapter_for_check:
+                current = get_current_adapter_config(adapter_for_check)
+                if current.get("error"):
+                    st.warning(f"현재 설정 조회: {current['error']}")
                 else:
-                    ok, msg = validate_emp_id(emp_id)
-                    if not ok:
-                        st.warning(msg)
+                    st.markdown("#### 현재 PC 설정")
+                    current_df = pd.DataFrame([{
+                        "어댑터": adapter_for_check,
+                        "현재 IP": current.get("ip", ""),
+                        "현재 서브넷": current.get("subnet", ""),
+                        "현재 게이트웨이": current.get("gateway", ""),
+                        "현재 DNS": ", ".join(current.get("dns", []) or []),
+                        "DHCP": current.get("dhcp", ""),
+                    }])
+                    st.dataframe(current_df, use_container_width=True, hide_index=True)
+
+            confirm_apply = st.checkbox("선택한 프로필과 작업자 정보를 확인했습니다.", key="ip_apply_confirm")
+            if st.button("선택 IP 적용", type="primary", use_container_width=True, disabled=not (local_windows and local_admin)):
+                if not ip_modifier_emp_id.strip() or not ip_modifier_name.strip():
+                    st.error("작업 이력 저장을 위해 작업자 사번과 성명을 입력해 주세요.")
+                elif not confirm_apply:
+                    st.error("적용 전 확인 항목에 체크해 주세요.")
+                elif adapters and adapter_for_check not in adapters:
+                    st.error(f"'{adapter_for_check}' 어댑터가 이 PC에서 확인되지 않습니다. 프로필의 어댑터명을 수정해 주세요.")
+                else:
+                    with st.spinner("기존 설정을 확인하고 IP를 변경하는 중입니다..."):
+                        ok, message, before = apply_static_ip(selected_profile)
+                        history_ok, history_msg = save_ip_change_history(
+                            selected_profile, before, "성공" if ok else "실패",
+                            ip_modifier_emp_id, ip_modifier_name,
+                            error="" if ok else message,
+                            note="사용자 선택 프로필 적용",
+                        )
+                    if ok:
+                        st.success(f"✅ {message}")
                     else:
-                        record = {
-                            "사번": emp_id.strip(),
-                            "성명": name.strip(),
-                            "총괄/본부/단": unit,
-                            "부서": dept.strip(),
-                            "교육대상": "전 임직원",
-                            "Theme1_청렴공정_확인": "완료" if t1_done else "미완료",
-                            "Theme1_점수": t1_score_now,
-                            "Theme2_협력정보_확인": "완료" if t2_done else "미완료",
-                            "Theme2_점수": t2_score_now,
-                            "이벤트퀴즈_선택": event_answer_now,
-                            "이벤트퀴즈_정답여부": "정답" if event_correct_now else "오답",
-                            "퀴즈점수": quiz_score_now,
-                            "참여점수": participation_score,
-                            "최종점수": final_score,
-                            "수료상태": "수료",
-                            "이벤트추첨대상": "대상",
-                            "비고": "감사실 주관 2026년 6월 컴플라이언스 인식제고 자율점검 교육 / 모바일 쿠폰 추첨 대상 포함 / Final V3 단계별 60초·체크항목 10초 확인형 교육",
-                        }
-                        with st.spinner("6월 컴플라이언스 교육 수료 내역을 저장 중입니다..."):
-                            success, save_msg = save_june_compliance_training_result(record)
-                        if success:
-                            st.session_state["june_training_saved"] = True
-                            st.success(f"✅ {name}님, 최종 수료 제출이 완료되었습니다.")
-                            st.balloons()
-                            st.info("교육 수료 및 이벤트 퀴즈 정보가 Google Sheet에 저장되었습니다. 5초 후 교육 초기 화면으로 이동합니다.")
-                            reset_ph = st.empty()
-                            for sec in range(5, 0, -1):
-                                reset_ph.markdown(
-                                    f"<div class='timer-panel timer-panel-clear'>✅ 최종 제출 완료 · {sec}초 후 초기 화면으로 이동합니다.</div>",
-                                    unsafe_allow_html=True,
-                                )
-                                time.sleep(1)
-                            st.session_state["june_force_reset_after_submit"] = True
-                            _request_training_scroll_top()
+                        st.error(f"❌ {message}")
+                    if history_ok:
+                        st.caption(history_msg)
+                    else:
+                        st.warning(f"IP 변경 결과는 발생했으나 Google Sheets 이력 저장에 실패했습니다: {history_msg}")
+
+            st.markdown("#### 자동 IP(DHCP) 전환")
+            dhcp_adapter = st.selectbox("DHCP로 전환할 어댑터", adapters or [adapter_for_check or "Ethernet"], key="dhcp_adapter")
+            if st.button("자동 IP(DHCP) 적용", use_container_width=True, disabled=not (local_windows and local_admin)):
+                if not ip_modifier_emp_id.strip() or not ip_modifier_name.strip():
+                    st.error("작업자 사번과 성명을 입력해 주세요.")
+                else:
+                    dhcp_profile = {
+                        "profile_id": "DHCP", "프로필명": "자동 IP(DHCP)", "어댑터명": dhcp_adapter,
+                        "IP주소": "DHCP", "서브넷마스크": "자동", "기본게이트웨이": "자동", "기본DNS": "자동", "보조DNS": ""
+                    }
+                    ok, message, before = apply_dhcp(dhcp_adapter)
+                    history_ok, history_msg = save_ip_change_history(
+                        dhcp_profile, before, "성공" if ok else "실패", ip_modifier_emp_id, ip_modifier_name,
+                        error="" if ok else message, note="DHCP 전환"
+                    )
+                    if ok:
+                        st.success(message)
+                    else:
+                        st.error(message)
+                    if not history_ok:
+                        st.warning(f"이력 저장 실패: {history_msg}")
+        elif not profile_load_error:
+            st.info("등록된 IP 프로필이 없습니다. 'IP 오류 수정·프로필 관리'에서 첫 프로필을 등록해 주세요.")
+
+    with manage_tab:
+        st.markdown("#### IP 프로필 등록 및 직접 수정")
+        st.caption("IP 오류가 확인되면 기존 프로필을 선택하여 값을 바로 수정할 수 있습니다. 수정 전 값은 Google Sheets 버전 기록과 변경 이력으로 관리하는 것을 권장합니다.")
+
+        try:
+            manage_profiles = load_ip_profiles()
+        except Exception as e:
+            manage_profiles = []
+            st.error(f"프로필 조회 실패: {e}")
+
+        edit_options = ["새 프로필 등록"] + [f"{r.get('프로필명', '')} · {r.get('IP주소', '')}" for r in manage_profiles]
+        edit_choice = st.selectbox("작업 선택", edit_options, key="ip_edit_choice")
+        editing = None
+        if edit_choice != "새 프로필 등록":
+            editing = manage_profiles[edit_options.index(edit_choice) - 1]
+
+        detected_adapters = list_windows_adapters()
+        default_adapter = str((editing or {}).get("어댑터명", ""))
+        adapter_candidates = detected_adapters.copy()
+        if default_adapter and default_adapter not in adapter_candidates:
+            adapter_candidates.insert(0, default_adapter)
+        if not adapter_candidates:
+            adapter_candidates = [default_adapter or "Ethernet"]
+
+        with st.form("ip_profile_form"):
+            profile_name = st.text_input("프로필명 *", value=str((editing or {}).get("프로필명", "")), placeholder="예: 본사 1층 장비망")
+            adapter_name = st.selectbox(
+                "네트워크 어댑터명 *",
+                adapter_candidates,
+                index=adapter_candidates.index(default_adapter) if default_adapter in adapter_candidates else 0,
+                help="대상 PC의 Windows 어댑터 이름과 정확히 일치해야 합니다. 예: Ethernet, 이더넷"
+            )
+            c1, c2 = st.columns(2)
+            with c1:
+                ip_address = st.text_input("IP 주소 *", value=str((editing or {}).get("IP주소", "")), placeholder="192.168.10.20")
+                subnet_mask = st.text_input("서브넷 마스크 *", value=str((editing or {}).get("서브넷마스크", "255.255.255.0")), placeholder="255.255.255.0")
+                gateway = st.text_input("기본 게이트웨이", value=str((editing or {}).get("기본게이트웨이", "")), placeholder="192.168.10.1")
+            with c2:
+                dns1 = st.text_input("기본 DNS", value=str((editing or {}).get("기본DNS", "")), placeholder="사내 DNS 또는 8.8.8.8")
+                dns2 = st.text_input("보조 DNS", value=str((editing or {}).get("보조DNS", "")), placeholder="선택 입력")
+                note = st.text_input("비고", value=str((editing or {}).get("비고", "")), placeholder="장소·장비·사용 목적")
+            submitted = st.form_submit_button("검증 후 Google Sheets에 저장", use_container_width=True)
+
+        if submitted:
+            if not ip_modifier_emp_id.strip() or not ip_modifier_name.strip():
+                st.error("수정자 사번과 성명을 먼저 입력해 주세요.")
+            else:
+                profile_payload = {
+                    "profile_id": str((editing or {}).get("profile_id", "")),
+                    "프로필명": profile_name, "어댑터명": adapter_name, "IP주소": ip_address,
+                    "서브넷마스크": subnet_mask, "기본게이트웨이": gateway,
+                    "기본DNS": dns1, "보조DNS": dns2, "비고": note,
+                }
+                ok, msg = save_ip_profile(profile_payload, ip_modifier_emp_id, ip_modifier_name)
+                if ok:
+                    st.success(msg)
+                    st.rerun()
+                else:
+                    st.error(f"저장 실패: {msg}")
+
+        if editing:
+            with st.expander("프로필 비활성화", expanded=False):
+                st.warning("비활성화하면 전환 목록에서 제외되지만 기존 변경 이력은 삭제되지 않습니다.")
+                delete_confirm = st.checkbox("선택 프로필 비활성화에 동의합니다.", key="ip_disable_confirm")
+                if st.button("선택 프로필 비활성화", disabled=not delete_confirm, use_container_width=True):
+                    if not ip_modifier_emp_id.strip() or not ip_modifier_name.strip():
+                        st.error("작업자 사번과 성명을 입력해 주세요.")
+                    else:
+                        ok, msg = disable_ip_profile(str(editing.get("profile_id", "")), ip_modifier_emp_id, ip_modifier_name)
+                        if ok:
+                            st.success(msg)
                             st.rerun()
                         else:
-                            st.error(f"❌ 제출 실패: {save_msg}")
+                            st.error(msg)
+
+    with history_tab:
+        st.markdown("#### IP 변경 이력")
+        try:
+            spreadsheet = _open_ip_spreadsheet()
+            history_ws = _ensure_ip_sheet(spreadsheet, IP_HISTORY_SHEET_NAME, IP_HISTORY_HEADERS, rows=10000)
+            history_records = history_ws.get_all_records()
+            if history_records:
+                history_df = pd.DataFrame(history_records)
+                st.dataframe(history_df.iloc[::-1], use_container_width=True, hide_index=True)
+                st.download_button(
+                    "변경 이력 CSV 다운로드",
+                    data=history_df.to_csv(index=False).encode("utf-8-sig"),
+                    file_name=f"IP_Change_History_{_korea_now().strftime('%Y%m%d')}.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                )
+            else:
+                st.info("아직 저장된 IP 변경 이력이 없습니다.")
+        except Exception as e:
+            st.error(f"변경 이력 조회 실패: {e}")
+
+    st.warning("보안 유의: IP·게이트웨이·DNS 정보는 내부 네트워크 구성정보에 해당할 수 있습니다. Google Sheets 공유 범위를 최소화하고, 서비스 계정 및 앱 접근권한을 현장 담당자에게만 부여하세요.")
+
 
 # --- [Tab 2: 법률 리스크/규정/계약 검토 & 감사보고서 작성] ---
 # --- [Tab 2: 법률 리스크/규정/계약 검토 & 감사보고서 작성] ---
@@ -3215,7 +1804,7 @@ with tab_doc:
         st.markdown("""
         <div class="audit-message-v2">
             <h4>🧭 AI 검토 품질 업그레이드 적용</h4>
-            <p>최신 Gemini 모델 우선 선택, 검색 보강 옵션, 조항별 리스크 표, 수정문안, 감사보고서 품질검증 구조를 적용했습니다. 자율점검 기능은 수정하지 않았습니다.</p>
+            <p>최신 Gemini 모델 우선 선택, 검색 보강 옵션, 조항별 리스크 표, 수정문안, 감사보고서 품질검증 구조를 적용했습니다. 기존 법률 검토 기능은 그대로 유지됩니다.</p>
         </div>
         """, unsafe_allow_html=True)
 
