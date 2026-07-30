@@ -1311,6 +1311,7 @@ POWER_STATION_MAP = _build_power_station_map()
 def _power_headers() -> list[str]:
     headers = [
         "저장일시", "점검ID", "점검자", "모국", "국소", "전원구분", "축전지조수",
+        "입력방식", "원본점검ID", "원본저장일시",
         "입력완료율(%)", "누락항목수", "누락항목", "부분입력확인",
         "삼상전압_R-S(V)", "삼상전압_S-T(V)", "삼상전압_T-R(V)", "삼상전압_R-N(V)",
         "삼상전류_R(A)", "삼상전류_S(A)", "삼상전류_T(A)",
@@ -1319,6 +1320,10 @@ def _power_headers() -> list[str]:
         "1조_최저전압(V)", "1조_최고전압(V)", "1조_방전종료전압(V)",
     ]
     headers.extend([f"1조_셀{i:02d}(V)" for i in range(1, 25)])
+    headers.extend([
+        "2조_방전후_Total전류(A)", "2조_방전후_Total전압(V)",
+        "2조_최저전압(V)", "2조_최고전압(V)", "2조_방전종료전압(V)",
+    ])
     headers.extend([f"2조_셀{i:02d}(V)" for i in range(1, 25)])
     headers.extend([
         "보안접지_1종(Ω)", "보안접지_2종(Ω)", "보안접지_3종(Ω)",
@@ -1348,7 +1353,7 @@ def _ensure_power_inspection_sheet(spreadsheet):
         ws = spreadsheet.add_worksheet(
             title=POWER_INSPECTION_SHEET_NAME,
             rows=10000,
-            cols=max(len(POWER_INSPECTION_HEADERS) + 5, 90),
+            cols=max(len(POWER_INSPECTION_HEADERS) + 5, 100),
         )
 
     current_headers = ws.row_values(1)
@@ -1378,18 +1383,18 @@ def _ensure_power_inspection_sheet(spreadsheet):
             },
         )
     except Exception:
-        # 헤더 서식 실패는 저장 기능에 영향을 주지 않도록 무시합니다.
         pass
 
     return ws, current_headers
 
 
 def _parse_power_number(value, implicit_decimals: int | None = None):
-    """숫자 문자열을 Google Sheets 분석이 가능한 실수로 변환합니다.
+    """숫자만 입력한 측정값을 실제 숫자로 변환합니다.
 
-    implicit_decimals가 지정되고 사용자가 소수점을 입력하지 않았다면:
-    - 215, decimals=2 -> 2.15
-    - 0000, decimals=1 -> 0.0
+    예시:
+    - 전압·전류 3800, decimals=1 → 380.0
+    - 축전지 셀 215, decimals=2 → 2.15
+    - 접지저항 123, decimals=2 → 1.23
     """
     raw = str(value or "").strip().replace(",", "")
     if not raw:
@@ -1415,31 +1420,45 @@ def _format_power_display(value, decimals: int) -> str:
     raw = str(value or "").strip().replace(",", "")
     if not raw:
         return ""
-    cleaned = re.sub(r"[^0-9.]", "", raw)
+    cleaned = re.sub(r"[^0-9.-]", "", raw)
     if not cleaned:
         return ""
-    if "." in cleaned:
-        integer, fraction = (cleaned.split(".", 1) + [""])[:2]
-        integer = integer or "0"
-        fraction = re.sub(r"\D", "", fraction)[:decimals].ljust(decimals, "0")
-        return f"{integer}.{fraction}" if decimals else integer
-    if decimals <= 0:
-        return cleaned
-    if len(cleaned) <= decimals:
-        cleaned = cleaned.zfill(decimals + 1)
-    return f"{cleaned[:-decimals]}.{cleaned[-decimals:]}"
+    try:
+        number = float(cleaned)
+        return f"{number:.{decimals}f}"
+    except Exception:
+        return raw
 
 
 def _power_value_is_blank(value) -> bool:
     return value is None or (isinstance(value, str) and not value.strip())
 
 
-def _power_payload_missing_items(payload: dict) -> list[str]:
-    """저장 대상 측정항목 중 입력되지 않은 항목을 반환합니다.
+def _power_basic_missing() -> list[str]:
+    missing: list[str] = []
+    if _power_state_blank("power_worker"):
+        missing.append("점검자 성명")
+    if st.session_state.get("power_mother", "모국 선택") == "모국 선택":
+        missing.append("모국")
+    if st.session_state.get("power_local", "국소 선택") == "국소 선택":
+        missing.append("국소")
+    return missing
 
-    기본정보(점검자·모국·국소)는 저장 필수값으로 별도 검증하고,
-    아래 목록은 부분 입력 여부와 완료율 산정에 사용합니다.
-    """
+
+def _power_battery2_enabled() -> bool:
+    if bool(st.session_state.get("power_battery2_enabled", False)):
+        return True
+    if st.session_state.get("power_battery_set") == "2조 셀 측정":
+        return True
+    keys = [
+        "power_battery2_total_current", "power_battery2_total_voltage",
+        "power_battery2_min_voltage", "power_battery2_max_voltage", "power_battery2_end_voltage",
+    ]
+    keys.extend(f"power_battery_2_{index:02d}" for index in range(1, 25))
+    return any(not _power_state_blank(key) for key in keys)
+
+
+def _power_payload_missing_items(payload: dict) -> list[str]:
     expected: list[tuple[str, object]] = []
     phase_type = str(payload.get("phase_type", "")).strip()
 
@@ -1466,15 +1485,21 @@ def _power_payload_missing_items(payload: dict) -> list[str]:
         ("1조 최고전압", payload.get("battery1_max_voltage")),
         ("1조 방전종료 전압", payload.get("battery1_end_voltage")),
     ])
-
     battery1_cells = list(payload.get("battery1_cells", []))[:24]
     battery1_cells.extend([""] * (24 - len(battery1_cells)))
-    expected.extend((f"1조 {index:02d}셀", value) for index, value in enumerate(battery1_cells, 1))
+    expected.extend((f"1조 {index}셀", value) for index, value in enumerate(battery1_cells, 1))
 
     if int(payload.get("battery_group_count", 1) or 1) == 2:
+        expected.extend([
+            ("2조 방전 후 Total 전류", payload.get("battery2_total_current")),
+            ("2조 방전 후 Total 전압", payload.get("battery2_total_voltage")),
+            ("2조 최저전압", payload.get("battery2_min_voltage")),
+            ("2조 최고전압", payload.get("battery2_max_voltage")),
+            ("2조 방전종료 전압", payload.get("battery2_end_voltage")),
+        ])
         battery2_cells = list(payload.get("battery2_cells", []))[:24]
         battery2_cells.extend([""] * (24 - len(battery2_cells)))
-        expected.extend((f"2조 {index:02d}셀", value) for index, value in enumerate(battery2_cells, 1))
+        expected.extend((f"2조 {index}셀", value) for index, value in enumerate(battery2_cells, 1))
 
     expected.extend([
         ("보안접지 1종", payload.get("security_ground_1")),
@@ -1489,16 +1514,21 @@ def _power_payload_missing_items(payload: dict) -> list[str]:
 
 def _power_expected_item_count(payload: dict) -> int:
     phase_count = 7 if str(payload.get("phase_type", "")).strip() == "삼상" else 2
-    battery2_count = 24 if int(payload.get("battery_group_count", 1) or 1) == 2 else 0
-    return phase_count + 5 + 24 + battery2_count + 5
+    battery_count = 29
+    if int(payload.get("battery_group_count", 1) or 1) == 2:
+        battery_count += 29
+    return phase_count + battery_count + 5
 
 
 def _power_has_measurement(payload: dict) -> bool:
     measurement_keys = [
         "three_voltage_rs", "three_voltage_st", "three_voltage_tr", "three_voltage_rn",
         "three_current_r", "three_current_s", "three_current_t",
-        "single_voltage", "single_current", "battery1_total_current", "battery1_total_voltage",
-        "battery1_min_voltage", "battery1_max_voltage", "battery1_end_voltage",
+        "single_voltage", "single_current",
+        "battery1_total_current", "battery1_total_voltage", "battery1_min_voltage",
+        "battery1_max_voltage", "battery1_end_voltage",
+        "battery2_total_current", "battery2_total_voltage", "battery2_min_voltage",
+        "battery2_max_voltage", "battery2_end_voltage",
         "security_ground_1", "security_ground_2", "security_ground_3",
         "telecom_ground", "lightning_ground",
     ]
@@ -1512,7 +1542,7 @@ def _power_has_measurement(payload: dict) -> bool:
 
 
 def save_power_inspection_result(payload: dict) -> tuple[bool, str, str]:
-    """국사 전원시설 정밀점검 결과를 Google Sheet에 1행으로 저장합니다."""
+    """국사 전원시설 정밀점검 결과를 Google Sheet에 새 행으로 저장합니다."""
     client = init_google_sheet_connection()
     if not client:
         return False, "구글 시트 연결 실패: Streamlit Secrets의 gcp_service_account 설정을 확인하세요.", ""
@@ -1530,13 +1560,13 @@ def save_power_inspection_result(payload: dict) -> tuple[bool, str, str]:
         if local not in POWER_STATION_MAP.get(mother, []):
             return False, "선택한 모국과 국소의 조합이 올바르지 않습니다.", ""
         if phase_type not in {"삼상", "단상"}:
-            return False, "전원 구분은 삼상 또는 단상이어야 합니다.", ""
+            return False, "삼상 또는 단상 측정 방식을 선택해 주세요.", ""
         if not _power_has_measurement(payload):
             return False, "측정값 또는 특이사항을 한 개 이상 입력해 주세요.", ""
 
         missing_items = _power_payload_missing_items(payload)
-        if missing_items and not bool(payload.get("partial_confirmed", False)):
-            return False, "누락 항목이 있습니다. 부분 입력 저장 동의를 확인해 주세요.", ""
+        if not bool(payload.get("final_confirmed", False)):
+            return False, "최종 확인에 동의해 주세요.", ""
 
         expected_count = max(_power_expected_item_count(payload), 1)
         completed_count = expected_count - len(missing_items)
@@ -1549,6 +1579,8 @@ def save_power_inspection_result(payload: dict) -> tuple[bool, str, str]:
         saved_at = now.strftime("%Y-%m-%d %H:%M:%S")
         inspection_seed = f"{saved_at}|{worker}|{mother}|{local}|{time.time_ns()}"
         inspection_id = hashlib.sha256(inspection_seed.encode("utf-8")).hexdigest()[:14]
+        source_id = str(payload.get("source_inspection_id", "")).strip()
+        source_saved_at = str(payload.get("source_saved_at", "")).strip()
 
         row_map = {
             "저장일시": saved_at,
@@ -1558,6 +1590,9 @@ def save_power_inspection_result(payload: dict) -> tuple[bool, str, str]:
             "국소": local,
             "전원구분": phase_type,
             "축전지조수": int(payload.get("battery_group_count", 1) or 1),
+            "입력방식": "기존값 불러오기 후 수정" if source_id else "신규 입력",
+            "원본점검ID": source_id,
+            "원본저장일시": source_saved_at,
             "입력완료율(%)": completion_rate,
             "누락항목수": len(missing_items),
             "누락항목": ", ".join(missing_items),
@@ -1576,6 +1611,11 @@ def save_power_inspection_result(payload: dict) -> tuple[bool, str, str]:
             "1조_최저전압(V)": payload.get("battery1_min_voltage", ""),
             "1조_최고전압(V)": payload.get("battery1_max_voltage", ""),
             "1조_방전종료전압(V)": payload.get("battery1_end_voltage", ""),
+            "2조_방전후_Total전류(A)": payload.get("battery2_total_current", ""),
+            "2조_방전후_Total전압(V)": payload.get("battery2_total_voltage", ""),
+            "2조_최저전압(V)": payload.get("battery2_min_voltage", ""),
+            "2조_최고전압(V)": payload.get("battery2_max_voltage", ""),
+            "2조_방전종료전압(V)": payload.get("battery2_end_voltage", ""),
             "보안접지_1종(Ω)": payload.get("security_ground_1", ""),
             "보안접지_2종(Ω)": payload.get("security_ground_2", ""),
             "보안접지_3종(Ω)": payload.get("security_ground_3", ""),
@@ -1588,7 +1628,6 @@ def save_power_inspection_result(payload: dict) -> tuple[bool, str, str]:
         battery1_cells.extend([""] * (24 - len(battery1_cells)))
         battery2_cells = list(payload.get("battery2_cells", []))[:24]
         battery2_cells.extend([""] * (24 - len(battery2_cells)))
-
         for index, value in enumerate(battery1_cells, 1):
             row_map[f"1조_셀{index:02d}(V)"] = value
         for index, value in enumerate(battery2_cells, 1):
@@ -1612,34 +1651,147 @@ def save_power_inspection_result(payload: dict) -> tuple[bool, str, str]:
         return False, str(e), ""
 
 
+def load_recent_power_inspection(mother: str, local: str, within_days: int = 60) -> tuple[bool, str, dict]:
+    """동일 모국·국소의 최근 측정값을 찾아 입력폼 재사용용으로 반환합니다."""
+    client = init_google_sheet_connection()
+    if not client:
+        return False, "구글 시트 연결 실패: Secrets 설정을 확인하세요.", {}
+    if mother not in POWER_STATION_MAP or local not in POWER_STATION_MAP.get(mother, []):
+        return False, "먼저 모국과 국소를 정확히 선택해 주세요.", {}
+
+    try:
+        spreadsheet = client.open(POWER_INSPECTION_SPREADSHEET_NAME)
+        try:
+            ws = spreadsheet.worksheet(POWER_INSPECTION_SHEET_NAME)
+        except Exception:
+            return False, "아직 저장된 전원 정밀점검 기록이 없습니다.", {}
+
+        values = ws.get_all_values()
+        if len(values) < 2:
+            return False, "아직 저장된 전원 정밀점검 기록이 없습니다.", {}
+
+        headers = values[0]
+        now_naive = _korea_now().replace(tzinfo=None)
+        cutoff = now_naive - datetime.timedelta(days=max(1, int(within_days)))
+        for row in reversed(values[1:]):
+            record = {headers[index]: row[index] if index < len(row) else "" for index in range(len(headers))}
+            if str(record.get("모국", "")).strip() != mother or str(record.get("국소", "")).strip() != local:
+                continue
+            saved_text = str(record.get("저장일시", "")).strip()
+            try:
+                saved_dt = datetime.datetime.strptime(saved_text, "%Y-%m-%d %H:%M:%S")
+            except Exception:
+                continue
+            if saved_dt < cutoff:
+                continue
+            return True, f"최근 측정값을 불러왔습니다. ({saved_text})", record
+        return False, f"최근 {within_days}일 이내 동일 국소의 저장 기록이 없습니다.", {}
+    except Exception as e:
+        return False, str(e), {}
+
+
+def _set_power_state_from_record(record: dict) -> None:
+    def set_value(key: str, header: str, decimals: int | None = None) -> None:
+        value = str(record.get(header, "")).strip()
+        if not value:
+            st.session_state[key] = ""
+        elif decimals is None:
+            st.session_state[key] = value
+        else:
+            st.session_state[key] = _format_power_display(value, decimals)
+
+    phase = str(record.get("전원구분", "삼상")).strip()
+    st.session_state["power_phase_type"] = phase if phase in {"삼상", "단상"} else "삼상"
+
+    phase_map = [
+        ("power_three_voltage_rs", "삼상전압_R-S(V)", 1),
+        ("power_three_voltage_st", "삼상전압_S-T(V)", 1),
+        ("power_three_voltage_tr", "삼상전압_T-R(V)", 1),
+        ("power_three_voltage_rn", "삼상전압_R-N(V)", 1),
+        ("power_three_current_r", "삼상전류_R(A)", 1),
+        ("power_three_current_s", "삼상전류_S(A)", 1),
+        ("power_three_current_t", "삼상전류_T(A)", 1),
+        ("power_single_voltage", "단상전압(V)", 1),
+        ("power_single_current", "단상전류(A)", 1),
+    ]
+    for key, header, decimals in phase_map:
+        set_value(key, header, decimals)
+
+    for group in (1, 2):
+        prefix = f"power_battery{group}"
+        set_value(f"{prefix}_total_current", f"{group}조_방전후_Total전류(A)", 1)
+        set_value(f"{prefix}_total_voltage", f"{group}조_방전후_Total전압(V)", 2)
+        set_value(f"{prefix}_min_voltage", f"{group}조_최저전압(V)", 2)
+        set_value(f"{prefix}_max_voltage", f"{group}조_최고전압(V)", 2)
+        set_value(f"{prefix}_end_voltage", f"{group}조_방전종료전압(V)", 2)
+        for index in range(1, 25):
+            set_value(f"power_battery_{group}_{index:02d}", f"{group}조_셀{index:02d}(V)", 2)
+
+    ground_map = [
+        ("power_security_ground_1", "보안접지_1종(Ω)"),
+        ("power_security_ground_2", "보안접지_2종(Ω)"),
+        ("power_security_ground_3", "보안접지_3종(Ω)"),
+        ("power_telecom_ground", "통신용접지_메인(Ω)"),
+        ("power_lightning_ground", "피뢰침접지(Ω)"),
+    ]
+    for key, header in ground_map:
+        set_value(key, header, 2)
+
+    group_count = str(record.get("축전지조수", "1")).strip()
+    has_group2 = group_count == "2" or any(
+        str(record.get(f"2조_셀{index:02d}(V)", "")).strip() for index in range(1, 25)
+    )
+    st.session_state["power_battery2_enabled"] = has_group2
+    st.session_state["power_battery_set"] = "1조 셀 측정"
+    st.session_state["power_loaded_source_id"] = str(record.get("점검ID", "")).strip()
+    st.session_state["power_loaded_source_saved_at"] = str(record.get("저장일시", "")).strip()
+    st.session_state["power_loaded_notice"] = True
+
+
 def _render_power_cell_inputs(group_number: int) -> list[str]:
-    """휴대전화 폭에서도 안정적으로 누를 수 있도록 셀 입력을 2열로 배치합니다."""
+    """셀 번호 1~24를 한 줄 최대 5개로 배치합니다."""
     values: list[str] = []
-    for start in range(1, 25, 2):
-        row_columns = st.columns(2, gap="small")
+    for start in range(1, 25, 5):
+        row_columns = st.columns(5, gap="small")
         for offset, column in enumerate(row_columns):
             cell_number = start + offset
-            label = f"{group_number}조 {cell_number:02d}셀"
+            if cell_number > 24:
+                break
             with column:
                 values.append(
                     st.text_input(
-                        label,
-                        placeholder="2.15",
+                        str(cell_number),
                         key=f"power_battery_{group_number}_{cell_number:02d}",
-                        help="숫자만 입력하면 소수점 둘째 자리로 변환됩니다. 예: 215 → 2.15V",
+                        label_visibility="visible",
                     )
                 )
     return values
 
 
-POWER_THEME_ORDER = ["기본정보", "전압·전류", "축전지 1조", "축전지 2조", "접지저항", "확인·전송"]
+def _render_power_battery_summary(group_number: int) -> None:
+    prefix = f"power_battery{group_number}"
+    st.markdown(f"**{group_number}조 측정값**")
+    row1 = st.columns(2, gap="small")
+    with row1[0]:
+        st.text_input("방전 후 Total 전류 (A)", key=f"{prefix}_total_current")
+    with row1[1]:
+        st.text_input("방전 후 Total 전압 (V)", key=f"{prefix}_total_voltage")
+    row2 = st.columns(2, gap="small")
+    with row2[0]:
+        st.text_input("최저전압 (V)", key=f"{prefix}_min_voltage")
+    with row2[1]:
+        st.text_input("최고전압 (V)", key=f"{prefix}_max_voltage")
+    st.text_input("방전종료 전압 (V)", key=f"{prefix}_end_voltage")
+    st.markdown(f"**{group_number}조 셀 전압 (V)**")
+    _render_power_cell_inputs(group_number)
+
+
+POWER_THEME_ORDER = ["전압·전류 측정", "축전지 측정", "접지저항 측정", "최종 확인·전송"]
 POWER_THEME_ICON = {
-    "기본정보": "👤",
-    "전압·전류": "⚡",
-    "축전지 1조": "🔋",
-    "축전지 2조": "🔋",
-    "접지저항": "🛡️",
-    "확인·전송": "📤",
+    "전압·전류 측정": "⚡",
+    "축전지 측정": "🔋",
+    "접지저항 측정": "🛡️",
+    "최종 확인·전송": "📤",
 }
 
 
@@ -1648,20 +1800,18 @@ def _power_state_blank(key: str) -> bool:
     return value is None or (isinstance(value, str) and not value.strip())
 
 
+def _clear_power_measurements_after_station_change() -> None:
+    """국사가 바뀌면 이전 국사의 측정값이 섞이지 않도록 측정 영역만 초기화합니다."""
+    keep_keys = {"power_worker", "power_mother", "power_local", "power_current_theme", "power_phase_type", "power_battery_set"}
+    for key in list(st.session_state.keys()):
+        if key.startswith("power_") and key not in keep_keys:
+            del st.session_state[key]
+    st.session_state["power_current_theme"] = POWER_THEME_ORDER[0]
+
+
 def _power_theme_missing(theme: str) -> list[str]:
-    missing: list[str] = []
-
-    if theme == "기본정보":
-        if _power_state_blank("power_worker"):
-            missing.append("점검자 성명")
-        if st.session_state.get("power_mother", "모국 선택") == "모국 선택":
-            missing.append("모국")
-        if st.session_state.get("power_local", "국소 선택") == "국소 선택":
-            missing.append("국소")
-        return missing
-
     phase_type = st.session_state.get("power_phase_type", "삼상")
-    if theme == "전압·전류":
+    if theme == "전압·전류 측정":
         if phase_type == "삼상":
             checks = [
                 ("power_three_voltage_rs", "R-S 전압"),
@@ -1679,32 +1829,35 @@ def _power_theme_missing(theme: str) -> list[str]:
             ]
         return [label for key, label in checks if _power_state_blank(key)]
 
-    if theme == "축전지 1조":
+    if theme == "축전지 측정":
         checks = [
-            ("power_battery1_total_current", "방전 후 Total 전류"),
-            ("power_battery1_total_voltage", "방전 후 Total 전압"),
-            ("power_battery1_min_voltage", "최저전압"),
-            ("power_battery1_max_voltage", "최고전압"),
-            ("power_battery1_end_voltage", "방전종료 전압"),
+            ("power_battery1_total_current", "1조 방전 후 Total 전류"),
+            ("power_battery1_total_voltage", "1조 방전 후 Total 전압"),
+            ("power_battery1_min_voltage", "1조 최저전압"),
+            ("power_battery1_max_voltage", "1조 최고전압"),
+            ("power_battery1_end_voltage", "1조 방전종료 전압"),
         ]
-        missing.extend(label for key, label in checks if _power_state_blank(key))
+        missing = [label for key, label in checks if _power_state_blank(key)]
         missing.extend(
-            f"1조 {index:02d}셀"
-            for index in range(1, 25)
+            f"1조 {index}셀" for index in range(1, 25)
             if _power_state_blank(f"power_battery_1_{index:02d}")
         )
+        if _power_battery2_enabled():
+            checks2 = [
+                ("power_battery2_total_current", "2조 방전 후 Total 전류"),
+                ("power_battery2_total_voltage", "2조 방전 후 Total 전압"),
+                ("power_battery2_min_voltage", "2조 최저전압"),
+                ("power_battery2_max_voltage", "2조 최고전압"),
+                ("power_battery2_end_voltage", "2조 방전종료 전압"),
+            ]
+            missing.extend(label for key, label in checks2 if _power_state_blank(key))
+            missing.extend(
+                f"2조 {index}셀" for index in range(1, 25)
+                if _power_state_blank(f"power_battery_2_{index:02d}")
+            )
         return missing
 
-    if theme == "축전지 2조":
-        if st.session_state.get("power_battery_group_choice", "1조 측정") != "1·2조 측정":
-            return []
-        return [
-            f"2조 {index:02d}셀"
-            for index in range(1, 25)
-            if _power_state_blank(f"power_battery_2_{index:02d}")
-        ]
-
-    if theme == "접지저항":
+    if theme == "접지저항 측정":
         checks = [
             ("power_security_ground_1", "보안 1종"),
             ("power_security_ground_2", "보안 2종"),
@@ -1713,77 +1866,106 @@ def _power_theme_missing(theme: str) -> list[str]:
             ("power_lightning_ground", "피뢰침접지"),
         ]
         return [label for key, label in checks if _power_state_blank(key)]
-
     return []
 
 
 def _power_theme_started(theme: str) -> bool:
     missing = _power_theme_missing(theme)
-    if theme == "기본정보":
-        return len(missing) < 3
-    if theme == "전압·전류":
+    if theme == "전압·전류 측정":
         expected = 7 if st.session_state.get("power_phase_type", "삼상") == "삼상" else 2
         return len(missing) < expected
-    if theme == "축전지 1조":
-        return len(missing) < 29
-    if theme == "축전지 2조":
-        if st.session_state.get("power_battery_group_choice", "1조 측정") != "1·2조 측정":
-            return False
-        return len(missing) < 24
-    if theme == "접지저항":
+    if theme == "축전지 측정":
+        expected = 58 if _power_battery2_enabled() else 29
+        return len(missing) < expected
+    if theme == "접지저항 측정":
         return len(missing) < 5
     return False
 
 
 def _request_power_theme(target_theme: str) -> None:
     current_theme = st.session_state.get("power_current_theme", POWER_THEME_ORDER[0])
+    if current_theme not in POWER_THEME_ORDER:
+        current_theme = POWER_THEME_ORDER[0]
     if target_theme == current_theme:
         return
 
     current_index = POWER_THEME_ORDER.index(current_theme)
     target_index = POWER_THEME_ORDER.index(target_theme)
     if target_index > current_index:
-        missing = _power_theme_missing(current_theme)
-        if missing:
-            st.session_state["power_pending_theme"] = target_theme
-            st.session_state["power_pending_missing"] = missing
-            return
+        st.session_state["power_pending_theme"] = target_theme
+        st.session_state["power_pending_from_theme"] = current_theme
+        st.session_state["power_pending_missing"] = _power_theme_missing(current_theme)
+        st.session_state.pop("power_missing_answer", None)
+        st.session_state.pop("power_move_validation_error", None)
+        return
 
     st.session_state["power_current_theme"] = target_theme
-    st.session_state.pop("power_pending_theme", None)
-    st.session_state.pop("power_pending_missing", None)
+    for key in ("power_pending_theme", "power_pending_from_theme", "power_pending_missing", "power_missing_answer"):
+        st.session_state.pop(key, None)
 
 
-def _confirm_power_theme_move() -> None:
-    target = st.session_state.pop("power_pending_theme", None)
-    st.session_state.pop("power_pending_missing", None)
+def _process_power_theme_move() -> bool:
+    target = st.session_state.get("power_pending_theme")
+    source = st.session_state.get("power_pending_from_theme")
+    missing = _power_theme_missing(str(source)) if source in POWER_THEME_ORDER else []
+    st.session_state["power_pending_missing"] = missing
+    answer = st.session_state.get("power_missing_answer")
+    if answer not in {"예", "아니오"}:
+        st.session_state["power_move_validation_error"] = "‘예’ 또는 ‘아니오’를 선택해 주세요."
+        return False
+    if answer == "아니오" and missing:
+        st.session_state["power_move_validation_error"] = (
+            f"실제 누락 항목이 {len(missing)}개 있습니다. ‘예’를 선택하거나 값을 추가로 입력해 주세요."
+        )
+        return False
+    if answer == "예" and not missing:
+        st.session_state["power_move_validation_error"] = "현재 테마에는 누락된 값이 없습니다. ‘아니오’를 선택해 주세요."
+        return False
+    confirmations = dict(st.session_state.get("power_theme_confirmations", {}))
+    confirmations[str(source)] = {
+        "answer": answer,
+        "missing_count": len(missing),
+        "confirmed_at": _korea_now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    st.session_state["power_theme_confirmations"] = confirmations
     if target in POWER_THEME_ORDER:
         st.session_state["power_current_theme"] = target
+    for key in (
+        "power_pending_theme", "power_pending_from_theme", "power_pending_missing",
+        "power_missing_answer", "power_move_validation_error",
+    ):
+        st.session_state.pop(key, None)
+    st.session_state["power_temp_saved_notice"] = True
+    return True
 
 
 def _cancel_power_theme_move() -> None:
-    st.session_state.pop("power_pending_theme", None)
-    st.session_state.pop("power_pending_missing", None)
+    for key in (
+        "power_pending_theme", "power_pending_from_theme", "power_pending_missing",
+        "power_missing_answer", "power_move_validation_error",
+    ):
+        st.session_state.pop(key, None)
 
 
-def _build_power_payload_from_state(partial_confirmed: bool = False) -> dict:
+def _build_power_payload_from_state(final_confirmed: bool = False) -> dict:
     phase_type = st.session_state.get("power_phase_type", "삼상")
-    group_count = 2 if st.session_state.get("power_battery_group_choice", "1조 측정") == "1·2조 측정" else 1
-
+    group_count = 2 if _power_battery2_enabled() else 1
     return {
         "worker": st.session_state.get("power_worker", ""),
         "mother": st.session_state.get("power_mother", "모국 선택"),
         "local": st.session_state.get("power_local", "국소 선택"),
         "phase_type": phase_type,
         "battery_group_count": group_count,
-        "three_voltage_rs": _parse_power_number(st.session_state.get("power_three_voltage_rs", "")),
-        "three_voltage_st": _parse_power_number(st.session_state.get("power_three_voltage_st", "")),
-        "three_voltage_tr": _parse_power_number(st.session_state.get("power_three_voltage_tr", "")),
-        "three_voltage_rn": _parse_power_number(st.session_state.get("power_three_voltage_rn", "")),
+        "source_inspection_id": st.session_state.get("power_loaded_source_id", ""),
+        "source_saved_at": st.session_state.get("power_loaded_source_saved_at", ""),
+        "three_voltage_rs": _parse_power_number(st.session_state.get("power_three_voltage_rs", ""), 1),
+        "three_voltage_st": _parse_power_number(st.session_state.get("power_three_voltage_st", ""), 1),
+        "three_voltage_tr": _parse_power_number(st.session_state.get("power_three_voltage_tr", ""), 1),
+        "three_voltage_rn": _parse_power_number(st.session_state.get("power_three_voltage_rn", ""), 1),
         "three_current_r": _parse_power_number(st.session_state.get("power_three_current_r", ""), 1),
         "three_current_s": _parse_power_number(st.session_state.get("power_three_current_s", ""), 1),
         "three_current_t": _parse_power_number(st.session_state.get("power_three_current_t", ""), 1),
-        "single_voltage": _parse_power_number(st.session_state.get("power_single_voltage", "")),
+        "single_voltage": _parse_power_number(st.session_state.get("power_single_voltage", ""), 1),
         "single_current": _parse_power_number(st.session_state.get("power_single_current", ""), 1),
         "battery1_total_current": _parse_power_number(st.session_state.get("power_battery1_total_current", ""), 1),
         "battery1_total_voltage": _parse_power_number(st.session_state.get("power_battery1_total_voltage", ""), 2),
@@ -1794,17 +1976,22 @@ def _build_power_payload_from_state(partial_confirmed: bool = False) -> dict:
             _parse_power_number(st.session_state.get(f"power_battery_1_{index:02d}", ""), 2)
             for index in range(1, 25)
         ],
+        "battery2_total_current": _parse_power_number(st.session_state.get("power_battery2_total_current", ""), 1),
+        "battery2_total_voltage": _parse_power_number(st.session_state.get("power_battery2_total_voltage", ""), 2),
+        "battery2_min_voltage": _parse_power_number(st.session_state.get("power_battery2_min_voltage", ""), 2),
+        "battery2_max_voltage": _parse_power_number(st.session_state.get("power_battery2_max_voltage", ""), 2),
+        "battery2_end_voltage": _parse_power_number(st.session_state.get("power_battery2_end_voltage", ""), 2),
         "battery2_cells": [
             _parse_power_number(st.session_state.get(f"power_battery_2_{index:02d}", ""), 2)
             for index in range(1, 25)
         ] if group_count == 2 else [""] * 24,
-        "security_ground_1": _parse_power_number(st.session_state.get("power_security_ground_1", "")),
-        "security_ground_2": _parse_power_number(st.session_state.get("power_security_ground_2", "")),
-        "security_ground_3": _parse_power_number(st.session_state.get("power_security_ground_3", "")),
-        "telecom_ground": _parse_power_number(st.session_state.get("power_telecom_ground", "")),
-        "lightning_ground": _parse_power_number(st.session_state.get("power_lightning_ground", "")),
+        "security_ground_1": _parse_power_number(st.session_state.get("power_security_ground_1", ""), 2),
+        "security_ground_2": _parse_power_number(st.session_state.get("power_security_ground_2", ""), 2),
+        "security_ground_3": _parse_power_number(st.session_state.get("power_security_ground_3", ""), 2),
+        "telecom_ground": _parse_power_number(st.session_state.get("power_telecom_ground", ""), 2),
+        "lightning_ground": _parse_power_number(st.session_state.get("power_lightning_ground", ""), 2),
         "notes": st.session_state.get("power_notes", ""),
-        "partial_confirmed": bool(partial_confirmed),
+        "final_confirmed": bool(final_confirmed),
     }
 
 
@@ -1813,23 +2000,22 @@ def _reset_power_inspection() -> None:
         if key.startswith("power_"):
             del st.session_state[key]
     st.session_state["power_current_theme"] = POWER_THEME_ORDER[0]
+    st.session_state["power_phase_type"] = "삼상"
+    st.session_state["power_battery_set"] = "1조 셀 측정"
 
 
 def _render_power_auto_decimal_script() -> None:
     label_decimals = {
-        "R상 전류": 1,
-        "S상 전류": 1,
-        "T상 전류": 1,
-        "단상 전류": 1,
-        "방전 후 Total 전류": 1,
-        "방전 후 Total 전압": 2,
-        "최저전압": 2,
-        "최고전압": 2,
-        "방전종료 전압": 2,
+        "R-S 전압 (V)": 1, "S-T 전압 (V)": 1, "T-R 전압 (V)": 1, "R-N 전압 (V)": 1,
+        "R상 전류 (A)": 1, "S상 전류 (A)": 1, "T상 전류 (A)": 1,
+        "단상 전압 (V)": 1, "단상 전류 (A)": 1,
+        "방전 후 Total 전류 (A)": 1, "방전 후 Total 전압 (V)": 2,
+        "최저전압 (V)": 2, "최고전압 (V)": 2, "방전종료 전압 (V)": 2,
+        "보안 1종 (Ω)": 2, "보안 2종 (Ω)": 2, "보안 3종 (Ω)": 2,
+        "통신용접지(메인) (Ω)": 2, "피뢰침접지 (Ω)": 2,
     }
-    for group_number in (1, 2):
-        for cell_number in range(1, 25):
-            label_decimals[f"{group_number}조 {cell_number:02d}셀"] = 2
+    for cell_number in range(1, 25):
+        label_decimals[str(cell_number)] = 2
 
     labels_json = json.dumps(label_decimals, ensure_ascii=False)
     script = r"""
@@ -1842,14 +2028,12 @@ def _render_power_auto_decimal_script() -> None:
             if (!value) return '';
             value = value.replace(/[^0-9.]/g, '');
             if (!value) return '';
-
             if (value.includes('.')) {
               const pieces = value.split('.', 2);
               const integer = (pieces[0] || '0').replace(/\D/g, '') || '0';
               const fraction = (pieces[1] || '').replace(/\D/g, '').slice(0, decimals).padEnd(decimals, '0');
               return decimals > 0 ? `${integer}.${fraction}` : integer;
             }
-
             const digits = value.replace(/\D/g, '');
             if (!digits) return '';
             if (decimals <= 0) return digits;
@@ -1858,39 +2042,86 @@ def _render_power_auto_decimal_script() -> None:
           }
 
           function setReactValue(input, value) {
-            const descriptor = Object.getOwnPropertyDescriptor(window.parent.HTMLInputElement.prototype, 'value');
+            const proto = window.parent.HTMLInputElement.prototype;
+            const descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
             if (descriptor && descriptor.set) descriptor.set.call(input, value);
             else input.value = value;
             input.dispatchEvent(new Event('input', { bubbles: true }));
             input.dispatchEvent(new Event('change', { bubbles: true }));
           }
 
+          function isVisible(element) {
+            const style = window.parent.getComputedStyle(element);
+            const rect = element.getBoundingClientRect();
+            return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+          }
+
+          function visibleMeasurementInputs(doc) {
+            return Array.from(doc.querySelectorAll('input[aria-label]')).filter((input) => {
+              const label = input.getAttribute('aria-label') || '';
+              return Object.prototype.hasOwnProperty.call(fields, label) && isVisible(input);
+            });
+          }
+
           function bindInputs() {
             let doc;
             try { doc = window.parent.document; } catch (error) { return; }
-            Object.entries(fields).forEach(([label, decimals]) => {
-              const inputs = Array.from(doc.querySelectorAll('input[aria-label]'));
-              const input = inputs.find((element) => element.getAttribute('aria-label') === label);
-              if (!input || input.dataset.powerDecimalBound === '1') return;
-
+            const inputs = Array.from(doc.querySelectorAll('input[aria-label]'));
+            inputs.forEach((input) => {
+              const label = input.getAttribute('aria-label') || '';
+              if (!Object.prototype.hasOwnProperty.call(fields, label) || input.dataset.powerDecimalBound === '1') return;
               input.dataset.powerDecimalBound = '1';
               input.setAttribute('inputmode', 'decimal');
               input.setAttribute('autocomplete', 'off');
 
               const applyFormat = () => {
-                const next = formatted(input.value, Number(decimals));
+                const next = formatted(input.value, Number(fields[label]));
                 if (next && next !== input.value) setReactValue(input, next);
               };
 
               input.addEventListener('blur', applyFormat);
               input.addEventListener('keydown', (event) => {
-                if (event.key === 'Enter') applyFormat();
+                if (event.key !== 'Enter') return;
+                event.preventDefault();
+                applyFormat();
+                window.setTimeout(() => {
+                  const ordered = visibleMeasurementInputs(doc);
+                  const currentIndex = ordered.indexOf(input);
+                  const nextInput = ordered[currentIndex + 1];
+                  if (nextInput) {
+                    const nextLabel = nextInput.getAttribute('aria-label') || '';
+                    try { window.parent.sessionStorage.setItem('__power_next_focus__', nextLabel); } catch (e) {}
+                    nextInput.focus();
+                    nextInput.select();
+                    nextInput.scrollIntoView({behavior: 'smooth', block: 'center'});
+                  } else {
+                    input.blur();
+                  }
+                }, 80);
               });
             });
           }
 
+          function restoreNextFocus() {
+            let doc;
+            try { doc = window.parent.document; } catch (error) { return; }
+            let nextLabel = '';
+            try { nextLabel = window.parent.sessionStorage.getItem('__power_next_focus__') || ''; } catch (e) {}
+            if (!nextLabel) return;
+            const input = Array.from(doc.querySelectorAll('input[aria-label]')).find((element) =>
+              element.getAttribute('aria-label') === nextLabel && isVisible(element)
+            );
+            if (input) {
+              input.focus();
+              input.select();
+              input.scrollIntoView({behavior: 'smooth', block: 'center'});
+              try { window.parent.sessionStorage.removeItem('__power_next_focus__'); } catch (e) {}
+            }
+          }
+
           bindInputs();
-          const timer = setInterval(bindInputs, 500);
+          restoreNextFocus();
+          const timer = setInterval(() => { bindInputs(); restoreNextFocus(); }, 400);
           setTimeout(() => clearInterval(timer), 30000);
         })();
         </script>
@@ -2118,15 +2349,15 @@ def _render_pledge_group(
 
 # --- [Tab 1: 국사 전원시설 정밀점검] ---
 with tab_power:
-    if "power_current_theme" not in st.session_state:
+    if st.session_state.get("power_current_theme") not in POWER_THEME_ORDER:
         st.session_state["power_current_theme"] = POWER_THEME_ORDER[0]
-    if "power_phase_type" not in st.session_state:
+    if st.session_state.get("power_phase_type") not in {"삼상", "단상"}:
         st.session_state["power_phase_type"] = "삼상"
-    if "power_battery_group_choice" not in st.session_state:
-        st.session_state["power_battery_group_choice"] = "1조 측정"
+    if st.session_state.get("power_battery_set") not in {"1조 셀 측정", "2조 셀 측정"}:
+        st.session_state["power_battery_set"] = "1조 셀 측정"
 
     st.markdown("### 🔋 국사 전원시설 정밀점검")
-    st.caption("모바일에서는 한 번에 하나의 점검 테마만 표시합니다. 입력값은 마지막 확인 후 기존 Google Sheets 연결로 저장됩니다.")
+    st.caption("기본정보를 먼저 선택한 뒤, 측정 테마별로 입력하고 마지막에 Google Sheets로 전송합니다.")
 
     st.markdown("""
     <style>
@@ -2141,29 +2372,28 @@ with tab_power:
     }
     .power-mobile-hero h3 { margin:0 0 6px 0; color:#0F172A; font-weight:950; font-size:1.15rem; }
     .power-mobile-hero p { margin:0; color:#475569; line-height:1.55; font-weight:650; }
-    .power-sticky-card {
-        position: sticky;
-        top: 0.35rem;
-        z-index: 990;
-        background: rgba(15, 23, 42, 0.96);
-        color: #FFFFFF;
-        border: 1px solid rgba(255,255,255,0.18);
-        border-radius: 15px;
-        padding: 11px 14px;
-        margin: 8px 0 11px 0;
-        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.22);
-        backdrop-filter: blur(10px);
+    .power-basic-card {
+        background:#FFFFFF; border:1px solid #D8E3F2; border-radius:17px;
+        padding:14px 15px 6px; margin:10px 0 10px; box-shadow:0 6px 18px rgba(15,23,42,.06);
     }
-    .power-sticky-title { font-size:0.76rem; opacity:0.76; font-weight:800; margin-bottom:4px; }
-    .power-sticky-main { font-size:1.02rem; font-weight:950; line-height:1.35; word-break:keep-all; }
-    .power-sticky-sub { font-size:0.84rem; opacity:0.88; margin-top:3px; line-height:1.35; }
+    .power-basic-title {font-size:1.02rem; font-weight:950; color:#0B5CAB; margin-bottom:8px;}
+    .power-sticky-card {
+        position: sticky; top: 0.35rem; z-index: 990;
+        background: rgba(15, 23, 42, 0.96); color: #FFFFFF;
+        border: 1px solid rgba(255,255,255,0.18); border-radius: 15px;
+        padding: 10px 14px; margin: 8px 0 11px 0;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.22); backdrop-filter: blur(10px);
+    }
+    .power-sticky-title { font-size:0.73rem; opacity:0.76; font-weight:800; margin-bottom:3px; }
+    .power-sticky-main { font-size:0.98rem; font-weight:950; line-height:1.35; word-break:keep-all; }
+    .power-sticky-sub { font-size:0.82rem; opacity:0.88; margin-top:3px; line-height:1.35; }
     .power-theme-heading {
         font-size:1.18rem; font-weight:950; color:#0B5CAB;
         margin:12px 0 9px 0; padding-bottom:8px; border-bottom:2px solid #DCEAF7;
     }
-    .power-sheet-note {
-        background:#F8FAFC; border:1px solid #CBD5E1; border-radius:14px;
-        padding:13px 15px; color:#334155; font-weight:700; line-height:1.55;
+    .power-unit-guide {
+        background:#EFF6FF; border:1px solid #BFDBFE; border-radius:12px;
+        padding:10px 12px; color:#1E3A8A; font-weight:800; margin:8px 0 12px;
     }
     .power-missing-box {
         background:#FFF7ED; border:1px solid #FDBA74; border-left:7px solid #F97316;
@@ -2174,47 +2404,99 @@ with tab_power:
         background:#ECFDF5; border:1px solid #86EFAC; border-radius:15px;
         padding:13px 15px; color:#166534; font-weight:800;
     }
-    /* 테마 메뉴 버튼 */
+    .power-loaded-box {
+        background:#F0FDF4; border:1px solid #86EFAC; border-left:6px solid #16A34A;
+        border-radius:13px; padding:11px 13px; color:#166534; font-weight:800; margin:8px 0;
+    }
+    .power-sheet-note {
+        background:#F8FAFC; border:1px solid #CBD5E1; border-radius:14px;
+        padding:13px 15px; color:#334155; font-weight:700; line-height:1.55;
+    }
     .st-key-power_theme_menu_0 button,
     .st-key-power_theme_menu_1 button,
     .st-key-power_theme_menu_2 button,
-    .st-key-power_theme_menu_3 button,
-    .st-key-power_theme_menu_4 button,
-    .st-key-power_theme_menu_5 button {
-        min-height: 50px !important;
-        padding: 0.45rem 0.35rem !important;
-        border-radius: 13px !important;
-        font-size: 0.92rem !important;
-        line-height: 1.15 !important;
+    .st-key-power_theme_menu_3 button {
+        min-height: 52px !important; padding: 0.45rem 0.35rem !important;
+        border-radius: 13px !important; font-size: 0.92rem !important; line-height: 1.15 !important;
+    }
+    div[class*="st-key-power_battery_"] input {
+        text-align:center !important; padding-left:0.25rem !important; padding-right:0.25rem !important;
+        min-height:44px !important; font-weight:850 !important;
+    }
+    div[class*="st-key-power_battery_"] label p {
+        text-align:center !important; font-size:0.80rem !important; font-weight:900 !important;
     }
     @media (max-width: 768px) {
         .power-mobile-hero { padding:14px 13px; border-radius:15px; }
-        .power-sticky-card { top:0.25rem; border-radius:13px; padding:10px 12px; }
-        .power-sticky-main { font-size:0.96rem; }
+        .power-sticky-card { top:0.2rem; border-radius:13px; padding:9px 11px; }
+        .power-sticky-main { font-size:0.92rem; }
         div[class*="st-key-power_"] input,
         div[class*="st-key-power_"] textarea { font-size:16px !important; }
-        div[class*="st-key-power_"] label p { font-size:0.86rem !important; }
+        div[class*="st-key-power_"] label p { font-size:0.82rem !important; }
+        div[class*="st-key-power_battery_"] input { padding:0.35rem 0.12rem !important; }
+        div[class*="st-key-power_battery_"] label p { font-size:0.72rem !important; }
     }
     </style>
     <div class="power-mobile-hero">
       <h3>새로운 전원 정밀점검 전용 공간</h3>
-      <p>현재 점검 테마만 화면에 표시하여 삼성 Galaxy와 iPhone에서도 입력 부담을 줄였습니다. 입력값은 마지막 확인 후 Google Sheets에 한 행으로 저장됩니다.</p>
+      <p>점검자와 국소를 먼저 선택하고, 필요한 측정 테마만 열어 입력합니다. 최근 60일 측정값을 불러와 변경된 값만 수정할 수도 있습니다.</p>
     </div>
     """, unsafe_allow_html=True)
 
-    if st.session_state.get("power_last_success"):
-        success_data = st.session_state["power_last_success"]
-        st.success(
-            f"✅ {success_data.get('message', '저장 완료')}  ·  "
-            f"점검ID: {success_data.get('inspection_id', '-')}"
+    # 기본정보는 별도 메뉴가 아니라 항상 최상단에 표시합니다.
+    st.markdown('<div class="power-basic-card"><div class="power-basic-title">👤 기본정보</div></div>', unsafe_allow_html=True)
+    st.text_input("점검자 성명 *", key="power_worker")
+    station_col1, station_col2 = st.columns([1, 1], gap="small")
+    with station_col1:
+        mother_options = ["모국 선택"] + list(POWER_STATION_MAP.keys())
+        selected_mother = st.selectbox(
+            "모국 *", mother_options, key="power_mother",
+            on_change=_clear_power_measurements_after_station_change,
         )
-        st.button(
-            "➕ 새 점검 시작",
-            key="power_start_new_inspection",
-            type="primary",
-            use_container_width=True,
-            on_click=_reset_power_inspection,
+
+    local_options = ["국소 선택"]
+    if selected_mother in POWER_STATION_MAP:
+        local_options += POWER_STATION_MAP[selected_mother]
+    current_local = st.session_state.get("power_local", "국소 선택")
+    if current_local not in local_options:
+        st.session_state["power_local"] = "국소 선택"
+    with station_col2:
+        st.selectbox(
+            "국소 *", local_options, key="power_local",
+            disabled=selected_mother not in POWER_STATION_MAP,
+            on_change=_clear_power_measurements_after_station_change,
         )
+
+    selected_local = st.session_state.get("power_local", "국소 선택")
+    can_load = selected_mother in POWER_STATION_MAP and selected_local in POWER_STATION_MAP.get(selected_mother, [])
+    if st.button(
+        "↩️ 최근 60일 동일 국소 측정값 불러오기",
+        key="power_load_recent_values",
+        use_container_width=True,
+        disabled=not can_load,
+    ):
+        with st.spinner("최근 측정값을 확인하고 있습니다..."):
+            ok, message, record = load_recent_power_inspection(selected_mother, selected_local, 60)
+        if ok:
+            _set_power_state_from_record(record)
+            st.session_state["power_loaded_message"] = message
+            st.rerun()
+        else:
+            st.warning(message)
+
+    if st.session_state.pop("power_loaded_notice", False):
+        st.toast("최근 측정값을 입력폼에 불러왔습니다. 변경된 값만 수정해 주세요.", icon="↩️")
+    if st.session_state.get("power_loaded_source_id"):
+        st.markdown(
+            f'<div class="power-loaded-box">↩️ 기존 측정값 사용 중 · '
+            f'원본 저장일시: {html.escape(str(st.session_state.get("power_loaded_source_saved_at", "-")))} · '
+            f'원본 점검ID: {html.escape(str(st.session_state.get("power_loaded_source_id", "-")))}</div>',
+            unsafe_allow_html=True,
+        )
+
+    basic_missing = _power_basic_missing()
+    if basic_missing:
+        st.caption("※ 점검자 성명·모국·국소는 최종 전송을 위한 필수 기본정보입니다.")
 
     worker_summary = html.escape(str(st.session_state.get("power_worker", "")).strip() or "미입력")
     mother_summary = str(st.session_state.get("power_mother", "모국 선택"))
@@ -2222,19 +2504,17 @@ with tab_power:
     station_summary = "미선택"
     if mother_summary in POWER_STATION_MAP and local_summary in POWER_STATION_MAP.get(mother_summary, []):
         station_summary = f"{mother_summary} / {local_summary}"
-    station_summary = html.escape(station_summary)
     current_theme = st.session_state.get("power_current_theme", POWER_THEME_ORDER[0])
-
     st.markdown(
         f"""<div class="power-sticky-card">
-          <div class="power-sticky-title">현재 점검 대상 · {html.escape(current_theme)}</div>
+          <div class="power-sticky-title">현재 점검정보 · {html.escape(current_theme)}</div>
           <div class="power-sticky-main">👤 {worker_summary}</div>
-          <div class="power-sticky-sub">📍 {station_summary}</div>
+          <div class="power-sticky-sub">📍 {html.escape(station_summary)}</div>
         </div>""",
         unsafe_allow_html=True,
     )
 
-    # 2열 × 3행 메뉴 버튼: 휴대전화에서 누르기 쉽도록 구성
+    st.markdown("#### 측정 메뉴")
     for row_start in range(0, len(POWER_THEME_ORDER), 2):
         menu_columns = st.columns(2, gap="small")
         for offset, column in enumerate(menu_columns):
@@ -2243,7 +2523,7 @@ with tab_power:
                 continue
             theme = POWER_THEME_ORDER[theme_index]
             missing_count = len(_power_theme_missing(theme))
-            if theme == "확인·전송":
+            if theme == "최종 확인·전송":
                 status_mark = ""
             elif not missing_count:
                 status_mark = " ✅"
@@ -2263,145 +2543,122 @@ with tab_power:
 
     pending_theme = st.session_state.get("power_pending_theme")
     if pending_theme:
-        pending_missing = list(st.session_state.get("power_pending_missing", []))
-        preview = ", ".join(pending_missing[:7])
-        more_text = f" 외 {len(pending_missing) - 7}개" if len(pending_missing) > 7 else ""
+        pending_from_theme = st.session_state.get("power_pending_from_theme")
+        pending_missing = _power_theme_missing(str(pending_from_theme)) if pending_from_theme in POWER_THEME_ORDER else []
+        st.session_state["power_pending_missing"] = pending_missing
+        preview = ", ".join(pending_missing[:8]) if pending_missing else "없음"
+        more_text = f" 외 {len(pending_missing) - 8}개" if len(pending_missing) > 8 else ""
         st.markdown(
-            f'<div class="power-missing-box"><b>누락된 항목이 있는데 그대로 다음 테마로 이동해도 괜찮습니까?</b><br>'
-            f'누락 항목: {html.escape(preview)}{more_text}</div>',
+            f'<div class="power-missing-box"><b>누락된 값이 있습니까?</b><br>'
+            f'시스템 확인 결과: {html.escape(preview)}{more_text}<br>'
+            '선택 후 ‘확인’을 누르면 현재 입력값을 임시 저장하고 다음 측정 테마로 이동합니다.</div>',
             unsafe_allow_html=True,
         )
-        confirm_col, continue_col = st.columns(2, gap="small")
+        st.radio(
+            "누락된 값이 있습니까?",
+            ["예", "아니오"],
+            horizontal=True,
+            index=None,
+            key="power_missing_answer",
+        )
+        if st.session_state.get("power_move_validation_error"):
+            st.error(st.session_state["power_move_validation_error"])
+        confirm_col, cancel_col = st.columns(2, gap="small")
         with confirm_col:
-            st.button(
-                "누락 허용하고 이동",
-                key="power_confirm_theme_move",
-                type="primary",
-                use_container_width=True,
-                on_click=_confirm_power_theme_move,
-            )
-        with continue_col:
+            if st.button("확인", key="power_confirm_theme_move", type="primary", use_container_width=True):
+                if _process_power_theme_move():
+                    st.rerun()
+                else:
+                    st.rerun()
+        with cancel_col:
             st.button(
                 "계속 입력",
                 key="power_cancel_theme_move",
                 use_container_width=True,
                 on_click=_cancel_power_theme_move,
             )
-        # 경고 아래에는 현재 테마 입력창을 계속 표시하여 사용자가 바로 보완할 수 있게 합니다.
+
+    if st.session_state.pop("power_temp_saved_notice", False):
+        st.toast("현재 측정값을 임시 저장하고 다음 테마로 이동했습니다.", icon="✅")
 
     current_theme = st.session_state.get("power_current_theme", POWER_THEME_ORDER[0])
     st.markdown(
         f'<div class="power-theme-heading">{POWER_THEME_ICON[current_theme]} {html.escape(current_theme)}</div>',
         unsafe_allow_html=True,
     )
+    st.markdown(
+        '<div class="power-unit-guide">전압(V), 전류(A), 저항(Ω) 단위는 자동으로 표시·저장됩니다. 숫자만 입력하세요.</div>',
+        unsafe_allow_html=True,
+    )
 
-    if current_theme == "기본정보":
-        st.text_input(
-            "점검자 성명 *",
-            key="power_worker",
-            placeholder="예: 홍길동",
-            help="상단 고정영역과 Google Sheets 점검자 열에 표시됩니다.",
-        )
-        mother_options = ["모국 선택"] + list(POWER_STATION_MAP.keys())
-        selected_mother = st.selectbox("모국 *", mother_options, key="power_mother")
-
-        local_options = ["국소 선택"]
-        if selected_mother in POWER_STATION_MAP:
-            local_options += POWER_STATION_MAP[selected_mother]
-        current_local = st.session_state.get("power_local", "국소 선택")
-        if current_local not in local_options:
-            st.session_state["power_local"] = "국소 선택"
-        st.selectbox(
-            "국소 *",
-            local_options,
-            key="power_local",
-            disabled=selected_mother not in POWER_STATION_MAP,
-        )
-        st.radio("전원 구분", ["삼상", "단상"], horizontal=True, key="power_phase_type")
+    if current_theme == "전압·전류 측정":
         st.radio(
-            "축전지 측정 범위",
-            ["1조 측정", "1·2조 측정"],
+            "전원 방식 선택",
+            ["삼상", "단상"],
+            format_func=lambda value: "삼상 전류" if value == "삼상" else "단상 전류",
             horizontal=True,
-            key="power_battery_group_choice",
-            help="1조당 24셀입니다. 2조 측정이 필요할 때만 1·2조 측정을 선택하세요.",
+            key="power_phase_type",
         )
-        st.info("점검자·모국·국소는 Google Sheets 저장을 위한 필수 기본정보입니다.")
-
-    elif current_theme == "전압·전류":
         phase_type = st.session_state.get("power_phase_type", "삼상")
-        st.caption(f"현재 전원 구분: **{phase_type}** · 변경은 기본정보 메뉴에서 할 수 있습니다.")
         if phase_type == "삼상":
-            row1 = st.columns(2, gap="small")
-            with row1[0]:
-                st.text_input("R-S 전압 (V)", placeholder="예: 380.0", key="power_three_voltage_rs")
-            with row1[1]:
-                st.text_input("S-T 전압 (V)", placeholder="예: 380.0", key="power_three_voltage_st")
-            row2 = st.columns(2, gap="small")
-            with row2[0]:
-                st.text_input("T-R 전압 (V)", placeholder="예: 380.0", key="power_three_voltage_tr")
-            with row2[1]:
-                st.text_input("R-N 전압 (V)", placeholder="예: 220.0", key="power_three_voltage_rn")
-            row3 = st.columns(2, gap="small")
-            with row3[0]:
-                st.text_input("R상 전류", placeholder="000.0", key="power_three_current_r")
-            with row3[1]:
-                st.text_input("S상 전류", placeholder="000.0", key="power_three_current_s")
-            st.text_input("T상 전류", placeholder="000.0", key="power_three_current_t")
-            st.caption("전류는 숫자만 입력해도 소수점 첫째 자리로 처리됩니다. 예: 1234 → 123.4A")
+            voltage_fields = [
+                ("R-S 전압 (V)", "power_three_voltage_rs"),
+                ("S-T 전압 (V)", "power_three_voltage_st"),
+                ("T-R 전압 (V)", "power_three_voltage_tr"),
+                ("R-N 전압 (V)", "power_three_voltage_rn"),
+            ]
+            for start in range(0, len(voltage_fields), 2):
+                row1 = st.columns(2, gap="small")
+                for column, (label, key) in zip(row1, voltage_fields[start:start + 2]):
+                    with column:
+                        st.text_input(label, key=key)
+            row2 = st.columns(3, gap="small")
+            current_fields = [
+                ("R상 전류 (A)", "power_three_current_r"),
+                ("S상 전류 (A)", "power_three_current_s"),
+                ("T상 전류 (A)", "power_three_current_t"),
+            ]
+            for column, (label, key) in zip(row2, current_fields):
+                with column:
+                    st.text_input(label, key=key)
         else:
             row = st.columns(2, gap="small")
             with row[0]:
-                st.text_input("단상 전압 (V)", placeholder="예: 220.0", key="power_single_voltage")
+                st.text_input("단상 전압 (V)", key="power_single_voltage")
             with row[1]:
-                st.text_input("단상 전류", placeholder="000.0", key="power_single_current")
+                st.text_input("단상 전류 (A)", key="power_single_current")
 
-    elif current_theme == "축전지 1조":
-        st.caption("숫자만 입력하면 셀 전압은 소수점 둘째 자리로 변환됩니다. 215 → 2.15V, 000 → 0.00V")
-        summary_row1 = st.columns(2, gap="small")
-        with summary_row1[0]:
-            st.text_input("방전 후 Total 전류", placeholder="000.0", key="power_battery1_total_current")
-        with summary_row1[1]:
-            st.text_input("방전 후 Total 전압", placeholder="00.00", key="power_battery1_total_voltage")
-        summary_row2 = st.columns(2, gap="small")
-        with summary_row2[0]:
-            st.text_input("최저전압", placeholder="0.00", key="power_battery1_min_voltage")
-        with summary_row2[1]:
-            st.text_input("최고전압", placeholder="0.00", key="power_battery1_max_voltage")
-        st.text_input("방전종료 전압", placeholder="00.00", key="power_battery1_end_voltage")
-        st.markdown("**1조 셀별 전압 · 24셀**")
-        _render_power_cell_inputs(1)
+    elif current_theme == "축전지 측정":
+        st.radio(
+            "측정할 축전지 선택",
+            ["1조 셀 측정", "2조 셀 측정"],
+            horizontal=True,
+            key="power_battery_set",
+        )
+        selected_group = 1 if st.session_state.get("power_battery_set") == "1조 셀 측정" else 2
+        _render_power_battery_summary(selected_group)
 
-    elif current_theme == "축전지 2조":
-        if st.session_state.get("power_battery_group_choice", "1조 측정") != "1·2조 측정":
-            st.info("현재 기본정보에서 ‘1조 측정’을 선택했습니다. 2조 입력이 필요하면 기본정보 메뉴에서 ‘1·2조 측정’으로 변경하세요.")
-        else:
-            st.caption("2조 셀 전압도 숫자만 입력하면 소수점 둘째 자리로 변환됩니다.")
-            st.markdown("**2조 셀별 전압 · 24셀**")
-            _render_power_cell_inputs(2)
-
-    elif current_theme == "접지저항":
-        st.caption("모든 접지저항 입력 단위는 Ω(옴)입니다.")
-        row1 = st.columns(2, gap="small")
+    elif current_theme == "접지저항 측정":
+        row1 = st.columns(3, gap="small")
         with row1[0]:
-            st.text_input("보안 1종 (Ω)", placeholder="0.00", key="power_security_ground_1")
+            st.text_input("보안 1종 (Ω)", key="power_security_ground_1")
         with row1[1]:
-            st.text_input("보안 2종 (Ω)", placeholder="0.00", key="power_security_ground_2")
+            st.text_input("보안 2종 (Ω)", key="power_security_ground_2")
+        with row1[2]:
+            st.text_input("보안 3종 (Ω)", key="power_security_ground_3")
         row2 = st.columns(2, gap="small")
         with row2[0]:
-            st.text_input("보안 3종 (Ω)", placeholder="0.00", key="power_security_ground_3")
+            st.text_input("통신용접지(메인) (Ω)", key="power_telecom_ground")
         with row2[1]:
-            st.text_input("통신용접지(메인) (Ω)", placeholder="0.00", key="power_telecom_ground")
-        st.text_input("피뢰침접지 (Ω)", placeholder="0.00", key="power_lightning_ground")
+            st.text_input("피뢰침접지 (Ω)", key="power_lightning_ground")
         st.text_area(
             "특이사항",
-            placeholder="이상사항 또는 미측정 사유가 있을 때 입력하세요.",
             key="power_notes",
-            height=95,
+            height=90,
         )
 
-    elif current_theme == "확인·전송":
-        payload_preview = _build_power_payload_from_state(partial_confirmed=True)
-        basic_missing = _power_theme_missing("기본정보")
+    elif current_theme == "최종 확인·전송":
+        payload_preview = _build_power_payload_from_state(final_confirmed=True)
         all_missing = _power_payload_missing_items(payload_preview)
         expected_count = max(_power_expected_item_count(payload_preview), 1)
         completion_rate = round(((expected_count - len(all_missing)) / expected_count) * 100, 1)
@@ -2415,61 +2672,59 @@ with tab_power:
             {"구분": "점검자", "내용": payload_preview.get("worker") or "미입력"},
             {"구분": "점검 국사", "내용": f"{payload_preview.get('mother')} / {payload_preview.get('local')}"},
             {"구분": "전원 구분", "내용": payload_preview.get("phase_type")},
+            {"구분": "입력 방식", "내용": "기존값 불러오기 후 수정" if payload_preview.get("source_inspection_id") else "신규 입력"},
             {"구분": "특이사항", "내용": payload_preview.get("notes") or "없음"},
         ])
         st.dataframe(summary_df, use_container_width=True, hide_index=True)
 
+        basic_missing = _power_basic_missing()
         if basic_missing:
             st.error("저장 필수 기본정보가 누락되었습니다: " + ", ".join(basic_missing))
 
-        partial_confirmed = False
         if all_missing:
             preview = ", ".join(all_missing[:12])
             more = f" 외 {len(all_missing) - 12}개" if len(all_missing) > 12 else ""
             st.markdown(
-                f'<div class="power-missing-box"><b>일부 측정항목이 입력되지 않았습니다.</b><br>'
+                f'<div class="power-missing-box"><b>입력하지 않은 측정값이 있습니다.</b><br>'
                 f'{html.escape(preview)}{more}<br><br>'
-                '미측정 항목은 Google Sheets에 공란으로 저장되고, 누락항목과 완료율도 함께 기록됩니다.</div>',
+                '누락값은 Google Sheets에 공란으로 저장되며 누락항목도 함께 기록됩니다.</div>',
                 unsafe_allow_html=True,
             )
-            partial_confirmed = st.checkbox(
-                "누락된 항목이 있지만 현재 입력값 그대로 저장하는 데 동의합니다.",
-                key="power_partial_save_confirmed",
-            )
         else:
-            partial_confirmed = True
             st.markdown('<div class="power-complete-box">✅ 모든 예정 측정항목이 입력되었습니다.</div>', unsafe_allow_html=True)
 
-        submit_disabled = bool(basic_missing) or (bool(all_missing) and not partial_confirmed)
+        final_confirmed = st.checkbox(
+            "입력한 측정값과 누락항목을 모두 확인했으며, 현재 내용으로 최종 전송합니다.",
+            key="power_final_confirmed",
+        )
+        st.markdown("**모든 측정값이 정확하게 입력되었는지 최종 확인한 후 ‘전송’을 눌러 주세요.**")
         submit_power = st.button(
-            "📤 Google Sheets로 최종 전송",
+            "📤 전송",
             key="power_final_submit",
             type="primary",
             use_container_width=True,
-            disabled=submit_disabled,
+            disabled=bool(basic_missing) or not final_confirmed,
         )
 
         if submit_power:
-            payload = _build_power_payload_from_state(partial_confirmed=partial_confirmed)
+            payload = _build_power_payload_from_state(final_confirmed=final_confirmed)
             payload_signature = hashlib.sha256(
                 json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
             ).hexdigest()
             now_ts = time.time()
             last_signature = st.session_state.get("power_last_signature", "")
             last_saved_ts = float(st.session_state.get("power_last_saved_ts", 0) or 0)
-
             if payload_signature == last_signature and (now_ts - last_saved_ts) < 30:
                 st.warning("같은 측정값이 방금 저장되었습니다. 중복 전송을 방지했습니다.")
             else:
-                with st.spinner("Google Sheets에 측정값과 누락 정보를 저장하고 있습니다..."):
+                with st.spinner("Google Sheets에 측정값을 저장하고 있습니다..."):
                     ok, message, inspection_id = save_power_inspection_result(payload)
                 if ok:
                     st.session_state["power_last_signature"] = payload_signature
                     st.session_state["power_last_saved_ts"] = now_ts
-                    st.session_state["power_last_success"] = {
-                        "message": message,
-                        "inspection_id": inspection_id,
-                    }
+                    st.success(f"✅ {message} · 점검ID: {inspection_id}")
+                    time.sleep(2)
+                    _reset_power_inspection()
                     st.rerun()
                 else:
                     st.error(f"❌ 저장 실패: {message}")
@@ -2478,23 +2733,12 @@ with tab_power:
             st.markdown(
                 f'<div class="power-sheet-note">스프레드시트: <b>{POWER_INSPECTION_SPREADSHEET_NAME}</b><br>'
                 f'워크시트: <b>{POWER_INSPECTION_SHEET_NAME}</b><br>'
-                '정리 방식: <b>현장 점검 1건 = Google Sheet 1행</b><br>'
-                '부분 입력 시 완료율·누락항목수·누락항목명·부분입력확인이 함께 저장됩니다.</div>',
+                '점검 1건은 새 행으로 추가됩니다. 최근 측정값을 불러온 경우 원본 점검ID와 원본 저장일시도 함께 기록됩니다.</div>',
                 unsafe_allow_html=True,
             )
-            structure_df = pd.DataFrame([
-                {"구분": "기본정보", "저장 열": "저장일시, 점검ID, 점검자, 모국, 국소, 전원구분, 축전지조수"},
-                {"구분": "입력상태", "저장 열": "입력완료율, 누락항목수, 누락항목, 부분입력확인"},
-                {"구분": "전압·전류", "저장 열": "삼상 R-S/S-T/T-R/R-N, R/S/T 전류 또는 단상 전압·전류"},
-                {"구분": "축전지", "저장 열": "1조 요약값, 1조 셀01~24, 선택 시 2조 셀01~24"},
-                {"구분": "접지저항", "저장 열": "보안1·2·3종, 통신용접지(메인), 피뢰침접지"},
-                {"구분": "기타", "저장 열": "특이사항"},
-            ])
-            st.dataframe(structure_df, use_container_width=True, hide_index=True)
 
     _render_power_auto_decimal_script()
 
-    # 현재 테마 하단의 이전/다음 이동 버튼
     current_theme = st.session_state.get("power_current_theme", POWER_THEME_ORDER[0])
     current_index = POWER_THEME_ORDER.index(current_theme)
     nav_left, nav_right = st.columns(2, gap="small")
@@ -2520,7 +2764,7 @@ with tab_power:
                 args=(next_theme,),
             )
 
-    st.info("Galaxy는 Chrome, iPhone은 Safari에서 열고 ‘홈 화면에 추가’를 사용하면 앱 아이콘처럼 실행할 수 있습니다.")
+    st.info("측정값 입력 후 휴대전화 키패드의 Enter/확인을 누르면 자동 소수점이 적용되고 다음 입력칸으로 이동합니다.")
 
 
 # --- [Tab 2: 법률 리스크/규정/계약 검토 & 감사보고서 작성] ---
