@@ -1475,48 +1475,84 @@ def _power_draft() -> dict:
     return draft
 
 
+def _power_widget_key(data_key: str) -> str:
+    """화면 위젯 키와 영구 임시저장 키를 분리합니다.
+
+    Streamlit은 현재 화면에서 사라진 위젯 키를 정리할 수 있으므로,
+    측정값은 power_draft와 data_key에 별도로 보존하고 화면에는 _ui_ 키를 사용합니다.
+    """
+    return f"_ui_{data_key}"
+
+
 def _power_get(key: str, default=""):
-    # 현재 화면에 렌더링된 위젯값을 우선하고, 화면에서 사라진 위젯은 임시저장소에서 복원합니다.
-    if key in st.session_state:
-        return st.session_state.get(key, default)
-    return _power_draft().get(key, default)
+    """화면의 최신값 → 임시저장값 → 영구 세션값 순으로 값을 반환합니다."""
+    ui_key = _power_widget_key(key)
+    if ui_key in st.session_state:
+        return st.session_state.get(ui_key, default)
+    draft = _power_draft()
+    if key in draft:
+        return draft.get(key, default)
+    return st.session_state.get(key, default)
 
 
 def _power_set(key: str, value) -> None:
+    """영구 임시저장값과 현재 렌더링된 화면값을 함께 갱신합니다."""
     _power_draft()[key] = value
     st.session_state[key] = value
+    ui_key = _power_widget_key(key)
+    if ui_key in st.session_state:
+        st.session_state[ui_key] = value
 
 
 def _persist_power_widget(key: str) -> None:
-    _power_draft()[key] = st.session_state.get(key, "")
+    """화면 위젯값을 영구 임시저장소로 즉시 복사합니다."""
+    ui_key = _power_widget_key(key)
+    value = st.session_state.get(ui_key, st.session_state.get(key, ""))
+    _power_draft()[key] = value
+    st.session_state[key] = value
     st.session_state["power_draft_saved_at"] = _korea_now().strftime("%H:%M:%S")
 
 
 def _hydrate_power_widget(key: str, default="") -> None:
-    if key not in st.session_state:
-        st.session_state[key] = _power_draft().get(key, default)
+    """매 렌더링 시 임시저장값으로 화면 위젯을 복원합니다."""
+    draft = _power_draft()
+    value = draft.get(key, st.session_state.get(key, default))
+    st.session_state[key] = value
+    # 위젯이 만들어지기 전에 항상 화면 키를 임시저장값으로 맞춥니다.
+    st.session_state[_power_widget_key(key)] = value
 
 
 def _power_text_input(label: str, key: str, **kwargs):
     _hydrate_power_widget(key, "")
-    return st.text_input(
+    ui_key = _power_widget_key(key)
+    result = st.text_input(
         label,
-        key=key,
+        key=ui_key,
         on_change=_persist_power_widget,
         args=(key,),
         **kwargs,
     )
+    # 버튼 클릭 등 다른 이벤트로 재실행되더라도 현재 화면값을 놓치지 않습니다.
+    current_value = st.session_state.get(ui_key, result)
+    _power_draft()[key] = current_value
+    st.session_state[key] = current_value
+    return current_value
 
 
 def _power_text_area(label: str, key: str, **kwargs):
     _hydrate_power_widget(key, "")
-    return st.text_area(
+    ui_key = _power_widget_key(key)
+    result = st.text_area(
         label,
-        key=key,
+        key=ui_key,
         on_change=_persist_power_widget,
         args=(key,),
         **kwargs,
     )
+    current_value = st.session_state.get(ui_key, result)
+    _power_draft()[key] = current_value
+    st.session_state[key] = current_value
+    return current_value
 
 
 def _power_theme_keys(theme: str) -> list[str]:
@@ -1549,17 +1585,26 @@ def _power_theme_keys(theme: str) -> list[str]:
 
 
 def _save_power_theme_to_draft(theme: str) -> None:
+    """현재 화면값을 shadow UI 키에서 읽어 영구 임시저장소에 스냅샷합니다."""
     draft = _power_draft()
     for key in _power_theme_keys(theme):
-        if key in st.session_state:
-            draft[key] = st.session_state.get(key, "")
+        ui_key = _power_widget_key(key)
+        if ui_key in st.session_state:
+            value = st.session_state.get(ui_key, "")
+        elif key in draft:
+            value = draft.get(key, "")
+        else:
+            value = st.session_state.get(key, "")
+        draft[key] = value
+        st.session_state[key] = value
     st.session_state["power_draft_saved_at"] = _korea_now().strftime("%H:%M:%S")
 
 
 def _hydrate_power_theme_from_draft(theme: str) -> None:
+    """선택한 테마의 모든 값을 영구 임시저장소에서 복원합니다."""
     draft = _power_draft()
     for key in _power_theme_keys(theme):
-        if key not in st.session_state and key in draft:
+        if key in draft:
             st.session_state[key] = draft[key]
 
 
@@ -1568,11 +1613,11 @@ def _on_power_phase_change() -> None:
 
 
 def _on_power_battery_set_change() -> None:
+    _persist_power_widget("power_battery_set")
     _save_power_theme_to_draft("축전지 측정")
-    selected = st.session_state.get("power_battery_set", "1조 셀 측정")
+    selected = _power_get("power_battery_set", "1조 셀 측정")
     if selected == "2조 셀 측정":
-        st.session_state["power_battery2_enabled"] = True
-        _power_draft()["power_battery2_enabled"] = True
+        _power_set("power_battery2_enabled", True)
 
 
 def _power_basic_missing() -> list[str]:
@@ -1933,6 +1978,10 @@ def _set_power_state_from_record(record: dict) -> None:
         }
         for theme in POWER_THEME_ORDER[:-1]
     }
+    # 화면 위젯 shadow 값은 제거하여 불러온 최신 draft 값으로 다시 생성합니다.
+    for session_key in list(st.session_state.keys()):
+        if session_key.startswith("_ui_power_"):
+            del st.session_state[session_key]
     st.session_state["power_panel_nonce"] = int(st.session_state.get("power_panel_nonce", 0) or 0) + 1
 
 
@@ -1997,7 +2046,7 @@ def _clear_power_measurements_after_station_change() -> None:
         "power_phase_type", "power_battery_set",
     }
     for key in list(st.session_state.keys()):
-        if key.startswith("power_") and key not in keep_keys:
+        if (key.startswith("power_") and key not in keep_keys) or key.startswith("_ui_power_"):
             del st.session_state[key]
     st.session_state["power_draft"] = {}
     st.session_state["power_current_theme"] = POWER_THEME_ORDER[0]
@@ -2060,10 +2109,10 @@ def _power_theme_missing(theme: str) -> list[str]:
 
     if theme == "접지저항 측정":
         checks = [
-            ("power_security_ground_1", "보안 1종"),
-            ("power_security_ground_2", "보안 2종"),
-            ("power_security_ground_3", "보안 3종"),
-            ("power_telecom_ground", "통신용접지(메인)"),
+            ("power_security_ground_1", "보안접지 1종"),
+            ("power_security_ground_2", "보안접지 2종"),
+            ("power_security_ground_3", "보안접지 3종"),
+            ("power_telecom_ground", "통신접지(메인)"),
             ("power_lightning_ground", "피뢰침접지"),
         ]
         return [label for key, label in checks if _power_state_blank(key)]
@@ -2268,18 +2317,23 @@ def _build_power_payload_from_state(final_confirmed: bool = False) -> dict:
 
 def _reset_power_inspection() -> None:
     for key in list(st.session_state.keys()):
-        if key.startswith("power_"):
+        if key.startswith("power_") or key.startswith("_ui_power_"):
             del st.session_state[key]
     st.session_state["power_current_theme"] = POWER_THEME_ORDER[0]
     st.session_state["power_unlocked_theme_index"] = 0
     st.session_state["power_theme_confirmations"] = {}
     st.session_state["power_panel_nonce"] = 0
+    st.session_state["power_draft"] = {
+        "power_phase_type": "삼상",
+        "power_battery_set": "1조 셀 측정",
+        "power_battery2_enabled": False,
+    }
     st.session_state["power_phase_type"] = "삼상"
     st.session_state["power_battery_set"] = "1조 셀 측정"
 
 
 def _render_power_auto_decimal_script() -> None:
-    field_decimals = {
+    data_field_decimals = {
         "power_three_voltage_rs": 1, "power_three_voltage_st": 1,
         "power_three_voltage_tr": 1, "power_three_voltage_rn": 1,
         "power_three_current_r": 1, "power_three_current_s": 1, "power_three_current_t": 1,
@@ -2295,13 +2349,19 @@ def _render_power_auto_decimal_script() -> None:
     }
     for group in (1, 2):
         for cell_number in range(1, 25):
-            field_decimals[f"power_battery_{group}_{cell_number:02d}"] = 2
+            data_field_decimals[f"power_battery_{group}_{cell_number:02d}"] = 2
 
+    # 실제 화면에는 shadow UI key가 렌더링됩니다.
+    field_decimals = {
+        _power_widget_key(data_key): decimals
+        for data_key, decimals in data_field_decimals.items()
+    }
     rules_json = json.dumps(field_decimals, ensure_ascii=False)
     script = r"""
         <script>
         (() => {
           const rules = __POWER_RULES_JSON__;
+          const FOCUS_STORAGE_KEY = '__power_next_focus_key_v7__';
 
           function formatted(raw, decimals) {
             let value = String(raw || '').trim().replace(/,/g, '');
@@ -2321,19 +2381,27 @@ def _render_power_auto_decimal_script() -> None:
             return `${padded.slice(0, -decimals)}.${padded.slice(-decimals)}`;
           }
 
+          function parentDocument() {
+            try { return window.parent.document; } catch (error) { return null; }
+          }
+
           function setReactValue(input, value) {
-            const proto = window.parent.HTMLInputElement.prototype;
+            const view = input.ownerDocument.defaultView || window.parent;
+            const proto = view.HTMLInputElement.prototype;
             const descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
             if (descriptor && descriptor.set) descriptor.set.call(input, value);
             else input.value = value;
-            input.dispatchEvent(new Event('input', { bubbles: true }));
-            input.dispatchEvent(new Event('change', { bubbles: true }));
+            input.dispatchEvent(new view.Event('input', { bubbles: true }));
+            input.dispatchEvent(new view.Event('change', { bubbles: true }));
           }
 
           function isVisible(element) {
-            const style = window.parent.getComputedStyle(element);
+            if (!element) return false;
+            const view = element.ownerDocument.defaultView || window.parent;
+            const style = view.getComputedStyle(element);
             const rect = element.getBoundingClientRect();
-            return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+            return style.display !== 'none' && style.visibility !== 'hidden'
+              && Number(style.opacity || 1) !== 0 && rect.width > 0 && rect.height > 0;
           }
 
           function wrapperForKey(doc, key) {
@@ -2347,73 +2415,105 @@ def _render_power_auto_decimal_script() -> None:
               const input = wrapper ? wrapper.querySelector('input') : null;
               if (input && isVisible(input)) found.push({ key, input });
             });
+            const NodeCtor = doc.defaultView.Node;
             return found.sort((a, b) => {
               const pos = a.input.compareDocumentPosition(b.input);
-              if (pos & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
-              if (pos & Node.DOCUMENT_POSITION_PRECEDING) return 1;
+              if (pos & NodeCtor.DOCUMENT_POSITION_FOLLOWING) return -1;
+              if (pos & NodeCtor.DOCUMENT_POSITION_PRECEDING) return 1;
               return 0;
             });
           }
 
+          function rememberAndFocusNext(doc, input) {
+            const ordered = visibleMeasurementInputs(doc);
+            const currentIndex = ordered.findIndex((item) => item.input === input);
+            const nextItem = currentIndex >= 0 ? ordered[currentIndex + 1] : null;
+            try {
+              if (nextItem) window.parent.sessionStorage.setItem(FOCUS_STORAGE_KEY, nextItem.key);
+              else window.parent.sessionStorage.removeItem(FOCUS_STORAGE_KEY);
+            } catch (e) {}
+            return nextItem;
+          }
+
+          function bindInput(doc, key, decimals) {
+            const wrapper = wrapperForKey(doc, key);
+            const input = wrapper ? wrapper.querySelector('input') : null;
+            if (!input || input.dataset.powerDecimalBoundV7 === '1') return;
+
+            input.dataset.powerDecimalBoundV7 = '1';
+            input.dataset.powerKey = key;
+            input.setAttribute('inputmode', 'decimal');
+            input.setAttribute('autocomplete', 'off');
+            input.setAttribute('enterkeyhint', 'next');
+
+            const applyFormat = () => {
+              const next = formatted(input.value, Number(decimals));
+              if (next !== input.value) setReactValue(input, next);
+              return next;
+            };
+
+            input.addEventListener('blur', applyFormat, { passive: true });
+            input.addEventListener('keydown', (event) => {
+              if (event.key !== 'Enter' && event.keyCode !== 13) return;
+              event.preventDefault();
+              event.stopPropagation();
+
+              // 리렌더링 전에 다음 입력키를 먼저 보존합니다.
+              const nextItem = rememberAndFocusNext(doc, input);
+              applyFormat();
+
+              window.setTimeout(() => {
+                if (nextItem && isVisible(nextItem.input)) {
+                  nextItem.input.focus({ preventScroll: true });
+                  nextItem.input.select();
+                  nextItem.input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                } else {
+                  input.blur();
+                }
+              }, 40);
+            }, true);
+          }
+
           function bindInputs() {
-            let doc;
-            try { doc = window.parent.document; } catch (error) { return; }
-            Object.entries(rules).forEach(([key, decimals]) => {
-              const wrapper = wrapperForKey(doc, key);
-              const input = wrapper ? wrapper.querySelector('input') : null;
-              if (!input || input.dataset.powerDecimalBound === '1') return;
-              input.dataset.powerDecimalBound = '1';
-              input.dataset.powerKey = key;
-              input.setAttribute('inputmode', 'decimal');
-              input.setAttribute('autocomplete', 'off');
-
-              const applyFormat = () => {
-                const next = formatted(input.value, Number(decimals));
-                if (next && next !== input.value) setReactValue(input, next);
-              };
-
-              input.addEventListener('blur', applyFormat);
-              input.addEventListener('keydown', (event) => {
-                if (event.key !== 'Enter') return;
-                event.preventDefault();
-                applyFormat();
-                window.setTimeout(() => {
-                  const ordered = visibleMeasurementInputs(doc);
-                  const currentIndex = ordered.findIndex((item) => item.input === input);
-                  const nextItem = ordered[currentIndex + 1];
-                  if (nextItem) {
-                    try { window.parent.sessionStorage.setItem('__power_next_focus_key__', nextItem.key); } catch (e) {}
-                    nextItem.input.focus();
-                    nextItem.input.select();
-                    nextItem.input.scrollIntoView({behavior: 'smooth', block: 'center'});
-                  } else {
-                    input.blur();
-                  }
-                }, 100);
-              });
-            });
+            const doc = parentDocument();
+            if (!doc) return;
+            Object.entries(rules).forEach(([key, decimals]) => bindInput(doc, key, decimals));
           }
 
           function restoreNextFocus() {
-            let doc;
-            try { doc = window.parent.document; } catch (error) { return; }
+            const doc = parentDocument();
+            if (!doc) return;
             let nextKey = '';
-            try { nextKey = window.parent.sessionStorage.getItem('__power_next_focus_key__') || ''; } catch (e) {}
+            try { nextKey = window.parent.sessionStorage.getItem(FOCUS_STORAGE_KEY) || ''; } catch (e) {}
             if (!nextKey) return;
             const wrapper = wrapperForKey(doc, nextKey);
             const input = wrapper ? wrapper.querySelector('input') : null;
             if (input && isVisible(input)) {
-              input.focus();
+              input.focus({ preventScroll: true });
               input.select();
-              input.scrollIntoView({behavior: 'smooth', block: 'center'});
-              try { window.parent.sessionStorage.removeItem('__power_next_focus_key__'); } catch (e) {}
+              input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              try { window.parent.sessionStorage.removeItem(FOCUS_STORAGE_KEY); } catch (e) {}
             }
           }
 
           bindInputs();
           restoreNextFocus();
-          const timer = setInterval(() => { bindInputs(); restoreNextFocus(); }, 350);
-          setTimeout(() => clearInterval(timer), 60000);
+
+          const doc = parentDocument();
+          if (doc) {
+            const observer = new MutationObserver(() => {
+              bindInputs();
+              restoreNextFocus();
+            });
+            observer.observe(doc.body, { childList: true, subtree: true });
+            window.setTimeout(() => observer.disconnect(), 120000);
+          }
+
+          const timer = window.setInterval(() => {
+            bindInputs();
+            restoreNextFocus();
+          }, 300);
+          window.setTimeout(() => window.clearInterval(timer), 120000);
         })();
         </script>
     """
@@ -2642,10 +2742,10 @@ def _render_pledge_group(
 with tab_power:
     if st.session_state.get("power_current_theme") not in POWER_THEME_ORDER:
         st.session_state["power_current_theme"] = POWER_THEME_ORDER[0]
-    if st.session_state.get("power_phase_type") not in {"삼상", "단상"}:
-        st.session_state["power_phase_type"] = "삼상"
-    if st.session_state.get("power_battery_set") not in {"1조 셀 측정", "2조 셀 측정"}:
-        st.session_state["power_battery_set"] = "1조 셀 측정"
+    if _power_get("power_phase_type", "삼상") not in {"삼상", "단상"}:
+        _power_set("power_phase_type", "삼상")
+    if _power_get("power_battery_set", "1조 셀 측정") not in {"1조 셀 측정", "2조 셀 측정"}:
+        _power_set("power_battery_set", "1조 셀 측정")
     if "power_unlocked_theme_index" not in st.session_state:
         st.session_state["power_unlocked_theme_index"] = 0
     if "power_theme_confirmations" not in st.session_state:
@@ -2717,6 +2817,32 @@ with tab_power:
         background:#F8FAFC; border:1px solid #CBD5E1; border-radius:14px;
         padding:13px 15px; color:#334155; font-weight:700; line-height:1.55;
     }
+    .power-ground-heading {
+        border-radius:13px; padding:10px 13px; margin:8px 0 8px;
+        font-size:1rem; font-weight:950; color:#0F172A;
+        box-shadow:0 5px 14px rgba(15,23,42,.07);
+    }
+    .power-ground-heading span { font-weight:850; opacity:.78; }
+    .power-ground-heading.security {
+        background:linear-gradient(135deg,#DBEAFE,#E0F2FE);
+        border:1px solid #60A5FA; border-left:7px solid #2563EB;
+    }
+    .power-ground-heading.telecom {
+        background:linear-gradient(135deg,#DCFCE7,#ECFDF5);
+        border:1px solid #4ADE80; border-left:7px solid #16A34A;
+    }
+    .power-ground-heading.lightning {
+        background:linear-gradient(135deg,#FEF3C7,#FFF7ED);
+        border:1px solid #FBBF24; border-left:7px solid #F97316;
+    }
+    .power-menu-legend {
+        display:flex; flex-wrap:wrap; gap:7px; margin:7px 0 10px;
+        font-size:.80rem; font-weight:850; color:#334155;
+    }
+    .power-menu-legend span {
+        background:#FFFFFF; border:1px solid #D8E3F2; border-radius:999px;
+        padding:5px 9px; box-shadow:0 3px 9px rgba(15,23,42,.05);
+    }
     @keyframes powerBlindDown {
         0% { opacity:0; transform:scaleY(0.08) translateY(-10px); clip-path:inset(0 0 92% 0); }
         70% { opacity:1; transform:scaleY(1.015) translateY(0); clip-path:inset(0 0 0 0); }
@@ -2736,33 +2862,30 @@ with tab_power:
         background:#F8FAFC; border:1px solid #D8E3F2; border-radius:12px;
         padding:9px 12px; margin:8px 0 10px; color:#475569; font-weight:750;
     }
-    div[class*="st-key-power_theme_menu_"] button:disabled {
-        background:#E2E8F0 !important; color:#94A3B8 !important;
-        border:1px solid #CBD5E1 !important; opacity:1 !important;
+    div[class*="st-key-power_theme_menu_"] button {
+        min-height: 56px !important; padding: 0.50rem 0.35rem !important;
+        border-radius: 14px !important; font-size: 0.94rem !important; line-height: 1.15 !important;
+        font-weight:950 !important; transition:transform .18s ease, box-shadow .18s ease !important;
     }
-    .st-key-power_theme_menu_0 button,
-    .st-key-power_theme_menu_1 button,
-    .st-key-power_theme_menu_2 button,
-    .st-key-power_theme_menu_3 button {
-        min-height: 52px !important; padding: 0.45rem 0.35rem !important;
-        border-radius: 13px !important; font-size: 0.92rem !important; line-height: 1.15 !important;
+    div[class*="st-key-power_theme_menu_"] button:hover:not(:disabled) {
+        transform:translateY(-2px) !important;
     }
-    div[class*="st-key-power_battery_"] input {
+    div[class*="st-key-_ui_power_battery_"] input {
         text-align:center !important; padding-left:0.25rem !important; padding-right:0.25rem !important;
         min-height:44px !important; font-weight:850 !important;
     }
-    div[class*="st-key-power_battery_"] label p {
+    div[class*="st-key-_ui_power_battery_"] label p {
         text-align:center !important; font-size:0.80rem !important; font-weight:900 !important;
     }
     @media (max-width: 768px) {
         .power-mobile-hero { padding:14px 13px; border-radius:15px; }
         .power-sticky-card { top:0.2rem; border-radius:13px; padding:9px 11px; }
         .power-sticky-main { font-size:0.92rem; }
-        div[class*="st-key-power_"] input,
-        div[class*="st-key-power_"] textarea { font-size:16px !important; }
-        div[class*="st-key-power_"] label p { font-size:0.82rem !important; }
-        div[class*="st-key-power_battery_"] input { padding:0.35rem 0.12rem !important; }
-        div[class*="st-key-power_battery_"] label p { font-size:0.72rem !important; }
+        div[class*="st-key-_ui_power_"] input,
+        div[class*="st-key-_ui_power_"] textarea { font-size:16px !important; }
+        div[class*="st-key-_ui_power_"] label p { font-size:0.82rem !important; }
+        div[class*="st-key-_ui_power_battery_"] input { padding:0.35rem 0.12rem !important; }
+        div[class*="st-key-_ui_power_battery_"] label p { font-size:0.72rem !important; }
     }
     </style>
     <div class="power-mobile-hero">
@@ -2865,6 +2988,48 @@ with tab_power:
     confirmations = dict(st.session_state.get("power_theme_confirmations", {}))
     current_theme = st.session_state.get("power_current_theme", POWER_THEME_ORDER[0])
 
+    # 측정상태를 색상으로 즉시 구분합니다.
+    state_css_rules: list[str] = []
+    for theme_index, theme in enumerate(POWER_THEME_ORDER):
+        selector = f'div[class*="st-key-power_theme_menu_{theme_index}"] button'
+        is_locked = theme_index > unlocked_index
+        is_completed = theme in confirmations
+        is_current = theme == current_theme
+        if is_current:
+            style = (
+                "background:linear-gradient(135deg,#FFB703,#FB8500)!important;"
+                "color:#FFFFFF!important;border:2px solid #FFD166!important;"
+                "box-shadow:0 10px 24px rgba(251,133,0,.38)!important;"
+            )
+        elif is_completed:
+            style = (
+                "background:linear-gradient(135deg,#34D399,#16A34A)!important;"
+                "color:#FFFFFF!important;border:2px solid #86EFAC!important;"
+                "box-shadow:0 8px 20px rgba(22,163,74,.28)!important;"
+            )
+        elif is_locked:
+            style = (
+                "background:linear-gradient(135deg,#E2E8F0,#CBD5E1)!important;"
+                "color:#64748B!important;border:2px solid #CBD5E1!important;"
+                "box-shadow:none!important;opacity:1!important;"
+            )
+        else:
+            style = (
+                "background:linear-gradient(135deg,#38BDF8,#2563EB)!important;"
+                "color:#FFFFFF!important;border:2px solid #93C5FD!important;"
+                "box-shadow:0 8px 20px rgba(37,99,235,.25)!important;"
+            )
+        state_css_rules.append(f"{selector}{{{style}}}{selector} *{{color:inherit!important;}}")
+
+    st.markdown("<style>" + "".join(state_css_rules) + "</style>", unsafe_allow_html=True)
+    st.markdown(
+        '<div class="power-menu-legend">'
+        '<span>🟠 현재 측정</span><span>🟢 측정 완료</span>'
+        '<span>🔵 미측정·활성</span><span>⚪ 미측정·잠금</span>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
     for row_start in range(0, len(POWER_THEME_ORDER), 2):
         menu_columns = st.columns(2, gap="small")
         for offset, column in enumerate(menu_columns):
@@ -2921,15 +3086,16 @@ with tab_power:
         )
 
         if current_theme == "전압·전류 측정":
+            _hydrate_power_widget("power_phase_type", "삼상")
             st.radio(
                 "전원 방식 선택",
                 ["삼상", "단상"],
                 format_func=lambda value: "삼상 전류" if value == "삼상" else "단상 전류",
                 horizontal=True,
-                key="power_phase_type",
+                key=_power_widget_key("power_phase_type"),
                 on_change=_on_power_phase_change,
             )
-            phase_type = st.session_state.get("power_phase_type", "삼상")
+            phase_type = _power_get("power_phase_type", "삼상")
             if phase_type == "삼상":
                 voltage_fields = [
                     ("R-S 전압 (V)", "power_three_voltage_rs"),
@@ -2959,30 +3125,46 @@ with tab_power:
                     _power_text_input("단상 전류 (A)", key="power_single_current")
 
         elif current_theme == "축전지 측정":
+            _hydrate_power_widget("power_battery_set", "1조 셀 측정")
             st.radio(
                 "측정할 축전지 선택",
                 ["1조 셀 측정", "2조 셀 측정"],
                 horizontal=True,
-                key="power_battery_set",
+                key=_power_widget_key("power_battery_set"),
                 on_change=_on_power_battery_set_change,
             )
             st.caption("1조 측정을 마친 뒤에는 2조 측정 여부를 확인합니다. 실제 설치된 셀 수만 입력해도 됩니다.")
-            selected_group = 1 if st.session_state.get("power_battery_set") == "1조 셀 측정" else 2
+            selected_group = 1 if _power_get("power_battery_set", "1조 셀 측정") == "1조 셀 측정" else 2
             _render_power_battery_summary(selected_group)
 
         elif current_theme == "접지저항 측정":
-            row1 = st.columns(3, gap="small")
-            with row1[0]:
-                _power_text_input("보안 1종 (Ω)", key="power_security_ground_1")
-            with row1[1]:
-                _power_text_input("보안 2종 (Ω)", key="power_security_ground_2")
-            with row1[2]:
-                _power_text_input("보안 3종 (Ω)", key="power_security_ground_3")
-            row2 = st.columns(2, gap="small")
-            with row2[0]:
-                _power_text_input("통신용접지(메인) (Ω)", key="power_telecom_ground")
-            with row2[1]:
-                _power_text_input("피뢰침접지 (Ω)", key="power_lightning_ground")
+            st.markdown(
+                '<div class="power-ground-heading security">🛡️ 보안접지 <span>(Ω)</span></div>',
+                unsafe_allow_html=True,
+            )
+            st.caption("보안접지는 보안 1종·2종·3종으로 구분합니다.")
+            security_columns = st.columns(3, gap="small")
+            with security_columns[0]:
+                _power_text_input("보안 1종", key="power_security_ground_1")
+            with security_columns[1]:
+                _power_text_input("보안 2종", key="power_security_ground_2")
+            with security_columns[2]:
+                _power_text_input("보안 3종", key="power_security_ground_3")
+
+            ground_columns = st.columns(2, gap="small")
+            with ground_columns[0]:
+                st.markdown(
+                    '<div class="power-ground-heading telecom">📡 통신접지 <span>(Ω)</span></div>',
+                    unsafe_allow_html=True,
+                )
+                _power_text_input("통신접지(메인)", key="power_telecom_ground")
+            with ground_columns[1]:
+                st.markdown(
+                    '<div class="power-ground-heading lightning">⚡ 피뢰침접지 <span>(Ω)</span></div>',
+                    unsafe_allow_html=True,
+                )
+                _power_text_input("피뢰침접지", key="power_lightning_ground")
+
             _power_text_area("특이사항", key="power_notes", height=90)
 
         elif current_theme == "최종 확인·전송":
@@ -3151,7 +3333,7 @@ with tab_power:
                     )
 
     _render_power_auto_decimal_script()
-    st.info("측정값 입력 후 휴대전화 키패드의 Enter/확인을 누르면 자동 소수점이 적용되고 다음 입력칸으로 이동합니다.")
+    st.info("측정값은 화면과 분리된 임시저장소에 즉시 보존됩니다. 이전 메뉴를 다시 열어도 값이 유지되며, Enter/확인을 누르면 자동 소수점 적용 후 다음 입력칸으로 이동합니다.")
 
 
 # --- [Tab 2: 법률 리스크/규정/계약 검토 & 감사보고서 작성] ---
