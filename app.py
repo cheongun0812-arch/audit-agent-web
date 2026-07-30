@@ -12,6 +12,8 @@ import glob
 import tempfile
 import hashlib
 import base64
+import html
+import json
 import datetime
 import pytz
 import pandas as pd
@@ -1055,286 +1057,845 @@ def save_june_compliance_training_result(record: dict) -> tuple[bool, str]:
         return False, str(e)
 
 # ==========================================
-# 8-1. 현장 IP 자동 전환 및 Google Sheets 이력관리
+# 8-2. 국사 전원시설 정밀점검 및 Google Sheets 저장
+#      - 기존 Google 서비스 계정/스프레드시트 연결 재사용
+#      - 점검 1건을 Google Sheet 1행으로 저장
 # ==========================================
-import json
-import platform
-import subprocess
-import socket
-import getpass
-import ipaddress
+POWER_INSPECTION_SPREADSHEET_NAME = "Audit_Result_2026"
+POWER_INSPECTION_SHEET_NAME = "국사_전원시설_정밀점검"
 
-IP_PROFILE_SHEET_NAME = "IP_Profiles"
-IP_HISTORY_SHEET_NAME = "IP_Change_History"
-IP_PROFILE_HEADERS = [
-    "profile_id", "프로필명", "어댑터명", "IP주소", "서브넷마스크", "기본게이트웨이",
-    "기본DNS", "보조DNS", "사용여부", "수정일시", "수정자사번", "수정자성명", "비고"
-]
-IP_HISTORY_HEADERS = [
-    "변경일시", "작업ID", "작업결과", "프로필ID", "프로필명", "PC명", "Windows사용자",
-    "수정자사번", "수정자성명", "어댑터명", "기존IP", "기존서브넷", "기존게이트웨이",
-    "기존DNS", "변경IP", "변경서브넷", "변경게이트웨이", "변경DNS", "오류내용", "비고"
-]
+POWER_STATION_DATA = r"""행당	약수역 BBH
+신내	중랑최적화분기국사
+중앙	BBH(후암동68-6-BBH)
+광진	구의동 BBH
+광진	중곡동 BBH
+성북	안암 BBH
+성북	대광 BBH
+성북	성북 BBH
+노원	공릉최적화분기국사
+도봉	방학최적화분기국사
+용산	청파3가 BBH
+은평	삼송
+은평	홍제최적화분기국사
+서대문	서대문(최적화분기국사)
+서대문	화전
+가평	가평
+청평	청평
+청평	고성
+청평	대성
+청평	마일
+청평	미사
+청평	방일
+청평	봉수
+청평	삼회
+가평	상색
+청평	설악
+청평	율길
+청평	임초
+청평	조종
+청평	회곡
+청평	상판
+청평	대보
+가평	산유
+가평	북면
+가평	화악
+가평	백둔
+가평	도대
+가평	적목
+동의정부	경중앙(통신구내) BBH
+동의정부	남방
+의정부	장흥
+의정부	송추
+의정부	백석
+의정부	광적
+동의정부	광사
+의정부	의정부 덕도(N3162)
+동의정부	자일
+의정부	석우
+동의정부	청학
+의정부	삼하
+의정부	비암
+퇴계원	퇴계원
+남양주	남양주
+덕소	덕소
+퇴계원	진접
+퇴계원	진건
+퇴계원	오남
+퇴계원	광릉
+남양주	일패
+남양주	답내
+남양주	운수
+남양주	외방
+남양주	호평 BBH
+덕소	조안
+덕소	송촌
+덕소	월문
+덕소	팔당
+퇴계원	금곡 BBH
+퇴계원	별내
+양평	양평
+양평	노문
+양평	정배
+양평	목왕
+양평	서종
+양평	양수
+양평	국수
+양평	강하
+양평	강상
+양평	회현
+양평	개군
+양평	일신
+양평	양동
+양평	계정
+양평	금왕
+양평	고송
+양평	용문
+양평	신점
+양평	단월
+양평	산음
+양평	명성
+양평	용두
+양평	옥천
+양평	지평
+양평	용문산중계소
+연천	연천
+동두천	동두천
+전곡	원당
+전곡	백학
+전곡	동이
+전곡	궁평
+전곡	왕림
+전곡	초성
+전곡	동중
+전곡	진상
+전곡	북삼
+전곡	늘목
+전곡	양원
+전곡	대전
+연천	대광
+연천	삼곳
+연천	내산
+연천	고문
+동두천	은현
+동두천	신산
+동두천	상수
+동두천	덕정
+동두천	덕계
+동두천	소요
+동두천	광암
+포천	포천
+송우	송우
+송우	가산
+송우	내촌
+송우	신팔
+송우	이곡
+포천	자작
+포천	직두
+포천	화현
+포천	일동
+포천	사직
+포천	수입
+포천	장암
+포천	도평
+포천	산정
+포천	영북
+포천	관인
+포천	운산
+포천	창수
+포천	신북
+포천	남청산
+포천	고소성
+포천	만세교
+포천	양문
+덕양	덕양
+덕양	덕양 벽제(N3055)
+덕양	고양
+파주	영장
+파주	장곡
+파주	위전
+파주	법흥
+파주	문발
+파주	용미
+파주	발랑
+파주	파주 연다산(N3218)
+파주	광탄
+파주	탄현
+파주	운정
+문산	문산
+법원리	법원리
+문산	파주
+문산	마산
+문산	마정
+문산	통일촌(N3211)
+문산	장현
+문산	웅담
+문산	적성
+문산	파평
+일산	송포
+일산	성석
+일산	고봉산중계소
+고양IBS고양BBH	백석12블럭 BBH
+고양IBS고양BBH	마두21블럭 BBH
+일산	백마5단지상가 BBH(N3173)
+일산	장항동 BBH
+일산	북일산최적화분기국사(북일산)
+일산	고양 BBH(N3170)
+전곡	전곡
+철원	철원
+철원	동송분기국사
+철원	문혜
+철원	내대
+철원	관전
+철원	장흥
+철원	오지
+철원	지경
+철원	자등
+철원	마현
+철원	양지
+철원	근남
+철원	잠곡
+철원	와수
+철원	도창
+파주	(파주)마이프라자1층 BBH
+일산	가좌 BBH
+동의정부	금오 BBH
+법원리	금파리마을회관 BBH
+덕양	달빛3단지상가지하 BBH
+문산	당동상가 BBH
+광화문	독립문통신구 BBH(N995)
+고양IBS고양BBH	마두25블럭 BBH
+아현	마포분기국사
+중랑	망우최적화분기국사(중랑)
+광화문	무교동 BBH
+일산	백석13블럭 BBH
+일산	백석7블럭 BBH
+고양IBS고양BBH	백석8블럭 BBH
+문산	봉암1리마을회관 BBH
+파주	분수3리마을회관 BBH
+덕양	상곡 BBH
+파주	새말 BBH
+능곡	소만8단지(소만풍림8단지) BBH
+신촌	신촌분기국사
+청평	에덴성회 BBH
+일산	정발 BBH
+광화문	종로5가통신구-1 BBH(통신구내)
+청량	청량최적화 BBH
+파주	토우프라자 BBH
+파주	통일프라자 BBH
+고양IBS고양BBH	풍동에이스타워 BBH
+파주	한라비발디상가 BBH
+능곡	햇빛주공22단지 BBH
+방학	행운빌라 BBH
+능곡	화정동상가(별빛건영10단지) BBH
+의정부	녹양"""
 
 
-def _open_ip_spreadsheet():
-    """기존 Google 서비스 계정 연결을 재사용하여 IP 관리 스프레드시트를 엽니다."""
+def _build_power_station_map() -> dict[str, list[str]]:
+    station_map: dict[str, list[str]] = {}
+    for raw_line in POWER_STATION_DATA.splitlines():
+        line = raw_line.strip()
+        if not line or "\t" not in line:
+            continue
+        mother, local = [part.strip() for part in line.split("\t", 1)]
+        if not mother or not local:
+            continue
+        station_map.setdefault(mother, [])
+        if local not in station_map[mother]:
+            station_map[mother].append(local)
+    return station_map
+
+
+POWER_STATION_MAP = _build_power_station_map()
+
+
+def _power_headers() -> list[str]:
+    headers = [
+        "저장일시", "점검ID", "점검자", "모국", "국소", "전원구분", "축전지조수",
+        "입력완료율(%)", "누락항목수", "누락항목", "부분입력확인",
+        "삼상전압_R-S(V)", "삼상전압_S-T(V)", "삼상전압_T-R(V)", "삼상전압_R-N(V)",
+        "삼상전류_R(A)", "삼상전류_S(A)", "삼상전류_T(A)",
+        "단상전압(V)", "단상전류(A)",
+        "1조_방전후_Total전류(A)", "1조_방전후_Total전압(V)",
+        "1조_최저전압(V)", "1조_최고전압(V)", "1조_방전종료전압(V)",
+    ]
+    headers.extend([f"1조_셀{i:02d}(V)" for i in range(1, 25)])
+    headers.extend([f"2조_셀{i:02d}(V)" for i in range(1, 25)])
+    headers.extend([
+        "보안접지_1종(Ω)", "보안접지_2종(Ω)", "보안접지_3종(Ω)",
+        "통신용접지_메인(Ω)", "피뢰침접지(Ω)", "특이사항",
+    ])
+    return headers
+
+
+POWER_INSPECTION_HEADERS = _power_headers()
+
+
+def _column_letter(column_number: int) -> str:
+    if column_number < 1:
+        raise ValueError("열 번호는 1 이상이어야 합니다.")
+    letters = ""
+    number = column_number
+    while number:
+        number, remainder = divmod(number - 1, 26)
+        letters = chr(65 + remainder) + letters
+    return letters
+
+
+def _ensure_power_inspection_sheet(spreadsheet):
+    try:
+        ws = spreadsheet.worksheet(POWER_INSPECTION_SHEET_NAME)
+    except Exception:
+        ws = spreadsheet.add_worksheet(
+            title=POWER_INSPECTION_SHEET_NAME,
+            rows=10000,
+            cols=max(len(POWER_INSPECTION_HEADERS) + 5, 90),
+        )
+
+    current_headers = ws.row_values(1)
+    if not current_headers:
+        end_col = _column_letter(len(POWER_INSPECTION_HEADERS))
+        ws.update(range_name=f"A1:{end_col}1", values=[POWER_INSPECTION_HEADERS])
+        current_headers = POWER_INSPECTION_HEADERS.copy()
+    else:
+        missing_headers = [header for header in POWER_INSPECTION_HEADERS if header not in current_headers]
+        if missing_headers:
+            start_col_num = len(current_headers) + 1
+            end_col_num = len(current_headers) + len(missing_headers)
+            ws.update(
+                range_name=f"{_column_letter(start_col_num)}1:{_column_letter(end_col_num)}1",
+                values=[missing_headers],
+            )
+            current_headers.extend(missing_headers)
+
+    try:
+        ws.freeze(rows=1)
+        ws.format(
+            f"A1:{_column_letter(len(current_headers))}1",
+            {
+                "backgroundColor": {"red": 0.86, "green": 0.92, "blue": 0.98},
+                "textFormat": {"bold": True},
+                "horizontalAlignment": "CENTER",
+            },
+        )
+    except Exception:
+        # 헤더 서식 실패는 저장 기능에 영향을 주지 않도록 무시합니다.
+        pass
+
+    return ws, current_headers
+
+
+def _parse_power_number(value, implicit_decimals: int | None = None):
+    """숫자 문자열을 Google Sheets 분석이 가능한 실수로 변환합니다.
+
+    implicit_decimals가 지정되고 사용자가 소수점을 입력하지 않았다면:
+    - 215, decimals=2 -> 2.15
+    - 0000, decimals=1 -> 0.0
+    """
+    raw = str(value or "").strip().replace(",", "")
+    if not raw:
+        return ""
+
+    cleaned = re.sub(r"[^0-9.+-]", "", raw)
+    if cleaned in {"", "+", "-", ".", "+.", "-."}:
+        return ""
+
+    try:
+        if implicit_decimals is not None and "." not in cleaned:
+            sign = -1 if cleaned.startswith("-") else 1
+            digits = cleaned.lstrip("+-")
+            if not digits.isdigit():
+                return ""
+            return sign * (int(digits) / (10 ** implicit_decimals))
+        return float(cleaned)
+    except (TypeError, ValueError, OverflowError):
+        return ""
+
+
+def _format_power_display(value, decimals: int) -> str:
+    raw = str(value or "").strip().replace(",", "")
+    if not raw:
+        return ""
+    cleaned = re.sub(r"[^0-9.]", "", raw)
+    if not cleaned:
+        return ""
+    if "." in cleaned:
+        integer, fraction = (cleaned.split(".", 1) + [""])[:2]
+        integer = integer or "0"
+        fraction = re.sub(r"\D", "", fraction)[:decimals].ljust(decimals, "0")
+        return f"{integer}.{fraction}" if decimals else integer
+    if decimals <= 0:
+        return cleaned
+    if len(cleaned) <= decimals:
+        cleaned = cleaned.zfill(decimals + 1)
+    return f"{cleaned[:-decimals]}.{cleaned[-decimals:]}"
+
+
+def _power_value_is_blank(value) -> bool:
+    return value is None or (isinstance(value, str) and not value.strip())
+
+
+def _power_payload_missing_items(payload: dict) -> list[str]:
+    """저장 대상 측정항목 중 입력되지 않은 항목을 반환합니다.
+
+    기본정보(점검자·모국·국소)는 저장 필수값으로 별도 검증하고,
+    아래 목록은 부분 입력 여부와 완료율 산정에 사용합니다.
+    """
+    expected: list[tuple[str, object]] = []
+    phase_type = str(payload.get("phase_type", "")).strip()
+
+    if phase_type == "삼상":
+        expected.extend([
+            ("삼상 R-S 전압", payload.get("three_voltage_rs")),
+            ("삼상 S-T 전압", payload.get("three_voltage_st")),
+            ("삼상 T-R 전압", payload.get("three_voltage_tr")),
+            ("삼상 R-N 전압", payload.get("three_voltage_rn")),
+            ("삼상 R상 전류", payload.get("three_current_r")),
+            ("삼상 S상 전류", payload.get("three_current_s")),
+            ("삼상 T상 전류", payload.get("three_current_t")),
+        ])
+    elif phase_type == "단상":
+        expected.extend([
+            ("단상 전압", payload.get("single_voltage")),
+            ("단상 전류", payload.get("single_current")),
+        ])
+
+    expected.extend([
+        ("1조 방전 후 Total 전류", payload.get("battery1_total_current")),
+        ("1조 방전 후 Total 전압", payload.get("battery1_total_voltage")),
+        ("1조 최저전압", payload.get("battery1_min_voltage")),
+        ("1조 최고전압", payload.get("battery1_max_voltage")),
+        ("1조 방전종료 전압", payload.get("battery1_end_voltage")),
+    ])
+
+    battery1_cells = list(payload.get("battery1_cells", []))[:24]
+    battery1_cells.extend([""] * (24 - len(battery1_cells)))
+    expected.extend((f"1조 {index:02d}셀", value) for index, value in enumerate(battery1_cells, 1))
+
+    if int(payload.get("battery_group_count", 1) or 1) == 2:
+        battery2_cells = list(payload.get("battery2_cells", []))[:24]
+        battery2_cells.extend([""] * (24 - len(battery2_cells)))
+        expected.extend((f"2조 {index:02d}셀", value) for index, value in enumerate(battery2_cells, 1))
+
+    expected.extend([
+        ("보안접지 1종", payload.get("security_ground_1")),
+        ("보안접지 2종", payload.get("security_ground_2")),
+        ("보안접지 3종", payload.get("security_ground_3")),
+        ("통신용접지(메인)", payload.get("telecom_ground")),
+        ("피뢰침접지", payload.get("lightning_ground")),
+    ])
+
+    return [label for label, value in expected if _power_value_is_blank(value)]
+
+
+def _power_expected_item_count(payload: dict) -> int:
+    phase_count = 7 if str(payload.get("phase_type", "")).strip() == "삼상" else 2
+    battery2_count = 24 if int(payload.get("battery_group_count", 1) or 1) == 2 else 0
+    return phase_count + 5 + 24 + battery2_count + 5
+
+
+def _power_has_measurement(payload: dict) -> bool:
+    measurement_keys = [
+        "three_voltage_rs", "three_voltage_st", "three_voltage_tr", "three_voltage_rn",
+        "three_current_r", "three_current_s", "three_current_t",
+        "single_voltage", "single_current", "battery1_total_current", "battery1_total_voltage",
+        "battery1_min_voltage", "battery1_max_voltage", "battery1_end_voltage",
+        "security_ground_1", "security_ground_2", "security_ground_3",
+        "telecom_ground", "lightning_ground",
+    ]
+    if any(payload.get(key, "") not in ("", None) for key in measurement_keys):
+        return True
+    if any(value not in ("", None) for value in payload.get("battery1_cells", [])):
+        return True
+    if any(value not in ("", None) for value in payload.get("battery2_cells", [])):
+        return True
+    return bool(str(payload.get("notes", "")).strip())
+
+
+def save_power_inspection_result(payload: dict) -> tuple[bool, str, str]:
+    """국사 전원시설 정밀점검 결과를 Google Sheet에 1행으로 저장합니다."""
     client = init_google_sheet_connection()
     if not client:
-        raise RuntimeError("Google Sheets 연결 실패: .streamlit/secrets.toml의 gcp_service_account 설정을 확인하세요.")
-    # 기존 앱이 사용하는 동일 파일을 활용하여 별도 자격증명 추가를 피합니다.
-    return client.open("Audit_Result_2026")
+        return False, "구글 시트 연결 실패: Streamlit Secrets의 gcp_service_account 설정을 확인하세요.", ""
 
-
-def _ensure_ip_sheet(spreadsheet, title: str, headers: list[str], rows: int = 3000):
     try:
-        ws = spreadsheet.worksheet(title)
-    except Exception:
-        ws = spreadsheet.add_worksheet(title=title, rows=rows, cols=max(len(headers) + 2, 20))
-        ws.append_row(headers)
-    values = ws.get_all_values()
-    if not values:
-        ws.append_row(headers)
-    elif values[0][:len(headers)] != headers:
-        # 기존 데이터 훼손 방지를 위해 헤더를 강제로 덮어쓰지 않고 오류로 중단합니다.
-        raise RuntimeError(f"'{title}' 시트의 헤더가 예상 형식과 다릅니다. 기존 시트를 백업한 후 확인하세요.")
-    return ws
+        worker = str(payload.get("worker", "")).strip()
+        mother = str(payload.get("mother", "")).strip()
+        local = str(payload.get("local", "")).strip()
+        phase_type = str(payload.get("phase_type", "")).strip()
+
+        if not worker:
+            return False, "점검자 성명을 입력해 주세요.", ""
+        if mother not in POWER_STATION_MAP:
+            return False, "모국 선택값이 올바르지 않습니다.", ""
+        if local not in POWER_STATION_MAP.get(mother, []):
+            return False, "선택한 모국과 국소의 조합이 올바르지 않습니다.", ""
+        if phase_type not in {"삼상", "단상"}:
+            return False, "전원 구분은 삼상 또는 단상이어야 합니다.", ""
+        if not _power_has_measurement(payload):
+            return False, "측정값 또는 특이사항을 한 개 이상 입력해 주세요.", ""
+
+        missing_items = _power_payload_missing_items(payload)
+        if missing_items and not bool(payload.get("partial_confirmed", False)):
+            return False, "누락 항목이 있습니다. 부분 입력 저장 동의를 확인해 주세요.", ""
+
+        expected_count = max(_power_expected_item_count(payload), 1)
+        completed_count = expected_count - len(missing_items)
+        completion_rate = round((completed_count / expected_count) * 100, 1)
+
+        spreadsheet = client.open(POWER_INSPECTION_SPREADSHEET_NAME)
+        ws, sheet_headers = _ensure_power_inspection_sheet(spreadsheet)
+
+        now = _korea_now()
+        saved_at = now.strftime("%Y-%m-%d %H:%M:%S")
+        inspection_seed = f"{saved_at}|{worker}|{mother}|{local}|{time.time_ns()}"
+        inspection_id = hashlib.sha256(inspection_seed.encode("utf-8")).hexdigest()[:14]
+
+        row_map = {
+            "저장일시": saved_at,
+            "점검ID": inspection_id,
+            "점검자": worker,
+            "모국": mother,
+            "국소": local,
+            "전원구분": phase_type,
+            "축전지조수": int(payload.get("battery_group_count", 1) or 1),
+            "입력완료율(%)": completion_rate,
+            "누락항목수": len(missing_items),
+            "누락항목": ", ".join(missing_items),
+            "부분입력확인": "확인" if missing_items else "해당없음",
+            "삼상전압_R-S(V)": payload.get("three_voltage_rs", "") if phase_type == "삼상" else "",
+            "삼상전압_S-T(V)": payload.get("three_voltage_st", "") if phase_type == "삼상" else "",
+            "삼상전압_T-R(V)": payload.get("three_voltage_tr", "") if phase_type == "삼상" else "",
+            "삼상전압_R-N(V)": payload.get("three_voltage_rn", "") if phase_type == "삼상" else "",
+            "삼상전류_R(A)": payload.get("three_current_r", "") if phase_type == "삼상" else "",
+            "삼상전류_S(A)": payload.get("three_current_s", "") if phase_type == "삼상" else "",
+            "삼상전류_T(A)": payload.get("three_current_t", "") if phase_type == "삼상" else "",
+            "단상전압(V)": payload.get("single_voltage", "") if phase_type == "단상" else "",
+            "단상전류(A)": payload.get("single_current", "") if phase_type == "단상" else "",
+            "1조_방전후_Total전류(A)": payload.get("battery1_total_current", ""),
+            "1조_방전후_Total전압(V)": payload.get("battery1_total_voltage", ""),
+            "1조_최저전압(V)": payload.get("battery1_min_voltage", ""),
+            "1조_최고전압(V)": payload.get("battery1_max_voltage", ""),
+            "1조_방전종료전압(V)": payload.get("battery1_end_voltage", ""),
+            "보안접지_1종(Ω)": payload.get("security_ground_1", ""),
+            "보안접지_2종(Ω)": payload.get("security_ground_2", ""),
+            "보안접지_3종(Ω)": payload.get("security_ground_3", ""),
+            "통신용접지_메인(Ω)": payload.get("telecom_ground", ""),
+            "피뢰침접지(Ω)": payload.get("lightning_ground", ""),
+            "특이사항": str(payload.get("notes", "")).strip(),
+        }
+
+        battery1_cells = list(payload.get("battery1_cells", []))[:24]
+        battery1_cells.extend([""] * (24 - len(battery1_cells)))
+        battery2_cells = list(payload.get("battery2_cells", []))[:24]
+        battery2_cells.extend([""] * (24 - len(battery2_cells)))
+
+        for index, value in enumerate(battery1_cells, 1):
+            row_map[f"1조_셀{index:02d}(V)"] = value
+        for index, value in enumerate(battery2_cells, 1):
+            row_map[f"2조_셀{index:02d}(V)"] = value
+
+        row = [row_map.get(header, "") for header in sheet_headers]
+        last_error = None
+        for attempt in range(5):
+            try:
+                ws.append_row(row, value_input_option="USER_ENTERED")
+                return True, "측정값이 Google Sheets에 정상 저장되었습니다.", inspection_id
+            except Exception as append_error:
+                last_error = append_error
+                error_text = str(append_error)
+                if any(token in error_text for token in ("429", "Quota exceeded", "RESOURCE_EXHAUSTED")):
+                    time.sleep(1.1 * (attempt + 1))
+                    continue
+                raise
+        return False, f"저장 요청이 집중되어 전송하지 못했습니다. 다시 전송해 주세요. ({last_error})", ""
+    except Exception as e:
+        return False, str(e), ""
 
 
-def load_ip_profiles() -> list[dict]:
-    spreadsheet = _open_ip_spreadsheet()
-    ws = _ensure_ip_sheet(spreadsheet, IP_PROFILE_SHEET_NAME, IP_PROFILE_HEADERS)
-    records = ws.get_all_records()
-    return [r for r in records if str(r.get("사용여부", "Y")).strip().upper() != "N"]
+def _render_power_cell_inputs(group_number: int) -> list[str]:
+    """휴대전화 폭에서도 안정적으로 누를 수 있도록 셀 입력을 2열로 배치합니다."""
+    values: list[str] = []
+    for start in range(1, 25, 2):
+        row_columns = st.columns(2, gap="small")
+        for offset, column in enumerate(row_columns):
+            cell_number = start + offset
+            label = f"{group_number}조 {cell_number:02d}셀"
+            with column:
+                values.append(
+                    st.text_input(
+                        label,
+                        placeholder="2.15",
+                        key=f"power_battery_{group_number}_{cell_number:02d}",
+                        help="숫자만 입력하면 소수점 둘째 자리로 변환됩니다. 예: 215 → 2.15V",
+                    )
+                )
+    return values
 
 
-def _profile_row_index(ws, profile_id: str) -> int | None:
-    rows = ws.get_all_values()
-    for idx, row in enumerate(rows[1:], start=2):
-        if row and str(row[0]).strip() == str(profile_id).strip():
-            return idx
-    return None
+POWER_THEME_ORDER = ["기본정보", "전압·전류", "축전지 1조", "축전지 2조", "접지저항", "확인·전송"]
+POWER_THEME_ICON = {
+    "기본정보": "👤",
+    "전압·전류": "⚡",
+    "축전지 1조": "🔋",
+    "축전지 2조": "🔋",
+    "접지저항": "🛡️",
+    "확인·전송": "📤",
+}
 
 
-def save_ip_profile(profile: dict, modifier_emp_id: str, modifier_name: str) -> tuple[bool, str]:
-    try:
-        validate_ip_profile(profile)
-        spreadsheet = _open_ip_spreadsheet()
-        ws = _ensure_ip_sheet(spreadsheet, IP_PROFILE_SHEET_NAME, IP_PROFILE_HEADERS)
-        profile_id = str(profile.get("profile_id") or "").strip()
-        now = _korea_now().strftime("%Y-%m-%d %H:%M:%S")
-        if not profile_id:
-            seed = f"{profile.get('프로필명')}|{profile.get('IP주소')}|{now}"
-            profile_id = hashlib.sha256(seed.encode("utf-8")).hexdigest()[:12]
+def _power_state_blank(key: str) -> bool:
+    value = st.session_state.get(key, "")
+    return value is None or (isinstance(value, str) and not value.strip())
 
-        row = [
-            profile_id, str(profile.get("프로필명", "")).strip(), str(profile.get("어댑터명", "")).strip(),
-            str(profile.get("IP주소", "")).strip(), str(profile.get("서브넷마스크", "")).strip(),
-            str(profile.get("기본게이트웨이", "")).strip(), str(profile.get("기본DNS", "")).strip(),
-            str(profile.get("보조DNS", "")).strip(), "Y", now, modifier_emp_id.strip(), modifier_name.strip(),
-            str(profile.get("비고", "")).strip(),
+
+def _power_theme_missing(theme: str) -> list[str]:
+    missing: list[str] = []
+
+    if theme == "기본정보":
+        if _power_state_blank("power_worker"):
+            missing.append("점검자 성명")
+        if st.session_state.get("power_mother", "모국 선택") == "모국 선택":
+            missing.append("모국")
+        if st.session_state.get("power_local", "국소 선택") == "국소 선택":
+            missing.append("국소")
+        return missing
+
+    phase_type = st.session_state.get("power_phase_type", "삼상")
+    if theme == "전압·전류":
+        if phase_type == "삼상":
+            checks = [
+                ("power_three_voltage_rs", "R-S 전압"),
+                ("power_three_voltage_st", "S-T 전압"),
+                ("power_three_voltage_tr", "T-R 전압"),
+                ("power_three_voltage_rn", "R-N 전압"),
+                ("power_three_current_r", "R상 전류"),
+                ("power_three_current_s", "S상 전류"),
+                ("power_three_current_t", "T상 전류"),
+            ]
+        else:
+            checks = [
+                ("power_single_voltage", "단상 전압"),
+                ("power_single_current", "단상 전류"),
+            ]
+        return [label for key, label in checks if _power_state_blank(key)]
+
+    if theme == "축전지 1조":
+        checks = [
+            ("power_battery1_total_current", "방전 후 Total 전류"),
+            ("power_battery1_total_voltage", "방전 후 Total 전압"),
+            ("power_battery1_min_voltage", "최저전압"),
+            ("power_battery1_max_voltage", "최고전압"),
+            ("power_battery1_end_voltage", "방전종료 전압"),
         ]
-        row_idx = _profile_row_index(ws, profile_id)
-        if row_idx:
-            ws.update(f"A{row_idx}:M{row_idx}", [row])
-            return True, "IP 프로필이 수정되었습니다."
-        ws.append_row(row, value_input_option="USER_ENTERED")
-        return True, "IP 프로필이 등록되었습니다."
-    except Exception as e:
-        return False, str(e)
+        missing.extend(label for key, label in checks if _power_state_blank(key))
+        missing.extend(
+            f"1조 {index:02d}셀"
+            for index in range(1, 25)
+            if _power_state_blank(f"power_battery_1_{index:02d}")
+        )
+        return missing
 
-
-def disable_ip_profile(profile_id: str, modifier_emp_id: str, modifier_name: str) -> tuple[bool, str]:
-    try:
-        spreadsheet = _open_ip_spreadsheet()
-        ws = _ensure_ip_sheet(spreadsheet, IP_PROFILE_SHEET_NAME, IP_PROFILE_HEADERS)
-        row_idx = _profile_row_index(ws, profile_id)
-        if not row_idx:
-            return False, "삭제할 프로필을 찾지 못했습니다."
-        now = _korea_now().strftime("%Y-%m-%d %H:%M:%S")
-        ws.update(f"I{row_idx}:L{row_idx}", [["N", now, modifier_emp_id.strip(), modifier_name.strip()]])
-        return True, "프로필을 비활성화했습니다. 기존 변경 이력은 유지됩니다."
-    except Exception as e:
-        return False, str(e)
-
-
-def _mask_to_prefix(mask: str) -> int:
-    try:
-        return ipaddress.IPv4Network(f"0.0.0.0/{mask}").prefixlen
-    except Exception as e:
-        raise ValueError("서브넷 마스크 형식이 올바르지 않습니다. 예: 255.255.255.0") from e
-
-
-def validate_ip_profile(profile: dict) -> None:
-    required = ["프로필명", "어댑터명", "IP주소", "서브넷마스크"]
-    missing = [k for k in required if not str(profile.get(k, "")).strip()]
-    if missing:
-        raise ValueError("필수값 누락: " + ", ".join(missing))
-
-    ip = ipaddress.IPv4Address(str(profile["IP주소"]).strip())
-    mask = str(profile["서브넷마스크"]).strip()
-    prefix = _mask_to_prefix(mask)
-    network = ipaddress.IPv4Network(f"{ip}/{prefix}", strict=False)
-    if ip in {network.network_address, network.broadcast_address}:
-        raise ValueError("IP 주소로 네트워크 주소 또는 브로드캐스트 주소를 사용할 수 없습니다.")
-
-    gateway_text = str(profile.get("기본게이트웨이", "")).strip()
-    if gateway_text:
-        gateway = ipaddress.IPv4Address(gateway_text)
-        if gateway not in network:
-            raise ValueError(f"기본 게이트웨이({gateway})가 IP 대역({network})에 포함되지 않습니다.")
-    for dns_key in ("기본DNS", "보조DNS"):
-        dns = str(profile.get(dns_key, "")).strip()
-        if dns:
-            ipaddress.IPv4Address(dns)
-
-
-def is_local_windows() -> bool:
-    return platform.system().lower() == "windows"
-
-
-def is_windows_admin() -> bool:
-    if not is_local_windows():
-        return False
-    try:
-        import ctypes
-        return bool(ctypes.windll.shell32.IsUserAnAdmin())
-    except Exception:
-        return False
-
-
-def list_windows_adapters() -> list[str]:
-    if not is_local_windows():
-        return []
-    command = [
-        "powershell", "-NoProfile", "-NonInteractive", "-Command",
-        "Get-NetAdapter -Physical | Where-Object {$_.Status -ne 'Disabled'} | Select-Object -ExpandProperty Name"
-    ]
-    result = subprocess.run(command, capture_output=True, text=True, timeout=15, check=False)
-    if result.returncode != 0:
-        return []
-    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
-
-
-def get_current_adapter_config(adapter_name: str) -> dict:
-    if not is_local_windows():
-        return {"ip": "", "subnet": "", "gateway": "", "dns": [], "dhcp": "", "error": "Windows 로컬 실행이 아닙니다."}
-    safe_name = adapter_name.replace("'", "''")
-    script = rf"""
-$alias = '{safe_name}'
-$cfg = Get-NetIPConfiguration -InterfaceAlias $alias -ErrorAction Stop
-$ipif = Get-NetIPInterface -InterfaceAlias $alias -AddressFamily IPv4 -ErrorAction Stop
-$ipv4 = $cfg.IPv4Address | Select-Object -First 1
-$prefix = if ($ipv4) {{ $ipv4.PrefixLength }} else {{ $null }}
-$mask = if ($prefix -ne $null) {{
-    $bits = ('1' * $prefix).PadRight(32, '0')
-    (($bits -split '(.{{8}})' | Where-Object {{$_}} | ForEach-Object {{[convert]::ToInt32($_,2)}}) -join '.')
-}} else {{ '' }}
-[PSCustomObject]@{{
-  ip = if ($ipv4) {{$ipv4.IPAddress}} else {{''}}
-  subnet = $mask
-  gateway = if ($cfg.IPv4DefaultGateway) {{$cfg.IPv4DefaultGateway.NextHop}} else {{''}}
-  dns = @($cfg.DNSServer.ServerAddresses | Where-Object {{$_ -match '^\d+\.\d+\.\d+\.\d+$'}})
-  dhcp = [string]$ipif.Dhcp
-}} | ConvertTo-Json -Compress
-"""
-    result = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script], capture_output=True, text=True, timeout=20, check=False)
-    if result.returncode != 0:
-        return {"ip": "", "subnet": "", "gateway": "", "dns": [], "dhcp": "", "error": result.stderr.strip() or "현재 설정 조회 실패"}
-    try:
-        data = json.loads(result.stdout.strip())
-        if isinstance(data.get("dns"), str):
-            data["dns"] = [data["dns"]]
-        return data
-    except Exception:
-        return {"ip": "", "subnet": "", "gateway": "", "dns": [], "dhcp": "", "error": "현재 설정 응답을 해석하지 못했습니다."}
-
-
-def apply_static_ip(profile: dict) -> tuple[bool, str, dict]:
-    """선택 어댑터의 IPv4 설정을 변경합니다. 관리자 권한이 없으면 실행하지 않습니다."""
-    if not is_local_windows():
-        return False, "이 기능은 해당 PC의 Windows에서 로컬 실행할 때만 사용할 수 있습니다.", {}
-    if not is_windows_admin():
-        return False, "관리자 권한이 없습니다. 명령 프롬프트 또는 PowerShell을 관리자 권한으로 실행한 뒤 Streamlit을 시작하세요.", {}
-    validate_ip_profile(profile)
-    adapter = str(profile["어댑터명"]).strip()
-    before = get_current_adapter_config(adapter)
-    prefix = _mask_to_prefix(str(profile["서브넷마스크"]).strip())
-    ip = str(profile["IP주소"]).strip()
-    gateway = str(profile.get("기본게이트웨이", "")).strip()
-    dns = [str(profile.get("기본DNS", "")).strip(), str(profile.get("보조DNS", "")).strip()]
-    dns = [x for x in dns if x]
-    q = lambda value: value.replace("'", "''")
-
-    script = rf"""
-$ErrorActionPreference = 'Stop'
-$alias = '{q(adapter)}'
-Set-NetIPInterface -InterfaceAlias $alias -AddressFamily IPv4 -Dhcp Disabled
-Get-NetIPAddress -InterfaceAlias $alias -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-    Where-Object {{$_.IPAddress -notlike '169.254.*'}} | Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
-Get-NetRoute -InterfaceAlias $alias -AddressFamily IPv4 -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue |
-    Remove-NetRoute -Confirm:$false -ErrorAction SilentlyContinue
-"""
-    if gateway:
-        script += f"New-NetIPAddress -InterfaceAlias $alias -IPAddress '{q(ip)}' -PrefixLength {prefix} -DefaultGateway '{q(gateway)}'\n"
-    else:
-        script += f"New-NetIPAddress -InterfaceAlias $alias -IPAddress '{q(ip)}' -PrefixLength {prefix}\n"
-    if dns:
-        dns_literal = ",".join([f"'{q(x)}'" for x in dns])
-        script += f"Set-DnsClientServerAddress -InterfaceAlias $alias -ServerAddresses @({dns_literal})\n"
-    else:
-        script += "Set-DnsClientServerAddress -InterfaceAlias $alias -ResetServerAddresses\n"
-    script += "Clear-DnsClientCache\n"
-
-    result = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script], capture_output=True, text=True, timeout=35, check=False)
-    if result.returncode != 0:
-        return False, result.stderr.strip() or "IP 설정 변경에 실패했습니다.", before
-    time.sleep(1)
-    after = get_current_adapter_config(adapter)
-    if str(after.get("ip", "")).strip() != ip:
-        return False, f"명령은 실행되었으나 적용된 IP({after.get('ip')})가 요청 IP({ip})와 다릅니다.", before
-    return True, "IP 설정이 정상적으로 적용되었습니다.", before
-
-
-def apply_dhcp(adapter_name: str) -> tuple[bool, str, dict]:
-    if not is_local_windows():
-        return False, "Windows 로컬 실행이 아닙니다.", {}
-    if not is_windows_admin():
-        return False, "관리자 권한이 없습니다.", {}
-    before = get_current_adapter_config(adapter_name)
-    safe = adapter_name.replace("'", "''")
-    script = rf"""
-$ErrorActionPreference = 'Stop'
-$alias = '{safe}'
-Set-NetIPInterface -InterfaceAlias $alias -AddressFamily IPv4 -Dhcp Enabled
-Set-DnsClientServerAddress -InterfaceAlias $alias -ResetServerAddresses
-Clear-DnsClientCache
-"""
-    result = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script], capture_output=True, text=True, timeout=30, check=False)
-    if result.returncode != 0:
-        return False, result.stderr.strip() or "DHCP 전환 실패", before
-    return True, "자동 IP(DHCP)로 전환했습니다.", before
-
-
-def save_ip_change_history(profile: dict, before: dict, result: str, modifier_emp_id: str, modifier_name: str, error: str = "", note: str = "") -> tuple[bool, str]:
-    try:
-        spreadsheet = _open_ip_spreadsheet()
-        ws = _ensure_ip_sheet(spreadsheet, IP_HISTORY_SHEET_NAME, IP_HISTORY_HEADERS, rows=10000)
-        now = _korea_now().strftime("%Y-%m-%d %H:%M:%S")
-        work_id = hashlib.sha256(f"{now}|{socket.gethostname()}|{modifier_emp_id}|{profile.get('IP주소')}".encode()).hexdigest()[:14]
-        old_dns = ", ".join(before.get("dns", []) or [])
-        new_dns = ", ".join([x for x in [str(profile.get("기본DNS", "")).strip(), str(profile.get("보조DNS", "")).strip()] if x])
-        row = [
-            now, work_id, result, profile.get("profile_id", ""), profile.get("프로필명", ""),
-            socket.gethostname(), getpass.getuser(), modifier_emp_id.strip(), modifier_name.strip(),
-            profile.get("어댑터명", ""), before.get("ip", ""), before.get("subnet", ""), before.get("gateway", ""), old_dns,
-            profile.get("IP주소", ""), profile.get("서브넷마스크", ""), profile.get("기본게이트웨이", ""), new_dns,
-            error, note,
+    if theme == "축전지 2조":
+        if st.session_state.get("power_battery_group_choice", "1조 측정") != "1·2조 측정":
+            return []
+        return [
+            f"2조 {index:02d}셀"
+            for index in range(1, 25)
+            if _power_state_blank(f"power_battery_2_{index:02d}")
         ]
-        ws.append_row(row, value_input_option="USER_ENTERED")
-        return True, "변경 이력이 Google Sheets에 저장되었습니다."
-    except Exception as e:
-        return False, str(e)
+
+    if theme == "접지저항":
+        checks = [
+            ("power_security_ground_1", "보안 1종"),
+            ("power_security_ground_2", "보안 2종"),
+            ("power_security_ground_3", "보안 3종"),
+            ("power_telecom_ground", "통신용접지(메인)"),
+            ("power_lightning_ground", "피뢰침접지"),
+        ]
+        return [label for key, label in checks if _power_state_blank(key)]
+
+    return []
+
+
+def _power_theme_started(theme: str) -> bool:
+    missing = _power_theme_missing(theme)
+    if theme == "기본정보":
+        return len(missing) < 3
+    if theme == "전압·전류":
+        expected = 7 if st.session_state.get("power_phase_type", "삼상") == "삼상" else 2
+        return len(missing) < expected
+    if theme == "축전지 1조":
+        return len(missing) < 29
+    if theme == "축전지 2조":
+        if st.session_state.get("power_battery_group_choice", "1조 측정") != "1·2조 측정":
+            return False
+        return len(missing) < 24
+    if theme == "접지저항":
+        return len(missing) < 5
+    return False
+
+
+def _request_power_theme(target_theme: str) -> None:
+    current_theme = st.session_state.get("power_current_theme", POWER_THEME_ORDER[0])
+    if target_theme == current_theme:
+        return
+
+    current_index = POWER_THEME_ORDER.index(current_theme)
+    target_index = POWER_THEME_ORDER.index(target_theme)
+    if target_index > current_index:
+        missing = _power_theme_missing(current_theme)
+        if missing:
+            st.session_state["power_pending_theme"] = target_theme
+            st.session_state["power_pending_missing"] = missing
+            return
+
+    st.session_state["power_current_theme"] = target_theme
+    st.session_state.pop("power_pending_theme", None)
+    st.session_state.pop("power_pending_missing", None)
+
+
+def _confirm_power_theme_move() -> None:
+    target = st.session_state.pop("power_pending_theme", None)
+    st.session_state.pop("power_pending_missing", None)
+    if target in POWER_THEME_ORDER:
+        st.session_state["power_current_theme"] = target
+
+
+def _cancel_power_theme_move() -> None:
+    st.session_state.pop("power_pending_theme", None)
+    st.session_state.pop("power_pending_missing", None)
+
+
+def _build_power_payload_from_state(partial_confirmed: bool = False) -> dict:
+    phase_type = st.session_state.get("power_phase_type", "삼상")
+    group_count = 2 if st.session_state.get("power_battery_group_choice", "1조 측정") == "1·2조 측정" else 1
+
+    return {
+        "worker": st.session_state.get("power_worker", ""),
+        "mother": st.session_state.get("power_mother", "모국 선택"),
+        "local": st.session_state.get("power_local", "국소 선택"),
+        "phase_type": phase_type,
+        "battery_group_count": group_count,
+        "three_voltage_rs": _parse_power_number(st.session_state.get("power_three_voltage_rs", "")),
+        "three_voltage_st": _parse_power_number(st.session_state.get("power_three_voltage_st", "")),
+        "three_voltage_tr": _parse_power_number(st.session_state.get("power_three_voltage_tr", "")),
+        "three_voltage_rn": _parse_power_number(st.session_state.get("power_three_voltage_rn", "")),
+        "three_current_r": _parse_power_number(st.session_state.get("power_three_current_r", ""), 1),
+        "three_current_s": _parse_power_number(st.session_state.get("power_three_current_s", ""), 1),
+        "three_current_t": _parse_power_number(st.session_state.get("power_three_current_t", ""), 1),
+        "single_voltage": _parse_power_number(st.session_state.get("power_single_voltage", "")),
+        "single_current": _parse_power_number(st.session_state.get("power_single_current", ""), 1),
+        "battery1_total_current": _parse_power_number(st.session_state.get("power_battery1_total_current", ""), 1),
+        "battery1_total_voltage": _parse_power_number(st.session_state.get("power_battery1_total_voltage", ""), 2),
+        "battery1_min_voltage": _parse_power_number(st.session_state.get("power_battery1_min_voltage", ""), 2),
+        "battery1_max_voltage": _parse_power_number(st.session_state.get("power_battery1_max_voltage", ""), 2),
+        "battery1_end_voltage": _parse_power_number(st.session_state.get("power_battery1_end_voltage", ""), 2),
+        "battery1_cells": [
+            _parse_power_number(st.session_state.get(f"power_battery_1_{index:02d}", ""), 2)
+            for index in range(1, 25)
+        ],
+        "battery2_cells": [
+            _parse_power_number(st.session_state.get(f"power_battery_2_{index:02d}", ""), 2)
+            for index in range(1, 25)
+        ] if group_count == 2 else [""] * 24,
+        "security_ground_1": _parse_power_number(st.session_state.get("power_security_ground_1", "")),
+        "security_ground_2": _parse_power_number(st.session_state.get("power_security_ground_2", "")),
+        "security_ground_3": _parse_power_number(st.session_state.get("power_security_ground_3", "")),
+        "telecom_ground": _parse_power_number(st.session_state.get("power_telecom_ground", "")),
+        "lightning_ground": _parse_power_number(st.session_state.get("power_lightning_ground", "")),
+        "notes": st.session_state.get("power_notes", ""),
+        "partial_confirmed": bool(partial_confirmed),
+    }
+
+
+def _reset_power_inspection() -> None:
+    for key in list(st.session_state.keys()):
+        if key.startswith("power_"):
+            del st.session_state[key]
+    st.session_state["power_current_theme"] = POWER_THEME_ORDER[0]
+
+
+def _render_power_auto_decimal_script() -> None:
+    label_decimals = {
+        "R상 전류": 1,
+        "S상 전류": 1,
+        "T상 전류": 1,
+        "단상 전류": 1,
+        "방전 후 Total 전류": 1,
+        "방전 후 Total 전압": 2,
+        "최저전압": 2,
+        "최고전압": 2,
+        "방전종료 전압": 2,
+    }
+    for group_number in (1, 2):
+        for cell_number in range(1, 25):
+            label_decimals[f"{group_number}조 {cell_number:02d}셀"] = 2
+
+    labels_json = json.dumps(label_decimals, ensure_ascii=False)
+    script = r"""
+        <script>
+        (() => {
+          const fields = __POWER_FIELDS_JSON__;
+
+          function formatted(raw, decimals) {
+            let value = String(raw || '').trim().replace(/,/g, '');
+            if (!value) return '';
+            value = value.replace(/[^0-9.]/g, '');
+            if (!value) return '';
+
+            if (value.includes('.')) {
+              const pieces = value.split('.', 2);
+              const integer = (pieces[0] || '0').replace(/\D/g, '') || '0';
+              const fraction = (pieces[1] || '').replace(/\D/g, '').slice(0, decimals).padEnd(decimals, '0');
+              return decimals > 0 ? `${integer}.${fraction}` : integer;
+            }
+
+            const digits = value.replace(/\D/g, '');
+            if (!digits) return '';
+            if (decimals <= 0) return digits;
+            const padded = digits.length <= decimals ? digits.padStart(decimals + 1, '0') : digits;
+            return `${padded.slice(0, -decimals)}.${padded.slice(-decimals)}`;
+          }
+
+          function setReactValue(input, value) {
+            const descriptor = Object.getOwnPropertyDescriptor(window.parent.HTMLInputElement.prototype, 'value');
+            if (descriptor && descriptor.set) descriptor.set.call(input, value);
+            else input.value = value;
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+
+          function bindInputs() {
+            let doc;
+            try { doc = window.parent.document; } catch (error) { return; }
+            Object.entries(fields).forEach(([label, decimals]) => {
+              const inputs = Array.from(doc.querySelectorAll('input[aria-label]'));
+              const input = inputs.find((element) => element.getAttribute('aria-label') === label);
+              if (!input || input.dataset.powerDecimalBound === '1') return;
+
+              input.dataset.powerDecimalBound = '1';
+              input.setAttribute('inputmode', 'decimal');
+              input.setAttribute('autocomplete', 'off');
+
+              const applyFormat = () => {
+                const next = formatted(input.value, Number(decimals));
+                if (next && next !== input.value) setReactValue(input, next);
+              };
+
+              input.addEventListener('blur', applyFormat);
+              input.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') applyFormat();
+              });
+            });
+          }
+
+          bindInputs();
+          const timer = setInterval(bindInputs, 500);
+          setTimeout(() => clearInterval(timer), 30000);
+        })();
+        </script>
+    """
+    components.html(script.replace("__POWER_FIELDS_JSON__", labels_json), height=1)
 
 
 # ==========================================
@@ -1414,8 +1975,9 @@ div[data-testid="stTabs"] button[role="tab"]::after {
 </style>
 """, unsafe_allow_html=True)
 
-tab_audit, tab_doc, tab_chat, tab_summary, tab_admin = st.tabs([
-    "🌐 IP 자동전환", "📄 법률 검토", "💬 AI 에이전트(챗봇)", "📰 스마트 요약", "🔒 관리자 모드"
+tab_power, tab_doc, tab_chat, tab_summary, tab_admin = st.tabs([
+    "🔋 국사 전원시설 정밀점검", "📄 법률 검토",
+    "💬 AI 에이전트(챗봇)", "📰 스마트 요약", "🔒 관리자 모드"
 ])
 
 # ---------- (아이콘) 인라인 SVG: 애니메이션 모래시계 ----------
@@ -1553,247 +2115,414 @@ def _render_pledge_group(
                 else:
                     ph.markdown("", unsafe_allow_html=True)
 
-# --- [Tab 1: 현장 IP 자동전환] ---
-with tab_audit:
-    st.markdown("### 🌐 현장 IP 자동전환")
-    st.caption("장소별 고정 IP를 Google Sheets에 등록하고, 선택한 프로필을 현재 Windows PC에 적용합니다. 모든 변경·실패 이력은 별도로 기록됩니다.")
+
+# --- [Tab 1: 국사 전원시설 정밀점검] ---
+with tab_power:
+    if "power_current_theme" not in st.session_state:
+        st.session_state["power_current_theme"] = POWER_THEME_ORDER[0]
+    if "power_phase_type" not in st.session_state:
+        st.session_state["power_phase_type"] = "삼상"
+    if "power_battery_group_choice" not in st.session_state:
+        st.session_state["power_battery_group_choice"] = "1조 측정"
+
+    st.markdown("### 🔋 국사 전원시설 정밀점검")
+    st.caption("모바일에서는 한 번에 하나의 점검 테마만 표시합니다. 입력값은 마지막 확인 후 기존 Google Sheets 연결로 저장됩니다.")
 
     st.markdown("""
     <style>
-    .ip-hero {
-        background: linear-gradient(135deg, #E8F1FF 0%, #F8FAFC 55%, #E8FFF6 100%);
-        border: 1px solid #D7E3F4;
-        border-left: 9px solid #2563EB;
-        border-radius: 22px;
-        padding: 22px 24px;
-        margin: 10px 0 18px 0;
-        box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+    .power-mobile-hero {
+        background: linear-gradient(135deg, #EAF4FF 0%, #F8FAFC 54%, #ECFDF5 100%);
+        border: 1px solid #D5E3F3;
+        border-left: 8px solid #0B5CAB;
+        border-radius: 20px;
+        padding: 17px 19px;
+        margin: 8px 0 12px 0;
+        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
     }
-    .ip-hero h3 { margin:0 0 8px 0; color:#0F172A; font-weight:950; }
-    .ip-hero p { margin:0; color:#475569; line-height:1.65; font-weight:650; }
-    .ip-status-ok { background:#ECFDF5; border:1px solid #A7F3D0; padding:12px 14px; border-radius:14px; }
-    .ip-status-warn { background:#FFF7ED; border:1px solid #FED7AA; padding:12px 14px; border-radius:14px; }
+    .power-mobile-hero h3 { margin:0 0 6px 0; color:#0F172A; font-weight:950; font-size:1.15rem; }
+    .power-mobile-hero p { margin:0; color:#475569; line-height:1.55; font-weight:650; }
+    .power-sticky-card {
+        position: sticky;
+        top: 0.35rem;
+        z-index: 990;
+        background: rgba(15, 23, 42, 0.96);
+        color: #FFFFFF;
+        border: 1px solid rgba(255,255,255,0.18);
+        border-radius: 15px;
+        padding: 11px 14px;
+        margin: 8px 0 11px 0;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.22);
+        backdrop-filter: blur(10px);
+    }
+    .power-sticky-title { font-size:0.76rem; opacity:0.76; font-weight:800; margin-bottom:4px; }
+    .power-sticky-main { font-size:1.02rem; font-weight:950; line-height:1.35; word-break:keep-all; }
+    .power-sticky-sub { font-size:0.84rem; opacity:0.88; margin-top:3px; line-height:1.35; }
+    .power-theme-heading {
+        font-size:1.18rem; font-weight:950; color:#0B5CAB;
+        margin:12px 0 9px 0; padding-bottom:8px; border-bottom:2px solid #DCEAF7;
+    }
+    .power-sheet-note {
+        background:#F8FAFC; border:1px solid #CBD5E1; border-radius:14px;
+        padding:13px 15px; color:#334155; font-weight:700; line-height:1.55;
+    }
+    .power-missing-box {
+        background:#FFF7ED; border:1px solid #FDBA74; border-left:7px solid #F97316;
+        border-radius:15px; padding:13px 15px; margin:10px 0;
+        color:#7C2D12; line-height:1.55; font-weight:750;
+    }
+    .power-complete-box {
+        background:#ECFDF5; border:1px solid #86EFAC; border-radius:15px;
+        padding:13px 15px; color:#166534; font-weight:800;
+    }
+    /* 테마 메뉴 버튼 */
+    .st-key-power_theme_menu_0 button,
+    .st-key-power_theme_menu_1 button,
+    .st-key-power_theme_menu_2 button,
+    .st-key-power_theme_menu_3 button,
+    .st-key-power_theme_menu_4 button,
+    .st-key-power_theme_menu_5 button {
+        min-height: 50px !important;
+        padding: 0.45rem 0.35rem !important;
+        border-radius: 13px !important;
+        font-size: 0.92rem !important;
+        line-height: 1.15 !important;
+    }
+    @media (max-width: 768px) {
+        .power-mobile-hero { padding:14px 13px; border-radius:15px; }
+        .power-sticky-card { top:0.25rem; border-radius:13px; padding:10px 12px; }
+        .power-sticky-main { font-size:0.96rem; }
+        div[class*="st-key-power_"] input,
+        div[class*="st-key-power_"] textarea { font-size:16px !important; }
+        div[class*="st-key-power_"] label p { font-size:0.86rem !important; }
+    }
     </style>
-    <div class="ip-hero">
-      <h3>현장 네트워크 설정 오류를 줄이는 표준 IP 프로필</h3>
-      <p>본사·현장·장비망 등 장소별 설정을 미리 등록한 뒤 버튼 한 번으로 적용합니다. 기존 IP, 변경 IP, 일시, 작업자, 성공·실패 결과를 Google Sheets에 남겨 추적성을 확보합니다.</p>
+    <div class="power-mobile-hero">
+      <h3>새로운 전원 정밀점검 전용 공간</h3>
+      <p>현재 점검 테마만 화면에 표시하여 삼성 Galaxy와 iPhone에서도 입력 부담을 줄였습니다. 입력값은 마지막 확인 후 Google Sheets에 한 행으로 저장됩니다.</p>
     </div>
     """, unsafe_allow_html=True)
 
-    local_windows = is_local_windows()
-    local_admin = is_windows_admin()
-    if local_windows and local_admin:
-        st.success("✅ Windows 로컬 실행 및 관리자 권한이 확인되었습니다. 실제 IP 변경이 가능합니다.")
-    elif local_windows:
-        st.warning("⚠️ Windows에서 실행 중이지만 관리자 권한이 없습니다. 관리자 권한 PowerShell에서 `streamlit run app.py`로 실행해 주세요.")
-    else:
-        st.info("ℹ️ 현재 앱은 Windows 로컬 환경이 아닙니다. Google Sheets 프로필 관리와 이력 조회는 가능하지만, 이 서버에서 사용자의 PC IP를 직접 변경할 수는 없습니다.")
+    if st.session_state.get("power_last_success"):
+        success_data = st.session_state["power_last_success"]
+        st.success(
+            f"✅ {success_data.get('message', '저장 완료')}  ·  "
+            f"점검ID: {success_data.get('inspection_id', '-')}"
+        )
+        st.button(
+            "➕ 새 점검 시작",
+            key="power_start_new_inspection",
+            type="primary",
+            use_container_width=True,
+            on_click=_reset_power_inspection,
+        )
 
-    identity_col1, identity_col2 = st.columns(2)
-    with identity_col1:
-        ip_modifier_emp_id = st.text_input("작업자 사번 *", key="ip_modifier_emp_id", placeholder="예: 10123456")
-    with identity_col2:
-        ip_modifier_name = st.text_input("작업자 성명 *", key="ip_modifier_name", placeholder="예: 홍길동")
+    worker_summary = html.escape(str(st.session_state.get("power_worker", "")).strip() or "미입력")
+    mother_summary = str(st.session_state.get("power_mother", "모국 선택"))
+    local_summary = str(st.session_state.get("power_local", "국소 선택"))
+    station_summary = "미선택"
+    if mother_summary in POWER_STATION_MAP and local_summary in POWER_STATION_MAP.get(mother_summary, []):
+        station_summary = f"{mother_summary} / {local_summary}"
+    station_summary = html.escape(station_summary)
+    current_theme = st.session_state.get("power_current_theme", POWER_THEME_ORDER[0])
 
-    st.divider()
-    switch_tab, manage_tab, history_tab = st.tabs(["⚡ IP 전환", "🛠️ IP 오류 수정·프로필 관리", "📋 변경 이력"])
+    st.markdown(
+        f"""<div class="power-sticky-card">
+          <div class="power-sticky-title">현재 점검 대상 · {html.escape(current_theme)}</div>
+          <div class="power-sticky-main">👤 {worker_summary}</div>
+          <div class="power-sticky-sub">📍 {station_summary}</div>
+        </div>""",
+        unsafe_allow_html=True,
+    )
 
-    with switch_tab:
-        try:
-            profiles = load_ip_profiles()
-            profile_load_error = ""
-        except Exception as e:
-            profiles = []
-            profile_load_error = str(e)
-            st.error(f"Google Sheets 프로필 조회 실패: {e}")
-
-        adapters = list_windows_adapters()
-        if profiles:
-            profile_map = {
-                f"{r.get('프로필명', '')} · {r.get('IP주소', '')} · {r.get('어댑터명', '')}": r
-                for r in profiles
-            }
-            selected_label = st.selectbox("적용할 장소/IP 프로필", list(profile_map.keys()), key="ip_apply_profile")
-            selected_profile = profile_map[selected_label]
-
-            st.markdown("#### 선택 프로필")
-            preview_df = pd.DataFrame([{
-                "프로필": selected_profile.get("프로필명", ""),
-                "어댑터": selected_profile.get("어댑터명", ""),
-                "IP": selected_profile.get("IP주소", ""),
-                "서브넷": selected_profile.get("서브넷마스크", ""),
-                "게이트웨이": selected_profile.get("기본게이트웨이", ""),
-                "DNS": ", ".join([x for x in [str(selected_profile.get("기본DNS", "")).strip(), str(selected_profile.get("보조DNS", "")).strip()] if x]),
-            }])
-            st.dataframe(preview_df, use_container_width=True, hide_index=True)
-
-            adapter_for_check = str(selected_profile.get("어댑터명", "")).strip()
-            if local_windows and adapter_for_check:
-                current = get_current_adapter_config(adapter_for_check)
-                if current.get("error"):
-                    st.warning(f"현재 설정 조회: {current['error']}")
-                else:
-                    st.markdown("#### 현재 PC 설정")
-                    current_df = pd.DataFrame([{
-                        "어댑터": adapter_for_check,
-                        "현재 IP": current.get("ip", ""),
-                        "현재 서브넷": current.get("subnet", ""),
-                        "현재 게이트웨이": current.get("gateway", ""),
-                        "현재 DNS": ", ".join(current.get("dns", []) or []),
-                        "DHCP": current.get("dhcp", ""),
-                    }])
-                    st.dataframe(current_df, use_container_width=True, hide_index=True)
-
-            confirm_apply = st.checkbox("선택한 프로필과 작업자 정보를 확인했습니다.", key="ip_apply_confirm")
-            if st.button("선택 IP 적용", type="primary", use_container_width=True, disabled=not (local_windows and local_admin)):
-                if not ip_modifier_emp_id.strip() or not ip_modifier_name.strip():
-                    st.error("작업 이력 저장을 위해 작업자 사번과 성명을 입력해 주세요.")
-                elif not confirm_apply:
-                    st.error("적용 전 확인 항목에 체크해 주세요.")
-                elif adapters and adapter_for_check not in adapters:
-                    st.error(f"'{adapter_for_check}' 어댑터가 이 PC에서 확인되지 않습니다. 프로필의 어댑터명을 수정해 주세요.")
-                else:
-                    with st.spinner("기존 설정을 확인하고 IP를 변경하는 중입니다..."):
-                        ok, message, before = apply_static_ip(selected_profile)
-                        history_ok, history_msg = save_ip_change_history(
-                            selected_profile, before, "성공" if ok else "실패",
-                            ip_modifier_emp_id, ip_modifier_name,
-                            error="" if ok else message,
-                            note="사용자 선택 프로필 적용",
-                        )
-                    if ok:
-                        st.success(f"✅ {message}")
-                    else:
-                        st.error(f"❌ {message}")
-                    if history_ok:
-                        st.caption(history_msg)
-                    else:
-                        st.warning(f"IP 변경 결과는 발생했으나 Google Sheets 이력 저장에 실패했습니다: {history_msg}")
-
-            st.markdown("#### 자동 IP(DHCP) 전환")
-            dhcp_adapter = st.selectbox("DHCP로 전환할 어댑터", adapters or [adapter_for_check or "Ethernet"], key="dhcp_adapter")
-            if st.button("자동 IP(DHCP) 적용", use_container_width=True, disabled=not (local_windows and local_admin)):
-                if not ip_modifier_emp_id.strip() or not ip_modifier_name.strip():
-                    st.error("작업자 사번과 성명을 입력해 주세요.")
-                else:
-                    dhcp_profile = {
-                        "profile_id": "DHCP", "프로필명": "자동 IP(DHCP)", "어댑터명": dhcp_adapter,
-                        "IP주소": "DHCP", "서브넷마스크": "자동", "기본게이트웨이": "자동", "기본DNS": "자동", "보조DNS": ""
-                    }
-                    ok, message, before = apply_dhcp(dhcp_adapter)
-                    history_ok, history_msg = save_ip_change_history(
-                        dhcp_profile, before, "성공" if ok else "실패", ip_modifier_emp_id, ip_modifier_name,
-                        error="" if ok else message, note="DHCP 전환"
-                    )
-                    if ok:
-                        st.success(message)
-                    else:
-                        st.error(message)
-                    if not history_ok:
-                        st.warning(f"이력 저장 실패: {history_msg}")
-        elif not profile_load_error:
-            st.info("등록된 IP 프로필이 없습니다. 'IP 오류 수정·프로필 관리'에서 첫 프로필을 등록해 주세요.")
-
-    with manage_tab:
-        st.markdown("#### IP 프로필 등록 및 직접 수정")
-        st.caption("IP 오류가 확인되면 기존 프로필을 선택하여 값을 바로 수정할 수 있습니다. 수정 전 값은 Google Sheets 버전 기록과 변경 이력으로 관리하는 것을 권장합니다.")
-
-        try:
-            manage_profiles = load_ip_profiles()
-        except Exception as e:
-            manage_profiles = []
-            st.error(f"프로필 조회 실패: {e}")
-
-        edit_options = ["새 프로필 등록"] + [f"{r.get('프로필명', '')} · {r.get('IP주소', '')}" for r in manage_profiles]
-        edit_choice = st.selectbox("작업 선택", edit_options, key="ip_edit_choice")
-        editing = None
-        if edit_choice != "새 프로필 등록":
-            editing = manage_profiles[edit_options.index(edit_choice) - 1]
-
-        detected_adapters = list_windows_adapters()
-        default_adapter = str((editing or {}).get("어댑터명", ""))
-        adapter_candidates = detected_adapters.copy()
-        if default_adapter and default_adapter not in adapter_candidates:
-            adapter_candidates.insert(0, default_adapter)
-        if not adapter_candidates:
-            adapter_candidates = [default_adapter or "Ethernet"]
-
-        with st.form("ip_profile_form"):
-            profile_name = st.text_input("프로필명 *", value=str((editing or {}).get("프로필명", "")), placeholder="예: 본사 1층 장비망")
-            adapter_name = st.selectbox(
-                "네트워크 어댑터명 *",
-                adapter_candidates,
-                index=adapter_candidates.index(default_adapter) if default_adapter in adapter_candidates else 0,
-                help="대상 PC의 Windows 어댑터 이름과 정확히 일치해야 합니다. 예: Ethernet, 이더넷"
-            )
-            c1, c2 = st.columns(2)
-            with c1:
-                ip_address = st.text_input("IP 주소 *", value=str((editing or {}).get("IP주소", "")), placeholder="192.168.10.20")
-                subnet_mask = st.text_input("서브넷 마스크 *", value=str((editing or {}).get("서브넷마스크", "255.255.255.0")), placeholder="255.255.255.0")
-                gateway = st.text_input("기본 게이트웨이", value=str((editing or {}).get("기본게이트웨이", "")), placeholder="192.168.10.1")
-            with c2:
-                dns1 = st.text_input("기본 DNS", value=str((editing or {}).get("기본DNS", "")), placeholder="사내 DNS 또는 8.8.8.8")
-                dns2 = st.text_input("보조 DNS", value=str((editing or {}).get("보조DNS", "")), placeholder="선택 입력")
-                note = st.text_input("비고", value=str((editing or {}).get("비고", "")), placeholder="장소·장비·사용 목적")
-            submitted = st.form_submit_button("검증 후 Google Sheets에 저장", use_container_width=True)
-
-        if submitted:
-            if not ip_modifier_emp_id.strip() or not ip_modifier_name.strip():
-                st.error("수정자 사번과 성명을 먼저 입력해 주세요.")
+    # 2열 × 3행 메뉴 버튼: 휴대전화에서 누르기 쉽도록 구성
+    for row_start in range(0, len(POWER_THEME_ORDER), 2):
+        menu_columns = st.columns(2, gap="small")
+        for offset, column in enumerate(menu_columns):
+            theme_index = row_start + offset
+            if theme_index >= len(POWER_THEME_ORDER):
+                continue
+            theme = POWER_THEME_ORDER[theme_index]
+            missing_count = len(_power_theme_missing(theme))
+            if theme == "확인·전송":
+                status_mark = ""
+            elif not missing_count:
+                status_mark = " ✅"
+            elif _power_theme_started(theme):
+                status_mark = " ◐"
             else:
-                profile_payload = {
-                    "profile_id": str((editing or {}).get("profile_id", "")),
-                    "프로필명": profile_name, "어댑터명": adapter_name, "IP주소": ip_address,
-                    "서브넷마스크": subnet_mask, "기본게이트웨이": gateway,
-                    "기본DNS": dns1, "보조DNS": dns2, "비고": note,
-                }
-                ok, msg = save_ip_profile(profile_payload, ip_modifier_emp_id, ip_modifier_name)
+                status_mark = ""
+            with column:
+                st.button(
+                    f"{'▶ ' if theme == current_theme else ''}{POWER_THEME_ICON[theme]} {theme}{status_mark}",
+                    key=f"power_theme_menu_{theme_index}",
+                    type="primary" if theme == current_theme else "secondary",
+                    use_container_width=True,
+                    on_click=_request_power_theme,
+                    args=(theme,),
+                )
+
+    pending_theme = st.session_state.get("power_pending_theme")
+    if pending_theme:
+        pending_missing = list(st.session_state.get("power_pending_missing", []))
+        preview = ", ".join(pending_missing[:7])
+        more_text = f" 외 {len(pending_missing) - 7}개" if len(pending_missing) > 7 else ""
+        st.markdown(
+            f'<div class="power-missing-box"><b>누락된 항목이 있는데 그대로 다음 테마로 이동해도 괜찮습니까?</b><br>'
+            f'누락 항목: {html.escape(preview)}{more_text}</div>',
+            unsafe_allow_html=True,
+        )
+        confirm_col, continue_col = st.columns(2, gap="small")
+        with confirm_col:
+            st.button(
+                "누락 허용하고 이동",
+                key="power_confirm_theme_move",
+                type="primary",
+                use_container_width=True,
+                on_click=_confirm_power_theme_move,
+            )
+        with continue_col:
+            st.button(
+                "계속 입력",
+                key="power_cancel_theme_move",
+                use_container_width=True,
+                on_click=_cancel_power_theme_move,
+            )
+        # 경고 아래에는 현재 테마 입력창을 계속 표시하여 사용자가 바로 보완할 수 있게 합니다.
+
+    current_theme = st.session_state.get("power_current_theme", POWER_THEME_ORDER[0])
+    st.markdown(
+        f'<div class="power-theme-heading">{POWER_THEME_ICON[current_theme]} {html.escape(current_theme)}</div>',
+        unsafe_allow_html=True,
+    )
+
+    if current_theme == "기본정보":
+        st.text_input(
+            "점검자 성명 *",
+            key="power_worker",
+            placeholder="예: 홍길동",
+            help="상단 고정영역과 Google Sheets 점검자 열에 표시됩니다.",
+        )
+        mother_options = ["모국 선택"] + list(POWER_STATION_MAP.keys())
+        selected_mother = st.selectbox("모국 *", mother_options, key="power_mother")
+
+        local_options = ["국소 선택"]
+        if selected_mother in POWER_STATION_MAP:
+            local_options += POWER_STATION_MAP[selected_mother]
+        current_local = st.session_state.get("power_local", "국소 선택")
+        if current_local not in local_options:
+            st.session_state["power_local"] = "국소 선택"
+        st.selectbox(
+            "국소 *",
+            local_options,
+            key="power_local",
+            disabled=selected_mother not in POWER_STATION_MAP,
+        )
+        st.radio("전원 구분", ["삼상", "단상"], horizontal=True, key="power_phase_type")
+        st.radio(
+            "축전지 측정 범위",
+            ["1조 측정", "1·2조 측정"],
+            horizontal=True,
+            key="power_battery_group_choice",
+            help="1조당 24셀입니다. 2조 측정이 필요할 때만 1·2조 측정을 선택하세요.",
+        )
+        st.info("점검자·모국·국소는 Google Sheets 저장을 위한 필수 기본정보입니다.")
+
+    elif current_theme == "전압·전류":
+        phase_type = st.session_state.get("power_phase_type", "삼상")
+        st.caption(f"현재 전원 구분: **{phase_type}** · 변경은 기본정보 메뉴에서 할 수 있습니다.")
+        if phase_type == "삼상":
+            row1 = st.columns(2, gap="small")
+            with row1[0]:
+                st.text_input("R-S 전압 (V)", placeholder="예: 380.0", key="power_three_voltage_rs")
+            with row1[1]:
+                st.text_input("S-T 전압 (V)", placeholder="예: 380.0", key="power_three_voltage_st")
+            row2 = st.columns(2, gap="small")
+            with row2[0]:
+                st.text_input("T-R 전압 (V)", placeholder="예: 380.0", key="power_three_voltage_tr")
+            with row2[1]:
+                st.text_input("R-N 전압 (V)", placeholder="예: 220.0", key="power_three_voltage_rn")
+            row3 = st.columns(2, gap="small")
+            with row3[0]:
+                st.text_input("R상 전류", placeholder="000.0", key="power_three_current_r")
+            with row3[1]:
+                st.text_input("S상 전류", placeholder="000.0", key="power_three_current_s")
+            st.text_input("T상 전류", placeholder="000.0", key="power_three_current_t")
+            st.caption("전류는 숫자만 입력해도 소수점 첫째 자리로 처리됩니다. 예: 1234 → 123.4A")
+        else:
+            row = st.columns(2, gap="small")
+            with row[0]:
+                st.text_input("단상 전압 (V)", placeholder="예: 220.0", key="power_single_voltage")
+            with row[1]:
+                st.text_input("단상 전류", placeholder="000.0", key="power_single_current")
+
+    elif current_theme == "축전지 1조":
+        st.caption("숫자만 입력하면 셀 전압은 소수점 둘째 자리로 변환됩니다. 215 → 2.15V, 000 → 0.00V")
+        summary_row1 = st.columns(2, gap="small")
+        with summary_row1[0]:
+            st.text_input("방전 후 Total 전류", placeholder="000.0", key="power_battery1_total_current")
+        with summary_row1[1]:
+            st.text_input("방전 후 Total 전압", placeholder="00.00", key="power_battery1_total_voltage")
+        summary_row2 = st.columns(2, gap="small")
+        with summary_row2[0]:
+            st.text_input("최저전압", placeholder="0.00", key="power_battery1_min_voltage")
+        with summary_row2[1]:
+            st.text_input("최고전압", placeholder="0.00", key="power_battery1_max_voltage")
+        st.text_input("방전종료 전압", placeholder="00.00", key="power_battery1_end_voltage")
+        st.markdown("**1조 셀별 전압 · 24셀**")
+        _render_power_cell_inputs(1)
+
+    elif current_theme == "축전지 2조":
+        if st.session_state.get("power_battery_group_choice", "1조 측정") != "1·2조 측정":
+            st.info("현재 기본정보에서 ‘1조 측정’을 선택했습니다. 2조 입력이 필요하면 기본정보 메뉴에서 ‘1·2조 측정’으로 변경하세요.")
+        else:
+            st.caption("2조 셀 전압도 숫자만 입력하면 소수점 둘째 자리로 변환됩니다.")
+            st.markdown("**2조 셀별 전압 · 24셀**")
+            _render_power_cell_inputs(2)
+
+    elif current_theme == "접지저항":
+        st.caption("모든 접지저항 입력 단위는 Ω(옴)입니다.")
+        row1 = st.columns(2, gap="small")
+        with row1[0]:
+            st.text_input("보안 1종 (Ω)", placeholder="0.00", key="power_security_ground_1")
+        with row1[1]:
+            st.text_input("보안 2종 (Ω)", placeholder="0.00", key="power_security_ground_2")
+        row2 = st.columns(2, gap="small")
+        with row2[0]:
+            st.text_input("보안 3종 (Ω)", placeholder="0.00", key="power_security_ground_3")
+        with row2[1]:
+            st.text_input("통신용접지(메인) (Ω)", placeholder="0.00", key="power_telecom_ground")
+        st.text_input("피뢰침접지 (Ω)", placeholder="0.00", key="power_lightning_ground")
+        st.text_area(
+            "특이사항",
+            placeholder="이상사항 또는 미측정 사유가 있을 때 입력하세요.",
+            key="power_notes",
+            height=95,
+        )
+
+    elif current_theme == "확인·전송":
+        payload_preview = _build_power_payload_from_state(partial_confirmed=True)
+        basic_missing = _power_theme_missing("기본정보")
+        all_missing = _power_payload_missing_items(payload_preview)
+        expected_count = max(_power_expected_item_count(payload_preview), 1)
+        completion_rate = round(((expected_count - len(all_missing)) / expected_count) * 100, 1)
+
+        metric1, metric2, metric3 = st.columns(3, gap="small")
+        metric1.metric("입력 완료율", f"{completion_rate}%")
+        metric2.metric("누락 측정항목", f"{len(all_missing)}개")
+        metric3.metric("축전지 범위", f"{payload_preview['battery_group_count']}조")
+
+        summary_df = pd.DataFrame([
+            {"구분": "점검자", "내용": payload_preview.get("worker") or "미입력"},
+            {"구분": "점검 국사", "내용": f"{payload_preview.get('mother')} / {payload_preview.get('local')}"},
+            {"구분": "전원 구분", "내용": payload_preview.get("phase_type")},
+            {"구분": "특이사항", "내용": payload_preview.get("notes") or "없음"},
+        ])
+        st.dataframe(summary_df, use_container_width=True, hide_index=True)
+
+        if basic_missing:
+            st.error("저장 필수 기본정보가 누락되었습니다: " + ", ".join(basic_missing))
+
+        partial_confirmed = False
+        if all_missing:
+            preview = ", ".join(all_missing[:12])
+            more = f" 외 {len(all_missing) - 12}개" if len(all_missing) > 12 else ""
+            st.markdown(
+                f'<div class="power-missing-box"><b>일부 측정항목이 입력되지 않았습니다.</b><br>'
+                f'{html.escape(preview)}{more}<br><br>'
+                '미측정 항목은 Google Sheets에 공란으로 저장되고, 누락항목과 완료율도 함께 기록됩니다.</div>',
+                unsafe_allow_html=True,
+            )
+            partial_confirmed = st.checkbox(
+                "누락된 항목이 있지만 현재 입력값 그대로 저장하는 데 동의합니다.",
+                key="power_partial_save_confirmed",
+            )
+        else:
+            partial_confirmed = True
+            st.markdown('<div class="power-complete-box">✅ 모든 예정 측정항목이 입력되었습니다.</div>', unsafe_allow_html=True)
+
+        submit_disabled = bool(basic_missing) or (bool(all_missing) and not partial_confirmed)
+        submit_power = st.button(
+            "📤 Google Sheets로 최종 전송",
+            key="power_final_submit",
+            type="primary",
+            use_container_width=True,
+            disabled=submit_disabled,
+        )
+
+        if submit_power:
+            payload = _build_power_payload_from_state(partial_confirmed=partial_confirmed)
+            payload_signature = hashlib.sha256(
+                json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
+            ).hexdigest()
+            now_ts = time.time()
+            last_signature = st.session_state.get("power_last_signature", "")
+            last_saved_ts = float(st.session_state.get("power_last_saved_ts", 0) or 0)
+
+            if payload_signature == last_signature and (now_ts - last_saved_ts) < 30:
+                st.warning("같은 측정값이 방금 저장되었습니다. 중복 전송을 방지했습니다.")
+            else:
+                with st.spinner("Google Sheets에 측정값과 누락 정보를 저장하고 있습니다..."):
+                    ok, message, inspection_id = save_power_inspection_result(payload)
                 if ok:
-                    st.success(msg)
+                    st.session_state["power_last_signature"] = payload_signature
+                    st.session_state["power_last_saved_ts"] = now_ts
+                    st.session_state["power_last_success"] = {
+                        "message": message,
+                        "inspection_id": inspection_id,
+                    }
                     st.rerun()
                 else:
-                    st.error(f"저장 실패: {msg}")
+                    st.error(f"❌ 저장 실패: {message}")
 
-        if editing:
-            with st.expander("프로필 비활성화", expanded=False):
-                st.warning("비활성화하면 전환 목록에서 제외되지만 기존 변경 이력은 삭제되지 않습니다.")
-                delete_confirm = st.checkbox("선택 프로필 비활성화에 동의합니다.", key="ip_disable_confirm")
-                if st.button("선택 프로필 비활성화", disabled=not delete_confirm, use_container_width=True):
-                    if not ip_modifier_emp_id.strip() or not ip_modifier_name.strip():
-                        st.error("작업자 사번과 성명을 입력해 주세요.")
-                    else:
-                        ok, msg = disable_ip_profile(str(editing.get("profile_id", "")), ip_modifier_emp_id, ip_modifier_name)
-                        if ok:
-                            st.success(msg)
-                            st.rerun()
-                        else:
-                            st.error(msg)
+        with st.expander("📊 Google Sheets 저장 구조", expanded=False):
+            st.markdown(
+                f'<div class="power-sheet-note">스프레드시트: <b>{POWER_INSPECTION_SPREADSHEET_NAME}</b><br>'
+                f'워크시트: <b>{POWER_INSPECTION_SHEET_NAME}</b><br>'
+                '정리 방식: <b>현장 점검 1건 = Google Sheet 1행</b><br>'
+                '부분 입력 시 완료율·누락항목수·누락항목명·부분입력확인이 함께 저장됩니다.</div>',
+                unsafe_allow_html=True,
+            )
+            structure_df = pd.DataFrame([
+                {"구분": "기본정보", "저장 열": "저장일시, 점검ID, 점검자, 모국, 국소, 전원구분, 축전지조수"},
+                {"구분": "입력상태", "저장 열": "입력완료율, 누락항목수, 누락항목, 부분입력확인"},
+                {"구분": "전압·전류", "저장 열": "삼상 R-S/S-T/T-R/R-N, R/S/T 전류 또는 단상 전압·전류"},
+                {"구분": "축전지", "저장 열": "1조 요약값, 1조 셀01~24, 선택 시 2조 셀01~24"},
+                {"구분": "접지저항", "저장 열": "보안1·2·3종, 통신용접지(메인), 피뢰침접지"},
+                {"구분": "기타", "저장 열": "특이사항"},
+            ])
+            st.dataframe(structure_df, use_container_width=True, hide_index=True)
 
-    with history_tab:
-        st.markdown("#### IP 변경 이력")
-        try:
-            spreadsheet = _open_ip_spreadsheet()
-            history_ws = _ensure_ip_sheet(spreadsheet, IP_HISTORY_SHEET_NAME, IP_HISTORY_HEADERS, rows=10000)
-            history_records = history_ws.get_all_records()
-            if history_records:
-                history_df = pd.DataFrame(history_records)
-                st.dataframe(history_df.iloc[::-1], use_container_width=True, hide_index=True)
-                st.download_button(
-                    "변경 이력 CSV 다운로드",
-                    data=history_df.to_csv(index=False).encode("utf-8-sig"),
-                    file_name=f"IP_Change_History_{_korea_now().strftime('%Y%m%d')}.csv",
-                    mime="text/csv",
-                    use_container_width=True,
-                )
-            else:
-                st.info("아직 저장된 IP 변경 이력이 없습니다.")
-        except Exception as e:
-            st.error(f"변경 이력 조회 실패: {e}")
+    _render_power_auto_decimal_script()
 
-    st.warning("보안 유의: IP·게이트웨이·DNS 정보는 내부 네트워크 구성정보에 해당할 수 있습니다. Google Sheets 공유 범위를 최소화하고, 서비스 계정 및 앱 접근권한을 현장 담당자에게만 부여하세요.")
+    # 현재 테마 하단의 이전/다음 이동 버튼
+    current_theme = st.session_state.get("power_current_theme", POWER_THEME_ORDER[0])
+    current_index = POWER_THEME_ORDER.index(current_theme)
+    nav_left, nav_right = st.columns(2, gap="small")
+    with nav_left:
+        if current_index > 0:
+            previous_theme = POWER_THEME_ORDER[current_index - 1]
+            st.button(
+                f"← {previous_theme}",
+                key=f"power_previous_{current_index}",
+                use_container_width=True,
+                on_click=_request_power_theme,
+                args=(previous_theme,),
+            )
+    with nav_right:
+        if current_index < len(POWER_THEME_ORDER) - 1:
+            next_theme = POWER_THEME_ORDER[current_index + 1]
+            st.button(
+                f"{next_theme} →",
+                key=f"power_next_{current_index}",
+                type="primary",
+                use_container_width=True,
+                on_click=_request_power_theme,
+                args=(next_theme,),
+            )
+
+    st.info("Galaxy는 Chrome, iPhone은 Safari에서 열고 ‘홈 화면에 추가’를 사용하면 앱 아이콘처럼 실행할 수 있습니다.")
 
 
-# --- [Tab 2: 법률 리스크/규정/계약 검토 & 감사보고서 작성] ---
 # --- [Tab 2: 법률 리스크/규정/계약 검토 & 감사보고서 작성] ---
 with tab_doc:
     st.markdown("### 📄 법률 검토 · 감사보고서 작성/검증")
