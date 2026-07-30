@@ -51,7 +51,7 @@ except ImportError:
 # 1. 페이지 설정
 # ==========================================
 st.set_page_config(
-    page_title="AUDIT AI Agent",
+    page_title="SMART WORK AI AGENT",
     page_icon="🛡️",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -396,7 +396,7 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown(
-        "<div style='color:white; text-align:center; font-size:12px; opacity:0.8;'>ktMOS북부 Audit AI Solution © 2026<br>Engine: Gemini 2.5 / Search Grounding Ready</div>",
+        "<div style='color:white; text-align:center; font-size:12px; opacity:0.8;'>ktMOS북부 Smart Work AI Solution © 2026<br>Engine: Gemini 2.5 / Search Grounding Ready</div>",
         unsafe_allow_html=True,
     )
 
@@ -413,7 +413,7 @@ if st.session_state.get("logout_anim"):
     안전하게 로그아웃되었습니다.
   </div>
   <div style="margin-top:18px; font-size: 12px; color: rgba(255,255,255,0.65);">
-    ktMOS북부 Audit AI Solution © 2026
+    ktMOS북부 Smart Work AI Solution © 2026
   </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1903,6 +1903,64 @@ def load_recent_power_inspection(mother: str, local: str, within_days: int = 60)
         return False, str(e), {}
 
 
+def list_power_inspection_history(
+    mother: str,
+    local: str,
+    within_days: int = 183,
+    max_records: int = 100,
+) -> tuple[bool, str, list[dict]]:
+    """동일 모국·국소의 과거 측정기록을 최신순으로 반환합니다."""
+    client = init_google_sheet_connection()
+    if not client:
+        return False, "구글 시트 연결 실패: Secrets 설정을 확인하세요.", []
+    if mother not in POWER_STATION_MAP or local not in POWER_STATION_MAP.get(mother, []):
+        return False, "먼저 모국과 국소를 정확히 선택해 주세요.", []
+
+    try:
+        spreadsheet = client.open(POWER_INSPECTION_SPREADSHEET_NAME)
+        try:
+            ws = spreadsheet.worksheet(POWER_INSPECTION_SHEET_NAME)
+        except Exception:
+            return False, "아직 저장된 전원 정밀점검 기록이 없습니다.", []
+
+        values = ws.get_all_values()
+        if len(values) < 2:
+            return False, "아직 저장된 전원 정밀점검 기록이 없습니다.", []
+
+        headers = values[0]
+        now_naive = _korea_now().replace(tzinfo=None)
+        cutoff = now_naive - datetime.timedelta(days=max(1, int(within_days)))
+        records: list[dict] = []
+
+        for row in reversed(values[1:]):
+            record = {
+                headers[index]: row[index] if index < len(row) else ""
+                for index in range(len(headers))
+            }
+            if str(record.get("모국", "")).strip() != mother:
+                continue
+            if str(record.get("국소", "")).strip() != local:
+                continue
+
+            saved_text = str(record.get("저장일시", "")).strip()
+            try:
+                saved_dt = datetime.datetime.strptime(saved_text, "%Y-%m-%d %H:%M:%S")
+            except Exception:
+                continue
+            if saved_dt < cutoff:
+                continue
+
+            records.append(record)
+            if len(records) >= max(1, int(max_records)):
+                break
+
+        if not records:
+            return False, f"최근 {within_days}일 이내 동일 국소의 저장 기록이 없습니다.", []
+        return True, f"과거 측정기록 {len(records)}건을 조회했습니다.", records
+    except Exception as e:
+        return False, str(e), []
+
+
 def _set_power_state_from_record(record: dict) -> None:
     draft = _power_draft()
 
@@ -2363,7 +2421,7 @@ def _render_power_auto_decimal_script() -> None:
           const rules = __POWER_RULES_JSON__;
           const FOCUS_STORAGE_KEY = '__power_next_focus_key_v7__';
 
-          function formatted(raw, decimals) {
+          function formatted(raw, decimals, key) {
             let value = String(raw || '').trim().replace(/,/g, '');
             if (!value) return '';
             value = value.replace(/[^0-9.]/g, '');
@@ -2377,6 +2435,14 @@ def _render_power_auto_decimal_script() -> None:
             const digits = value.replace(/\D/g, '');
             if (!digits) return '';
             if (decimals <= 0) return digits;
+
+            // 접지저항은 현장 입력 관행을 반영합니다.
+            // 00 -> 0.0, 000 -> 0.00, 0000 -> 00.00
+            const isGroundResistance = String(key || '').includes('ground');
+            if (isGroundResistance && digits.length === 2) {
+              return `${digits.slice(0, 1)}.${digits.slice(1)}`;
+            }
+
             const padded = digits.length <= decimals ? digits.padStart(decimals + 1, '0') : digits;
             return `${padded.slice(0, -decimals)}.${padded.slice(-decimals)}`;
           }
@@ -2447,7 +2513,7 @@ def _render_power_auto_decimal_script() -> None:
             input.setAttribute('enterkeyhint', 'next');
 
             const applyFormat = () => {
-              const next = formatted(input.value, Number(decimals));
+              const next = formatted(input.value, Number(decimals), key);
               if (next !== input.value) setReactValue(input, next);
               return next;
             };
@@ -2523,8 +2589,8 @@ def _render_power_auto_decimal_script() -> None:
 # ==========================================
 # 9. 메인 화면 및 탭 구성
 # ==========================================
-st.markdown("<h1 style='text-align: center; color: #2C3E50;'>🛡️ AUDIT AI AGENT</h1>", unsafe_allow_html=True)
-st.markdown("<div style='text-align: center; color: #555; margin-bottom: 20px;'>Professional Legal & Audit Assistant System</div>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center; color: #2C3E50;'>✨ SMART WORK AI AGENT</h1>", unsafe_allow_html=True)
+st.markdown("<div style='text-align: center; color: #555; margin-bottom: 20px;'>Integrated Field & Business Assistant System</div>", unsafe_allow_html=True)
 
 _now_kst = _korea_now()
 CURRENT_YEAR = _now_kst.year
@@ -2890,7 +2956,7 @@ with tab_power:
     </style>
     <div class="power-mobile-hero">
       <h3>새로운 전원 정밀점검 전용 공간</h3>
-      <p>점검자와 국소를 먼저 선택하고, 필요한 측정 테마만 열어 입력합니다. 최근 60일 측정값을 불러와 변경된 값만 수정할 수도 있습니다.</p>
+      <p>점검자와 국소를 먼저 선택하고, 필요한 측정 테마만 열어 입력합니다. 과거 측정기록을 조회하고 원하는 측정일시를 선택해 불러올 수도 있습니다.</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -2936,23 +3002,87 @@ with tab_power:
 
     selected_local = st.session_state.get("power_local", "국소 선택")
     can_load = selected_mother in POWER_STATION_MAP and selected_local in POWER_STATION_MAP.get(selected_mother, [])
-    if st.button(
-        "↩️ 최근 60일 동일 국소 측정값 불러오기",
-        key="power_load_recent_values",
-        use_container_width=True,
-        disabled=not can_load,
-    ):
-        with st.spinner("최근 측정값을 확인하고 있습니다..."):
-            ok, message, record = load_recent_power_inspection(selected_mother, selected_local, 60)
+
+    st.markdown("**과거 측정값 불러오기**")
+    history_periods = {
+        "최근 6개월": 183,
+        "최근 1년": 365,
+        "최근 2년": 730,
+    }
+    history_col1, history_col2 = st.columns([0.82, 1.18], gap="small")
+    with history_col1:
+        history_period_label = st.selectbox(
+            "조회 기간",
+            list(history_periods.keys()),
+            key="power_history_period_label",
+            disabled=not can_load,
+        )
+    with history_col2:
+        history_search_clicked = st.button(
+            "🔎 과거 측정기록 조회",
+            key="power_search_history",
+            use_container_width=True,
+            disabled=not can_load,
+        )
+
+    if history_search_clicked:
+        within_days = history_periods.get(history_period_label, 183)
+        with st.spinner("동일 국소의 과거 측정기록을 확인하고 있습니다..."):
+            ok, message, records = list_power_inspection_history(
+                selected_mother,
+                selected_local,
+                within_days=within_days,
+                max_records=100,
+            )
         if ok:
-            _set_power_state_from_record(record)
-            st.session_state["power_loaded_message"] = message
+            st.session_state["power_history_records"] = records
+            st.session_state["power_history_message"] = message
+            st.session_state["power_history_station"] = f"{selected_mother}|{selected_local}"
+            st.session_state["power_history_selected_index"] = 0
             st.rerun()
         else:
+            st.session_state.pop("power_history_records", None)
             st.warning(message)
 
+    history_records = list(st.session_state.get("power_history_records", []))
+    expected_history_station = f"{selected_mother}|{selected_local}" if can_load else ""
+    if st.session_state.get("power_history_station", "") != expected_history_station:
+        history_records = []
+        st.session_state.pop("power_history_records", None)
+
+    if history_records:
+        st.success(st.session_state.get("power_history_message", f"과거 측정기록 {len(history_records)}건을 조회했습니다."))
+
+        def _power_history_label(index: int) -> str:
+            record = history_records[index]
+            saved_at = str(record.get("저장일시", "일시 미상")).strip() or "일시 미상"
+            worker = str(record.get("점검자", "점검자 미상")).strip() or "점검자 미상"
+            phase = str(record.get("전원구분", "-")).strip() or "-"
+            completion = str(record.get("입력완료율(%)", "-")).strip() or "-"
+            return f"{saved_at} · {worker} · {phase} · 완료율 {completion}%"
+
+        selected_history_index = st.selectbox(
+            "불러올 측정기록",
+            options=list(range(len(history_records))),
+            format_func=_power_history_label,
+            key="power_history_selected_index",
+        )
+        if st.button(
+            "↩️ 선택한 측정값 불러오기",
+            key="power_load_selected_history",
+            use_container_width=True,
+            type="primary",
+        ):
+            selected_record = history_records[int(selected_history_index)]
+            _set_power_state_from_record(selected_record)
+            st.session_state["power_loaded_message"] = (
+                f"선택한 측정값을 불러왔습니다. "
+                f"({selected_record.get('저장일시', '')})"
+            )
+            st.rerun()
+
     if st.session_state.pop("power_loaded_notice", False):
-        st.toast("최근 측정값을 입력폼에 불러왔습니다. 변경된 값만 수정해 주세요.", icon="↩️")
+        st.toast("선택한 과거 측정값을 입력폼에 불러왔습니다. 변경된 값만 수정해 주세요.", icon="↩️")
     if st.session_state.get("power_loaded_source_id"):
         st.markdown(
             f'<div class="power-loaded-box">↩️ 기존 측정값 사용 중 · '
@@ -3673,382 +3803,273 @@ with tab_summary:
 
 # --- [Tab 5: 관리자 대시보드 - 수동 로딩형 현황판] ---
 with tab_admin:
-    st.markdown("### 🔒 관리자 전용 대시보드")
-    st.caption("교육 수료 제출 안정성을 우선하기 위해, 관리자 화면은 자동으로 Google Sheet 데이터를 읽지 않습니다. 필요한 시점에만 현재 데이터를 불러옵니다.")
-
-    # 1. 관리자 비밀번호 검증
-    admin_pw = st.text_input("관리자 비밀번호", type="password", key="admin_dash_pw")
-    if admin_pw.strip() != "ktmos0402!":
-        st.info("관리자 비밀번호를 입력하세요.")
-        st.stop()
-
-    st.success("✅ 접속 성공")
+    st.markdown("### 🔋 전원 정밀점검 데이터 관리")
+    st.caption(
+        "Google Sheets의 최신 누적 점검자료를 필요한 시점에 불러와 지역·국소·기간별로 확인하고 "
+        "CSV 또는 Excel 파일로 다운로드합니다. 이 화면은 조회 버튼을 누를 때만 Google Sheets를 읽습니다."
+    )
 
     st.markdown("""
-    <div style="background:#FFF7ED; border:1px solid #FED7AA; border-left:6px solid #F97316; border-radius:16px; padding:16px 18px; margin:10px 0 18px 0;">
-      <div style="font-weight:950; color:#9A3412; font-size:1.02rem; margin-bottom:6px;">운영 안정화 안내</div>
-      <div style="color:#7C2D12; font-weight:750; line-height:1.65;">
-        전 임직원 교육 수료 제출이 집중되는 기간에는 수료 저장을 최우선으로 보호합니다.<br>
-        이 관리자 대시보드는 자동 조회를 하지 않으며, 감사실에서 필요할 때 <b>현재 데이터 불러오기</b> 버튼을 누른 경우에만 Google Sheet를 1회 조회합니다.
+    <div style="background:linear-gradient(135deg,#E0F2FE 0%,#ECFDF5 100%); border:1px solid #7DD3FC;
+                border-radius:18px; padding:18px 20px; margin:8px 0 16px; box-shadow:0 8px 22px rgba(14,116,144,0.10);">
+      <div style="font-size:1.08rem; font-weight:950; color:#0F172A; margin-bottom:6px;">지역 사용자 이용방법</div>
+      <div style="color:#334155; font-weight:750; line-height:1.65;">
+        ① 최신 누적 데이터를 불러옵니다. ② 담당 모국·국소와 기간을 선택합니다.<br>
+        ③ 화면에서 측정값을 확인하거나 CSV·Excel로 내려받아 현장 및 사무실 업무에 활용합니다.
       </div>
     </div>
     """, unsafe_allow_html=True)
 
-    TOTAL_STAFF_MAP = {
-        "감사실": 3,
-        "경영총괄": 27,
-        "사업총괄": 39,
-        "강북본부": 221,
-        "강남본부": 173,
-        "서부본부": 278,
-        "강원본부": 101,
-        "품질지원단": 137,
-    }
+    if "power_admin_df" not in st.session_state:
+        st.session_state["power_admin_df"] = None
+    if "power_admin_loaded_at" not in st.session_state:
+        st.session_state["power_admin_loaded_at"] = ""
+    if "power_admin_error" not in st.session_state:
+        st.session_state["power_admin_error"] = ""
 
-    if "june_admin_df" not in st.session_state:
-        st.session_state["june_admin_df"] = None
-    if "june_admin_loaded_at" not in st.session_state:
-        st.session_state["june_admin_loaded_at"] = ""
-    if "june_admin_load_error" not in st.session_state:
-        st.session_state["june_admin_load_error"] = ""
-
-    def _load_june_admin_df_once() -> pd.DataFrame:
-        """관리자가 버튼을 누른 경우에만 Google Sheet를 1회 읽습니다."""
+    def _load_power_inspection_admin_df() -> pd.DataFrame:
+        """사용자가 조회 버튼을 누른 시점의 최신 전원 정밀점검 누적자료를 읽습니다."""
         client = init_google_sheet_connection()
         if not client:
-            raise RuntimeError("구글 시트 연결 실패. API 권한 및 Secrets 설정을 확인하세요.")
-        spreadsheet = client.open("Audit_Result_2026")
+            raise RuntimeError("Google Sheets 연결 실패: Streamlit Secrets와 서비스 계정 권한을 확인하세요.")
+
+        spreadsheet = client.open(POWER_INSPECTION_SPREADSHEET_NAME)
         try:
-            ws = spreadsheet.worksheet(JUNE_TRAINING_SHEET_NAME)
-            values = ws.get_all_values()
+            worksheet = spreadsheet.worksheet(POWER_INSPECTION_SHEET_NAME)
         except Exception:
-            values = []
-        if not values or len(values) < 2:
-            return pd.DataFrame(columns=JUNE_TRAINING_HEADERS)
-        headers = values[0]
+            return pd.DataFrame(columns=POWER_INSPECTION_HEADERS)
+
+        values = worksheet.get_all_values()
+        if not values:
+            return pd.DataFrame(columns=POWER_INSPECTION_HEADERS)
+
+        headers = [str(value).strip() for value in values[0]]
         rows = values[1:]
-        return pd.DataFrame(rows, columns=headers)
+        normalized_rows = [
+            [row[index] if index < len(row) else "" for index in range(len(headers))]
+            for row in rows
+        ]
+        return pd.DataFrame(normalized_rows, columns=headers).fillna("")
 
-    load_col, clear_col, stamp_col = st.columns([0.22, 0.18, 0.60], vertical_alignment="center")
+    load_col, reset_col, status_col = st.columns([0.27, 0.20, 0.53], vertical_alignment="center")
     with load_col:
-        load_clicked = st.button("📊 현재 데이터 불러오기", type="primary", use_container_width=True, key="june_admin_load_current")
-    with clear_col:
-        clear_clicked = st.button("🧹 화면 데이터 초기화", use_container_width=True, key="june_admin_clear_loaded")
-    with stamp_col:
-        if st.session_state.get("june_admin_loaded_at"):
-            st.caption(f"마지막 조회 시각: {st.session_state['june_admin_loaded_at']}  ·  검색/필터/다운로드는 저장된 조회 결과 기준으로 동작합니다.")
+        load_power_data = st.button(
+            "🔄 최신 누적 데이터 불러오기",
+            type="primary",
+            use_container_width=True,
+            key="power_admin_load_latest",
+        )
+    with reset_col:
+        clear_power_data = st.button(
+            "🧹 조회화면 초기화",
+            use_container_width=True,
+            key="power_admin_clear_data",
+        )
+    with status_col:
+        if st.session_state.get("power_admin_loaded_at"):
+            st.caption(
+                f"마지막 조회: {st.session_state['power_admin_loaded_at']} · "
+                "최신 자료가 필요하면 다시 불러오기를 누르세요."
+            )
         else:
-            st.caption("아직 데이터를 불러오지 않았습니다. 버튼을 누르기 전에는 Google Sheet 읽기 요청이 발생하지 않습니다.")
+            st.caption("아직 Google Sheets 데이터를 불러오지 않았습니다.")
 
-    if clear_clicked:
-        st.session_state["june_admin_df"] = None
-        st.session_state["june_admin_loaded_at"] = ""
-        st.session_state["june_admin_load_error"] = ""
+    if clear_power_data:
+        st.session_state["power_admin_df"] = None
+        st.session_state["power_admin_loaded_at"] = ""
+        st.session_state["power_admin_error"] = ""
         st.rerun()
 
-    if load_clicked:
-        with st.spinner("Google Sheet에서 현재 수료 현황을 1회 불러오는 중입니다..."):
+    if load_power_data:
+        with st.spinner("Google Sheets에서 전원 정밀점검 최신 누적자료를 불러오는 중입니다..."):
             try:
-                st.session_state["june_admin_df"] = _load_june_admin_df_once()
-                st.session_state["june_admin_loaded_at"] = _korea_now().strftime("%Y-%m-%d %H:%M:%S")
-                st.session_state["june_admin_load_error"] = ""
-            except Exception as e:
-                st.session_state["june_admin_load_error"] = str(e)
-                st.session_state["june_admin_df"] = None
+                st.session_state["power_admin_df"] = _load_power_inspection_admin_df()
+                st.session_state["power_admin_loaded_at"] = _korea_now().strftime("%Y-%m-%d %H:%M:%S")
+                st.session_state["power_admin_error"] = ""
+            except Exception as error:
+                st.session_state["power_admin_df"] = None
+                st.session_state["power_admin_error"] = str(error)
 
-    if st.session_state.get("june_admin_load_error"):
-        st.error(f"현재 데이터 로드 중 오류가 발생했습니다: {st.session_state['june_admin_load_error']}")
-        st.info("잠시 후 다시 '현재 데이터 불러오기' 버튼을 눌러 주세요. 이 화면은 자동 재조회하지 않습니다.")
-        st.stop()
+    if st.session_state.get("power_admin_error"):
+        st.error(f"전원 정밀점검 데이터를 불러오지 못했습니다: {st.session_state['power_admin_error']}")
 
-    june_df = st.session_state.get("june_admin_df")
-    if june_df is None:
-        st.markdown("""
-        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:18px; padding:22px; margin-top:12px; box-shadow:0 10px 26px rgba(15,23,42,0.06);">
-          <div style="font-size:1.18rem; font-weight:950; color:#0F172A; margin-bottom:8px;">수동 조회 대기 상태</div>
-          <div style="color:#475569; font-weight:750; line-height:1.65;">
-            현재 관리자 모드는 Google Sheet를 자동으로 읽지 않습니다.<br>
-            현황 공유가 필요할 때만 <b>📊 현재 데이터 불러오기</b>를 눌러 최신 수료 현황을 확인해 주세요.
-          </div>
-        </div>
-        """, unsafe_allow_html=True)
-        st.stop()
+    power_admin_df = st.session_state.get("power_admin_df")
 
-    st.markdown("---")
-    st.markdown("#### 🌊 6월 컴플라이언스 인식제고 교육 수료 현황")
-
-    # 숫자형/문자형 안전 처리
-    if "사번" in june_df.columns:
-        unique_emp_count = int(june_df["사번"].astype(str).str.strip().replace("", pd.NA).dropna().nunique())
-        duplicate_count = max(int(len(june_df) - unique_emp_count), 0)
+    if power_admin_df is None:
+        st.info("업무에 최신 측정자료가 필요할 때 위의 ‘최신 누적 데이터 불러오기’를 눌러 주세요.")
+    elif power_admin_df.empty:
+        st.warning("Google Sheets에 저장된 전원 정밀점검 자료가 아직 없습니다.")
     else:
-        unique_emp_count = int(len(june_df))
-        duplicate_count = 0
+        source_df = power_admin_df.copy().fillna("")
 
-    total_completion_rows = int(len(june_df))
-    total_target = int(sum(TOTAL_STAFF_MAP.values()))
-    overall_rate = (unique_emp_count / total_target * 100) if total_target else 0
+        for required_column in POWER_INSPECTION_HEADERS:
+            if required_column not in source_df.columns:
+                source_df[required_column] = ""
 
-    event_count = 0
-    if not june_df.empty and "이벤트추첨대상" in june_df.columns:
-        event_count = int((june_df["이벤트추첨대상"].astype(str).str.strip() == "대상").sum())
+        source_df["_저장일시_dt"] = pd.to_datetime(source_df["저장일시"], errors="coerce")
+        source_df = source_df.sort_values("_저장일시_dt", ascending=False, na_position="last")
 
-    latest_time = "-"
-    if not june_df.empty and "저장시간" in june_df.columns:
-        latest_time = str(june_df["저장시간"].iloc[-1])
+        st.markdown("#### 🔎 담당 지역 및 조회범위 선택")
+        filter_col1, filter_col2, filter_col3 = st.columns(3)
 
-    kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(5)
-    kpi1.metric("전체 대상자", f"{total_target:,}명")
-    kpi2.metric("고유 수료자", f"{unique_emp_count:,}명")
-    kpi3.metric("전체 수료율", f"{overall_rate:.1f}%")
-    kpi4.metric("이벤트 추첨 대상", f"{event_count:,}명")
-    kpi5.metric("최근 저장시간", latest_time)
-
-    if duplicate_count > 0:
-        st.caption(f"참고: 사번 기준 중복 제출로 추정되는 행이 {duplicate_count:,}건 있습니다. 최종 수료자 산정 시 Google Sheet에서 사번 기준으로 정리해 주세요.")
-
-    # 조직별 참여율 산정
-    org_stats_df = pd.DataFrame()
-    if not june_df.empty and "총괄/본부/단" in june_df.columns:
-        tmp = june_df.copy()
-        tmp["총괄/본부/단"] = tmp["총괄/본부/단"].astype(str).str.strip()
-        if "사번" in tmp.columns:
-            tmp["사번"] = tmp["사번"].astype(str).str.strip()
-            org_counts = tmp.drop_duplicates(subset=["사번"], keep="last")["총괄/본부/단"].value_counts().to_dict()
-        else:
-            org_counts = tmp["총괄/본부/단"].value_counts().to_dict()
-        org_rows = []
-        for org, target in TOTAL_STAFF_MAP.items():
-            done = int(org_counts.get(org, 0))
-            rate = (done / target * 100) if target else 0
-            org_rows.append({"조직": org, "대상자": target, "수료자": done, "미수료자": max(target - done, 0), "수료율(%)": round(rate, 1)})
-        org_stats_df = pd.DataFrame(org_rows)
-
-    if not org_stats_df.empty:
-        st.markdown("#### 📈 조직별 수료 현황")
-        chart_col1, chart_col2 = st.columns(2)
-        with chart_col1:
-            fig_rate = px.bar(
-                org_stats_df,
-                x="조직",
-                y="수료율(%)",
-                text="수료율(%)",
-                title="조직별 수료율(%)",
-                color="수료율(%)",
-                color_continuous_scale="Blues",
-                range_y=[0, 100],
-            )
-            fig_rate.add_hline(y=100, line_dash="dash", line_color="red")
-            fig_rate.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
-            fig_rate.update_layout(margin=dict(l=10, r=10, t=58, b=10))
-            st.plotly_chart(fig_rate, use_container_width=True, config=PLOTLY_CONFIG)
-        with chart_col2:
-            fig_count = px.bar(
-                org_stats_df,
-                x="조직",
-                y=["수료자", "미수료자"],
-                title="조직별 수료/미수료 현황",
-                barmode="stack",
-                text_auto=True,
-            )
-            fig_count.update_layout(margin=dict(l=10, r=10, t=58, b=10), legend_title_text="구분")
-            st.plotly_chart(fig_count, use_container_width=True, config=PLOTLY_CONFIG)
-
-        st.markdown("#### 🧾 조직별 공유용 요약표")
-        org_stats_display_df = org_stats_df.copy()
-        org_stats_display_df["명단 다운로드"] = "아래 조직별 버튼 사용"
-        st.dataframe(org_stats_display_df, use_container_width=True, hide_index=True)
-
-        summary_csv = org_stats_df.to_csv(index=False).encode("utf-8-sig")
-        st.download_button(
-            "📥 조직별 수료율 요약 CSV 다운로드",
-            summary_csv,
-            "2026_06_컴플라이언스_조직별_수료율.csv",
-            "text/csv",
-            use_container_width=True,
-            key="june_org_summary_csv_download",
+        mother_values = sorted(
+            value for value in source_df["모국"].astype(str).str.strip().unique().tolist() if value
         )
+        with filter_col1:
+            selected_mother = st.selectbox(
+                "관리 모국",
+                ["전체 모국"] + mother_values,
+                key="power_admin_filter_mother",
+            )
 
-        # =========================================================
-        # ✅ 조직별 참여/미참여 명단 다운로드
-        # - Google Sheet 추가 조회 없음: 이미 '현재 데이터 불러오기'로 가져온 june_df만 사용
-        # - 미참여자 실명 확인은 전체 대상자 명부가 있을 때만 가능
-        # =========================================================
-        st.markdown("#### 📋 조직별 참여·미참여 명단 다운로드")
+        if selected_mother == "전체 모국":
+            locality_source = source_df
+        else:
+            locality_source = source_df[source_df["모국"].astype(str).str.strip() == selected_mother]
+
+        locality_values = sorted(
+            value for value in locality_source["국소"].astype(str).str.strip().unique().tolist() if value
+        )
+        with filter_col2:
+            selected_local = st.selectbox(
+                "관리 국소",
+                ["전체 국소"] + locality_values,
+                key="power_admin_filter_local",
+            )
+
+        period_options = {
+            "최근 1개월": 31,
+            "최근 6개월": 183,
+            "최근 1년": 365,
+            "최근 2년": 730,
+            "전체 기간": None,
+        }
+        with filter_col3:
+            selected_period = st.selectbox(
+                "조회 기간",
+                list(period_options.keys()),
+                index=2,
+                key="power_admin_filter_period",
+            )
+
+        search_term = st.text_input(
+            "측정자료 검색",
+            placeholder="점검자, 운용조, 모국, 국소, 특이사항 등",
+            key="power_admin_search_term",
+        ).strip()
+
+        filtered_df = source_df.copy()
+        if selected_mother != "전체 모국":
+            filtered_df = filtered_df[
+                filtered_df["모국"].astype(str).str.strip() == selected_mother
+            ]
+        if selected_local != "전체 국소":
+            filtered_df = filtered_df[
+                filtered_df["국소"].astype(str).str.strip() == selected_local
+            ]
+
+        period_days = period_options[selected_period]
+        if period_days is not None:
+            cutoff = _korea_now().replace(tzinfo=None) - datetime.timedelta(days=period_days)
+            filtered_df = filtered_df[
+                filtered_df["_저장일시_dt"].notna()
+                & (filtered_df["_저장일시_dt"] >= cutoff)
+            ]
+
+        if search_term:
+            searchable_columns = [column for column in filtered_df.columns if column != "_저장일시_dt"]
+            search_mask = filtered_df[searchable_columns].apply(
+                lambda row: row.astype(str).str.contains(search_term, case=False, na=False).any(),
+                axis=1,
+            )
+            filtered_df = filtered_df[search_mask]
+
+        total_records = int(len(filtered_df))
+        unique_mothers = int(filtered_df["모국"].astype(str).str.strip().replace("", pd.NA).dropna().nunique())
+        unique_locals = int(filtered_df["국소"].astype(str).str.strip().replace("", pd.NA).dropna().nunique())
+        unique_inspectors = int(filtered_df["점검자"].astype(str).str.strip().replace("", pd.NA).dropna().nunique())
+        latest_saved_at = "-"
+        if not filtered_df.empty and filtered_df["_저장일시_dt"].notna().any():
+            latest_saved_at = filtered_df["_저장일시_dt"].max().strftime("%Y-%m-%d %H:%M:%S")
+
+        metric1, metric2, metric3, metric4, metric5 = st.columns(5)
+        metric1.metric("조회 건수", f"{total_records:,}건")
+        metric2.metric("모국", f"{unique_mothers:,}개")
+        metric3.metric("국소", f"{unique_locals:,}개")
+        metric4.metric("점검자", f"{unique_inspectors:,}명")
+        metric5.metric("최근 측정일시", latest_saved_at)
+
+        display_df = filtered_df.drop(columns=["_저장일시_dt"], errors="ignore")
+
+        st.markdown("#### 📋 전원 정밀점검 측정자료")
         st.caption(
-            "완료자 명단은 현재 불러온 수료 데이터 기준으로 바로 생성됩니다. "
-            "미참여자 실명 명단은 전체 교육 대상자 명부를 업로드한 경우에만 생성됩니다. "
-            "대상자 명부 업로드는 Google Sheet를 추가로 읽지 않습니다."
+            "화면에는 선택한 모국·국소·기간 조건의 자료만 표시됩니다. "
+            "CSV와 Excel 다운로드에도 동일한 필터가 적용됩니다."
         )
+        st.dataframe(display_df, use_container_width=True, hide_index=True, height=520)
 
-        roster_file = st.file_uploader(
-            "전체 교육 대상자 명부 업로드(선택 · CSV/XLSX) - 권장 컬럼: 사번, 성명, 총괄/본부/단, 부서 또는 상세 부서명",
-            type=["csv", "xlsx", "xls"],
-            key="june_target_roster_upload",
-        )
+        summary_df = pd.DataFrame(columns=["모국", "국소", "점검건수", "최근측정일시", "최근점검자"])
+        if not filtered_df.empty:
+            summary_source = filtered_df.copy()
+            summary_source["점검자"] = summary_source["점검자"].astype(str)
+            summary_rows = []
+            for (mother_name, local_name), group in summary_source.groupby(["모국", "국소"], dropna=False):
+                ordered = group.sort_values("_저장일시_dt", ascending=False, na_position="last")
+                latest_row = ordered.iloc[0]
+                latest_dt = latest_row.get("_저장일시_dt")
+                latest_text = latest_dt.strftime("%Y-%m-%d %H:%M:%S") if pd.notna(latest_dt) else str(latest_row.get("저장일시", ""))
+                summary_rows.append({
+                    "모국": str(mother_name),
+                    "국소": str(local_name),
+                    "점검건수": int(len(group)),
+                    "최근측정일시": latest_text,
+                    "최근점검자": str(latest_row.get("점검자", "")),
+                })
+            summary_df = pd.DataFrame(summary_rows).sort_values(["모국", "국소"])
 
-        def _normalize_admin_colname(col) -> str:
-            return str(col or "").strip().replace(" ", "")
+        safe_mother = "전체" if selected_mother == "전체 모국" else re.sub(r"[^0-9A-Za-z가-힣_-]", "_", selected_mother)
+        safe_local = "전체" if selected_local == "전체 국소" else re.sub(r"[^0-9A-Za-z가-힣_-]", "_", selected_local)
+        exported_at = _korea_now().strftime("%Y%m%d_%H%M%S")
+        file_base = f"전원정밀점검_{safe_mother}_{safe_local}_{exported_at}"
 
-        def _read_uploaded_roster(uploaded_file) -> pd.DataFrame:
-            if uploaded_file is None:
-                return pd.DataFrame()
-            name = str(getattr(uploaded_file, "name", "")).lower()
-            if name.endswith(".csv"):
-                df = pd.read_csv(uploaded_file, dtype=str)
-            else:
-                df = pd.read_excel(uploaded_file, dtype=str)
-            df = df.fillna("")
-            col_map = {}
-            for col in df.columns:
-                norm = _normalize_admin_colname(col)
-                if norm in {"사번", "직원번호", "사원번호", "EMPID", "EMPLOYEEID"}:
-                    col_map[col] = "사번"
-                elif norm in {"성명", "이름", "직원명", "사원명", "NAME"}:
-                    col_map[col] = "성명"
-                elif norm in {"총괄/본부/단", "총괄본부단", "조직", "본부", "소속", "ORG"}:
-                    col_map[col] = "총괄/본부/단"
-                elif norm in {"부서", "상세부서명", "상세부서", "팀", "DEPT", "DEPARTMENT"}:
-                    col_map[col] = "부서"
-            df = df.rename(columns=col_map)
-            for required in ["사번", "성명", "총괄/본부/단", "부서"]:
-                if required not in df.columns:
-                    df[required] = ""
-            df["사번"] = df["사번"].astype(str).str.strip()
-            df["성명"] = df["성명"].astype(str).str.strip()
-            df["총괄/본부/단"] = df["총괄/본부/단"].astype(str).str.strip()
-            df["부서"] = df["부서"].astype(str).str.strip()
-            return df[["사번", "성명", "총괄/본부/단", "부서"]].drop_duplicates(subset=["사번", "성명", "총괄/본부/단"], keep="last")
+        download_col1, download_col2 = st.columns(2)
+        with download_col1:
+            csv_bytes = display_df.to_csv(index=False).encode("utf-8-sig")
+            st.download_button(
+                "📥 현재 조회자료 CSV 다운로드",
+                data=csv_bytes,
+                file_name=f"{file_base}.csv",
+                mime="text/csv",
+                use_container_width=True,
+                key="power_admin_download_csv",
+                disabled=display_df.empty,
+            )
 
-        def _unique_completed_df(source_df: pd.DataFrame) -> pd.DataFrame:
-            if source_df is None or source_df.empty:
-                return pd.DataFrame(columns=["사번", "성명", "총괄/본부/단", "부서", "저장시간"])
-            df = source_df.copy().fillna("")
-            for col in ["사번", "성명", "총괄/본부/단", "부서", "저장시간"]:
-                if col not in df.columns:
-                    df[col] = ""
-            df["사번"] = df["사번"].astype(str).str.strip()
-            df["성명"] = df["성명"].astype(str).str.strip()
-            df["총괄/본부/단"] = df["총괄/본부/단"].astype(str).str.strip()
-            df["부서"] = df["부서"].astype(str).str.strip()
-            if "사번" in df.columns:
-                df = df.sort_values("저장시간").drop_duplicates(subset=["사번"], keep="last")
-            return df[["사번", "성명", "총괄/본부/단", "부서", "저장시간"]]
+        with download_col2:
+            try:
+                from io import BytesIO
 
-        def _build_org_list_df(org_name: str, completed_df: pd.DataFrame, roster_df: pd.DataFrame | None = None) -> pd.DataFrame:
-            completed_org = completed_df[completed_df["총괄/본부/단"] == org_name].copy()
-            completed_org["참여상태"] = "수료"
-            completed_org = completed_org.rename(columns={"저장시간": "수료저장시간"})
-
-            if roster_df is not None and not roster_df.empty:
-                roster_org = roster_df[roster_df["총괄/본부/단"] == org_name].copy()
-                completed_keys = set(completed_org["사번"].astype(str).str.strip())
-                roster_org["참여상태"] = roster_org["사번"].astype(str).str.strip().apply(lambda x: "수료" if x in completed_keys else "미수료")
-                saved_time_map = completed_org.set_index("사번")["수료저장시간"].to_dict() if not completed_org.empty else {}
-                roster_org["수료저장시간"] = roster_org["사번"].map(saved_time_map).fillna("")
-                result = roster_org[["총괄/본부/단", "부서", "사번", "성명", "참여상태", "수료저장시간"]]
-                result = result.sort_values(["참여상태", "부서", "성명"], ascending=[True, True, True])
-                return result
-
-            result = completed_org[["총괄/본부/단", "부서", "사번", "성명", "참여상태", "수료저장시간"]]
-            if result.empty:
-                return pd.DataFrame(columns=["총괄/본부/단", "부서", "사번", "성명", "참여상태", "수료저장시간"])
-            return result.sort_values(["부서", "성명"])
-
-        try:
-            roster_df = _read_uploaded_roster(roster_file)
-        except Exception as roster_error:
-            roster_df = pd.DataFrame()
-            st.warning(f"대상자 명부를 읽지 못했습니다. 파일 컬럼과 형식을 확인해 주세요: {roster_error}")
-
-        completed_unique_df = _unique_completed_df(june_df)
-        if roster_df.empty:
-            st.info("현재는 수료자 명단만 다운로드할 수 있습니다. 미수료자 실명 명단까지 필요하면 전체 교육 대상자 명부를 업로드해 주세요.")
-        else:
-            st.success("대상자 명부가 적용되었습니다. 조직별 파일에 수료/미수료 상태가 함께 표시됩니다.")
-
-        org_button_cols = st.columns(4)
-        for idx, org_name in enumerate(TOTAL_STAFF_MAP.keys()):
-            org_list_df = _build_org_list_df(org_name, completed_unique_df, roster_df)
-            if roster_df.empty:
-                filename = f"2026_06_컴플라이언스_{org_name}_수료자명단.csv"
-                label = f"📥 {org_name} 수료자"
-            else:
-                filename = f"2026_06_컴플라이언스_{org_name}_참여미참여명단.csv"
-                label = f"📥 {org_name} 참여/미참여"
-            with org_button_cols[idx % 4]:
+                excel_output = BytesIO()
+                with pd.ExcelWriter(excel_output, engine="openpyxl") as writer:
+                    display_df.to_excel(writer, index=False, sheet_name="전원정밀점검_자료")
+                    summary_df.to_excel(writer, index=False, sheet_name="국소별_요약")
                 st.download_button(
-                    label,
-                    org_list_df.to_csv(index=False).encode("utf-8-sig"),
-                    filename,
-                    "text/csv",
+                    "📥 현재 조회자료 Excel 다운로드",
+                    data=excel_output.getvalue(),
+                    file_name=f"{file_base}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True,
-                    key=f"june_org_list_download_{org_name}",
+                    key="power_admin_download_excel",
+                    disabled=display_df.empty,
                 )
+            except Exception as excel_error:
+                st.warning(f"Excel 파일을 생성하지 못했습니다. CSV 다운로드를 이용해 주세요. ({excel_error})")
 
-        try:
-            from io import BytesIO
-            all_output = BytesIO()
-            with pd.ExcelWriter(all_output, engine="openpyxl") as writer:
-                org_stats_df.to_excel(writer, index=False, sheet_name="조직별_요약")
-                for org_name in TOTAL_STAFF_MAP.keys():
-                    sheet_name = re.sub(r"[\/*?:\[\]]", "", org_name)[:31]
-                    _build_org_list_df(org_name, completed_unique_df, roster_df).to_excel(writer, index=False, sheet_name=sheet_name)
-            st.download_button(
-                "📥 전체 조직별 명단 Excel 다운로드",
-                all_output.getvalue(),
-                "2026_06_컴플라이언스_전체조직별_참여현황.xlsx",
-                use_container_width=True,
-                key="june_all_org_list_excel_download",
+        with st.expander("📌 데이터 이용 및 운영 안내", expanded=False):
+            st.markdown(
+                "- 이 화면은 **최신 누적 데이터 불러오기**를 누른 시점의 Google Sheets 자료를 사용합니다.\n"
+                "- 실시간 최신자료가 필요하면 조회 버튼을 다시 눌러 새로 읽어오면 됩니다.\n"
+                "- 지역 사용자는 담당 모국과 국소를 선택한 뒤 화면 확인 또는 파일 다운로드를 이용할 수 있습니다.\n"
+                "- CSV는 범용 공유용, Excel은 원본자료와 국소별 요약을 함께 제공하는 업무용 형식입니다.\n"
+                "- 지역별 열람권한을 기술적으로 제한해야 하는 경우에는 사용자 계정과 담당 모국을 연결하는 별도 권한 설정이 필요합니다."
             )
-        except Exception:
-            st.caption("Excel 다운로드 생성이 어려운 경우 위 조직별 CSV 다운로드를 이용해 주세요.")
-    else:
-        st.warning("조직별 통계를 생성할 수 없습니다. 아직 수료 데이터가 없거나 '총괄/본부/단' 컬럼이 없습니다.")
-
-    st.markdown("---")
-    st.markdown("#### 🔍 수료 내역 확인 및 다운로드")
-    search_term = st.text_input("수료 내역 검색", placeholder="성명, 사번, 부서, 본부 등", key="june_admin_search")
-    if search_term and not june_df.empty:
-        june_display_df = june_df[june_df.apply(lambda row: row.astype(str).str.contains(search_term, case=False, na=False).any(), axis=1)]
-    else:
-        june_display_df = june_df
-
-    st.dataframe(june_display_df, use_container_width=True, hide_index=True)
-
-    dl1, dl2 = st.columns(2)
-    with dl1:
-        june_csv_bytes = june_display_df.to_csv(index=False).encode("utf-8-sig")
-        st.download_button(
-            "📥 현재 조회내역 CSV 다운로드",
-            june_csv_bytes,
-            f"{JUNE_TRAINING_SHEET_NAME}.csv",
-            "text/csv",
-            use_container_width=True,
-            key="june_csv_download",
-        )
-    with dl2:
-        try:
-            from io import BytesIO
-            output = BytesIO()
-            with pd.ExcelWriter(output, engine="openpyxl") as writer:
-                june_display_df.to_excel(writer, index=False, sheet_name="6월_컴플라이언스교육")
-                if not org_stats_df.empty:
-                    org_stats_df.to_excel(writer, index=False, sheet_name="조직별_수료율")
-            st.download_button(
-                "📥 현재 조회내역 Excel 다운로드",
-                output.getvalue(),
-                f"{JUNE_TRAINING_SHEET_NAME}.xlsx",
-                use_container_width=True,
-                key="june_xlsx_download",
-            )
-        except Exception:
-            st.info("Excel 엔진 미설치로 CSV 다운로드를 이용하세요.")
-
-    with st.expander("📌 운영 메모", expanded=False):
-        st.markdown("""
-        - 이 화면은 버튼을 누른 시점의 Google Sheet 데이터를 기준으로 표시합니다.
-        - 검색, 그래프 확인, 다운로드는 이미 불러온 데이터로 처리되므로 추가 Google Sheet 읽기 요청이 발생하지 않습니다.
-        - 최신 현황이 필요할 때만 다시 **현재 데이터 불러오기** 버튼을 눌러 주세요.
-        - 최종 수료자 확정 시에는 중복 제출 가능성을 고려하여 사번 기준으로 정리하는 것을 권장합니다.
-        """)
