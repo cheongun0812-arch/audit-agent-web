@@ -1406,7 +1406,6 @@ def _power_sheet_has_measurement_rows(ws) -> bool:
     try:
         values = ws.get_all_values()
     except Exception:
-        # 데이터 유무 확인에 실패하면 기존 자료 보호를 위해 데이터가 있는 것으로 간주합니다.
         return True
 
     if len(values) <= 1:
@@ -1417,41 +1416,110 @@ def _power_sheet_has_measurement_rows(ws) -> bool:
     )
 
 
-def _rewrite_power_headers_in_standard_order(ws) -> list[str]:
-    """데이터가 없는 시트의 헤더를 최종 표준 순서로 다시 작성합니다.
+def _rewrite_power_sheet_in_standard_order(ws) -> list[str]:
+    """기존 데이터까지 헤더명 기준으로 재배열해 최종 표준 열 순서를 즉시 적용합니다.
 
-    삼상 전류는 반드시 R → S → T → N 순서로 배치합니다.
-    기존 측정행이 없는 경우에만 실행하므로 누적 데이터의 열 정렬을 훼손하지 않습니다.
+    기존 시트에 데이터가 남아 있어도 각 행을 헤더명으로 다시 매핑하므로 값과 항목이
+    어긋나지 않습니다. 삼상전류는 반드시 R → S → T → N 순서로 배치됩니다.
+    표준 목록에 없는 기존 사용자 정의 열은 오른쪽 끝에 보존합니다.
     """
-    target_headers = POWER_INSPECTION_HEADERS.copy()
-    current_cols = int(getattr(ws, "col_count", 0) or 0)
-    clear_cols = max(current_cols, len(target_headers), 100)
+    try:
+        values = ws.get_all_values()
+    except Exception as read_error:
+        raise RuntimeError(f"기존 Google Sheets 데이터를 읽지 못했습니다: {read_error}")
 
+    current_headers = [str(value or "").strip() for value in (values[0] if values else [])]
+    standard_headers = POWER_INSPECTION_HEADERS.copy()
+    extra_headers = [
+        header for header in current_headers
+        if header and header not in standard_headers
+    ]
+    target_headers = standard_headers + extra_headers
+
+    # 이미 정확한 표준 순서이면 불필요한 전체 재작성을 하지 않습니다.
+    if current_headers == target_headers:
+        _ensure_worksheet_grid_capacity(
+            ws,
+            required_rows=max(int(getattr(ws, "row_count", 0) or 0), 10000),
+            required_cols=max(len(target_headers), 100),
+        )
+        return target_headers
+
+    # 중복 헤더가 있더라도 최초 열의 값을 기준으로 안전하게 재배열합니다.
+    source_index = {}
+    for index, header in enumerate(current_headers):
+        if header and header not in source_index:
+            source_index[header] = index
+
+    reordered_rows = [target_headers]
+    for source_row in values[1:]:
+        reordered_rows.append([
+            source_row[source_index[header]]
+            if header in source_index and source_index[header] < len(source_row)
+            else ""
+            for header in target_headers
+        ])
+
+    required_rows = max(
+        int(getattr(ws, "row_count", 0) or 0),
+        len(reordered_rows),
+        10000,
+    )
+    required_cols = max(
+        int(getattr(ws, "col_count", 0) or 0),
+        len(current_headers),
+        len(target_headers),
+        100,
+    )
     _ensure_worksheet_grid_capacity(
         ws,
-        required_rows=max(int(getattr(ws, "row_count", 0) or 0), 10000),
-        required_cols=clear_cols,
+        required_rows=required_rows,
+        required_cols=required_cols,
     )
 
-    # 과거 버전의 헤더가 CN 등 오른쪽 끝에 남아 있지 않도록 1행을 먼저 비웁니다.
-    clear_range = f"A1:{_column_letter(clear_cols)}1"
+    # 기존 값 영역을 비운 뒤 헤더와 모든 행을 표준 순서로 다시 기록합니다.
+    clear_last_row = max(len(values), 1)
+    clear_range = f"A1:{_column_letter(required_cols)}{clear_last_row}"
     try:
         ws.batch_clear([clear_range])
     except Exception:
         try:
-            ws.update(range_name=clear_range, values=[[""] * clear_cols])
+            ws.update(
+                range_name=clear_range,
+                values=[[""] * required_cols for _ in range(clear_last_row)],
+            )
         except TypeError:
-            ws.update(clear_range, [[""] * clear_cols])
+            ws.update(
+                clear_range,
+                [[""] * required_cols for _ in range(clear_last_row)],
+            )
 
     end_col = _column_letter(len(target_headers))
+    end_row = len(reordered_rows)
     try:
         ws.update(
-            range_name=f"A1:{end_col}1",
-            values=[target_headers],
-            value_input_option="RAW",
+            range_name=f"A1:{end_col}{end_row}",
+            values=reordered_rows,
+            value_input_option="USER_ENTERED",
         )
     except TypeError:
-        ws.update(f"A1:{end_col}1", [target_headers])
+        ws.update(
+            f"A1:{end_col}{end_row}",
+            reordered_rows,
+            value_input_option="USER_ENTERED",
+        )
+
+    # 재작성 결과를 다시 확인하여 R/S/T/N 순서가 실제 시트에 반영됐는지 검증합니다.
+    verified_headers = [str(value or "").strip() for value in ws.row_values(1)]
+    expected_sequence = [
+        "삼상전류_R(A)",
+        "삼상전류_S(A)",
+        "삼상전류_T(A)",
+        "삼상전류_N(A)",
+    ]
+    sequence_start = target_headers.index("삼상전류_R(A)")
+    if verified_headers[sequence_start:sequence_start + 4] != expected_sequence:
+        raise RuntimeError("Google Sheets의 삼상전류 R/S/T/N 열 순서 재배치에 실패했습니다.")
     return target_headers
 
 
@@ -1465,43 +1533,10 @@ def _ensure_power_inspection_sheet(spreadsheet):
             cols=max(len(POWER_INSPECTION_HEADERS) + 5, 100),
         )
 
-    current_headers = ws.row_values(1)
-    has_measurement_rows = _power_sheet_has_measurement_rows(ws)
+    # 데이터 유무와 관계없이 기존 행을 헤더명으로 안전하게 재매핑하여
+    # 삼상전류 R → S → T → N 표준 순서를 실제 시트에 즉시 적용합니다.
+    current_headers = _rewrite_power_sheet_in_standard_order(ws)
 
-    # 최종 배포 전 기존 데이터를 삭제한 빈 시트라면 헤더도 표준 순서로 재구성합니다.
-    # 이에 따라 삼상전류_N(A)는 CN이 아니라 R/S/T 다음인 X열에 배치됩니다.
-    if not has_measurement_rows:
-        current_headers = _rewrite_power_headers_in_standard_order(ws)
-    else:
-        # 기존 측정행이 남아 있는 동안에는 열 위치를 강제로 바꾸지 않아 자료 오정렬을 방지합니다.
-        missing_headers = [
-            header for header in POWER_INSPECTION_HEADERS
-            if header not in current_headers
-        ] if current_headers else POWER_INSPECTION_HEADERS.copy()
-
-        required_header_count = (
-            len(current_headers) + len(missing_headers)
-            if current_headers
-            else len(POWER_INSPECTION_HEADERS)
-        )
-        _ensure_worksheet_grid_capacity(
-            ws,
-            required_rows=max(int(getattr(ws, "row_count", 0) or 0), 10000),
-            required_cols=max(required_header_count, len(POWER_INSPECTION_HEADERS), 100),
-        )
-
-        if not current_headers:
-            current_headers = _rewrite_power_headers_in_standard_order(ws)
-        elif missing_headers:
-            start_col_num = len(current_headers) + 1
-            end_col_num = len(current_headers) + len(missing_headers)
-            ws.update(
-                range_name=f"{_column_letter(start_col_num)}1:{_column_letter(end_col_num)}1",
-                values=[missing_headers],
-            )
-            current_headers.extend(missing_headers)
-
-    # append_row 실행 전에도 현재 헤더 수만큼 열이 확보되도록 재확인합니다.
     _ensure_worksheet_grid_capacity(
         ws,
         required_rows=max(int(getattr(ws, "row_count", 0) or 0), 10000),
