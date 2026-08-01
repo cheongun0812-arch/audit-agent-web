@@ -1064,7 +1064,7 @@ def save_june_compliance_training_result(record: dict) -> tuple[bool, str]:
 POWER_INSPECTION_SPREADSHEET_NAME = "Audit_Result_2026"
 POWER_INSPECTION_SHEET_NAME = "국사_전원시설_정밀점검"
 
-POWER_REGION_DATA = {'1권역 · 파주·문산·동두천 등': {'담당자': ['김수창', '이철순'],
+POWER_REGION_DATA = {'1권역 · 파주·문산·동두천 등': {'담당자': ['이철순', '김수창'],
                        '모국_국소': {'동두천': ['은현', '신산', '상수'],
                                  '문산': ['문산', '파주', '마산', '마정', '통일촌(N3211)', '장현', '웅담', '적성', '파평', '당동상가BBH', '봉암1리마을회관BBH'],
                                  '법원리': ['법원리', '금파리마을회관BBH', '어유지리BBH'],
@@ -1111,7 +1111,7 @@ POWER_REGION_DATA = {'1권역 · 파주·문산·동두천 등': {'담당자': [
                                         '백석7블럭BBH',
                                         '정발BBH',
                                         '일산(EBS)']}},
- '3권역 · 광화문·중앙·광진 등': {'담당자': ['김태수', '이학원'],
+ '3권역 · 광화문·중앙·광진 등': {'담당자': ['이학원', '김태수'],
                        '모국_국소': {'광진': ['구의동BBH', '중곡동BBH'],
                                  '광화문': ['독립문통신구BBH(N995)', '무교동BBH', '종로5가통신구-1BBH(통신구내)'],
                                  '노원': ['공릉최적화분기국사'],
@@ -1126,7 +1126,7 @@ POWER_REGION_DATA = {'1권역 · 파주·문산·동두천 등': {'담당자': [
                                  '중앙': ['BBH(후암동68-6-BBH)', '을지메인통신구', '을지입구B1통신구내 BBH(N944)'],
                                  '청량': ['청량최적화BBH'],
                                  '행당': ['약수역BBH', '동대문최적화BBH(통신구내)']}},
- '4권역 · 동의정부·동두천·철원 등': {'담당자': ['박동희', '신진우'],
+ '4권역 · 동의정부·동두천·철원 등': {'담당자': ['신진우', '박동희'],
                          '모국_국소': {'동두천': ['동두천', '덕정', '덕계', '소요', '광암'],
                                    '동의정부': ['경중앙(통신구내)BBH', '남방', '광사', '자일', '청학', '금오BBH'],
                                    '송우': ['송우', '가산', '내촌', '신팔', '이곡'],
@@ -1154,7 +1154,7 @@ POWER_REGION_DATA = {'1권역 · 파주·문산·동두천 등': {'담당자': [
                                           '만세교',
                                           '양문',
                                           '대회산']}},
- '5권역 · 가평·남양주·양평 등': {'담당자': ['강만식', '이민우'],
+ '5권역 · 가평·남양주·양평 등': {'담당자': ['이민우', '강만식'],
                        '모국_국소': {'가평': ['개곡', '가평', '상색', '산유', '북면', '화악', '백둔', '도대', '적목'],
                                  '남양주': ['남양주', '일패', '답내', '운수', '외방', '호평BBH'],
                                  '덕소': ['덕소', '조안', '송촌', '월문', '팔당'],
@@ -1255,32 +1255,67 @@ def _power_area_station_map(area: str) -> dict[str, list[str]]:
     return mapping if isinstance(mapping, dict) else {}
 
 
+def _inspectors_for_major_area(area: str) -> list[str]:
+    """선택한 권역에 배정된 담당자 2명만 반환합니다."""
+    region = POWER_REGION_DATA.get(str(area or "").strip(), {})
+    people = region.get("담당자", []) if isinstance(region, dict) else []
+    return [str(person).strip() for person in people if str(person).strip()]
+
+
 def _update_power_inspector_group() -> None:
     st.session_state["power_inspector_group"] = _inspector_group_for_name(
         st.session_state.get("power_worker", "")
     )
 
 
+def _clear_power_history_state() -> None:
+    """국사 선택과 연동된 과거기록 조회 상태만 초기화합니다."""
+    for key in (
+        "power_history_records", "power_history_message", "power_history_station",
+        "power_history_selected_index", "power_loaded_message",
+    ):
+        st.session_state.pop(key, None)
+
+
+def _preserve_current_power_measurements() -> None:
+    """기본정보 또는 메뉴를 변경하기 전에 현재 측정값을 영구 임시저장소에 보존합니다."""
+    current_theme = st.session_state.get("power_current_theme", POWER_THEME_ORDER[0])
+    if current_theme in POWER_THEME_ORDER[:-1]:
+        _save_power_theme_to_draft(current_theme)
+
+
+def _mark_power_basic_info_changed() -> None:
+    st.session_state["power_basic_changed_notice"] = True
+    st.session_state["power_draft_saved_at"] = _korea_now().strftime("%H:%M:%S")
+
+
 def _on_power_worker_change() -> None:
-    """담당자 변경 시 배정 권역을 자동 선택하고 이전 국사의 측정값을 분리합니다."""
+    """담당자를 변경해도 기존 측정값은 삭제하지 않습니다."""
+    _preserve_current_power_measurements()
     _update_power_inspector_group()
-    worker = st.session_state.get("power_worker", "")
-    assigned_areas = _major_areas_for_inspector(worker)
-    st.session_state["power_major_area"] = assigned_areas[0] if len(assigned_areas) == 1 else "권역 선택"
-    st.session_state["power_mother"] = "모국 선택"
-    st.session_state["power_local"] = "국소 선택"
-    _clear_power_measurements_after_station_change()
+    _mark_power_basic_info_changed()
 
 
 def _on_power_major_area_change() -> None:
+    """권역 변경 시 담당자·모국·국소 선택만 재구성하고 측정값은 유지합니다."""
+    _preserve_current_power_measurements()
+    selected_area = st.session_state.get("power_major_area", "권역 선택")
+    area_people = _inspectors_for_major_area(selected_area)
+    if st.session_state.get("power_worker", "담당자 선택") not in area_people:
+        st.session_state["power_worker"] = "담당자 선택"
+        st.session_state["power_inspector_group"] = ""
     st.session_state["power_mother"] = "모국 선택"
     st.session_state["power_local"] = "국소 선택"
-    _clear_power_measurements_after_station_change()
+    _clear_power_history_state()
+    _mark_power_basic_info_changed()
 
 
 def _on_power_mother_change() -> None:
+    """모국 변경 시 국소와 과거조회 상태만 초기화하고 측정값은 유지합니다."""
+    _preserve_current_power_measurements()
     st.session_state["power_local"] = "국소 선택"
-    _clear_power_measurements_after_station_change()
+    _clear_power_history_state()
+    _mark_power_basic_info_changed()
 
 
 def _power_headers() -> list[str]:
@@ -2101,19 +2136,15 @@ def _power_state_blank(key: str) -> bool:
 
 
 def _clear_power_measurements_after_station_change() -> None:
-    """국사가 실제로 바뀌면 이전 국사의 측정값이 섞이지 않도록 측정 임시값을 초기화합니다."""
-    keep_keys = {
-        "power_worker", "power_inspector_group", "power_major_area", "power_mother", "power_local",
-        "power_phase_type", "power_battery_set",
-    }
-    for key in list(st.session_state.keys()):
-        if (key.startswith("power_") and key not in keep_keys) or key.startswith("_ui_power_"):
-            del st.session_state[key]
-    st.session_state["power_draft"] = {}
-    st.session_state["power_current_theme"] = POWER_THEME_ORDER[0]
-    st.session_state["power_unlocked_theme_index"] = 0
-    st.session_state["power_theme_confirmations"] = {}
-    st.session_state["power_panel_nonce"] = int(st.session_state.get("power_panel_nonce", 0) or 0) + 1
+    """국소가 바뀌어도 측정값을 삭제하지 않고 현재값을 보존합니다.
+
+    과거에는 이 함수가 power_draft까지 초기화하여, 최종 확인 단계에서
+    기본정보를 보완하면 모든 측정값이 사라지는 문제가 있었습니다.
+    이제 측정값 초기화는 최종 전송 성공 후 `_reset_power_inspection()`에서만 수행합니다.
+    """
+    _preserve_current_power_measurements()
+    _clear_power_history_state()
+    _mark_power_basic_info_changed()
 
 
 def _power_theme_missing(theme: str) -> list[str]:
@@ -2194,11 +2225,8 @@ def _power_theme_started(theme: str) -> bool:
 
 
 def _power_unlocked_theme_index() -> int:
-    try:
-        value = int(st.session_state.get("power_unlocked_theme_index", 0) or 0)
-    except Exception:
-        value = 0
-    return max(0, min(value, len(POWER_THEME_ORDER) - 1))
+    """모든 측정 테마는 언제든 선택할 수 있으므로 마지막 인덱스를 반환합니다."""
+    return len(POWER_THEME_ORDER) - 1
 
 
 def _bump_power_panel_nonce() -> None:
@@ -2214,20 +2242,92 @@ def _clear_power_completion_prompt() -> None:
         st.session_state.pop(key, None)
 
 
-def _activate_power_theme(target_theme: str) -> None:
-    """잠금 해제된 테마만 열고, 현재 화면 값은 먼저 임시 저장합니다."""
+def _move_to_power_theme(target_theme: str) -> None:
     if target_theme not in POWER_THEME_ORDER:
         return
-    target_index = POWER_THEME_ORDER.index(target_theme)
-    if target_index > _power_unlocked_theme_index():
-        st.session_state["power_locked_theme_notice"] = target_theme
+    _hydrate_power_theme_from_draft(target_theme)
+    st.session_state["power_current_theme"] = target_theme
+    st.session_state["power_temp_saved_notice"] = True
+    st.session_state.pop("power_pending_theme_switch", None)
+    st.session_state.pop("power_pending_from_theme", None)
+    st.session_state.pop("power_navigation_error", None)
+    _clear_power_completion_prompt()
+    _bump_power_panel_nonce()
+
+
+def _activate_power_theme(target_theme: str) -> None:
+    """측정 순서를 강제하지 않고, 다른 메뉴로 이동하기 전에 현재값 확인을 요청합니다."""
+    if target_theme not in POWER_THEME_ORDER:
+        return
+    current_theme = st.session_state.get("power_current_theme", POWER_THEME_ORDER[0])
+    if target_theme == current_theme:
+        _hydrate_power_theme_from_draft(current_theme)
         return
 
-    current_theme = st.session_state.get("power_current_theme", POWER_THEME_ORDER[0])
-    if current_theme in POWER_THEME_ORDER:
+    if current_theme in POWER_THEME_ORDER[:-1]:
         _save_power_theme_to_draft(current_theme)
-    st.session_state["power_current_theme"] = target_theme
-    _clear_power_completion_prompt()
+        st.session_state["power_pending_from_theme"] = current_theme
+        st.session_state["power_pending_theme_switch"] = target_theme
+        st.session_state.pop("power_navigation_error", None)
+        return
+
+    _move_to_power_theme(target_theme)
+
+
+def _confirm_power_theme_switch() -> None:
+    from_theme = st.session_state.get("power_pending_from_theme")
+    target_theme = st.session_state.get("power_pending_theme_switch")
+    if from_theme not in POWER_THEME_ORDER[:-1] or target_theme not in POWER_THEME_ORDER:
+        st.session_state["power_navigation_error"] = "이동할 측정 메뉴를 다시 선택해 주세요."
+        return
+
+    _save_power_theme_to_draft(from_theme)
+    confirmations = dict(st.session_state.get("power_theme_confirmations", {}))
+    confirmations[from_theme] = {
+        "answer": "현재 측정값 확인 후 이동",
+        "missing_count": len(_power_theme_missing(from_theme)),
+        "confirmed_at": _korea_now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    st.session_state["power_theme_confirmations"] = confirmations
+
+    # 1조 입력 후 다른 테마로 이동할 때 기존의 2조 측정 여부 확인을 유지합니다.
+    if (
+        from_theme == "축전지 측정"
+        and _power_get("power_battery_set", "1조 셀 측정") == "1조 셀 측정"
+        and not _power_battery2_enabled()
+        and target_theme != "축전지 측정"
+    ):
+        st.session_state["power_battery_navigation_target"] = target_theme
+        st.session_state["power_battery_exit_stage"] = "ask_group2_navigation"
+        st.session_state.pop("power_pending_theme_switch", None)
+        st.session_state.pop("power_pending_from_theme", None)
+        return
+
+    _move_to_power_theme(target_theme)
+
+
+def _cancel_power_theme_switch() -> None:
+    current_theme = st.session_state.get("power_current_theme", POWER_THEME_ORDER[0])
+    if current_theme in POWER_THEME_ORDER[:-1]:
+        _save_power_theme_to_draft(current_theme)
+    st.session_state.pop("power_pending_theme_switch", None)
+    st.session_state.pop("power_pending_from_theme", None)
+    st.session_state.pop("power_navigation_error", None)
+
+
+def _finish_battery_navigation(measure_second_group: bool) -> None:
+    target_theme = st.session_state.get("power_battery_navigation_target")
+    _save_power_theme_to_draft("축전지 측정")
+    if measure_second_group:
+        _power_set("power_battery2_enabled", True)
+        _power_set("power_battery_set", "2조 셀 측정")
+        st.session_state["power_current_theme"] = "축전지 측정"
+        _hydrate_power_theme_from_draft("축전지 측정")
+        st.session_state["power_temp_saved_notice"] = True
+    elif target_theme in POWER_THEME_ORDER:
+        _move_to_power_theme(target_theme)
+    st.session_state.pop("power_battery_navigation_target", None)
+    st.session_state.pop("power_battery_exit_stage", None)
     _bump_power_panel_nonce()
 
 
@@ -2384,7 +2484,7 @@ def _reset_power_inspection() -> None:
         if key.startswith("power_") or key.startswith("_ui_power_"):
             del st.session_state[key]
     st.session_state["power_current_theme"] = POWER_THEME_ORDER[0]
-    st.session_state["power_unlocked_theme_index"] = 0
+    st.session_state["power_unlocked_theme_index"] = len(POWER_THEME_ORDER) - 1
     st.session_state["power_theme_confirmations"] = {}
     st.session_state["power_panel_nonce"] = 0
     st.session_state["power_draft"] = {
@@ -2851,25 +2951,26 @@ with tab_power:
     if _power_get("power_battery_set", "1조 셀 측정") not in {"1조 셀 측정", "2조 셀 측정"}:
         _power_set("power_battery_set", "1조 셀 측정")
     if "power_unlocked_theme_index" not in st.session_state:
-        st.session_state["power_unlocked_theme_index"] = 0
+        st.session_state["power_unlocked_theme_index"] = len(POWER_THEME_ORDER) - 1
     if "power_theme_confirmations" not in st.session_state:
         st.session_state["power_theme_confirmations"] = {}
     if "power_panel_nonce" not in st.session_state:
         st.session_state["power_panel_nonce"] = 0
     unlocked_index = _power_unlocked_theme_index()
-    current_index = POWER_THEME_ORDER.index(st.session_state["power_current_theme"])
-    if current_index > unlocked_index:
-        st.session_state["power_current_theme"] = POWER_THEME_ORDER[unlocked_index]
     _power_draft()
+    selected_area_state = st.session_state.get("power_major_area", "권역 선택")
+    if selected_area_state not in POWER_REGION_DATA:
+        st.session_state["power_major_area"] = "권역 선택"
+        selected_area_state = "권역 선택"
+    area_people_state = _inspectors_for_major_area(selected_area_state)
+    if st.session_state.get("power_worker", "담당자 선택") not in area_people_state:
+        st.session_state["power_worker"] = "담당자 선택"
     expected_group = _inspector_group_for_name(st.session_state.get("power_worker", ""))
     if st.session_state.get("power_inspector_group", "") != expected_group:
         st.session_state["power_inspector_group"] = expected_group
-    assigned_areas = _major_areas_for_inspector(st.session_state.get("power_worker", ""))
-    if st.session_state.get("power_major_area", "권역 선택") not in assigned_areas:
-        st.session_state["power_major_area"] = assigned_areas[0] if len(assigned_areas) == 1 else "권역 선택"
 
     st.markdown("### 🔋 국사 전원시설 정밀점검")
-    st.caption("기본정보를 먼저 선택한 뒤, 측정 테마별로 입력하고 마지막에 Google Sheets로 전송합니다.")
+    st.caption("권역과 담당자를 선택한 뒤 필요한 측정 메뉴를 자유로운 순서로 입력하고, 마지막에 Google Sheets로 전송합니다.")
 
     st.markdown("""
     <style>
@@ -3035,37 +3136,37 @@ with tab_power:
     </style>
     <div class="power-mobile-hero">
       <h3>새로운 전원 정밀점검 전용 공간</h3>
-      <p>담당자와 주요 점검권역을 선택하면 배정된 모국·국소만 표시됩니다. 필요한 측정 테마를 열어 입력합니다. 과거 측정기록을 조회하고 원하는 측정일시를 선택해 불러올 수도 있습니다.</p>
+      <p>주요 점검권역을 선택하면 해당 권역의 담당자 2명과 배정된 모국·국소만 표시됩니다. 필요한 측정 테마를 열어 입력합니다. 과거 측정기록을 조회하고 원하는 측정일시를 선택해 불러올 수도 있습니다.</p>
     </div>
     """, unsafe_allow_html=True)
 
     # 기본정보는 별도 메뉴가 아니라 항상 최상단에 표시합니다.
     st.markdown('<div class="power-basic-card"><div class="power-basic-title">👤 기본정보</div></div>', unsafe_allow_html=True)
 
-    worker_options = ["담당자 선택"] + POWER_INSPECTOR_OPTIONS
-    if st.session_state.get("power_worker", "담당자 선택") not in worker_options:
-        st.session_state["power_worker"] = "담당자 선택"
+    area_options = ["권역 선택"] + list(POWER_REGION_DATA.keys())
+    if st.session_state.get("power_major_area", "권역 선택") not in area_options:
+        st.session_state["power_major_area"] = "권역 선택"
 
     basic_row1 = st.columns(2, gap="small")
     with basic_row1[0]:
-        selected_worker = st.selectbox(
-            "담당자 *",
-            worker_options,
-            key="power_worker",
-            on_change=_on_power_worker_change,
-        )
-
-    assigned_area_options = _major_areas_for_inspector(selected_worker)
-    area_options = assigned_area_options if assigned_area_options else ["권역 선택"]
-    if st.session_state.get("power_major_area", "권역 선택") not in area_options:
-        st.session_state["power_major_area"] = area_options[0]
-    with basic_row1[1]:
         selected_area = st.selectbox(
             "주요 점검권역 *",
             area_options,
             key="power_major_area",
-            disabled=selected_worker == "담당자 선택",
             on_change=_on_power_major_area_change,
+        )
+
+    area_people = _inspectors_for_major_area(selected_area)
+    worker_options = ["담당자 선택"] + area_people
+    if st.session_state.get("power_worker", "담당자 선택") not in worker_options:
+        st.session_state["power_worker"] = "담당자 선택"
+    with basic_row1[1]:
+        selected_worker = st.selectbox(
+            "담당자 * (해당 권역 2명 중 선택)",
+            worker_options,
+            key="power_worker",
+            disabled=selected_area not in POWER_REGION_DATA,
+            on_change=_on_power_worker_change,
         )
 
     area_station_map = _power_area_station_map(selected_area)
@@ -3187,6 +3288,9 @@ with tab_power:
             unsafe_allow_html=True,
         )
 
+    if st.session_state.pop("power_basic_changed_notice", False):
+        st.info("기본정보가 변경되었습니다. 기존 측정값은 삭제하지 않고 그대로 유지했습니다. 현재 국소의 측정값인지 확인해 주세요.")
+
     basic_missing = _power_basic_missing()
     if basic_missing:
         st.caption("※ 담당자·주요 점검권역·모국·국소는 최종 전송을 위한 필수 기본정보입니다.")
@@ -3211,15 +3315,13 @@ with tab_power:
     )
 
     st.markdown('<div class="power-measurement-menu-title">📋 측정 메뉴</div>', unsafe_allow_html=True)
-    unlocked_index = _power_unlocked_theme_index()
     confirmations = dict(st.session_state.get("power_theme_confirmations", {}))
     current_theme = st.session_state.get("power_current_theme", POWER_THEME_ORDER[0])
 
-    # 측정상태를 색상으로 즉시 구분합니다.
+    # 측정 순서는 자유이며, 색상으로 현재·완료·미측정 상태를 구분합니다.
     state_css_rules: list[str] = []
     for theme_index, theme in enumerate(POWER_THEME_ORDER):
         selector = f'div[class*="st-key-power_theme_menu_{theme_index}"] button'
-        is_locked = theme_index > unlocked_index
         is_completed = theme in confirmations
         is_current = theme == current_theme
         if is_current:
@@ -3234,12 +3336,6 @@ with tab_power:
                 "color:#FFFFFF!important;border:2px solid #86EFAC!important;"
                 "box-shadow:0 8px 20px rgba(22,163,74,.28)!important;"
             )
-        elif is_locked:
-            style = (
-                "background:linear-gradient(135deg,#E2E8F0,#CBD5E1)!important;"
-                "color:#64748B!important;border:2px solid #CBD5E1!important;"
-                "box-shadow:none!important;opacity:1!important;"
-            )
         else:
             style = (
                 "background:linear-gradient(135deg,#38BDF8,#2563EB)!important;"
@@ -3251,8 +3347,8 @@ with tab_power:
     st.markdown("<style>" + "".join(state_css_rules) + "</style>", unsafe_allow_html=True)
     st.markdown(
         '<div class="power-menu-legend">'
-        '<span>🟠 현재 측정</span><span>🟢 측정 완료</span>'
-        '<span>🔵 미측정·활성</span><span>⚪ 미측정·잠금</span>'
+        '<span>🟠 현재 측정</span><span>🟢 확인·임시저장 완료</span>'
+        '<span>🔵 미측정 또는 이동 가능</span>'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -3264,12 +3360,9 @@ with tab_power:
             if theme_index >= len(POWER_THEME_ORDER):
                 continue
             theme = POWER_THEME_ORDER[theme_index]
-            is_locked = theme_index > unlocked_index
             is_completed = theme in confirmations
             is_current = theme == current_theme
-            if is_locked:
-                status_mark = " 🔒"
-            elif is_completed:
+            if is_completed:
                 status_mark = " ✅"
             elif _power_theme_started(theme):
                 status_mark = " ◐"
@@ -3282,17 +3375,71 @@ with tab_power:
                     key=f"power_theme_menu_{theme_index}",
                     type="primary" if is_current else "secondary",
                     use_container_width=True,
-                    disabled=is_locked,
                     on_click=_activate_power_theme,
                     args=(theme,),
                 )
 
-    if st.session_state.pop("power_locked_theme_notice", None):
-        st.warning("앞 단계의 누락 여부 확인을 완료하면 다음 측정 메뉴가 활성화됩니다.")
+    pending_target = st.session_state.get("power_pending_theme_switch")
+    pending_from = st.session_state.get("power_pending_from_theme")
+    if pending_target in POWER_THEME_ORDER and pending_from in POWER_THEME_ORDER[:-1]:
+        detected_missing = _power_theme_missing(pending_from)
+        missing_preview = ", ".join(detected_missing[:8]) if detected_missing else "시스템상 확인된 공란 없음"
+        more_text = f" 외 {len(detected_missing) - 8}개" if len(detected_missing) > 8 else ""
+        st.markdown(
+            f'<div class="power-missing-box"><b>현재 측정값이 정확하게 입력되었습니까?</b><br>'
+            f'현재 메뉴: {html.escape(pending_from)}<br>'
+            f'이동할 메뉴: {html.escape(pending_target)}<br>'
+            f'시스템 확인: {html.escape(missing_preview)}{more_text}<br><br>'
+            '확인하면 현재 측정값을 임시저장한 뒤 선택한 메뉴로 이동합니다.</div>',
+            unsafe_allow_html=True,
+        )
+        if st.session_state.get("power_navigation_error"):
+            st.error(st.session_state["power_navigation_error"])
+        move_col, stay_col = st.columns(2, gap="small")
+        with move_col:
+            st.button(
+                "확인 후 이동",
+                key="power_confirm_theme_switch",
+                type="primary",
+                use_container_width=True,
+                on_click=_confirm_power_theme_switch,
+            )
+        with stay_col:
+            st.button(
+                "계속 입력",
+                key="power_cancel_theme_switch",
+                use_container_width=True,
+                on_click=_cancel_power_theme_switch,
+            )
+
+    if st.session_state.get("power_battery_exit_stage") == "ask_group2_navigation":
+        st.markdown(
+            '<div class="power-missing-box"><b>2조 축전지 측정값도 입력하시겠습니까?</b><br>'
+            '2조를 측정하면 축전지 메뉴에서 2조 입력창을 열고, 측정하지 않으면 선택한 다른 메뉴로 이동합니다.</div>',
+            unsafe_allow_html=True,
+        )
+        group2_yes, group2_no = st.columns(2, gap="small")
+        with group2_yes:
+            st.button(
+                "2조 측정",
+                key="power_nav_measure_group2",
+                type="primary",
+                use_container_width=True,
+                on_click=_finish_battery_navigation,
+                args=(True,),
+            )
+        with group2_no:
+            st.button(
+                "2조 미측정·이동",
+                key="power_nav_skip_group2",
+                use_container_width=True,
+                on_click=_finish_battery_navigation,
+                args=(False,),
+            )
 
     current_missing = _power_theme_missing(current_theme) if current_theme != "최종 확인·전송" else []
     current_status_text = (
-        f"현재 ‘{current_theme}’ 입력 중 · 시스템 확인 공란 {len(current_missing)}개 · 입력값은 세션에 자동 임시저장됩니다."
+        f"현재 ‘{current_theme}’ 입력 중 · 시스템 확인 공란 {len(current_missing)}개 · 모든 메뉴는 자유롭게 이동할 수 있으며 입력값은 자동 보존됩니다."
         if current_theme != "최종 확인·전송"
         else "모든 측정단계를 마쳤습니다. 최종 내용을 확인한 뒤 전송해 주세요."
     )
@@ -3480,86 +3627,8 @@ with tab_power:
                 unsafe_allow_html=True,
             )
 
-        # 측정 단계 완료 확인: 최종 전송 화면을 제외한 모든 테마에서 동일 패턴을 사용합니다.
-        if current_theme in POWER_THEME_ORDER[:-1]:
-            st.markdown("---")
-            st.button(
-                "현재 테마 입력 완료 · 누락 여부 확인",
-                key=f"power_request_completion_{POWER_THEME_ORDER.index(current_theme)}",
-                type="primary",
-                use_container_width=True,
-                on_click=_request_power_completion,
-                args=(current_theme,),
-            )
-
-            prompt_theme = st.session_state.get("power_completion_prompt_theme")
-            if prompt_theme == current_theme:
-                detected_missing = _power_theme_missing(current_theme)
-                preview = ", ".join(detected_missing[:8]) if detected_missing else "시스템상 확인된 공란 없음"
-                more_text = f" 외 {len(detected_missing) - 8}개" if len(detected_missing) > 8 else ""
-                st.markdown(
-                    f'<div class="power-missing-box"><b>누락된 값이 있습니까?</b><br>'
-                    f'현재 시스템 확인: {html.escape(preview)}{more_text}<br>'
-                    '‘예’는 현재 화면에서 계속 입력하고, ‘아니오’는 임시 저장 후 다음 측정 메뉴를 활성화합니다.</div>',
-                    unsafe_allow_html=True,
-                )
-                st.radio(
-                    "누락된 값이 있습니까?",
-                    ["예", "아니오"],
-                    horizontal=True,
-                    index=None,
-                    key="power_completion_answer",
-                )
-                if st.session_state.get("power_completion_validation_error"):
-                    st.error(st.session_state["power_completion_validation_error"])
-                confirm_col, cancel_col = st.columns(2, gap="small")
-                with confirm_col:
-                    st.button(
-                        "확인",
-                        key="power_confirm_completion",
-                        type="primary",
-                        use_container_width=True,
-                        on_click=_process_power_completion,
-                    )
-                with cancel_col:
-                    st.button(
-                        "취소",
-                        key="power_cancel_completion",
-                        use_container_width=True,
-                        on_click=_cancel_power_completion,
-                    )
-
-            if st.session_state.get("power_battery_exit_stage") == "ask_group2" and current_theme == "축전지 측정":
-                st.markdown(
-                    '<div class="power-missing-box"><b>2조 축전지 측정값도 입력하시겠습니까?</b><br>'
-                    '‘예’를 선택하면 2조 입력창이 열리고, ‘아니오’를 선택하면 축전지 값을 임시 저장한 뒤 접지저항 측정이 활성화됩니다.</div>',
-                    unsafe_allow_html=True,
-                )
-                st.radio(
-                    "2조 축전지 측정 여부",
-                    ["예", "아니오"],
-                    horizontal=True,
-                    index=None,
-                    key="power_battery2_measure_answer",
-                )
-                if st.session_state.get("power_battery_move_error"):
-                    st.error(st.session_state["power_battery_move_error"])
-                group_confirm_col, group_cancel_col = st.columns(2, gap="small")
-                with group_confirm_col:
-                    st.button(
-                        "확인",
-                        key="power_confirm_battery2_measure",
-                        type="primary",
-                        use_container_width=True,
-                        on_click=_process_battery2_measure_confirmation,
-                    )
-                with group_cancel_col:
-                    st.button(
-                        "취소",
-                        key="power_cancel_battery2_measure",
-                        use_container_width=True,
-                        on_click=_cancel_power_completion,
-                    )
+        # 다른 측정 메뉴를 누르면 상단에서 현재값 확인 후 이동합니다.
+        # 별도의 순차 완료 버튼은 사용하지 않습니다.
 
     _render_power_auto_decimal_script()
     st.info("측정값은 화면과 분리된 임시저장소에 즉시 보존됩니다. 이전 메뉴를 다시 열어도 값이 유지되며, Enter/확인을 누르면 자동 소수점 적용 후 다음 입력칸으로 이동합니다.")
