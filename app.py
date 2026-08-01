@@ -1262,10 +1262,29 @@ def _inspectors_for_major_area(area: str) -> list[str]:
     return [str(person).strip() for person in people if str(person).strip()]
 
 
+def _automatic_inspector_display(area: str) -> str:
+    """권역을 선택하면 별도 선택 없이 담당자 2명을 가로로 표시·저장합니다."""
+    return ", ".join(_inspectors_for_major_area(area))
+
+
+def _inspector_group_for_area(area: str) -> str:
+    groups: list[str] = []
+    for person in _inspectors_for_major_area(area):
+        group = _inspector_group_for_name(person)
+        if group and group not in groups:
+            groups.append(group)
+    return " · ".join(groups)
+
+
+def _sync_power_inspectors_from_area() -> None:
+    selected_area = st.session_state.get("power_major_area", "권역 선택")
+    st.session_state["power_worker"] = _automatic_inspector_display(selected_area)
+    st.session_state["power_inspector_group"] = _inspector_group_for_area(selected_area)
+
+
 def _update_power_inspector_group() -> None:
-    st.session_state["power_inspector_group"] = _inspector_group_for_name(
-        st.session_state.get("power_worker", "")
-    )
+    selected_area = st.session_state.get("power_major_area", "권역 선택")
+    st.session_state["power_inspector_group"] = _inspector_group_for_area(selected_area)
 
 
 def _clear_power_history_state() -> None:
@@ -1297,13 +1316,9 @@ def _on_power_worker_change() -> None:
 
 
 def _on_power_major_area_change() -> None:
-    """권역 변경 시 담당자·모국·국소 선택만 재구성하고 측정값은 유지합니다."""
+    """권역 변경 시 담당자 2명을 자동 설정하고 측정값은 유지합니다."""
     _preserve_current_power_measurements()
-    selected_area = st.session_state.get("power_major_area", "권역 선택")
-    area_people = _inspectors_for_major_area(selected_area)
-    if st.session_state.get("power_worker", "담당자 선택") not in area_people:
-        st.session_state["power_worker"] = "담당자 선택"
-        st.session_state["power_inspector_group"] = ""
+    _sync_power_inspectors_from_area()
     st.session_state["power_mother"] = "모국 선택"
     st.session_state["power_local"] = "국소 선택"
     _clear_power_history_state()
@@ -1691,7 +1706,7 @@ def _on_power_battery_set_change() -> None:
 
 def _power_basic_missing() -> list[str]:
     missing: list[str] = []
-    if st.session_state.get("power_worker", "담당자 선택") == "담당자 선택":
+    if not str(st.session_state.get("power_worker", "")).strip():
         missing.append("담당자")
     if st.session_state.get("power_major_area", "권역 선택") == "권역 선택":
         missing.append("주요 점검권역")
@@ -1836,11 +1851,11 @@ def save_power_inspection_result(payload: dict) -> tuple[bool, str, str]:
         local = str(payload.get("local", "")).strip()
         phase_type = str(payload.get("phase_type", "")).strip()
 
-        if not worker or worker == "담당자 선택":
-            return False, "담당자를 선택해 주세요.", ""
-        assigned_areas = _major_areas_for_inspector(worker)
-        if major_area not in assigned_areas:
-            return False, "담당자에게 배정된 주요 점검권역을 선택해 주세요.", ""
+        if not worker:
+            return False, "주요 점검권역을 선택해 담당자를 자동 지정해 주세요.", ""
+        expected_worker = _automatic_inspector_display(major_area)
+        if not expected_worker or worker != expected_worker:
+            return False, "선택한 주요 점검권역의 담당자 정보가 일치하지 않습니다.", ""
         area_map = _power_area_station_map(major_area)
         if mother not in area_map:
             return False, "선택한 권역에 포함된 모국을 선택해 주세요.", ""
@@ -1873,7 +1888,7 @@ def save_power_inspection_result(payload: dict) -> tuple[bool, str, str]:
             "저장일시": saved_at,
             "점검ID": inspection_id,
             "점검자": worker,
-            "운용조": str(payload.get("inspector_group", "")).strip() or _inspector_group_for_name(worker),
+            "운용조": str(payload.get("inspector_group", "")).strip() or _inspector_group_for_area(major_area),
             "주요점검권역": major_area,
             "모국": mother,
             "국소": local,
@@ -2511,7 +2526,7 @@ def _build_power_payload_from_state(final_confirmed: bool = False) -> dict:
     ] if group_count == 2 else [""] * 24
     return {
         "worker": worker,
-        "inspector_group": st.session_state.get("power_inspector_group", "") or _inspector_group_for_name(worker),
+        "inspector_group": st.session_state.get("power_inspector_group", "") or _inspector_group_for_area(st.session_state.get("power_major_area", "권역 선택")),
         "major_area": st.session_state.get("power_major_area", "권역 선택"),
         "mother": st.session_state.get("power_mother", "모국 선택"),
         "local": st.session_state.get("power_local", "국소 선택"),
@@ -2600,7 +2615,8 @@ def _render_power_auto_decimal_script() -> None:
         <script>
         (() => {
           const rules = __POWER_RULES_JSON__;
-          const FOCUS_STORAGE_KEY = '__power_next_focus_key_v10__';
+          const FOCUS_STORAGE_KEY = '__power_next_focus_key_v11__';
+          const SCROLL_STORAGE_KEY = '__power_scroll_y_v11__';
 
           function formatFixed(value, decimals, key) {
             if (value.includes('.')) {
@@ -2694,6 +2710,34 @@ def _render_power_auto_decimal_script() -> None:
             });
           }
 
+          function rememberViewport() {
+            try {
+              const parentWindow = window.parent;
+              parentWindow.sessionStorage.setItem(SCROLL_STORAGE_KEY, String(parentWindow.scrollY || 0));
+            } catch (e) {}
+          }
+
+          function restoreViewport(lockDuration = 520) {
+            let saved = null;
+            try {
+              const raw = window.parent.sessionStorage.getItem(SCROLL_STORAGE_KEY);
+              if (raw !== null && raw !== '') saved = Number(raw);
+            } catch (e) {}
+            if (!Number.isFinite(saved)) return;
+
+            const parentWindow = window.parent;
+            const restore = () => parentWindow.scrollTo({ top: saved, left: 0, behavior: 'auto' });
+            restore();
+            const started = Date.now();
+            const timer = parentWindow.setInterval(() => {
+              restore();
+              if (Date.now() - started >= lockDuration) {
+                parentWindow.clearInterval(timer);
+                try { parentWindow.sessionStorage.removeItem(SCROLL_STORAGE_KEY); } catch (e) {}
+              }
+            }, 24);
+          }
+
           function rememberAndFocusNext(doc, input) {
             const ordered = visibleMeasurementInputs(doc);
             const currentIndex = ordered.findIndex((item) => item.input === input);
@@ -2708,9 +2752,9 @@ def _render_power_auto_decimal_script() -> None:
           function bindInput(doc, key, rule) {
             const wrapper = wrapperForKey(doc, key);
             const input = wrapper ? wrapper.querySelector('input') : null;
-            if (!input || input.dataset.powerDecimalBoundV10 === '1') return;
+            if (!input || input.dataset.powerDecimalBoundV11 === '1') return;
 
-            input.dataset.powerDecimalBoundV10 = '1';
+            input.dataset.powerDecimalBoundV11 = '1';
             input.dataset.powerKey = key;
             input.setAttribute('inputmode', 'decimal');
             input.setAttribute('autocomplete', 'off');
@@ -2728,19 +2772,20 @@ def _render_power_auto_decimal_script() -> None:
               event.preventDefault();
               event.stopPropagation();
 
-              // 리렌더링 전에 다음 입력키를 먼저 보존합니다.
+              // Enter 직전의 화면 위치와 다음 입력키를 먼저 보존합니다.
+              rememberViewport();
               const nextItem = rememberAndFocusNext(doc, input);
               applyFormat();
 
               window.setTimeout(() => {
+                restoreViewport();
                 if (nextItem && isVisible(nextItem.input)) {
                   nextItem.input.focus({ preventScroll: true });
                   nextItem.input.select();
-                  nextItem.input.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 } else {
                   input.blur();
                 }
-              }, 40);
+              }, 35);
             }, true);
           }
 
@@ -2759,9 +2804,9 @@ def _render_power_auto_decimal_script() -> None:
             const wrapper = wrapperForKey(doc, nextKey);
             const input = wrapper ? wrapper.querySelector('input') : null;
             if (input && isVisible(input)) {
+              restoreViewport();
               input.focus({ preventScroll: true });
               input.select();
-              input.scrollIntoView({ behavior: 'smooth', block: 'center' });
               try { window.parent.sessionStorage.removeItem(FOCUS_STORAGE_KEY); } catch (e) {}
             }
           }
@@ -3036,15 +3081,15 @@ with tab_power:
     if selected_area_state not in POWER_REGION_DATA:
         st.session_state["power_major_area"] = "권역 선택"
         selected_area_state = "권역 선택"
-    area_people_state = _inspectors_for_major_area(selected_area_state)
-    if st.session_state.get("power_worker", "담당자 선택") not in area_people_state:
-        st.session_state["power_worker"] = "담당자 선택"
-    expected_group = _inspector_group_for_name(st.session_state.get("power_worker", ""))
+    expected_worker = _automatic_inspector_display(selected_area_state)
+    if st.session_state.get("power_worker", "") != expected_worker:
+        st.session_state["power_worker"] = expected_worker
+    expected_group = _inspector_group_for_area(selected_area_state)
     if st.session_state.get("power_inspector_group", "") != expected_group:
         st.session_state["power_inspector_group"] = expected_group
 
     st.markdown("### 🔋 국사 전원시설 정밀점검")
-    st.caption("권역과 담당자를 선택한 뒤 필요한 측정 메뉴를 자유로운 순서로 입력하고, 마지막에 Google Sheets로 전송합니다.")
+    st.caption("주요 점검권역을 선택하면 담당자 2명이 자동 표시됩니다. 필요한 측정 메뉴를 자유로운 순서로 입력하고 마지막에 Google Sheets로 전송합니다.")
 
     st.markdown("""
     <style>
@@ -3178,14 +3223,21 @@ with tab_power:
         font-size:clamp(1.04rem,3vw,1.18rem) !important; font-weight:900 !important; color:#0F172A !important;
         -webkit-text-fill-color:#0F172A !important; min-height:48px !important; border:1.5px solid #94A3B8 !important;
     }
-    div.st-key-power_worker label p, div.st-key-power_major_area label p,
-    div.st-key-power_mother label p, div.st-key-power_local label p {
+    div.st-key-power_major_area label p, div.st-key-power_mother label p, div.st-key-power_local label p {
         font-size:clamp(.98rem,2.9vw,1.10rem) !important; font-weight:950 !important; color:#1E293B !important;
     }
-    div.st-key-power_worker [data-baseweb="select"], div.st-key-power_major_area [data-baseweb="select"],
-    div.st-key-power_mother [data-baseweb="select"], div.st-key-power_local [data-baseweb="select"] {
+    div.st-key-power_major_area [data-baseweb="select"], div.st-key-power_mother [data-baseweb="select"], div.st-key-power_local [data-baseweb="select"] {
         font-size:clamp(1rem,3vw,1.12rem) !important; font-weight:850 !important; min-height:48px !important;
     }
+    .power-auto-worker-label { font-size:clamp(.98rem,2.9vw,1.10rem); font-weight:950; color:#1E293B; margin:0 0 6px 1px; }
+    .power-auto-worker-card {
+        min-height:48px; display:flex; align-items:center; justify-content:center;
+        padding:9px 12px; border:2px solid #38BDF8; border-radius:12px;
+        background:linear-gradient(135deg,#E0F2FE 0%,#F0F9FF 55%,#ECFEFF 100%);
+        color:#0F3C5D; font-size:clamp(1.02rem,3.2vw,1.18rem); font-weight:950;
+        letter-spacing:-0.02em; text-align:center; box-shadow:0 5px 14px rgba(14,165,233,.13);
+    }
+    .power-auto-worker-card.is-empty { color:#64748B; border-color:#CBD5E1; background:#F8FAFC; }
     div[class*="st-key-power_theme_menu_"] button p { font-size:clamp(.95rem,2.8vw,1.08rem) !important; font-weight:950 !important; }
     @media (max-width: 768px) {
         .power-mobile-hero { padding:14px 13px; border-radius:15px; }
@@ -3210,7 +3262,7 @@ with tab_power:
     </style>
     <div class="power-mobile-hero">
       <h3>새로운 전원 정밀점검 전용 공간</h3>
-      <p>주요 점검권역을 선택하면 해당 권역의 담당자 2명과 배정된 모국·국소만 표시됩니다. 필요한 측정 테마를 열어 입력합니다. 과거 측정기록을 조회하고 원하는 측정일시를 선택해 불러올 수도 있습니다.</p>
+      <p>주요 점검권역을 선택하면 담당자 2명이 자동으로 가로 표시되고, 해당 권역의 모국·국소만 표시됩니다. 필요한 측정 테마를 열어 입력합니다. 과거 측정기록을 조회하고 원하는 측정일시를 선택해 불러올 수도 있습니다.</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -3231,19 +3283,18 @@ with tab_power:
         )
 
     area_people = _inspectors_for_major_area(selected_area)
-    worker_options = ["담당자 선택"] + area_people
-    if st.session_state.get("power_worker", "담당자 선택") not in worker_options:
-        st.session_state["power_worker"] = "담당자 선택"
+    automatic_worker = _automatic_inspector_display(selected_area)
+    if st.session_state.get("power_worker", "") != automatic_worker:
+        st.session_state["power_worker"] = automatic_worker
+        st.session_state["power_inspector_group"] = _inspector_group_for_area(selected_area)
     with basic_row1[1]:
-        selected_worker = st.selectbox(
-            "담당자 * (동일 조 2명 중 선택)",
-            worker_options,
-            key="power_worker",
-            disabled=selected_area not in POWER_REGION_DATA,
-            on_change=_on_power_worker_change,
+        worker_class = "power-auto-worker-card" if automatic_worker else "power-auto-worker-card is-empty"
+        worker_text = html.escape(automatic_worker or "권역을 선택하면 자동 표시됩니다")
+        st.markdown(
+            f'<div class="power-auto-worker-label">담당자 *</div>'
+            f'<div class="{worker_class}">{worker_text}</div>',
+            unsafe_allow_html=True,
         )
-        if area_people:
-            st.caption("동일 조 담당자: " + " · ".join(area_people))
 
     area_station_map = _power_area_station_map(selected_area)
     basic_row2 = st.columns(2, gap="small")
@@ -3369,9 +3420,9 @@ with tab_power:
 
     basic_missing = _power_basic_missing()
     if basic_missing:
-        st.caption("※ 담당자·주요 점검권역·모국·국소는 최종 전송을 위한 필수 기본정보입니다.")
+        st.caption("※ 주요 점검권역을 선택하면 담당자 2명이 자동 지정됩니다. 모국·국소까지 선택해야 최종 전송할 수 있습니다.")
 
-    worker_summary = html.escape(str(st.session_state.get("power_worker", "담당자 선택")).strip() or "미입력")
+    worker_summary = html.escape(str(st.session_state.get("power_worker", "")).strip() or "권역 미선택")
     major_area_summary = html.escape(str(st.session_state.get("power_major_area", "권역 선택")).strip() or "권역 미선택")
     draft_saved_at = html.escape(str(st.session_state.get("power_draft_saved_at", "")).strip() or "-")
     mother_summary = str(st.session_state.get("power_mother", "모국 선택"))
