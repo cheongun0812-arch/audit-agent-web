@@ -1283,8 +1283,8 @@ def _sync_power_inspectors_from_area() -> None:
 
 
 def _update_power_inspector_group() -> None:
-    selected_area = st.session_state.get("power_major_area", "권역 선택")
-    st.session_state["power_inspector_group"] = _inspector_group_for_area(selected_area)
+    selected_worker = st.session_state.get("power_worker", "담당자 선택")
+    st.session_state["power_inspector_group"] = _inspector_group_for_name(selected_worker)
 
 
 def _clear_power_history_state() -> None:
@@ -1309,9 +1309,17 @@ def _mark_power_basic_info_changed() -> None:
 
 
 def _on_power_worker_change() -> None:
-    """담당자를 변경해도 기존 측정값은 삭제하지 않습니다."""
+    """담당자를 선택하면 권역을 자동 지정하고 기존 측정값은 보존합니다."""
     _preserve_current_power_measurements()
+    selected_worker = st.session_state.get("power_worker", "담당자 선택")
+    previous_area = st.session_state.get("power_major_area", "권역 선택")
+    selected_area = POWER_INSPECTOR_MAJOR_AREA_MAP.get(selected_worker, "권역 선택")
+    st.session_state["power_major_area"] = selected_area
     _update_power_inspector_group()
+    if selected_area != previous_area:
+        st.session_state["power_mother"] = "모국 선택"
+        st.session_state["power_local"] = "국소 선택"
+        _clear_power_history_state()
     _mark_power_basic_info_changed()
 
 
@@ -1706,7 +1714,7 @@ def _on_power_battery_set_change() -> None:
 
 def _power_basic_missing() -> list[str]:
     missing: list[str] = []
-    if not str(st.session_state.get("power_worker", "")).strip():
+    if st.session_state.get("power_worker", "담당자 선택") not in POWER_INSPECTOR_OPTIONS:
         missing.append("담당자")
     if st.session_state.get("power_major_area", "권역 선택") == "권역 선택":
         missing.append("주요 점검권역")
@@ -1851,11 +1859,10 @@ def save_power_inspection_result(payload: dict) -> tuple[bool, str, str]:
         local = str(payload.get("local", "")).strip()
         phase_type = str(payload.get("phase_type", "")).strip()
 
-        if not worker:
-            return False, "주요 점검권역을 선택해 담당자를 자동 지정해 주세요.", ""
-        expected_worker = _automatic_inspector_display(major_area)
-        if not expected_worker or worker != expected_worker:
-            return False, "선택한 주요 점검권역의 담당자 정보가 일치하지 않습니다.", ""
+        if not worker or worker == "담당자 선택":
+            return False, "담당자를 선택해 주세요.", ""
+        if worker not in _inspectors_for_major_area(major_area):
+            return False, "선택한 담당자와 주요 점검권역 정보가 일치하지 않습니다.", ""
         area_map = _power_area_station_map(major_area)
         if mother not in area_map:
             return False, "선택한 권역에 포함된 모국을 선택해 주세요.", ""
@@ -2526,7 +2533,7 @@ def _build_power_payload_from_state(final_confirmed: bool = False) -> dict:
     ] if group_count == 2 else [""] * 24
     return {
         "worker": worker,
-        "inspector_group": st.session_state.get("power_inspector_group", "") or _inspector_group_for_area(st.session_state.get("power_major_area", "권역 선택")),
+        "inspector_group": st.session_state.get("power_inspector_group", "") or _inspector_group_for_name(worker),
         "major_area": st.session_state.get("power_major_area", "권역 선택"),
         "mother": st.session_state.get("power_mother", "모국 선택"),
         "local": st.session_state.get("power_local", "국소 선택"),
@@ -2611,11 +2618,23 @@ def _render_power_auto_decimal_script() -> None:
         for data_key, rule in data_field_rules.items()
     }
     rules_json = json.dumps(field_rules, ensure_ascii=False)
+    explicit_next_data_keys = {
+        "power_security_ground_1": "power_security_ground_2",
+        "power_security_ground_2": "power_security_ground_3",
+        "power_security_ground_3": "power_telecom_ground",
+        "power_telecom_ground": "power_lightning_ground",
+    }
+    explicit_next_keys = {
+        _power_widget_key(current_key): _power_widget_key(next_key)
+        for current_key, next_key in explicit_next_data_keys.items()
+    }
+    next_keys_json = json.dumps(explicit_next_keys, ensure_ascii=False)
     script = r"""
         <script>
         (() => {
           const rules = __POWER_RULES_JSON__;
-          const FOCUS_STORAGE_KEY = '__power_next_focus_key_v11__';
+          const explicitNextKeys = __POWER_NEXT_KEYS_JSON__;
+          const FOCUS_STORAGE_KEY = '__power_next_focus_key_v12__';
           const SCROLL_STORAGE_KEY = '__power_scroll_y_v11__';
 
           function formatFixed(value, decimals, key) {
@@ -2739,9 +2758,26 @@ def _render_power_auto_decimal_script() -> None:
           }
 
           function rememberAndFocusNext(doc, input) {
-            const ordered = visibleMeasurementInputs(doc);
-            const currentIndex = ordered.findIndex((item) => item.input === input);
-            const nextItem = currentIndex >= 0 ? ordered[currentIndex + 1] : null;
+            const currentKey = String(input.dataset.powerKey || '');
+            const explicitNextKey = explicitNextKeys[currentKey] || '';
+            let nextItem = null;
+
+            // 보안접지 1종→2종→3종→통신접지→피뢰침접지는
+            // 열 배치나 모바일 DOM 순서와 관계없이 지정된 순서로 이동합니다.
+            if (explicitNextKey) {
+              const explicitWrapper = wrapperForKey(doc, explicitNextKey);
+              const explicitInput = explicitWrapper ? explicitWrapper.querySelector('input') : null;
+              if (explicitInput && isVisible(explicitInput)) {
+                nextItem = { key: explicitNextKey, input: explicitInput };
+              }
+            }
+
+            if (!nextItem) {
+              const ordered = visibleMeasurementInputs(doc);
+              const currentIndex = ordered.findIndex((item) => item.input === input);
+              nextItem = currentIndex >= 0 ? ordered[currentIndex + 1] : null;
+            }
+
             try {
               if (nextItem) window.parent.sessionStorage.setItem(FOCUS_STORAGE_KEY, nextItem.key);
               else window.parent.sessionStorage.removeItem(FOCUS_STORAGE_KEY);
@@ -2832,7 +2868,12 @@ def _render_power_auto_decimal_script() -> None:
         })();
         </script>
     """
-    components.html(script.replace("__POWER_RULES_JSON__", rules_json), height=1)
+    rendered_script = (
+        script
+        .replace("__POWER_RULES_JSON__", rules_json)
+        .replace("__POWER_NEXT_KEYS_JSON__", next_keys_json)
+    )
+    components.html(rendered_script, height=1)
 
 
 # ==========================================
@@ -3077,19 +3118,19 @@ with tab_power:
         st.session_state["power_panel_nonce"] = 0
     unlocked_index = _power_unlocked_theme_index()
     _power_draft()
-    selected_area_state = st.session_state.get("power_major_area", "권역 선택")
-    if selected_area_state not in POWER_REGION_DATA:
-        st.session_state["power_major_area"] = "권역 선택"
-        selected_area_state = "권역 선택"
-    expected_worker = _automatic_inspector_display(selected_area_state)
-    if st.session_state.get("power_worker", "") != expected_worker:
-        st.session_state["power_worker"] = expected_worker
-    expected_group = _inspector_group_for_area(selected_area_state)
+    selected_worker_state = st.session_state.get("power_worker", "담당자 선택")
+    if selected_worker_state not in POWER_INSPECTOR_OPTIONS:
+        st.session_state["power_worker"] = "담당자 선택"
+        selected_worker_state = "담당자 선택"
+    expected_area = POWER_INSPECTOR_MAJOR_AREA_MAP.get(selected_worker_state, "권역 선택")
+    if st.session_state.get("power_major_area", "권역 선택") != expected_area:
+        st.session_state["power_major_area"] = expected_area
+    expected_group = _inspector_group_for_name(selected_worker_state)
     if st.session_state.get("power_inspector_group", "") != expected_group:
         st.session_state["power_inspector_group"] = expected_group
 
     st.markdown("### 🔋 국사 전원시설 정밀점검")
-    st.caption("주요 점검권역을 선택하면 담당자 2명이 자동 표시됩니다. 필요한 측정 메뉴를 자유로운 순서로 입력하고 마지막에 Google Sheets로 전송합니다.")
+    st.caption("담당자를 선택하면 주요 점검권역이 자동 표시됩니다. 같은 기본정보 블록에서 모국·국소를 선택하고 필요한 과거 측정값도 불러올 수 있습니다.")
 
     st.markdown("""
     <style>
@@ -3136,6 +3177,52 @@ with tab_power:
     .power-complete-box {
         background:#ECFDF5; border:1px solid #86EFAC; border-radius:15px;
         padding:13px 15px; color:#166534; font-weight:800;
+    }
+    .power-battery-flow {
+        display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:7px;
+        margin:8px 0 11px;
+    }
+    .power-battery-flow-step {
+        min-height:66px; display:flex; flex-direction:column; align-items:center; justify-content:center;
+        padding:8px 6px; border:1.5px solid #CBD5E1; border-radius:13px;
+        background:#F8FAFC; color:#64748B; text-align:center; line-height:1.25;
+        font-size:clamp(.76rem,2.3vw,.91rem); font-weight:900;
+    }
+    .power-battery-flow-step .step-no {
+        display:inline-flex; align-items:center; justify-content:center; width:25px; height:25px;
+        margin-bottom:4px; border-radius:999px; background:#E2E8F0; color:#475569; font-weight:950;
+    }
+    .power-battery-flow-step.active {
+        border-color:#F59E0B; background:linear-gradient(135deg,#FFF7ED,#FEF3C7);
+        color:#92400E; box-shadow:0 0 0 2px rgba(245,158,11,.18);
+    }
+    .power-battery-flow-step.active .step-no { background:#F59E0B; color:#FFFFFF; }
+    .power-battery-flow-step.done {
+        border-color:#34D399; background:linear-gradient(135deg,#ECFDF5,#DCFCE7); color:#166534;
+    }
+    .power-battery-flow-step.done .step-no { background:#10B981; color:#FFFFFF; }
+    .power-battery-path-guide {
+        margin:7px 0 12px; padding:10px 12px; border-radius:12px;
+        background:#EFF6FF; border:1px solid #93C5FD; color:#1E3A8A;
+        font-size:clamp(.82rem,2.5vw,.96rem); font-weight:800; line-height:1.55;
+    }
+    .power-notes-guide {
+        margin:4px 0 9px; padding:13px 15px; border-radius:14px;
+        background:linear-gradient(135deg,#FFF7ED,#FFFBEB); border:1px solid #FDBA74;
+        border-left:7px solid #F97316; color:#7C2D12;
+    }
+    .power-notes-guide .title { font-size:clamp(1.10rem,3.4vw,1.30rem); font-weight:950; margin-bottom:4px; }
+    .power-notes-guide .desc { font-size:clamp(.88rem,2.6vw,1rem); font-weight:750; line-height:1.45; }
+    div.st-key-_ui_power_notes textarea {
+        min-height:145px !important; border:2px solid #F97316 !important;
+        background:#FFFEF7 !important; box-shadow:0 0 0 3px rgba(249,115,22,.10) !important;
+        font-size:clamp(1.04rem,3vw,1.16rem) !important; font-weight:800 !important; line-height:1.55 !important;
+    }
+    div.st-key-_ui_power_notes textarea::placeholder {
+        color:#94A3B8 !important; -webkit-text-fill-color:#94A3B8 !important; font-weight:600 !important; opacity:1 !important;
+    }
+    div.st-key-_ui_power_notes label p {
+        color:#9A3412 !important; font-size:clamp(1rem,3vw,1.14rem) !important; font-weight:950 !important;
     }
     .power-loaded-box {
         background:#F0FDF4; border:1px solid #86EFAC; border-left:6px solid #16A34A;
@@ -3223,11 +3310,27 @@ with tab_power:
         font-size:clamp(1.04rem,3vw,1.18rem) !important; font-weight:900 !important; color:#0F172A !important;
         -webkit-text-fill-color:#0F172A !important; min-height:48px !important; border:1.5px solid #94A3B8 !important;
     }
-    div.st-key-power_major_area label p, div.st-key-power_mother label p, div.st-key-power_local label p {
+    div.st-key-power_worker label p, div.st-key-power_mother label p, div.st-key-power_local label p {
         font-size:clamp(.98rem,2.9vw,1.10rem) !important; font-weight:950 !important; color:#1E293B !important;
     }
-    div.st-key-power_major_area [data-baseweb="select"], div.st-key-power_mother [data-baseweb="select"], div.st-key-power_local [data-baseweb="select"] {
-        font-size:clamp(1rem,3vw,1.12rem) !important; font-weight:850 !important; min-height:48px !important;
+    div.st-key-power_worker [data-baseweb="select"], div.st-key-power_mother [data-baseweb="select"], div.st-key-power_local [data-baseweb="select"] {
+        font-size:clamp(1rem,3vw,1.12rem) !important; font-weight:850 !important; min-height:50px !important;
+        border-radius:12px !important; box-shadow:0 0 0 2px #38BDF8, 0 5px 14px rgba(14,165,233,.10) !important;
+    }
+    .power-basic-auto-label {
+        font-size:clamp(.98rem,2.9vw,1.10rem); font-weight:950; color:#1E293B; margin:0 0 6px 1px;
+    }
+    .power-basic-auto-card {
+        min-height:50px; display:flex; align-items:center; justify-content:center; box-sizing:border-box;
+        padding:9px 12px; border:2px solid #38BDF8; border-radius:12px;
+        background:linear-gradient(135deg,#EFF6FF 0%,#F0F9FF 55%,#ECFEFF 100%);
+        color:#0F3C5D; font-size:clamp(1rem,3vw,1.14rem); font-weight:950;
+        letter-spacing:-0.02em; text-align:center; box-shadow:0 5px 14px rgba(14,165,233,.12);
+    }
+    .power-basic-auto-card.is-empty { color:#64748B; border-color:#CBD5E1; background:#F8FAFC; box-shadow:none; }
+    .power-basic-history-title {
+        margin:14px 0 8px; padding-top:12px; border-top:1px solid #D8E3F2;
+        color:#0B5CAB; font-size:clamp(1.02rem,3vw,1.16rem); font-weight:950;
     }
     .power-auto-worker-label { font-size:clamp(.98rem,2.9vw,1.10rem); font-weight:950; color:#1E293B; margin:0 0 6px 1px; }
     .power-auto-worker-card {
@@ -3249,6 +3352,8 @@ with tab_power:
         div[class*="st-key-_ui_power_battery_"] input { padding:.35rem .08rem !important; text-align:center !important; }
         div[class*="st-key-_ui_power_battery_"] label p { font-size:.78rem !important; }
         div[class*="st-key-power_theme_menu_"] button { min-height:60px !important; }
+        .power-battery-flow { grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; }
+        .power-battery-flow-step { min-height:60px; }
     }
     @media (max-width: 430px) {
         .power-mobile-hero { padding:13px 11px; }
@@ -3262,167 +3367,166 @@ with tab_power:
     </style>
     <div class="power-mobile-hero">
       <h3>새로운 전원 정밀점검 전용 공간</h3>
-      <p>주요 점검권역을 선택하면 담당자 2명이 자동으로 가로 표시되고, 해당 권역의 모국·국소만 표시됩니다. 필요한 측정 테마를 열어 입력합니다. 과거 측정기록을 조회하고 원하는 측정일시를 선택해 불러올 수도 있습니다.</p>
+      <p>담당자를 선택하면 주요 점검권역이 자동 표시되고, 해당 권역의 모국·국소만 선택할 수 있습니다. 기본정보와 과거 측정값 불러오기를 하나의 블록에서 처리합니다.</p>
     </div>
     """, unsafe_allow_html=True)
 
-    # 기본정보는 별도 메뉴가 아니라 항상 최상단에 표시합니다.
-    st.markdown('<div class="power-basic-card"><div class="power-basic-title">👤 기본정보</div></div>', unsafe_allow_html=True)
+    # 기본정보와 과거 측정값 불러오기를 하나의 블록으로 묶어 표시합니다.
+    with st.container(border=True):
+        st.markdown('<div class="power-basic-title">👤 기본정보</div>', unsafe_allow_html=True)
 
-    area_options = ["권역 선택"] + list(POWER_REGION_DATA.keys())
-    if st.session_state.get("power_major_area", "권역 선택") not in area_options:
-        st.session_state["power_major_area"] = "권역 선택"
+        worker_options = ["담당자 선택"] + POWER_INSPECTOR_OPTIONS
+        if st.session_state.get("power_worker", "담당자 선택") not in worker_options:
+            st.session_state["power_worker"] = "담당자 선택"
 
-    basic_row1 = st.columns(2, gap="small")
-    with basic_row1[0]:
-        selected_area = st.selectbox(
-            "주요 점검권역 *",
-            area_options,
-            key="power_major_area",
-            on_change=_on_power_major_area_change,
-        )
-
-    area_people = _inspectors_for_major_area(selected_area)
-    automatic_worker = _automatic_inspector_display(selected_area)
-    if st.session_state.get("power_worker", "") != automatic_worker:
-        st.session_state["power_worker"] = automatic_worker
-        st.session_state["power_inspector_group"] = _inspector_group_for_area(selected_area)
-    with basic_row1[1]:
-        worker_class = "power-auto-worker-card" if automatic_worker else "power-auto-worker-card is-empty"
-        worker_text = html.escape(automatic_worker or "권역을 선택하면 자동 표시됩니다")
-        st.markdown(
-            f'<div class="power-auto-worker-label">담당자 *</div>'
-            f'<div class="{worker_class}">{worker_text}</div>',
-            unsafe_allow_html=True,
-        )
-
-    area_station_map = _power_area_station_map(selected_area)
-    basic_row2 = st.columns(2, gap="small")
-    mother_options = ["모국 선택"] + list(area_station_map.keys())
-    if st.session_state.get("power_mother", "모국 선택") not in mother_options:
-        st.session_state["power_mother"] = "모국 선택"
-    with basic_row2[0]:
-        selected_mother = st.selectbox(
-            "모국 *",
-            mother_options,
-            key="power_mother",
-            disabled=selected_area not in POWER_REGION_DATA,
-            on_change=_on_power_mother_change,
-        )
-
-    local_options = ["국소 선택"]
-    if selected_mother in area_station_map:
-        local_options += area_station_map[selected_mother]
-    if st.session_state.get("power_local", "국소 선택") not in local_options:
-        st.session_state["power_local"] = "국소 선택"
-    with basic_row2[1]:
-        st.selectbox(
-            "국소 *",
-            local_options,
-            key="power_local",
-            disabled=selected_mother not in area_station_map,
-            on_change=_clear_power_measurements_after_station_change,
-        )
-
-    selected_local = st.session_state.get("power_local", "국소 선택")
-    can_load = selected_mother in area_station_map and selected_local in area_station_map.get(selected_mother, [])
-
-    st.markdown("**과거 측정값 불러오기**")
-    history_periods = {
-        "최근 6개월": 183,
-        "최근 1년": 365,
-        "최근 2년": 730,
-    }
-    history_col1, history_col2 = st.columns([0.82, 1.18], gap="small")
-    with history_col1:
-        history_period_label = st.selectbox(
-            "조회 기간",
-            list(history_periods.keys()),
-            key="power_history_period_label",
-            disabled=not can_load,
-        )
-    with history_col2:
-        history_search_clicked = st.button(
-            "🔎 과거 측정기록 조회",
-            key="power_search_history",
-            use_container_width=True,
-            disabled=not can_load,
-        )
-
-    if history_search_clicked:
-        within_days = history_periods.get(history_period_label, 183)
-        with st.spinner("동일 국소의 과거 측정기록을 확인하고 있습니다..."):
-            ok, message, records = list_power_inspection_history(
-                selected_mother,
-                selected_local,
-                within_days=within_days,
-                max_records=100,
+        basic_row1 = st.columns(2, gap="small")
+        with basic_row1[0]:
+            selected_worker = st.selectbox(
+                "담당자 *",
+                worker_options,
+                key="power_worker",
+                on_change=_on_power_worker_change,
             )
-        if ok:
-            st.session_state["power_history_records"] = records
-            st.session_state["power_history_message"] = message
-            st.session_state["power_history_station"] = f"{selected_mother}|{selected_local}"
-            st.session_state["power_history_selected_index"] = 0
-            st.rerun()
-        else:
+
+        selected_area = POWER_INSPECTOR_MAJOR_AREA_MAP.get(selected_worker, "권역 선택")
+        if st.session_state.get("power_major_area", "권역 선택") != selected_area:
+            st.session_state["power_major_area"] = selected_area
+        with basic_row1[1]:
+            area_class = "power-basic-auto-card" if selected_area in POWER_REGION_DATA else "power-basic-auto-card is-empty"
+            area_text = html.escape(selected_area if selected_area in POWER_REGION_DATA else "담당자를 선택하면 자동 표시됩니다")
+            st.markdown(
+                f'<div class="power-basic-auto-label">주요 점검권역 *</div>'
+                f'<div class="{area_class}">{area_text}</div>',
+                unsafe_allow_html=True,
+            )
+
+        area_station_map = _power_area_station_map(selected_area)
+        basic_row2 = st.columns(2, gap="small")
+        mother_options = ["모국 선택"] + list(area_station_map.keys())
+        if st.session_state.get("power_mother", "모국 선택") not in mother_options:
+            st.session_state["power_mother"] = "모국 선택"
+        with basic_row2[0]:
+            selected_mother = st.selectbox(
+                "모국 *",
+                mother_options,
+                key="power_mother",
+                disabled=selected_area not in POWER_REGION_DATA,
+                on_change=_on_power_mother_change,
+            )
+
+        local_options = ["국소 선택"]
+        if selected_mother in area_station_map:
+            local_options += area_station_map[selected_mother]
+        if st.session_state.get("power_local", "국소 선택") not in local_options:
+            st.session_state["power_local"] = "국소 선택"
+        with basic_row2[1]:
+            st.selectbox(
+                "국소 *",
+                local_options,
+                key="power_local",
+                disabled=selected_mother not in area_station_map,
+                on_change=_clear_power_measurements_after_station_change,
+            )
+
+        selected_local = st.session_state.get("power_local", "국소 선택")
+        can_load = selected_mother in area_station_map and selected_local in area_station_map.get(selected_mother, [])
+
+        st.markdown('<div class="power-basic-history-title">↩️ 과거 측정값 불러오기</div>', unsafe_allow_html=True)
+        history_periods = {
+            "최근 6개월": 183,
+            "최근 1년": 365,
+            "최근 2년": 730,
+        }
+        history_col1, history_col2 = st.columns([0.82, 1.18], gap="small")
+        with history_col1:
+            history_period_label = st.selectbox(
+                "조회 기간",
+                list(history_periods.keys()),
+                key="power_history_period_label",
+                disabled=not can_load,
+            )
+        with history_col2:
+            history_search_clicked = st.button(
+                "🔎 과거 측정기록 조회",
+                key="power_search_history",
+                use_container_width=True,
+                disabled=not can_load,
+            )
+
+        if history_search_clicked:
+            within_days = history_periods.get(history_period_label, 183)
+            with st.spinner("동일 국소의 과거 측정기록을 확인하고 있습니다..."):
+                ok, message, records = list_power_inspection_history(
+                    selected_mother,
+                    selected_local,
+                    within_days=within_days,
+                    max_records=100,
+                )
+            if ok:
+                st.session_state["power_history_records"] = records
+                st.session_state["power_history_message"] = message
+                st.session_state["power_history_station"] = f"{selected_mother}|{selected_local}"
+                st.session_state["power_history_selected_index"] = 0
+                st.rerun()
+            else:
+                st.session_state.pop("power_history_records", None)
+                st.warning(message)
+
+        history_records = list(st.session_state.get("power_history_records", []))
+        expected_history_station = f"{selected_mother}|{selected_local}" if can_load else ""
+        if st.session_state.get("power_history_station", "") != expected_history_station:
+            history_records = []
             st.session_state.pop("power_history_records", None)
-            st.warning(message)
 
-    history_records = list(st.session_state.get("power_history_records", []))
-    expected_history_station = f"{selected_mother}|{selected_local}" if can_load else ""
-    if st.session_state.get("power_history_station", "") != expected_history_station:
-        history_records = []
-        st.session_state.pop("power_history_records", None)
+        if history_records:
+            st.success(st.session_state.get("power_history_message", f"과거 측정기록 {len(history_records)}건을 조회했습니다."))
 
-    if history_records:
-        st.success(st.session_state.get("power_history_message", f"과거 측정기록 {len(history_records)}건을 조회했습니다."))
+            def _power_history_label(index: int) -> str:
+                record = history_records[index]
+                saved_at = str(record.get("저장일시", "일시 미상")).strip() or "일시 미상"
+                worker = str(record.get("점검자", "점검자 미상")).strip() or "점검자 미상"
+                phase = str(record.get("전원구분", "-")).strip() or "-"
+                completion = str(record.get("입력완료율(%)", "-")).strip() or "-"
+                return f"{saved_at} · {worker} · {phase} · 완료율 {completion}%"
 
-        def _power_history_label(index: int) -> str:
-            record = history_records[index]
-            saved_at = str(record.get("저장일시", "일시 미상")).strip() or "일시 미상"
-            worker = str(record.get("점검자", "점검자 미상")).strip() or "점검자 미상"
-            phase = str(record.get("전원구분", "-")).strip() or "-"
-            completion = str(record.get("입력완료율(%)", "-")).strip() or "-"
-            return f"{saved_at} · {worker} · {phase} · 완료율 {completion}%"
-
-        selected_history_index = st.selectbox(
-            "불러올 측정기록",
-            options=list(range(len(history_records))),
-            format_func=_power_history_label,
-            key="power_history_selected_index",
-        )
-        if st.button(
-            "↩️ 선택한 측정값 불러오기",
-            key="power_load_selected_history",
-            use_container_width=True,
-            type="primary",
-        ):
-            selected_record = history_records[int(selected_history_index)]
-            _set_power_state_from_record(selected_record)
-            st.session_state["power_loaded_message"] = (
-                f"선택한 측정값을 불러왔습니다. "
-                f"({selected_record.get('저장일시', '')})"
+            selected_history_index = st.selectbox(
+                "불러올 측정기록",
+                options=list(range(len(history_records))),
+                format_func=_power_history_label,
+                key="power_history_selected_index",
             )
-            st.rerun()
+            if st.button(
+                "↩️ 선택한 측정값 불러오기",
+                key="power_load_selected_history",
+                use_container_width=True,
+                type="primary",
+            ):
+                selected_record = history_records[int(selected_history_index)]
+                _set_power_state_from_record(selected_record)
+                st.session_state["power_loaded_message"] = (
+                    f"선택한 측정값을 불러왔습니다. "
+                    f"({selected_record.get('저장일시', '')})"
+                )
+                st.rerun()
 
-    if st.session_state.pop("power_loaded_notice", False):
-        st.toast("선택한 과거 측정값을 입력폼에 불러왔습니다. 변경된 값만 수정해 주세요.", icon="↩️")
-    if st.session_state.get("power_loaded_source_id"):
-        st.markdown(
-            f'<div class="power-loaded-box">↩️ 기존 측정값 사용 중 · '
-            f'원본 저장일시: {html.escape(str(st.session_state.get("power_loaded_source_saved_at", "-")))} · '
-            f'원본 점검ID: {html.escape(str(st.session_state.get("power_loaded_source_id", "-")))}</div>',
-            unsafe_allow_html=True,
-        )
+        if st.session_state.pop("power_loaded_notice", False):
+            st.toast("선택한 과거 측정값을 입력폼에 불러왔습니다. 변경된 값만 수정해 주세요.", icon="↩️")
+        if st.session_state.get("power_loaded_source_id"):
+            st.markdown(
+                f'<div class="power-loaded-box">↩️ 기존 측정값 사용 중 · '
+                f'원본 저장일시: {html.escape(str(st.session_state.get("power_loaded_source_saved_at", "-")))} · '
+                f'원본 점검ID: {html.escape(str(st.session_state.get("power_loaded_source_id", "-")))}</div>',
+                unsafe_allow_html=True,
+            )
 
     if st.session_state.pop("power_basic_changed_notice", False):
         st.info("기본정보가 변경되었습니다. 기존 측정값은 삭제하지 않고 그대로 유지했습니다. 현재 국소의 측정값인지 확인해 주세요.")
 
     basic_missing = _power_basic_missing()
     if basic_missing:
-        st.caption("※ 주요 점검권역을 선택하면 담당자 2명이 자동 지정됩니다. 모국·국소까지 선택해야 최종 전송할 수 있습니다.")
+        st.caption("※ 담당자를 선택하면 주요 점검권역이 자동 표시됩니다. 모국·국소까지 선택해야 최종 전송할 수 있습니다.")
 
-    worker_summary = html.escape(str(st.session_state.get("power_worker", "")).strip() or "권역 미선택")
+    worker_summary = html.escape(str(st.session_state.get("power_worker", "")).strip() if st.session_state.get("power_worker") in POWER_INSPECTOR_OPTIONS else "담당자 미선택")
     major_area_summary = html.escape(str(st.session_state.get("power_major_area", "권역 선택")).strip() or "권역 미선택")
     draft_saved_at = html.escape(str(st.session_state.get("power_draft_saved_at", "")).strip() or "-")
     mother_summary = str(st.session_state.get("power_mother", "모국 선택"))
@@ -3541,15 +3645,15 @@ with tab_power:
 
     if st.session_state.get("power_battery_exit_stage") == "ask_group2_complete":
         st.markdown(
-            '<div class="power-missing-box"><b>1조 축전지 측정을 완료했습니다. 2조도 측정하시겠습니까?</b><br>'
-            '2조 측정을 선택하면 기존 1조 값은 그대로 보존되고 2조 입력창이 열립니다. '
-            '2조 미측정을 선택하면 축전지 테마가 완료 처리됩니다.</div>',
+            '<div class="power-missing-box"><b>1조 셀 입력을 완료했습니다. 2조 셀도 입력하시겠습니까?</b><br>'
+            '예를 선택하면 1조 값은 그대로 저장되고 2조 셀 입력 화면이 열립니다.<br>'
+            '아니오를 선택하면 축전지 측정이 완료되고 다음 미완료 측정 메뉴로 이동합니다.</div>',
             unsafe_allow_html=True,
         )
         group2_yes, group2_no = st.columns(2, gap="small")
         with group2_yes:
             st.button(
-                "2조 측정 계속",
+                "예 · 2조 셀 측정",
                 key="power_complete_measure_group2",
                 type="primary",
                 use_container_width=True,
@@ -3558,7 +3662,7 @@ with tab_power:
             )
         with group2_no:
             st.button(
-                "2조 미측정·테마 완료",
+                "아니오 · 축전지 측정 완료 후 다음 메뉴",
                 key="power_complete_skip_group2",
                 use_container_width=True,
                 on_click=_finish_battery_completion,
@@ -3582,11 +3686,6 @@ with tab_power:
 
     with st.expander(f"{POWER_THEME_ICON[current_theme]} {current_theme}", expanded=True):
         st.markdown(f'<div class="power-panel-marker" data-panel="{panel_nonce}"></div>', unsafe_allow_html=True)
-        st.markdown(
-            '<div class="power-unit-guide">전압·전류는 소수 첫째 자리, 축전지 Total 전압은 둘째 자리, 방전 후 셀 전압은 둘째 또는 셋째 자리, 접지저항은 현장 입력 자릿수에 맞춰 자동 표시됩니다.</div>',
-            unsafe_allow_html=True,
-        )
-
         if current_theme == "전압·전류 측정":
             _hydrate_power_widget("power_phase_type", "삼상")
             st.radio(
@@ -3630,15 +3729,60 @@ with tab_power:
 
         elif current_theme == "축전지 측정":
             _hydrate_power_widget("power_battery_set", "1조 셀 측정")
+            battery_exit_stage = st.session_state.get("power_battery_exit_stage")
+            battery2_enabled = _power_battery2_enabled()
+            current_battery_set = _power_get("power_battery_set", "1조 셀 측정")
+            selected_group = 2 if current_battery_set == "2조 셀 측정" and battery2_enabled else 1
+
+            if battery_exit_stage == "ask_group2_complete":
+                step_classes = ["done", "done", "active", ""]
+            elif selected_group == 2:
+                step_classes = ["done", "done", "done", "active"]
+            else:
+                step_classes = ["active", "", "", ""]
+
+            step_labels = [
+                "1조 셀 입력",
+                "1조 측정 완료",
+                "2조 측정 여부",
+                "2조 측정 또는 테마 완료",
+            ]
+            step_html = ''.join(
+                f'<div class="power-battery-flow-step {step_classes[index]}">'
+                f'<span class="step-no">{index + 1}</span>{html.escape(label)}</div>'
+                for index, label in enumerate(step_labels)
+            )
+            st.markdown(f'<div class="power-battery-flow">{step_html}</div>', unsafe_allow_html=True)
+            st.markdown(
+                '<div class="power-battery-path-guide">'
+                '<b>1조만 측정:</b> 1조 입력 → 1조 측정 완료 → 2조 ‘아니오’ → 다음 메뉴<br>'
+                '<b>2조까지 측정:</b> 1조 입력 → 1조 측정 완료 → 2조 ‘예’ → 2조 입력 → 2조 측정 완료 → 다음 메뉴'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+
+            battery_options = ["1조 셀 측정"]
+            if battery2_enabled:
+                battery_options.append("2조 셀 측정")
+            battery_ui_key = _power_widget_key("power_battery_set")
+            if st.session_state.get(battery_ui_key, "1조 셀 측정") not in battery_options:
+                st.session_state[battery_ui_key] = "1조 셀 측정"
+                _power_set("power_battery_set", "1조 셀 측정")
+
             st.radio(
-                "측정할 축전지 선택",
-                ["1조 셀 측정", "2조 셀 측정"],
+                "현재 입력할 축전지",
+                battery_options,
                 horizontal=True,
-                key=_power_widget_key("power_battery_set"),
+                key=battery_ui_key,
                 on_change=_on_power_battery_set_change,
             )
-            st.caption("1조 측정을 마친 뒤에는 2조 측정 여부를 확인합니다. 실제 설치된 셀 수만 입력해도 됩니다.")
             selected_group = 1 if _power_get("power_battery_set", "1조 셀 측정") == "1조 셀 측정" else 2
+            group_caption = (
+                "1조의 실제 설치 셀 수만 입력한 뒤 아래 ‘1조 셀 측정 완료’를 눌러 주세요."
+                if selected_group == 1
+                else "2조의 실제 설치 셀 수만 입력한 뒤 아래 ‘2조 셀 측정 완료’를 눌러 주세요."
+            )
+            st.caption(group_caption)
             _render_power_battery_summary(selected_group)
 
         elif current_theme == "접지저항 측정":
@@ -3670,14 +3814,20 @@ with tab_power:
                 _power_text_input("피뢰침접지", key="power_lightning_ground")
 
         elif current_theme == "최종 확인·전송":
-            st.markdown("#### 📝 특이사항")
-            st.caption("현장 특이사항, 미측정 사유, 후속 조치가 필요한 내용을 최종 전송 전에 남겨 주세요.")
-            _power_text_area(
-                "특이사항 메모",
-                key="power_notes",
-                height=110,
-                placeholder="예: 축전지 2조 미측정 사유, 접지선 보완 필요, 다음 점검 시 확인사항 등",
+            st.markdown(
+                '<div class="power-notes-guide">'
+                '<div class="title">📝 특이사항 입력</div>'
+                '<div class="desc">현장 특이사항이나 미측정 사유, 후속 조치가 필요한 경우 아래 메모 입력란에 작성해 주세요. 특이사항이 없으면 비워 두어도 됩니다.</div>'
+                '</div>',
+                unsafe_allow_html=True,
             )
+            _power_text_area(
+                "특이사항 입력란 (선택)",
+                key="power_notes",
+                height=145,
+                placeholder="특이사항이 있을 때 여기에 입력하세요.",
+            )
+            st.caption("작성 예: 축전지 2조 미측정 사유 · 접지선 보완 필요 · 다음 점검 시 확인사항")
             payload_preview = _build_power_payload_from_state(final_confirmed=True)
             all_missing = _power_payload_missing_items(payload_preview)
             expected_count = max(_power_expected_item_count(payload_preview), 1)
@@ -3761,17 +3911,36 @@ with tab_power:
                 unsafe_allow_html=True,
             )
 
-        if current_theme in POWER_THEME_ORDER[:-1]:
+        show_theme_complete_button = not (
+            current_theme == "축전지 측정"
+            and st.session_state.get("power_battery_exit_stage") == "ask_group2_complete"
+        )
+        if current_theme in POWER_THEME_ORDER[:-1] and show_theme_complete_button:
             theme_missing = _power_theme_missing(current_theme)
             st.markdown("---")
+            if current_theme == "축전지 측정":
+                selected_battery_group = 1 if _power_get("power_battery_set", "1조 셀 측정") == "1조 셀 측정" else 2
+                if selected_battery_group == 1:
+                    complete_title = "1조 셀 입력을 마쳤습니까?"
+                    complete_description = "‘1조 셀 측정 완료’를 누르면 현재 값이 저장되고 2조 셀 측정 여부를 확인합니다."
+                    complete_button_label = "✅ 1조 셀 측정 완료"
+                else:
+                    complete_title = "2조 셀 입력을 마쳤습니까?"
+                    complete_description = "‘2조 셀 측정 완료’를 누르면 축전지 테마가 완료되고 다음 미완료 측정 메뉴로 이동합니다."
+                    complete_button_label = "✅ 2조 셀 측정 완료"
+            else:
+                complete_title = "현재 테마 측정을 마쳤습니까?"
+                complete_description = "‘측정 완료’를 누르면 현재 값이 임시저장되고 완료 상태로 표시됩니다."
+                complete_button_label = "✅ 측정 완료"
+
             st.markdown(
-                f'<div class="power-complete-box"><b>현재 테마 측정을 마쳤습니까?</b><br>'
-                f'‘측정 완료’ 버튼을 누르면 현재 값이 임시저장되고 완료 상태로 표시됩니다. '
+                f'<div class="power-complete-box"><b>{html.escape(complete_title)}</b><br>'
+                f'{html.escape(complete_description)} '
                 f'시스템 확인 공란: {len(theme_missing)}개</div>',
                 unsafe_allow_html=True,
             )
             st.button(
-                "✅ 측정 완료",
+                complete_button_label,
                 key=f"power_measurement_complete_{POWER_THEME_ORDER.index(current_theme)}",
                 type="primary",
                 use_container_width=True,
