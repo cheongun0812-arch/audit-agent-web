@@ -1064,251 +1064,156 @@ def save_june_compliance_training_result(record: dict) -> tuple[bool, str]:
 POWER_INSPECTION_SPREADSHEET_NAME = "Audit_Result_2026"
 POWER_INSPECTION_SHEET_NAME = "국사_전원시설_정밀점검"
 
-POWER_STATION_DATA = r"""행당	약수역 BBH
-신내	중랑최적화분기국사
-중앙	BBH(후암동68-6-BBH)
-광진	구의동 BBH
-광진	중곡동 BBH
-성북	안암 BBH
-성북	대광 BBH
-성북	성북 BBH
-노원	공릉최적화분기국사
-도봉	방학최적화분기국사
-용산	청파3가 BBH
-은평	삼송
-은평	홍제최적화분기국사
-서대문	서대문(최적화분기국사)
-서대문	화전
-가평	가평
-청평	청평
-청평	고성
-청평	대성
-청평	마일
-청평	미사
-청평	방일
-청평	봉수
-청평	삼회
-가평	상색
-청평	설악
-청평	율길
-청평	임초
-청평	조종
-청평	회곡
-청평	상판
-청평	대보
-가평	산유
-가평	북면
-가평	화악
-가평	백둔
-가평	도대
-가평	적목
-동의정부	경중앙(통신구내) BBH
-동의정부	남방
-의정부	장흥
-의정부	송추
-의정부	백석
-의정부	광적
-동의정부	광사
-의정부	의정부 덕도(N3162)
-동의정부	자일
-의정부	석우
-동의정부	청학
-의정부	삼하
-의정부	비암
-퇴계원	퇴계원
-남양주	남양주
-덕소	덕소
-퇴계원	진접
-퇴계원	진건
-퇴계원	오남
-퇴계원	광릉
-남양주	일패
-남양주	답내
-남양주	운수
-남양주	외방
-남양주	호평 BBH
-덕소	조안
-덕소	송촌
-덕소	월문
-덕소	팔당
-퇴계원	금곡 BBH
-퇴계원	별내
-양평	양평
-양평	노문
-양평	정배
-양평	목왕
-양평	서종
-양평	양수
-양평	국수
-양평	강하
-양평	강상
-양평	회현
-양평	개군
-양평	일신
-양평	양동
-양평	계정
-양평	금왕
-양평	고송
-양평	용문
-양평	신점
-양평	단월
-양평	산음
-양평	명성
-양평	용두
-양평	옥천
-양평	지평
-양평	용문산중계소
-연천	연천
-동두천	동두천
-전곡	원당
-전곡	백학
-전곡	동이
-전곡	궁평
-전곡	왕림
-전곡	초성
-전곡	동중
-전곡	진상
-전곡	북삼
-전곡	늘목
-전곡	양원
-전곡	대전
-연천	대광
-연천	삼곳
-연천	내산
-연천	고문
-동두천	은현
-동두천	신산
-동두천	상수
-동두천	덕정
-동두천	덕계
-동두천	소요
-동두천	광암
-포천	포천
-송우	송우
-송우	가산
-송우	내촌
-송우	신팔
-송우	이곡
-포천	자작
-포천	직두
-포천	화현
-포천	일동
-포천	사직
-포천	수입
-포천	장암
-포천	도평
-포천	산정
-포천	영북
-포천	관인
-포천	운산
-포천	창수
-포천	신북
-포천	남청산
-포천	고소성
-포천	만세교
-포천	양문
-덕양	덕양
-덕양	덕양 벽제(N3055)
-덕양	고양
-파주	영장
-파주	장곡
-파주	위전
-파주	법흥
-파주	문발
-파주	용미
-파주	발랑
-파주	파주 연다산(N3218)
-파주	광탄
-파주	탄현
-파주	운정
-문산	문산
-법원리	법원리
-문산	파주
-문산	마산
-문산	마정
-문산	통일촌(N3211)
-문산	장현
-문산	웅담
-문산	적성
-문산	파평
-일산	송포
-일산	성석
-일산	고봉산중계소
-고양IBS고양BBH	백석12블럭 BBH
-고양IBS고양BBH	마두21블럭 BBH
-일산	백마5단지상가 BBH(N3173)
-일산	장항동 BBH
-일산	북일산최적화분기국사(북일산)
-일산	고양 BBH(N3170)
-전곡	전곡
-철원	철원
-철원	동송분기국사
-철원	문혜
-철원	내대
-철원	관전
-철원	장흥
-철원	오지
-철원	지경
-철원	자등
-철원	마현
-철원	양지
-철원	근남
-철원	잠곡
-철원	와수
-철원	도창
-파주	(파주)마이프라자1층 BBH
-일산	가좌 BBH
-동의정부	금오 BBH
-법원리	금파리마을회관 BBH
-덕양	달빛3단지상가지하 BBH
-문산	당동상가 BBH
-광화문	독립문통신구 BBH(N995)
-고양IBS고양BBH	마두25블럭 BBH
-아현	마포분기국사
-중랑	망우최적화분기국사(중랑)
-광화문	무교동 BBH
-일산	백석13블럭 BBH
-일산	백석7블럭 BBH
-고양IBS고양BBH	백석8블럭 BBH
-문산	봉암1리마을회관 BBH
-파주	분수3리마을회관 BBH
-덕양	상곡 BBH
-파주	새말 BBH
-능곡	소만8단지(소만풍림8단지) BBH
-신촌	신촌분기국사
-청평	에덴성회 BBH
-일산	정발 BBH
-광화문	종로5가통신구-1 BBH(통신구내)
-청량	청량최적화 BBH
-파주	토우프라자 BBH
-파주	통일프라자 BBH
-고양IBS고양BBH	풍동에이스타워 BBH
-파주	한라비발디상가 BBH
-능곡	햇빛주공22단지 BBH
-방학	행운빌라 BBH
-능곡	화정동상가(별빛건영10단지) BBH
-의정부	녹양"""
+POWER_REGION_DATA = {'1권역 · 파주·문산·동두천 등': {'담당자': ['김수창', '이철순'],
+                       '모국_국소': {'동두천': ['은현', '신산', '상수'],
+                                 '문산': ['문산', '파주', '마산', '마정', '통일촌(N3211)', '장현', '웅담', '적성', '파평', '당동상가BBH', '봉암1리마을회관BBH'],
+                                 '법원리': ['법원리', '금파리마을회관BBH', '어유지리BBH'],
+                                 '연천': ['연천', '대광', '삼곳', '내산', '고문'],
+                                 '일산': ['중산BBH'],
+                                 '전곡': ['원당', '백학', '동이', '궁평', '왕림', '초성', '동중', '진상', '북삼', '늘목', '양원', '대전', '전곡', '학곡'],
+                                 '파주': ['영장',
+                                        '장곡',
+                                        '위전',
+                                        '법흥',
+                                        '문발',
+                                        '용미',
+                                        '발랑',
+                                        '파주 연다산(N3218)',
+                                        '광탄',
+                                        '탄현',
+                                        '운정',
+                                        '(파주)마이프라자1층BBH',
+                                        '분수3리마을회관BBH',
+                                        '새말BBH',
+                                        '토우프라자BBH',
+                                        '통일프라자BBH',
+                                        '한라비발디상가BBH',
+                                        '대성동마을회관BBH']}},
+ '2권역 · 고양·덕양·의정부 등': {'담당자': ['소순고', '정청운'],
+                       '모국_국소': {'고양IBS고양BBH': ['백석12블럭BBH', '마두21블럭BBH', '마두25블럭BBH', '백석8블럭BBH', '풍동에이스타워BBH'],
+                                 '능곡': ['소만8단지(소만풍림8단지)BBH', '햇빛주공22단지BBH', '화정동상가(별빛건영10단지) BBH'],
+                                 '덕양': ['덕양', '덕양 벽제(N3055)', '고양', '달빛3단지상가지하BBH', '상곡BBH'],
+                                 '서대문': ['서대문(최적화분기국사)', '화전'],
+                                 '신촌': ['신촌분기국사', '망원동BBH#1'],
+                                 '아현': ['마포분기국사'],
+                                 '용산': ['청파3가BBH'],
+                                 '은평': ['삼송'],
+                                 '의정부': ['장흥', '송추', '백석', '광적', '의정부 덕도(N3162)', '석우', '삼하', '비암'],
+                                 '일산': ['송포',
+                                        '성석',
+                                        '고봉산중계소',
+                                        '백마5단지상가BBH(N3173)',
+                                        '장항동BBH',
+                                        '북일산최적화분기국사(북일산)',
+                                        '고양BBH(N3170)',
+                                        '가좌BBH',
+                                        '백석13블럭BBH',
+                                        '백석7블럭BBH',
+                                        '정발BBH',
+                                        '일산(EBS)']}},
+ '3권역 · 광화문·중앙·광진 등': {'담당자': ['김태수', '이학원'],
+                       '모국_국소': {'광진': ['구의동BBH', '중곡동BBH'],
+                                 '광화문': ['독립문통신구BBH(N995)', '무교동BBH', '종로5가통신구-1BBH(통신구내)'],
+                                 '노원': ['공릉최적화분기국사'],
+                                 '도봉': ['방학최적화분기국사', '수유3국사(수유동269-16단독주택)BBH'],
+                                 '방학': ['행운빌라BBH'],
+                                 '성북': ['안암BBH', '대광BBH', '성북BBH', '보문시장BBH'],
+                                 '신내': ['중랑최적화분기국사'],
+                                 '용산': ['경찰청'],
+                                 '은평': ['홍제최적화분기국사', '평창아파트BBH', '효자BBH(N977)'],
+                                 '을지': ['을지로3가BBH', '을지로6가BBH', '을지로7가BBH(통신구내)'],
+                                 '중랑': ['망우최적화분기국사(중랑)'],
+                                 '중앙': ['BBH(후암동68-6-BBH)', '을지메인통신구', '을지입구B1통신구내 BBH(N944)'],
+                                 '청량': ['청량최적화BBH'],
+                                 '행당': ['약수역BBH', '동대문최적화BBH(통신구내)']}},
+ '4권역 · 동의정부·동두천·철원 등': {'담당자': ['박동희', '신진우'],
+                         '모국_국소': {'동두천': ['동두천', '덕정', '덕계', '소요', '광암'],
+                                   '동의정부': ['경중앙(통신구내)BBH', '남방', '광사', '자일', '청학', '금오BBH'],
+                                   '송우': ['송우', '가산', '내촌', '신팔', '이곡'],
+                                   '의정부': ['녹양'],
+                                   '철원': ['철원', '동송분기국사', '문혜', '내대', '관전', '장흥', '오지', '지경', '자등', '마현', '양지', '근남', '잠곡', '와수', '도창'],
+                                   '청평': ['마일', '봉수', '율길', '임초', '조종', '상판', '대보'],
+                                   '퇴계원': ['광릉', '금곡BBH'],
+                                   '포천': ['포천',
+                                          '자작',
+                                          '직두',
+                                          '화현',
+                                          '일동',
+                                          '사직',
+                                          '수입',
+                                          '장암',
+                                          '도평',
+                                          '산정',
+                                          '영북',
+                                          '관인',
+                                          '운산',
+                                          '창수',
+                                          '신북',
+                                          '남청산',
+                                          '고소성',
+                                          '만세교',
+                                          '양문',
+                                          '대회산']}},
+ '5권역 · 가평·남양주·양평 등': {'담당자': ['강만식', '이민우'],
+                       '모국_국소': {'가평': ['개곡', '가평', '상색', '산유', '북면', '화악', '백둔', '도대', '적목'],
+                                 '남양주': ['남양주', '일패', '답내', '운수', '외방', '호평BBH'],
+                                 '덕소': ['덕소', '조안', '송촌', '월문', '팔당'],
+                                 '양평': ['양평',
+                                        '노문',
+                                        '정배',
+                                        '목왕',
+                                        '서종',
+                                        '양수',
+                                        '국수',
+                                        '강하',
+                                        '강상',
+                                        '회현',
+                                        '개군',
+                                        '일신',
+                                        '양동',
+                                        '계정',
+                                        '금왕',
+                                        '고송',
+                                        '용문',
+                                        '신점',
+                                        '단월',
+                                        '산음',
+                                        '명성',
+                                        '용두',
+                                        '옥천',
+                                        '지평',
+                                        '용문산중계소'],
+                                 '청평': ['청평', '고성', '대성', '미사', '방일', '삼회', '설악', '회곡', '에덴성회BBH'],
+                                 '퇴계원': ['퇴계원', '진접', '진건', '오남', '별내']}}}
 
 
 def _build_power_station_map() -> dict[str, list[str]]:
+    """모든 권역의 모국·국소를 합친 하위 호환용 전체 목록입니다."""
     station_map: dict[str, list[str]] = {}
-    for raw_line in POWER_STATION_DATA.splitlines():
-        line = raw_line.strip()
-        if not line or "\t" not in line:
-            continue
-        mother, local = [part.strip() for part in line.split("\t", 1)]
-        if not mother or not local:
-            continue
-        station_map.setdefault(mother, [])
-        if local not in station_map[mother]:
-            station_map[mother].append(local)
+    for region in POWER_REGION_DATA.values():
+        for mother, locals_ in region.get("모국_국소", {}).items():
+            station_map.setdefault(mother, [])
+            for local in locals_:
+                if local not in station_map[mother]:
+                    station_map[mother].append(local)
     return station_map
 
 
 POWER_STATION_MAP = _build_power_station_map()
+POWER_INSPECTOR_OPTIONS = [
+    person
+    for region in POWER_REGION_DATA.values()
+    for person in region.get("담당자", [])
+]
+POWER_INSPECTOR_MAJOR_AREA_MAP = {
+    person: area
+    for area, region in POWER_REGION_DATA.items()
+    for person in region.get("담당자", [])
+}
 
 
-# 점검자 성명에 따라 소속 조를 자동 표시합니다.
+
+# 담당자에 따라 소속 조를 자동 표시합니다.
 # 이름과 조 정보가 추가되면 이 사전만 확장하면 됩니다.
 POWER_INSPECTOR_GROUP_MAP = {
     "정청운": "덕양관리조",
@@ -1335,19 +1240,56 @@ def _inspector_group_for_name(name: str) -> str:
     return POWER_INSPECTOR_GROUP_MAP.get(_normalize_inspector_name(name), "")
 
 
+def _major_areas_for_inspector(name: str) -> list[str]:
+    normalized = _normalize_inspector_name(name)
+    areas: list[str] = []
+    for person, area in POWER_INSPECTOR_MAJOR_AREA_MAP.items():
+        if _normalize_inspector_name(person) == normalized and area not in areas:
+            areas.append(area)
+    return areas
+
+
+def _power_area_station_map(area: str) -> dict[str, list[str]]:
+    region = POWER_REGION_DATA.get(str(area or "").strip(), {})
+    mapping = region.get("모국_국소", {}) if isinstance(region, dict) else {}
+    return mapping if isinstance(mapping, dict) else {}
+
+
 def _update_power_inspector_group() -> None:
     st.session_state["power_inspector_group"] = _inspector_group_for_name(
         st.session_state.get("power_worker", "")
     )
 
 
+def _on_power_worker_change() -> None:
+    """담당자 변경 시 배정 권역을 자동 선택하고 이전 국사의 측정값을 분리합니다."""
+    _update_power_inspector_group()
+    worker = st.session_state.get("power_worker", "")
+    assigned_areas = _major_areas_for_inspector(worker)
+    st.session_state["power_major_area"] = assigned_areas[0] if len(assigned_areas) == 1 else "권역 선택"
+    st.session_state["power_mother"] = "모국 선택"
+    st.session_state["power_local"] = "국소 선택"
+    _clear_power_measurements_after_station_change()
+
+
+def _on_power_major_area_change() -> None:
+    st.session_state["power_mother"] = "모국 선택"
+    st.session_state["power_local"] = "국소 선택"
+    _clear_power_measurements_after_station_change()
+
+
+def _on_power_mother_change() -> None:
+    st.session_state["power_local"] = "국소 선택"
+    _clear_power_measurements_after_station_change()
+
+
 def _power_headers() -> list[str]:
     headers = [
-        "저장일시", "점검ID", "점검자", "운용조", "모국", "국소", "전원구분", "축전지조수",
+        "저장일시", "점검ID", "점검자", "운용조", "주요점검권역", "모국", "국소", "전원구분", "축전지조수",
         "입력방식", "원본점검ID", "원본저장일시",
         "입력완료율(%)", "누락항목수", "누락항목", "부분입력확인",
         "삼상전압_R-S(V)", "삼상전압_S-T(V)", "삼상전압_T-R(V)", "삼상전압_R-N(V)",
-        "삼상전류_R(A)", "삼상전류_S(A)", "삼상전류_T(A)",
+        "삼상전류_R(A)", "삼상전류_S(A)", "삼상전류_T(A)", "삼상전류_N(A)",
         "단상전압(V)", "단상전류(A)",
         "1조_측정셀수", "1조_방전후_Total전류(A)", "1조_방전후_Total전압(V)",
         "1조_최저전압(V)", "1조_최고전압(V)", "1조_방전종료전압(V)",
@@ -1449,6 +1391,32 @@ def _parse_power_number(value, implicit_decimals: int | None = None):
         return ""
 
 
+def _parse_battery_cell_number(value):
+    """방전 후 셀 전압은 현장 입력 자릿수에 따라 2~3자리 소수를 허용합니다.
+
+    - 215  → 2.15V
+    - 3507 → 3.507V
+    - 0.00 / 0.000처럼 직접 입력한 소수점은 그대로 숫자로 저장
+    """
+    raw = str(value or "").strip().replace(",", "")
+    if not raw:
+        return ""
+    cleaned = re.sub(r"[^0-9.+-]", "", raw)
+    if cleaned in {"", "+", "-", ".", "+.", "-."}:
+        return ""
+    try:
+        if "." in cleaned:
+            return float(cleaned)
+        sign = -1 if cleaned.startswith("-") else 1
+        digits = cleaned.lstrip("+-")
+        if not digits.isdigit():
+            return ""
+        decimals = 3 if len(digits) >= 4 else 2
+        return sign * (int(digits) / (10 ** decimals))
+    except (TypeError, ValueError, OverflowError):
+        return ""
+
+
 def _format_power_display(value, decimals: int) -> str:
     raw = str(value or "").strip().replace(",", "")
     if not raw:
@@ -1458,6 +1426,26 @@ def _format_power_display(value, decimals: int) -> str:
         return ""
     try:
         number = float(cleaned)
+        return f"{number:.{decimals}f}"
+    except Exception:
+        return raw
+
+
+def _format_battery_cell_display(value) -> str:
+    """Google Sheets의 셀 전압 자릿수를 가능한 한 보존합니다."""
+    raw = str(value or "").strip().replace(",", "")
+    if not raw:
+        return ""
+    cleaned = re.sub(r"[^0-9.-]", "", raw)
+    if not cleaned:
+        return ""
+    try:
+        number = float(cleaned)
+        if "." in cleaned:
+            fraction_len = len(cleaned.split(".", 1)[1])
+            decimals = max(2, min(3, fraction_len))
+        else:
+            decimals = 2
         return f"{number:.{decimals}f}"
     except Exception:
         return raw
@@ -1561,7 +1549,7 @@ def _power_theme_keys(theme: str) -> list[str]:
             "power_phase_type",
             "power_three_voltage_rs", "power_three_voltage_st",
             "power_three_voltage_tr", "power_three_voltage_rn",
-            "power_three_current_r", "power_three_current_s", "power_three_current_t",
+            "power_three_current_r", "power_three_current_s", "power_three_current_t", "power_three_current_n",
             "power_single_voltage", "power_single_current",
         ]
     if theme == "축전지 측정":
@@ -1622,8 +1610,10 @@ def _on_power_battery_set_change() -> None:
 
 def _power_basic_missing() -> list[str]:
     missing: list[str] = []
-    if _power_state_blank("power_worker"):
-        missing.append("점검자 성명")
+    if st.session_state.get("power_worker", "담당자 선택") == "담당자 선택":
+        missing.append("담당자")
+    if st.session_state.get("power_major_area", "권역 선택") == "권역 선택":
+        missing.append("주요 점검권역")
     if st.session_state.get("power_mother", "모국 선택") == "모국 선택":
         missing.append("모국")
     if st.session_state.get("power_local", "국소 선택") == "국소 선택":
@@ -1667,6 +1657,7 @@ def _power_payload_missing_items(payload: dict) -> list[str]:
             ("삼상 R상 전류", payload.get("three_current_r")),
             ("삼상 S상 전류", payload.get("three_current_s")),
             ("삼상 T상 전류", payload.get("three_current_t")),
+            ("삼상 N상 전류", payload.get("three_current_n")),
         ])
     elif phase_type == "단상":
         expected.extend([
@@ -1721,7 +1712,7 @@ def _power_payload_missing_items(payload: dict) -> list[str]:
 
 
 def _power_expected_item_count(payload: dict) -> int:
-    phase_count = 7 if str(payload.get("phase_type", "")).strip() == "삼상" else 2
+    phase_count = 8 if str(payload.get("phase_type", "")).strip() == "삼상" else 2
     battery1_count = int(payload.get("battery1_cell_count", 0) or 0)
     battery_count = 5 + max(0, min(battery1_count, 24))
     if int(payload.get("battery_group_count", 1) or 1) == 2:
@@ -1733,7 +1724,7 @@ def _power_expected_item_count(payload: dict) -> int:
 def _power_has_measurement(payload: dict) -> bool:
     measurement_keys = [
         "three_voltage_rs", "three_voltage_st", "three_voltage_tr", "three_voltage_rn",
-        "three_current_r", "three_current_s", "three_current_t",
+        "three_current_r", "three_current_s", "three_current_t", "three_current_n",
         "single_voltage", "single_current",
         "battery1_total_current", "battery1_total_voltage", "battery1_min_voltage",
         "battery1_max_voltage", "battery1_end_voltage",
@@ -1759,16 +1750,21 @@ def save_power_inspection_result(payload: dict) -> tuple[bool, str, str]:
 
     try:
         worker = str(payload.get("worker", "")).strip()
+        major_area = str(payload.get("major_area", "")).strip()
         mother = str(payload.get("mother", "")).strip()
         local = str(payload.get("local", "")).strip()
         phase_type = str(payload.get("phase_type", "")).strip()
 
-        if not worker:
-            return False, "점검자 성명을 입력해 주세요.", ""
-        if mother not in POWER_STATION_MAP:
-            return False, "모국 선택값이 올바르지 않습니다.", ""
-        if local not in POWER_STATION_MAP.get(mother, []):
-            return False, "선택한 모국과 국소의 조합이 올바르지 않습니다.", ""
+        if not worker or worker == "담당자 선택":
+            return False, "담당자를 선택해 주세요.", ""
+        assigned_areas = _major_areas_for_inspector(worker)
+        if major_area not in assigned_areas:
+            return False, "담당자에게 배정된 주요 점검권역을 선택해 주세요.", ""
+        area_map = _power_area_station_map(major_area)
+        if mother not in area_map:
+            return False, "선택한 권역에 포함된 모국을 선택해 주세요.", ""
+        if local not in area_map.get(mother, []):
+            return False, "선택한 권역·모국·국소의 조합이 올바르지 않습니다.", ""
         if phase_type not in {"삼상", "단상"}:
             return False, "삼상 또는 단상 측정 방식을 선택해 주세요.", ""
         if not _power_has_measurement(payload):
@@ -1787,7 +1783,7 @@ def save_power_inspection_result(payload: dict) -> tuple[bool, str, str]:
 
         now = _korea_now()
         saved_at = now.strftime("%Y-%m-%d %H:%M:%S")
-        inspection_seed = f"{saved_at}|{worker}|{mother}|{local}|{time.time_ns()}"
+        inspection_seed = f"{saved_at}|{worker}|{major_area}|{mother}|{local}|{time.time_ns()}"
         inspection_id = hashlib.sha256(inspection_seed.encode("utf-8")).hexdigest()[:14]
         source_id = str(payload.get("source_inspection_id", "")).strip()
         source_saved_at = str(payload.get("source_saved_at", "")).strip()
@@ -1797,6 +1793,7 @@ def save_power_inspection_result(payload: dict) -> tuple[bool, str, str]:
             "점검ID": inspection_id,
             "점검자": worker,
             "운용조": str(payload.get("inspector_group", "")).strip() or _inspector_group_for_name(worker),
+            "주요점검권역": major_area,
             "모국": mother,
             "국소": local,
             "전원구분": phase_type,
@@ -1815,6 +1812,7 @@ def save_power_inspection_result(payload: dict) -> tuple[bool, str, str]:
             "삼상전류_R(A)": payload.get("three_current_r", "") if phase_type == "삼상" else "",
             "삼상전류_S(A)": payload.get("three_current_s", "") if phase_type == "삼상" else "",
             "삼상전류_T(A)": payload.get("three_current_t", "") if phase_type == "삼상" else "",
+            "삼상전류_N(A)": payload.get("three_current_n", "") if phase_type == "삼상" else "",
             "단상전압(V)": payload.get("single_voltage", "") if phase_type == "단상" else "",
             "단상전류(A)": payload.get("single_current", "") if phase_type == "단상" else "",
             "1조_측정셀수": int(payload.get("battery1_cell_count", 0) or 0),
@@ -1988,6 +1986,7 @@ def _set_power_state_from_record(record: dict) -> None:
         ("power_three_current_r", "삼상전류_R(A)", 1),
         ("power_three_current_s", "삼상전류_S(A)", 1),
         ("power_three_current_t", "삼상전류_T(A)", 1),
+        ("power_three_current_n", "삼상전류_N(A)", 1),
         ("power_single_voltage", "단상전압(V)", 1),
         ("power_single_current", "단상전류(A)", 1),
     ]
@@ -2002,7 +2001,11 @@ def _set_power_state_from_record(record: dict) -> None:
         set_value(f"{prefix}_max_voltage", f"{group}조_최고전압(V)", 2)
         set_value(f"{prefix}_end_voltage", f"{group}조_방전종료전압(V)", 2)
         for index in range(1, 25):
-            set_value(f"power_battery_{group}_{index:02d}", f"{group}조_셀{index:02d}(V)", 2)
+            key = f"power_battery_{group}_{index:02d}"
+            value = str(record.get(f"{group}조_셀{index:02d}(V)", "")).strip()
+            formatted = _format_battery_cell_display(value) if value else ""
+            draft[key] = formatted
+            st.session_state[key] = formatted
 
     ground_map = [
         ("power_security_ground_1", "보안접지_1종(Ω)"),
@@ -2078,7 +2081,7 @@ def _render_power_battery_summary(group_number: int) -> None:
     with row2[1]:
         _power_text_input("최고전압 (V)", key=f"{prefix}_max_voltage")
     _power_text_input("방전종료 전압 (V)", key=f"{prefix}_end_voltage")
-    st.markdown(f"**{group_number}조 셀 전압 (V)**")
+    st.markdown(f"**{group_number}조 방전 후 셀 전압 (V)**")
     st.caption("실제 설치된 셀 수만 입력해도 됩니다. 예: 10셀만 측정한 경우 1~10번까지만 입력하고 다음 단계로 진행할 수 있습니다.")
     _render_power_cell_inputs(group_number)
 
@@ -2100,7 +2103,7 @@ def _power_state_blank(key: str) -> bool:
 def _clear_power_measurements_after_station_change() -> None:
     """국사가 실제로 바뀌면 이전 국사의 측정값이 섞이지 않도록 측정 임시값을 초기화합니다."""
     keep_keys = {
-        "power_worker", "power_inspector_group", "power_mother", "power_local",
+        "power_worker", "power_inspector_group", "power_major_area", "power_mother", "power_local",
         "power_phase_type", "power_battery_set",
     }
     for key in list(st.session_state.keys()):
@@ -2125,6 +2128,7 @@ def _power_theme_missing(theme: str) -> list[str]:
                 ("power_three_current_r", "R상 전류"),
                 ("power_three_current_s", "S상 전류"),
                 ("power_three_current_t", "T상 전류"),
+                ("power_three_current_n", "N상 전류"),
             ]
         else:
             checks = [
@@ -2324,16 +2328,17 @@ def _build_power_payload_from_state(final_confirmed: bool = False) -> dict:
     group_count = 2 if _power_battery2_enabled() else 1
     worker = str(st.session_state.get("power_worker", "")).strip()
     battery1_cells = [
-        _parse_power_number(_power_get(f"power_battery_1_{index:02d}", ""), 2)
+        _parse_battery_cell_number(_power_get(f"power_battery_1_{index:02d}", ""))
         for index in range(1, 25)
     ]
     battery2_cells = [
-        _parse_power_number(_power_get(f"power_battery_2_{index:02d}", ""), 2)
+        _parse_battery_cell_number(_power_get(f"power_battery_2_{index:02d}", ""))
         for index in range(1, 25)
     ] if group_count == 2 else [""] * 24
     return {
         "worker": worker,
         "inspector_group": st.session_state.get("power_inspector_group", "") or _inspector_group_for_name(worker),
+        "major_area": st.session_state.get("power_major_area", "권역 선택"),
         "mother": st.session_state.get("power_mother", "모국 선택"),
         "local": st.session_state.get("power_local", "국소 선택"),
         "phase_type": phase_type,
@@ -2347,6 +2352,7 @@ def _build_power_payload_from_state(final_confirmed: bool = False) -> dict:
         "three_current_r": _parse_power_number(_power_get("power_three_current_r", ""), 1),
         "three_current_s": _parse_power_number(_power_get("power_three_current_s", ""), 1),
         "three_current_t": _parse_power_number(_power_get("power_three_current_t", ""), 1),
+        "three_current_n": _parse_power_number(_power_get("power_three_current_n", ""), 1),
         "single_voltage": _parse_power_number(_power_get("power_single_voltage", ""), 1),
         "single_current": _parse_power_number(_power_get("power_single_current", ""), 1),
         "battery1_total_current": _parse_power_number(_power_get("power_battery1_total_current", ""), 1),
@@ -2383,6 +2389,7 @@ def _reset_power_inspection() -> None:
     st.session_state["power_panel_nonce"] = 0
     st.session_state["power_draft"] = {
         "power_phase_type": "삼상",
+        "power_major_area": "권역 선택",
         "power_battery_set": "1조 셀 측정",
         "power_battery2_enabled": False,
     }
@@ -2391,10 +2398,10 @@ def _reset_power_inspection() -> None:
 
 
 def _render_power_auto_decimal_script() -> None:
-    data_field_decimals = {
+    data_field_rules = {
         "power_three_voltage_rs": 1, "power_three_voltage_st": 1,
         "power_three_voltage_tr": 1, "power_three_voltage_rn": 1,
-        "power_three_current_r": 1, "power_three_current_s": 1, "power_three_current_t": 1,
+        "power_three_current_r": 1, "power_three_current_s": 1, "power_three_current_t": 1, "power_three_current_n": 1,
         "power_single_voltage": 1, "power_single_current": 1,
         "power_battery1_total_current": 1, "power_battery2_total_current": 1,
         "power_battery1_total_voltage": 2, "power_battery2_total_voltage": 2,
@@ -2407,25 +2414,21 @@ def _render_power_auto_decimal_script() -> None:
     }
     for group in (1, 2):
         for cell_number in range(1, 25):
-            data_field_decimals[f"power_battery_{group}_{cell_number:02d}"] = 2
+            data_field_rules[f"power_battery_{group}_{cell_number:02d}"] = {"mode": "battery_cell"}
 
     # 실제 화면에는 shadow UI key가 렌더링됩니다.
-    field_decimals = {
-        _power_widget_key(data_key): decimals
-        for data_key, decimals in data_field_decimals.items()
+    field_rules = {
+        _power_widget_key(data_key): rule
+        for data_key, rule in data_field_rules.items()
     }
-    rules_json = json.dumps(field_decimals, ensure_ascii=False)
+    rules_json = json.dumps(field_rules, ensure_ascii=False)
     script = r"""
         <script>
         (() => {
           const rules = __POWER_RULES_JSON__;
-          const FOCUS_STORAGE_KEY = '__power_next_focus_key_v7__';
+          const FOCUS_STORAGE_KEY = '__power_next_focus_key_v10__';
 
-          function formatted(raw, decimals, key) {
-            let value = String(raw || '').trim().replace(/,/g, '');
-            if (!value) return '';
-            value = value.replace(/[^0-9.]/g, '');
-            if (!value) return '';
+          function formatFixed(value, decimals, key) {
             if (value.includes('.')) {
               const pieces = value.split('.', 2);
               const integer = (pieces[0] || '0').replace(/\D/g, '') || '0';
@@ -2436,15 +2439,42 @@ def _render_power_auto_decimal_script() -> None:
             if (!digits) return '';
             if (decimals <= 0) return digits;
 
-            // 접지저항은 현장 입력 관행을 반영합니다.
-            // 00 -> 0.0, 000 -> 0.00, 0000 -> 00.00
+            // 접지저항 현장 입력: 00→0.0, 000→0.00, 0000→00.00
             const isGroundResistance = String(key || '').includes('ground');
             if (isGroundResistance && digits.length === 2) {
               return `${digits.slice(0, 1)}.${digits.slice(1)}`;
             }
-
             const padded = digits.length <= decimals ? digits.padStart(decimals + 1, '0') : digits;
             return `${padded.slice(0, -decimals)}.${padded.slice(-decimals)}`;
+          }
+
+          function formatBatteryCell(value) {
+            if (value.includes('.')) {
+              const pieces = value.split('.', 2);
+              const integer = (pieces[0] || '0').replace(/\D/g, '') || '0';
+              const rawFraction = (pieces[1] || '').replace(/\D/g, '');
+              const decimals = Math.max(2, Math.min(3, rawFraction.length || 2));
+              const fraction = rawFraction.slice(0, decimals).padEnd(decimals, '0');
+              return `${integer}.${fraction}`;
+            }
+            const digits = value.replace(/\D/g, '');
+            if (!digits) return '';
+            // 참고 시험성적서의 셀 전압은 소수 셋째 자리까지 사용합니다.
+            // 215→2.15, 3507→3.507, 000→0.00, 0000→0.000
+            const decimals = digits.length >= 4 ? 3 : 2;
+            const padded = digits.length <= decimals ? digits.padStart(decimals + 1, '0') : digits;
+            return `${padded.slice(0, -decimals)}.${padded.slice(-decimals)}`;
+          }
+
+          function formatted(raw, rule, key) {
+            let value = String(raw || '').trim().replace(/,/g, '');
+            if (!value) return '';
+            value = value.replace(/[^0-9.]/g, '');
+            if (!value) return '';
+            if (rule && typeof rule === 'object' && rule.mode === 'battery_cell') {
+              return formatBatteryCell(value);
+            }
+            return formatFixed(value, Number(rule || 0), key);
           }
 
           function parentDocument() {
@@ -2501,19 +2531,19 @@ def _render_power_auto_decimal_script() -> None:
             return nextItem;
           }
 
-          function bindInput(doc, key, decimals) {
+          function bindInput(doc, key, rule) {
             const wrapper = wrapperForKey(doc, key);
             const input = wrapper ? wrapper.querySelector('input') : null;
-            if (!input || input.dataset.powerDecimalBoundV7 === '1') return;
+            if (!input || input.dataset.powerDecimalBoundV10 === '1') return;
 
-            input.dataset.powerDecimalBoundV7 = '1';
+            input.dataset.powerDecimalBoundV10 = '1';
             input.dataset.powerKey = key;
             input.setAttribute('inputmode', 'decimal');
             input.setAttribute('autocomplete', 'off');
             input.setAttribute('enterkeyhint', 'next');
 
             const applyFormat = () => {
-              const next = formatted(input.value, Number(decimals), key);
+              const next = formatted(input.value, rule, key);
               if (next !== input.value) setReactValue(input, next);
               return next;
             };
@@ -2543,7 +2573,7 @@ def _render_power_auto_decimal_script() -> None:
           function bindInputs() {
             const doc = parentDocument();
             if (!doc) return;
-            Object.entries(rules).forEach(([key, decimals]) => bindInput(doc, key, decimals));
+            Object.entries(rules).forEach(([key, rule]) => bindInput(doc, key, rule));
           }
 
           function restoreNextFocus() {
@@ -2612,6 +2642,9 @@ st.markdown("""
 /* Streamlit 탭을 카드형 메뉴처럼 보이게 개선 */
 div[data-testid="stTabs"] > div[role="tablist"] {
     gap: 10px !important;
+    overflow-x: auto !important;
+    flex-wrap: nowrap !important;
+    scrollbar-width: thin !important;
     background: linear-gradient(135deg, #EEF4FF 0%, #F8FAFC 100%) !important;
     border: 1px solid #D8E3F2 !important;
     border-radius: 20px !important;
@@ -2630,7 +2663,7 @@ div[data-testid="stTabs"] button[role="tab"] {
     transition: all 0.18s ease-in-out !important;
 }
 div[data-testid="stTabs"] button[role="tab"] p {
-    font-size: 1.02rem !important;
+    font-size: clamp(1.02rem, 2.6vw, 1.14rem) !important;
     font-weight: 950 !important;
     margin: 0 !important;
 }
@@ -2659,6 +2692,11 @@ div[data-testid="stTabs"] button[role="tab"][aria-selected="false"] * {
 /* 선택된 탭 하단 기본 라인 숨김 */
 div[data-testid="stTabs"] button[role="tab"]::after {
     display: none !important;
+}
+@media (max-width: 768px) {
+    section.main .block-container { padding-left:.65rem !important; padding-right:.65rem !important; padding-top:.75rem !important; }
+    div[data-testid="stTabs"] > div[role="tablist"] { padding:7px !important; gap:7px !important; border-radius:15px !important; }
+    div[data-testid="stTabs"] button[role="tab"] { flex:0 0 auto !important; min-width:142px !important; min-height:52px !important; padding:8px 11px !important; }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -2826,6 +2864,9 @@ with tab_power:
     expected_group = _inspector_group_for_name(st.session_state.get("power_worker", ""))
     if st.session_state.get("power_inspector_group", "") != expected_group:
         st.session_state["power_inspector_group"] = expected_group
+    assigned_areas = _major_areas_for_inspector(st.session_state.get("power_worker", ""))
+    if st.session_state.get("power_major_area", "권역 선택") not in assigned_areas:
+        st.session_state["power_major_area"] = assigned_areas[0] if len(assigned_areas) == 1 else "권역 선택"
 
     st.markdown("### 🔋 국사 전원시설 정밀점검")
     st.caption("기본정보를 먼저 선택한 뒤, 측정 테마별로 입력하고 마지막에 Google Sheets로 전송합니다.")
@@ -2841,13 +2882,13 @@ with tab_power:
         margin: 8px 0 12px 0;
         box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
     }
-    .power-mobile-hero h3 { margin:0 0 6px 0; color:#0F172A; font-weight:950; font-size:1.15rem; }
-    .power-mobile-hero p { margin:0; color:#475569; line-height:1.55; font-weight:650; }
+    .power-mobile-hero h3 { margin:0 0 7px 0; color:#0F172A; font-weight:950; font-size:clamp(1.28rem,3.5vw,1.60rem); letter-spacing:-0.02em; }
+    .power-mobile-hero p { margin:0; color:#334155; line-height:1.65; font-weight:720; font-size:clamp(.94rem,2.6vw,1.04rem); }
     .power-basic-card {
         background:#FFFFFF; border:1px solid #D8E3F2; border-radius:17px;
         padding:14px 15px 6px; margin:10px 0 10px; box-shadow:0 6px 18px rgba(15,23,42,.06);
     }
-    .power-basic-title {font-size:1.02rem; font-weight:950; color:#0B5CAB; margin-bottom:8px;}
+    .power-basic-title {font-size:clamp(1.16rem,3.2vw,1.34rem); font-weight:950; color:#0B5CAB; margin-bottom:9px; letter-spacing:-.01em;}
     .power-sticky-card {
         position: sticky; top: 0.35rem; z-index: 990;
         background: rgba(15, 23, 42, 0.96); color: #FFFFFF;
@@ -2855,9 +2896,10 @@ with tab_power:
         padding: 10px 14px; margin: 8px 0 11px 0;
         box-shadow: 0 10px 24px rgba(15, 23, 42, 0.22); backdrop-filter: blur(10px);
     }
-    .power-sticky-title { font-size:0.73rem; opacity:0.76; font-weight:800; margin-bottom:3px; }
-    .power-sticky-main { font-size:0.98rem; font-weight:950; line-height:1.35; word-break:keep-all; }
-    .power-sticky-sub { font-size:0.82rem; opacity:0.88; margin-top:3px; line-height:1.35; }
+    .power-sticky-title { font-size:.82rem; opacity:.82; font-weight:850; margin-bottom:3px; }
+    .power-sticky-main { font-size:clamp(1.00rem,3vw,1.16rem); font-weight:950; line-height:1.35; word-break:keep-all; }
+    .power-sticky-area { font-size:clamp(.88rem,2.7vw,1.02rem); font-weight:850; color:#BFDBFE; margin-top:2px; }
+    .power-sticky-sub { font-size:.88rem; opacity:.92; margin-top:3px; line-height:1.4; }
     .power-theme-heading {
         font-size:1.18rem; font-weight:950; color:#0B5CAB;
         margin:12px 0 9px 0; padding-bottom:8px; border-bottom:2px solid #DCEAF7;
@@ -2884,8 +2926,8 @@ with tab_power:
         padding:13px 15px; color:#334155; font-weight:700; line-height:1.55;
     }
     .power-ground-heading {
-        border-radius:13px; padding:10px 13px; margin:8px 0 8px;
-        font-size:1rem; font-weight:950; color:#0F172A;
+        border-radius:13px; padding:11px 14px; margin:9px 0 9px;
+        font-size:clamp(1.05rem,3vw,1.22rem); font-weight:950; color:#0F172A;
         box-shadow:0 5px 14px rgba(15,23,42,.07);
     }
     .power-ground-heading span { font-weight:850; opacity:.78; }
@@ -2941,67 +2983,121 @@ with tab_power:
         min-height:44px !important; font-weight:850 !important;
     }
     div[class*="st-key-_ui_power_battery_"] label p {
-        text-align:center !important; font-size:0.80rem !important; font-weight:900 !important;
+        text-align:center !important; font-size:0.86rem !important; font-weight:950 !important;
     }
+    .power-measurement-menu-title {
+        font-size:clamp(1.26rem,3.7vw,1.52rem); font-weight:950; color:#0F3B66;
+        margin:14px 0 9px; padding:10px 13px; border-radius:14px;
+        background:linear-gradient(135deg,#DBEAFE,#ECFEFF); border:1px solid #93C5FD;
+        border-left:7px solid #0284C7; box-shadow:0 5px 14px rgba(2,132,199,.10);
+    }
+    details:has(.power-panel-marker) > summary p,
+    details:has(.power-panel-marker) > summary span {
+        font-size:clamp(1.10rem,3.4vw,1.30rem) !important; font-weight:950 !important; color:#0F3B66 !important;
+    }
+    div[class*="st-key-_ui_power_"] label p {
+        font-size:clamp(.96rem,2.8vw,1.08rem) !important; font-weight:950 !important; color:#172033 !important; line-height:1.35 !important;
+    }
+    div[class*="st-key-_ui_power_"] input,
+    div[class*="st-key-_ui_power_"] textarea {
+        font-size:clamp(1.04rem,3vw,1.18rem) !important; font-weight:900 !important; color:#0F172A !important;
+        -webkit-text-fill-color:#0F172A !important; min-height:48px !important; border:1.5px solid #94A3B8 !important;
+    }
+    div.st-key-power_worker label p, div.st-key-power_major_area label p,
+    div.st-key-power_mother label p, div.st-key-power_local label p {
+        font-size:clamp(.98rem,2.9vw,1.10rem) !important; font-weight:950 !important; color:#1E293B !important;
+    }
+    div.st-key-power_worker [data-baseweb="select"], div.st-key-power_major_area [data-baseweb="select"],
+    div.st-key-power_mother [data-baseweb="select"], div.st-key-power_local [data-baseweb="select"] {
+        font-size:clamp(1rem,3vw,1.12rem) !important; font-weight:850 !important; min-height:48px !important;
+    }
+    div[class*="st-key-power_theme_menu_"] button p { font-size:clamp(.95rem,2.8vw,1.08rem) !important; font-weight:950 !important; }
     @media (max-width: 768px) {
         .power-mobile-hero { padding:14px 13px; border-radius:15px; }
         .power-sticky-card { top:0.2rem; border-radius:13px; padding:9px 11px; }
-        .power-sticky-main { font-size:0.92rem; }
+        .power-sticky-main { font-size:1rem; }
         div[class*="st-key-_ui_power_"] input,
-        div[class*="st-key-_ui_power_"] textarea { font-size:16px !important; }
-        div[class*="st-key-_ui_power_"] label p { font-size:0.82rem !important; }
-        div[class*="st-key-_ui_power_battery_"] input { padding:0.35rem 0.12rem !important; }
-        div[class*="st-key-_ui_power_battery_"] label p { font-size:0.72rem !important; }
+        div[class*="st-key-_ui_power_"] textarea { font-size:16px !important; min-height:47px !important; }
+        div[class*="st-key-_ui_power_"] label p { font-size:.94rem !important; }
+        div[class*="st-key-_ui_power_battery_"] input { padding:.35rem .08rem !important; text-align:center !important; }
+        div[class*="st-key-_ui_power_battery_"] label p { font-size:.78rem !important; }
+        div[class*="st-key-power_theme_menu_"] button { min-height:60px !important; }
+    }
+    @media (max-width: 430px) {
+        .power-mobile-hero { padding:13px 11px; }
+        .power-basic-card { padding:12px 11px 5px; }
+        .power-sticky-card { margin-left:-.1rem; margin-right:-.1rem; }
+        .power-menu-legend { gap:5px; font-size:.75rem; }
+        .power-menu-legend span { padding:4px 7px; }
+        div[class*="st-key-_ui_power_battery_"] label p { font-size:.72rem !important; }
+        div[class*="st-key-_ui_power_battery_"] input { font-size:15px !important; min-height:44px !important; }
     }
     </style>
     <div class="power-mobile-hero">
       <h3>새로운 전원 정밀점검 전용 공간</h3>
-      <p>점검자와 국소를 먼저 선택하고, 필요한 측정 테마만 열어 입력합니다. 과거 측정기록을 조회하고 원하는 측정일시를 선택해 불러올 수도 있습니다.</p>
+      <p>담당자와 주요 점검권역을 선택하면 배정된 모국·국소만 표시됩니다. 필요한 측정 테마를 열어 입력합니다. 과거 측정기록을 조회하고 원하는 측정일시를 선택해 불러올 수도 있습니다.</p>
     </div>
     """, unsafe_allow_html=True)
 
     # 기본정보는 별도 메뉴가 아니라 항상 최상단에 표시합니다.
     st.markdown('<div class="power-basic-card"><div class="power-basic-title">👤 기본정보</div></div>', unsafe_allow_html=True)
-    inspector_col1, inspector_col2 = st.columns([1.25, 0.75], gap="small")
-    with inspector_col1:
-        st.text_input(
-            "점검자 성명 *",
+
+    worker_options = ["담당자 선택"] + POWER_INSPECTOR_OPTIONS
+    if st.session_state.get("power_worker", "담당자 선택") not in worker_options:
+        st.session_state["power_worker"] = "담당자 선택"
+
+    basic_row1 = st.columns(2, gap="small")
+    with basic_row1[0]:
+        selected_worker = st.selectbox(
+            "담당자 *",
+            worker_options,
             key="power_worker",
-            on_change=_update_power_inspector_group,
-            placeholder="성명을 입력하세요",
+            on_change=_on_power_worker_change,
         )
-    with inspector_col2:
-        st.text_input(
-            "소속 조",
-            key="power_inspector_group",
-            disabled=True,
-            placeholder="이름 입력 시 자동 표시",
+
+    assigned_area_options = _major_areas_for_inspector(selected_worker)
+    area_options = assigned_area_options if assigned_area_options else ["권역 선택"]
+    if st.session_state.get("power_major_area", "권역 선택") not in area_options:
+        st.session_state["power_major_area"] = area_options[0]
+    with basic_row1[1]:
+        selected_area = st.selectbox(
+            "주요 점검권역 *",
+            area_options,
+            key="power_major_area",
+            disabled=selected_worker == "담당자 선택",
+            on_change=_on_power_major_area_change,
         )
-    if st.session_state.get("power_worker") and not st.session_state.get("power_inspector_group"):
-        st.caption("※ 등록되지 않은 성명입니다. 이름별 조 정보가 제공되면 목록에 추가할 수 있습니다.")
-    station_col1, station_col2 = st.columns([1, 1], gap="small")
-    with station_col1:
-        mother_options = ["모국 선택"] + list(POWER_STATION_MAP.keys())
+
+    area_station_map = _power_area_station_map(selected_area)
+    basic_row2 = st.columns(2, gap="small")
+    mother_options = ["모국 선택"] + list(area_station_map.keys())
+    if st.session_state.get("power_mother", "모국 선택") not in mother_options:
+        st.session_state["power_mother"] = "모국 선택"
+    with basic_row2[0]:
         selected_mother = st.selectbox(
-            "모국 *", mother_options, key="power_mother",
-            on_change=_clear_power_measurements_after_station_change,
+            "모국 *",
+            mother_options,
+            key="power_mother",
+            disabled=selected_area not in POWER_REGION_DATA,
+            on_change=_on_power_mother_change,
         )
 
     local_options = ["국소 선택"]
-    if selected_mother in POWER_STATION_MAP:
-        local_options += POWER_STATION_MAP[selected_mother]
-    current_local = st.session_state.get("power_local", "국소 선택")
-    if current_local not in local_options:
+    if selected_mother in area_station_map:
+        local_options += area_station_map[selected_mother]
+    if st.session_state.get("power_local", "국소 선택") not in local_options:
         st.session_state["power_local"] = "국소 선택"
-    with station_col2:
+    with basic_row2[1]:
         st.selectbox(
-            "국소 *", local_options, key="power_local",
-            disabled=selected_mother not in POWER_STATION_MAP,
+            "국소 *",
+            local_options,
+            key="power_local",
+            disabled=selected_mother not in area_station_map,
             on_change=_clear_power_measurements_after_station_change,
         )
 
     selected_local = st.session_state.get("power_local", "국소 선택")
-    can_load = selected_mother in POWER_STATION_MAP and selected_local in POWER_STATION_MAP.get(selected_mother, [])
+    can_load = selected_mother in area_station_map and selected_local in area_station_map.get(selected_mother, [])
 
     st.markdown("**과거 측정값 불러오기**")
     history_periods = {
@@ -3093,10 +3189,10 @@ with tab_power:
 
     basic_missing = _power_basic_missing()
     if basic_missing:
-        st.caption("※ 점검자 성명·모국·국소는 최종 전송을 위한 필수 기본정보입니다.")
+        st.caption("※ 담당자·주요 점검권역·모국·국소는 최종 전송을 위한 필수 기본정보입니다.")
 
-    worker_summary = html.escape(str(st.session_state.get("power_worker", "")).strip() or "미입력")
-    inspector_group_summary = html.escape(str(st.session_state.get("power_inspector_group", "")).strip() or "조 미등록")
+    worker_summary = html.escape(str(st.session_state.get("power_worker", "담당자 선택")).strip() or "미입력")
+    major_area_summary = html.escape(str(st.session_state.get("power_major_area", "권역 선택")).strip() or "권역 미선택")
     draft_saved_at = html.escape(str(st.session_state.get("power_draft_saved_at", "")).strip() or "-")
     mother_summary = str(st.session_state.get("power_mother", "모국 선택"))
     local_summary = str(st.session_state.get("power_local", "국소 선택"))
@@ -3107,13 +3203,14 @@ with tab_power:
     st.markdown(
         f"""<div class="power-sticky-card">
           <div class="power-sticky-title">현재 점검정보 · {html.escape(current_theme)}</div>
-          <div class="power-sticky-main">👤 {worker_summary} · {inspector_group_summary}</div>
+          <div class="power-sticky-main">👤 {worker_summary}</div>
+          <div class="power-sticky-area">🗺️ {major_area_summary}</div>
           <div class="power-sticky-sub">📍 {html.escape(station_summary)} · 임시저장 {draft_saved_at}</div>
         </div>""",
         unsafe_allow_html=True,
     )
 
-    st.markdown("#### 측정 메뉴")
+    st.markdown('<div class="power-measurement-menu-title">📋 측정 메뉴</div>', unsafe_allow_html=True)
     unlocked_index = _power_unlocked_theme_index()
     confirmations = dict(st.session_state.get("power_theme_confirmations", {}))
     current_theme = st.session_state.get("power_current_theme", POWER_THEME_ORDER[0])
@@ -3211,7 +3308,7 @@ with tab_power:
     with st.expander(f"{POWER_THEME_ICON[current_theme]} {current_theme}", expanded=True):
         st.markdown(f'<div class="power-panel-marker" data-panel="{panel_nonce}"></div>', unsafe_allow_html=True)
         st.markdown(
-            '<div class="power-unit-guide">전압(V), 전류(A), 저항(Ω) 단위는 자동으로 표시·저장됩니다. 숫자만 입력하세요.</div>',
+            '<div class="power-unit-guide">전압·전류는 소수 첫째 자리, 축전지 Total 전압은 둘째 자리, 방전 후 셀 전압은 둘째 또는 셋째 자리, 접지저항은 현장 입력 자릿수에 맞춰 자동 표시됩니다.</div>',
             unsafe_allow_html=True,
         )
 
@@ -3238,15 +3335,17 @@ with tab_power:
                     for column, (label, key) in zip(row1, voltage_fields[start:start + 2]):
                         with column:
                             _power_text_input(label, key=key)
-                row2 = st.columns(3, gap="small")
                 current_fields = [
                     ("R상 전류 (A)", "power_three_current_r"),
                     ("S상 전류 (A)", "power_three_current_s"),
                     ("T상 전류 (A)", "power_three_current_t"),
+                    ("N상 전류 (A)", "power_three_current_n"),
                 ]
-                for column, (label, key) in zip(row2, current_fields):
-                    with column:
-                        _power_text_input(label, key=key)
+                for start in range(0, len(current_fields), 2):
+                    current_row = st.columns(2, gap="small")
+                    for column, (label, key) in zip(current_row, current_fields[start:start + 2]):
+                        with column:
+                            _power_text_input(label, key=key)
             else:
                 row = st.columns(2, gap="small")
                 with row[0]:
@@ -3313,7 +3412,7 @@ with tab_power:
 
             summary_df = pd.DataFrame([
                 {"구분": "점검자", "내용": payload_preview.get("worker") or "미입력"},
-                {"구분": "소속 조", "내용": payload_preview.get("inspector_group") or "미등록"},
+                {"구분": "주요 점검권역", "내용": payload_preview.get("major_area") or "미선택"},
                 {"구분": "점검 국사", "내용": f"{payload_preview.get('mother')} / {payload_preview.get('local')}"},
                 {"구분": "전원 구분", "내용": payload_preview.get("phase_type")},
                 {"구분": "입력 방식", "내용": "기존값 불러오기 후 수정" if payload_preview.get("source_inspection_id") else "신규 입력"},
