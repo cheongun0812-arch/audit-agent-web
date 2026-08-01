@@ -1465,6 +1465,108 @@ def _ensure_power_inspection_sheet(spreadsheet):
     return ws, current_headers
 
 
+def _extract_appended_row_number(append_response) -> int | None:
+    """gspread append_row 응답에서 실제 추가된 행 번호를 추출합니다."""
+    if not isinstance(append_response, dict):
+        return None
+    updated_range = ""
+    updates = append_response.get("updates")
+    if isinstance(updates, dict):
+        updated_range = str(updates.get("updatedRange", "") or "")
+    if not updated_range:
+        updated_range = str(append_response.get("updatedRange", "") or "")
+    match = re.search(r"![A-Z]+(\d+):[A-Z]+(\d+)$", updated_range)
+    if not match:
+        return None
+    return int(match.group(1))
+
+
+def _locate_saved_inspection_row(ws, sheet_headers: list[str], inspection_id: str) -> int | None:
+    """append 응답에 행 번호가 없을 때 점검ID 열에서 저장 행을 찾습니다."""
+    if not inspection_id or "점검ID" not in sheet_headers:
+        return None
+    id_col = sheet_headers.index("점검ID") + 1
+    try:
+        values = ws.col_values(id_col)
+    except Exception:
+        return None
+    for row_number in range(len(values), 1, -1):
+        if str(values[row_number - 1]).strip() == inspection_id:
+            return row_number
+    return None
+
+
+def _ensure_n_phase_current_saved(
+    ws,
+    sheet_headers: list[str],
+    append_response,
+    inspection_id: str,
+    n_phase_value,
+) -> None:
+    """삼상 N상 전류를 저장 직후 확인하고 누락 시 정확한 셀에 보정 저장합니다.
+
+    과거 버전의 시트에서는 새 헤더가 기존 열 사이가 아니라 시트 오른쪽 끝에
+    추가될 수 있습니다. 따라서 헤더명으로 실제 열을 찾고, 저장된 행의 해당 셀을
+    직접 검증하여 N상 전류 누락을 방지합니다.
+    """
+    if n_phase_value in ("", None):
+        return
+
+    target_header = "삼상전류_N(A)"
+    if target_header not in sheet_headers:
+        raise RuntimeError("Google Sheets에 '삼상전류_N(A)' 헤더가 생성되지 않았습니다.")
+
+    row_number = _extract_appended_row_number(append_response)
+    if row_number is None:
+        row_number = _locate_saved_inspection_row(ws, sheet_headers, inspection_id)
+    if row_number is None:
+        raise RuntimeError("저장된 행을 찾지 못해 N상 전류를 확인할 수 없습니다.")
+
+    column_number = sheet_headers.index(target_header) + 1
+    _ensure_worksheet_grid_capacity(
+        ws,
+        required_rows=max(int(getattr(ws, "row_count", 0) or 0), row_number),
+        required_cols=max(int(getattr(ws, "col_count", 0) or 0), column_number),
+    )
+    cell_ref = f"{_column_letter(column_number)}{row_number}"
+
+    existing_value = ""
+    try:
+        existing_value = str(ws.acell(cell_ref).value or "").strip()
+    except Exception:
+        existing_value = ""
+
+    if existing_value:
+        return
+
+    last_error = None
+    for attempt in range(3):
+        try:
+            ws.update(
+                range_name=cell_ref,
+                values=[[n_phase_value]],
+                value_input_option="USER_ENTERED",
+            )
+            verified = str(ws.acell(cell_ref).value or "").strip()
+            if verified:
+                return
+            last_error = RuntimeError("N상 전류 셀의 저장값이 비어 있습니다.")
+        except TypeError:
+            try:
+                ws.update(cell_ref, [[n_phase_value]], value_input_option="USER_ENTERED")
+                verified = str(ws.acell(cell_ref).value or "").strip()
+                if verified:
+                    return
+                last_error = RuntimeError("N상 전류 셀의 저장값이 비어 있습니다.")
+            except Exception as update_error:
+                last_error = update_error
+        except Exception as update_error:
+            last_error = update_error
+        time.sleep(0.4 * (attempt + 1))
+
+    raise RuntimeError(f"N상 전류 저장 확인에 실패했습니다: {last_error}")
+
+
 def _parse_power_number(value, implicit_decimals: int | None = None):
     """숫자만 입력한 측정값을 실제 숫자로 변환합니다.
 
@@ -1949,10 +2051,11 @@ def save_power_inspection_result(payload: dict) -> tuple[bool, str, str]:
 
         row = [row_map.get(header, "") for header in sheet_headers]
         last_error = None
+        append_response = None
         for attempt in range(5):
             try:
-                ws.append_row(row, value_input_option="USER_ENTERED")
-                return True, "측정값이 Google Sheets에 정상 저장되었습니다.", inspection_id
+                append_response = ws.append_row(row, value_input_option="USER_ENTERED")
+                break
             except Exception as append_error:
                 last_error = append_error
                 error_text = str(append_error)
@@ -1960,7 +2063,28 @@ def save_power_inspection_result(payload: dict) -> tuple[bool, str, str]:
                     time.sleep(1.1 * (attempt + 1))
                     continue
                 raise
-        return False, f"저장 요청이 집중되어 전송하지 못했습니다. 다시 전송해 주세요. ({last_error})", ""
+
+        if append_response is None:
+            return False, f"저장 요청이 집중되어 전송하지 못했습니다. 다시 전송해 주세요. ({last_error})", ""
+
+        # 기존 시트의 헤더 순서와 관계없이 N상 전류가 실제 저장됐는지 확인합니다.
+        if phase_type == "삼상":
+            n_phase_value = row_map.get("삼상전류_N(A)", "")
+            try:
+                _ensure_n_phase_current_saved(
+                    ws,
+                    sheet_headers,
+                    append_response,
+                    inspection_id,
+                    n_phase_value,
+                )
+            except Exception as n_phase_error:
+                return False, (
+                    "기본 측정데이터 행은 저장되었으나 N상 전류 저장 확인에 실패했습니다. "
+                    f"관리자에게 확인해 주세요. ({n_phase_error})"
+                ), inspection_id
+
+        return True, "측정값과 N상 전류가 Google Sheets에 정상 저장되었습니다.", inspection_id
     except Exception as e:
         return False, str(e), ""
 
@@ -3314,18 +3438,28 @@ with tab_power:
         font-size:clamp(.98rem,2.9vw,1.10rem) !important; font-weight:950 !important; color:#1E293B !important;
     }
     div.st-key-power_worker [data-baseweb="select"], div.st-key-power_mother [data-baseweb="select"], div.st-key-power_local [data-baseweb="select"] {
-        font-size:clamp(1rem,3vw,1.12rem) !important; font-weight:850 !important; min-height:50px !important;
-        border-radius:12px !important; box-shadow:0 0 0 2px #38BDF8, 0 5px 14px rgba(14,165,233,.10) !important;
+        width:100% !important; height:52px !important; min-height:52px !important; max-height:52px !important;
+        box-sizing:border-box !important; border:2px solid #38BDF8 !important; border-radius:12px !important;
+        background:#F0F9FF !important; box-shadow:0 5px 14px rgba(14,165,233,.12) !important;
+        font-size:clamp(1rem,3vw,1.12rem) !important; font-weight:850 !important; opacity:1 !important;
+    }
+    div.st-key-power_worker [data-baseweb="select"] > div,
+    div.st-key-power_mother [data-baseweb="select"] > div,
+    div.st-key-power_local [data-baseweb="select"] > div {
+        height:48px !important; min-height:48px !important; border:0 !important; border-radius:10px !important;
+        background:transparent !important; box-shadow:none !important;
     }
     .power-basic-auto-label {
         font-size:clamp(.98rem,2.9vw,1.10rem); font-weight:950; color:#1E293B; margin:0 0 6px 1px;
     }
     .power-basic-auto-card {
-        min-height:50px; display:flex; align-items:center; justify-content:center; box-sizing:border-box;
-        padding:9px 12px; border:2px solid #38BDF8; border-radius:12px;
+        width:100%; height:52px; min-height:52px; max-height:52px;
+        display:flex; align-items:center; justify-content:center; box-sizing:border-box;
+        padding:0 12px; border:2px solid #38BDF8; border-radius:12px;
         background:linear-gradient(135deg,#EFF6FF 0%,#F0F9FF 55%,#ECFEFF 100%);
         color:#0F3C5D; font-size:clamp(1rem,3vw,1.14rem); font-weight:950;
         letter-spacing:-0.02em; text-align:center; box-shadow:0 5px 14px rgba(14,165,233,.12);
+        overflow:hidden;
     }
     .power-basic-auto-card.is-empty { color:#64748B; border-color:#CBD5E1; background:#F8FAFC; box-shadow:none; }
     .power-basic-history-title {
@@ -3643,32 +3777,6 @@ with tab_power:
                 on_click=_cancel_power_theme_switch,
             )
 
-    if st.session_state.get("power_battery_exit_stage") == "ask_group2_complete":
-        st.markdown(
-            '<div class="power-missing-box"><b>1조 셀 입력을 완료했습니다. 2조 셀도 입력하시겠습니까?</b><br>'
-            '예를 선택하면 1조 값은 그대로 저장되고 2조 셀 입력 화면이 열립니다.<br>'
-            '아니오를 선택하면 축전지 측정이 완료되고 다음 미완료 측정 메뉴로 이동합니다.</div>',
-            unsafe_allow_html=True,
-        )
-        group2_yes, group2_no = st.columns(2, gap="small")
-        with group2_yes:
-            st.button(
-                "예 · 2조 셀 측정",
-                key="power_complete_measure_group2",
-                type="primary",
-                use_container_width=True,
-                on_click=_finish_battery_completion,
-                args=(True,),
-            )
-        with group2_no:
-            st.button(
-                "아니오 · 축전지 측정 완료 후 다음 메뉴",
-                key="power_complete_skip_group2",
-                use_container_width=True,
-                on_click=_finish_battery_completion,
-                args=(False,),
-            )
-
     current_missing = _power_theme_missing(current_theme) if current_theme != "최종 확인·전송" else []
     current_status_text = (
         f"현재 ‘{current_theme}’ 입력 중 · 시스템 확인 공란 {len(current_missing)}개 · 모든 메뉴는 자유롭게 이동할 수 있습니다. 테마를 마치면 하단의 ‘측정 완료’를 눌러 주세요."
@@ -3734,6 +3842,32 @@ with tab_power:
             current_battery_set = _power_get("power_battery_set", "1조 셀 측정")
             selected_group = 2 if current_battery_set == "2조 셀 측정" and battery2_enabled else 1
 
+            battery_options = ["1조 셀 측정"]
+            if battery2_enabled:
+                battery_options.append("2조 셀 측정")
+            battery_ui_key = _power_widget_key("power_battery_set")
+            if st.session_state.get(battery_ui_key, "1조 셀 측정") not in battery_options:
+                st.session_state[battery_ui_key] = "1조 셀 측정"
+                _power_set("power_battery_set", "1조 셀 측정")
+
+            st.radio(
+                "현재 입력할 축전지",
+                battery_options,
+                horizontal=True,
+                key=battery_ui_key,
+                on_change=_on_power_battery_set_change,
+            )
+            selected_group = 1 if _power_get("power_battery_set", "1조 셀 측정") == "1조 셀 측정" else 2
+            group_caption = (
+                "1조의 실제 설치 셀 수만 입력한 뒤 아래 ‘1조 셀 측정 완료’를 눌러 주세요."
+                if selected_group == 1
+                else "2조의 실제 설치 셀 수만 입력한 뒤 아래 ‘2조 셀 측정 완료’를 눌러 주세요."
+            )
+            st.caption(group_caption)
+
+            # 측정값 화면을 먼저 보여 준 뒤 진행상태와 2조 측정 여부를 아래에 배치합니다.
+            _render_power_battery_summary(selected_group)
+
             if battery_exit_stage == "ask_group2_complete":
                 step_classes = ["done", "done", "active", ""]
             elif selected_group == 2:
@@ -3761,29 +3895,31 @@ with tab_power:
                 unsafe_allow_html=True,
             )
 
-            battery_options = ["1조 셀 측정"]
-            if battery2_enabled:
-                battery_options.append("2조 셀 측정")
-            battery_ui_key = _power_widget_key("power_battery_set")
-            if st.session_state.get(battery_ui_key, "1조 셀 측정") not in battery_options:
-                st.session_state[battery_ui_key] = "1조 셀 측정"
-                _power_set("power_battery_set", "1조 셀 측정")
-
-            st.radio(
-                "현재 입력할 축전지",
-                battery_options,
-                horizontal=True,
-                key=battery_ui_key,
-                on_change=_on_power_battery_set_change,
-            )
-            selected_group = 1 if _power_get("power_battery_set", "1조 셀 측정") == "1조 셀 측정" else 2
-            group_caption = (
-                "1조의 실제 설치 셀 수만 입력한 뒤 아래 ‘1조 셀 측정 완료’를 눌러 주세요."
-                if selected_group == 1
-                else "2조의 실제 설치 셀 수만 입력한 뒤 아래 ‘2조 셀 측정 완료’를 눌러 주세요."
-            )
-            st.caption(group_caption)
-            _render_power_battery_summary(selected_group)
+            if battery_exit_stage == "ask_group2_complete":
+                st.markdown(
+                    '<div class="power-missing-box"><b>1조 셀 입력값을 완료했습니다. 2조 셀도 측정하시겠습니까?</b><br>'
+                    '예를 선택하면 1조 값은 그대로 저장되고 2조 셀 입력 화면이 열립니다.<br>'
+                    '아니오를 선택하면 축전지 측정이 완료되고 다음 미완료 측정 메뉴로 이동합니다.</div>',
+                    unsafe_allow_html=True,
+                )
+                group2_yes, group2_no = st.columns(2, gap="small")
+                with group2_yes:
+                    st.button(
+                        "예 · 2조 셀 측정",
+                        key="power_complete_measure_group2",
+                        type="primary",
+                        use_container_width=True,
+                        on_click=_finish_battery_completion,
+                        args=(True,),
+                    )
+                with group2_no:
+                    st.button(
+                        "아니오 · 축전지 측정 완료 후 다음 메뉴",
+                        key="power_complete_skip_group2",
+                        use_container_width=True,
+                        on_click=_finish_battery_completion,
+                        args=(False,),
+                    )
 
         elif current_theme == "접지저항 측정":
             st.markdown(
