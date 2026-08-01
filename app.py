@@ -1111,7 +1111,7 @@ POWER_REGION_DATA = {'1권역 · 파주·문산·동두천 등': {'담당자': [
                                         '백석7블럭BBH',
                                         '정발BBH',
                                         '일산(EBS)']}},
- '3권역 · 광화문·중앙·광진 등': {'담당자': ['이학원', '김태수'],
+ '3권역 · 광화문·중앙·광진 등': {'담당자': ['김태수', '이학원'],
                        '모국_국소': {'광진': ['구의동BBH', '중곡동BBH'],
                                  '광화문': ['독립문통신구BBH(N995)', '무교동BBH', '종로5가통신구-1BBH(통신구내)'],
                                  '노원': ['공릉최적화분기국사'],
@@ -1126,7 +1126,7 @@ POWER_REGION_DATA = {'1권역 · 파주·문산·동두천 등': {'담당자': [
                                  '중앙': ['BBH(후암동68-6-BBH)', '을지메인통신구', '을지입구B1통신구내 BBH(N944)'],
                                  '청량': ['청량최적화BBH'],
                                  '행당': ['약수역BBH', '동대문최적화BBH(통신구내)']}},
- '4권역 · 동의정부·동두천·철원 등': {'담당자': ['신진우', '박동희'],
+ '4권역 · 동의정부·동두천·철원 등': {'담당자': ['박동희', '신진우'],
                          '모국_국소': {'동두천': ['동두천', '덕정', '덕계', '소요', '광암'],
                                    '동의정부': ['경중앙(통신구내)BBH', '남방', '광사', '자일', '청학', '금오BBH'],
                                    '송우': ['송우', '가산', '내촌', '신팔', '이곡'],
@@ -1154,7 +1154,7 @@ POWER_REGION_DATA = {'1권역 · 파주·문산·동두천 등': {'담당자': [
                                           '만세교',
                                           '양문',
                                           '대회산']}},
- '5권역 · 가평·남양주·양평 등': {'담당자': ['이민우', '강만식'],
+ '5권역 · 가평·남양주·양평 등': {'담당자': ['강만식', '이민우'],
                        '모국_국소': {'가평': ['개곡', '가평', '상색', '산유', '북면', '화악', '백둔', '도대', '적목'],
                                  '남양주': ['남양주', '일패', '답내', '운수', '외방', '호평BBH'],
                                  '덕소': ['덕소', '조안', '송촌', '월문', '팔당'],
@@ -1401,6 +1401,60 @@ def _ensure_worksheet_grid_capacity(ws, required_rows: int = 1, required_cols: i
     return ws
 
 
+def _power_sheet_has_measurement_rows(ws) -> bool:
+    """헤더 아래에 실제 측정 데이터가 한 건이라도 있는지 확인합니다."""
+    try:
+        values = ws.get_all_values()
+    except Exception:
+        # 데이터 유무 확인에 실패하면 기존 자료 보호를 위해 데이터가 있는 것으로 간주합니다.
+        return True
+
+    if len(values) <= 1:
+        return False
+    return any(
+        any(str(cell or "").strip() for cell in row)
+        for row in values[1:]
+    )
+
+
+def _rewrite_power_headers_in_standard_order(ws) -> list[str]:
+    """데이터가 없는 시트의 헤더를 최종 표준 순서로 다시 작성합니다.
+
+    삼상 전류는 반드시 R → S → T → N 순서로 배치합니다.
+    기존 측정행이 없는 경우에만 실행하므로 누적 데이터의 열 정렬을 훼손하지 않습니다.
+    """
+    target_headers = POWER_INSPECTION_HEADERS.copy()
+    current_cols = int(getattr(ws, "col_count", 0) or 0)
+    clear_cols = max(current_cols, len(target_headers), 100)
+
+    _ensure_worksheet_grid_capacity(
+        ws,
+        required_rows=max(int(getattr(ws, "row_count", 0) or 0), 10000),
+        required_cols=clear_cols,
+    )
+
+    # 과거 버전의 헤더가 CN 등 오른쪽 끝에 남아 있지 않도록 1행을 먼저 비웁니다.
+    clear_range = f"A1:{_column_letter(clear_cols)}1"
+    try:
+        ws.batch_clear([clear_range])
+    except Exception:
+        try:
+            ws.update(range_name=clear_range, values=[[""] * clear_cols])
+        except TypeError:
+            ws.update(clear_range, [[""] * clear_cols])
+
+    end_col = _column_letter(len(target_headers))
+    try:
+        ws.update(
+            range_name=f"A1:{end_col}1",
+            values=[target_headers],
+            value_input_option="RAW",
+        )
+    except TypeError:
+        ws.update(f"A1:{end_col}1", [target_headers])
+    return target_headers
+
+
 def _ensure_power_inspection_sheet(spreadsheet):
     try:
         ws = spreadsheet.worksheet(POWER_INSPECTION_SHEET_NAME)
@@ -1412,35 +1466,40 @@ def _ensure_power_inspection_sheet(spreadsheet):
         )
 
     current_headers = ws.row_values(1)
-    missing_headers = [
-        header for header in POWER_INSPECTION_HEADERS
-        if header not in current_headers
-    ] if current_headers else POWER_INSPECTION_HEADERS.copy()
+    has_measurement_rows = _power_sheet_has_measurement_rows(ws)
 
-    # 핵심 수정: 헤더 추가 전에 시트의 실제 열 수를 먼저 늘립니다.
-    required_header_count = (
-        len(current_headers) + len(missing_headers)
-        if current_headers
-        else len(POWER_INSPECTION_HEADERS)
-    )
-    _ensure_worksheet_grid_capacity(
-        ws,
-        required_rows=max(int(getattr(ws, "row_count", 0) or 0), 10000),
-        required_cols=max(required_header_count, len(POWER_INSPECTION_HEADERS), 100),
-    )
+    # 최종 배포 전 기존 데이터를 삭제한 빈 시트라면 헤더도 표준 순서로 재구성합니다.
+    # 이에 따라 삼상전류_N(A)는 CN이 아니라 R/S/T 다음인 X열에 배치됩니다.
+    if not has_measurement_rows:
+        current_headers = _rewrite_power_headers_in_standard_order(ws)
+    else:
+        # 기존 측정행이 남아 있는 동안에는 열 위치를 강제로 바꾸지 않아 자료 오정렬을 방지합니다.
+        missing_headers = [
+            header for header in POWER_INSPECTION_HEADERS
+            if header not in current_headers
+        ] if current_headers else POWER_INSPECTION_HEADERS.copy()
 
-    if not current_headers:
-        end_col = _column_letter(len(POWER_INSPECTION_HEADERS))
-        ws.update(range_name=f"A1:{end_col}1", values=[POWER_INSPECTION_HEADERS])
-        current_headers = POWER_INSPECTION_HEADERS.copy()
-    elif missing_headers:
-        start_col_num = len(current_headers) + 1
-        end_col_num = len(current_headers) + len(missing_headers)
-        ws.update(
-            range_name=f"{_column_letter(start_col_num)}1:{_column_letter(end_col_num)}1",
-            values=[missing_headers],
+        required_header_count = (
+            len(current_headers) + len(missing_headers)
+            if current_headers
+            else len(POWER_INSPECTION_HEADERS)
         )
-        current_headers.extend(missing_headers)
+        _ensure_worksheet_grid_capacity(
+            ws,
+            required_rows=max(int(getattr(ws, "row_count", 0) or 0), 10000),
+            required_cols=max(required_header_count, len(POWER_INSPECTION_HEADERS), 100),
+        )
+
+        if not current_headers:
+            current_headers = _rewrite_power_headers_in_standard_order(ws)
+        elif missing_headers:
+            start_col_num = len(current_headers) + 1
+            end_col_num = len(current_headers) + len(missing_headers)
+            ws.update(
+                range_name=f"{_column_letter(start_col_num)}1:{_column_letter(end_col_num)}1",
+                values=[missing_headers],
+            )
+            current_headers.extend(missing_headers)
 
     # append_row 실행 전에도 현재 헤더 수만큼 열이 확보되도록 재확인합니다.
     _ensure_worksheet_grid_capacity(
@@ -1505,9 +1564,8 @@ def _ensure_n_phase_current_saved(
 ) -> None:
     """삼상 N상 전류를 저장 직후 확인하고 누락 시 정확한 셀에 보정 저장합니다.
 
-    과거 버전의 시트에서는 새 헤더가 기존 열 사이가 아니라 시트 오른쪽 끝에
-    추가될 수 있습니다. 따라서 헤더명으로 실제 열을 찾고, 저장된 행의 해당 셀을
-    직접 검증하여 N상 전류 누락을 방지합니다.
+    과거 버전 시트와 최종 표준 시트 모두에서 헤더명으로 실제 열을 찾고,
+    저장된 행의 해당 셀을 직접 검증하여 N상 전류 누락을 방지합니다.
     """
     if n_phase_value in ("", None):
         return
@@ -2067,7 +2125,7 @@ def save_power_inspection_result(payload: dict) -> tuple[bool, str, str]:
         if append_response is None:
             return False, f"저장 요청이 집중되어 전송하지 못했습니다. 다시 전송해 주세요. ({last_error})", ""
 
-        # 기존 시트의 헤더 순서와 관계없이 N상 전류가 실제 저장됐는지 확인합니다.
+        # 최종 표준 순서(R/S/T/N)에서도 N상 전류가 실제 저장됐는지 확인합니다.
         if phase_type == "삼상":
             n_phase_value = row_map.get("삼상전류_N(A)", "")
             try:
