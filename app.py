@@ -3096,8 +3096,16 @@ def _render_power_auto_decimal_script() -> None:
 # ==========================================
 # 9. 메인 화면 및 탭 구성
 # ==========================================
-st.markdown("<h1 style='text-align: center; color: #2C3E50;'>✨ SMART WORK AI AGENT</h1>", unsafe_allow_html=True)
-st.markdown("<div style='text-align: center; color: #555; margin-bottom: 20px;'>Integrated Field & Business Assistant System</div>", unsafe_allow_html=True)
+st.markdown("""
+<div class="smart-work-brand">
+  <div class="smart-work-brand-line"></div>
+  <div class="smart-work-brand-title">
+    <span class="smart-work-brand-icon">◆</span>
+    <span>SMART WORK <b>AI AGENT</b></span>
+  </div>
+  <div class="smart-work-brand-subtitle">Integrated Field &amp; Business Assistant System</div>
+</div>
+""", unsafe_allow_html=True)
 
 _now_kst = _korea_now()
 CURRENT_YEAR = _now_kst.year
@@ -3116,6 +3124,109 @@ campaign_info = {
 # ✅ 상단 메뉴 카드형 디자인: 선택된 탭이 명확하게 보이도록 개선
 st.markdown("""
 <style>
+/* 상단 브랜드: 기존 제목 문구는 유지하고 가독성/색상만 보강 */
+.smart-work-brand {
+    text-align: center;
+    margin: 2px auto 18px auto;
+    padding: 8px 12px 11px 12px;
+}
+.smart-work-brand-line {
+    width: 78px;
+    height: 4px;
+    margin: 0 auto 9px auto;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #D71920 0%, #FF5A5F 55%, #0F4C81 55%, #0F4C81 100%);
+}
+.smart-work-brand-title {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    color: #24364B;
+    font-size: clamp(1.85rem, 4vw, 2.65rem);
+    line-height: 1.08;
+    font-weight: 950;
+    letter-spacing: -0.035em;
+}
+.smart-work-brand-title b {
+    color: #D71920;
+    font-weight: 950;
+}
+.smart-work-brand-icon {
+    color: #D71920;
+    font-size: .72em;
+    filter: drop-shadow(0 2px 3px rgba(215,25,32,.18));
+}
+.smart-work-brand-subtitle {
+    margin-top: 6px;
+    color: #64748B;
+    font-size: .92rem;
+    font-weight: 750;
+}
+
+/* 외부 스마트 내비 메뉴 1개: 기존 Streamlit 탭은 그대로 유지 */
+.smart-navi-launch-wrap {
+    display: flex;
+    justify-content: flex-start;
+    margin: 0 0 9px 0;
+}
+.smart-navi-launch {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 52px;
+    padding: 8px 14px 8px 11px;
+    border: 1.5px solid #D71920;
+    border-left: 5px solid #D71920;
+    border-radius: 15px;
+    background: linear-gradient(135deg, #FFFFFF 0%, #FFF7F7 100%);
+    box-shadow: 0 7px 18px rgba(15,23,42,.08);
+    color: #24364B !important;
+    text-decoration: none !important;
+    transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+}
+.smart-navi-launch:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 23px rgba(215,25,32,.14);
+    border-color: #B91218;
+}
+.smart-navi-launch-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 11px;
+    background: #D71920;
+    color: #FFFFFF;
+    font-size: 20px;
+    line-height: 1;
+    box-shadow: 0 5px 12px rgba(215,25,32,.22);
+}
+.smart-navi-launch-copy {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.15;
+}
+.smart-navi-launch-title {
+    color: #24364B;
+    font-size: 1.02rem;
+    font-weight: 950;
+    white-space: nowrap;
+}
+.smart-navi-launch-sub {
+    margin-top: 3px;
+    color: #D71920;
+    font-size: .72rem;
+    font-weight: 850;
+}
+.smart-navi-launch-arrow {
+    color: #D71920;
+    font-size: 1.05rem;
+    font-weight: 950;
+    margin-left: 2px;
+}
+
 /* Streamlit 탭을 카드형 메뉴처럼 보이게 개선 */
 div[data-testid="stTabs"] > div[role="tablist"] {
     gap: 10px !important;
@@ -3174,8 +3285,25 @@ div[data-testid="stTabs"] button[role="tab"]::after {
     section.main .block-container { padding-left:.65rem !important; padding-right:.65rem !important; padding-top:.75rem !important; }
     div[data-testid="stTabs"] > div[role="tablist"] { padding:7px !important; gap:7px !important; border-radius:15px !important; }
     div[data-testid="stTabs"] button[role="tab"] { flex:0 0 auto !important; min-width:142px !important; min-height:52px !important; padding:8px 11px !important; }
+    .smart-navi-launch-wrap { justify-content: stretch; }
+    .smart-navi-launch { width: 100%; box-sizing: border-box; }
+    .smart-work-brand { margin-bottom: 14px; }
 }
+
 </style>
+""", unsafe_allow_html=True)
+
+st.markdown("""
+<div class="smart-navi-launch-wrap">
+  <a class="smart-navi-launch" href="https://willowy-frangipane-e06d37.netlify.app/" target="_blank" rel="noopener noreferrer" aria-label="국사 스마트 내비게이션 새 창으로 열기">
+    <span class="smart-navi-launch-icon" aria-hidden="true">📡</span>
+    <span class="smart-navi-launch-copy">
+      <span class="smart-navi-launch-title">국사 스마트 내비</span>
+      <span class="smart-navi-launch-sub">SMART NAVIGATION · 새 창</span>
+    </span>
+    <span class="smart-navi-launch-arrow" aria-hidden="true">↗</span>
+  </a>
+</div>
 """, unsafe_allow_html=True)
 
 tab_power, tab_doc, tab_chat, tab_summary, tab_admin = st.tabs([
