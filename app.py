@@ -1364,37 +1364,88 @@ def _search_power_station_entries(query: str, limit: int = 40) -> list[dict]:
 
 
 def _power_station_search_label(entry_id: str) -> str:
-    if not entry_id:
-        return "검색된 국사를 선택하세요"
-    entry = POWER_STATION_SEARCH_BY_ID.get(str(entry_id), {})
+    entry = POWER_STATION_SEARCH_BY_ID.get(str(entry_id or ""), {})
     if not entry:
         return "검색 결과 없음"
     return (
-        f"{entry.get('local', '')} · 모국 {entry.get('mother', '')} · "
-        f"담당자 {entry.get('inspectors', '')} · {entry.get('area', '')}"
+        f"{entry.get('local', '')}  |  모국 {entry.get('mother', '')}  |  "
+        f"담당자 {entry.get('inspectors', '')}  |  {entry.get('area', '')}"
     )
 
 
-def _on_power_station_search_select() -> None:
-    """검색한 국사를 선택하면 기존 기본정보 4개 항목을 한 번에 채웁니다."""
-    selected_id = str(st.session_state.get("power_station_search_result", "") or "").strip()
-    entry = POWER_STATION_SEARCH_BY_ID.get(selected_id)
+def _apply_power_station_search_entry(entry: dict) -> None:
+    """검색으로 확정한 국사의 기본정보를 기존 입력 상태에 안전하게 반영합니다."""
     if not entry:
         return
 
     _preserve_current_power_measurements()
-    selected_area = entry["area"]
+    selected_area = str(entry.get("area", "")).strip()
     st.session_state["power_worker"] = _automatic_inspector_display(selected_area)
     st.session_state["power_major_area"] = selected_area
     st.session_state["power_inspector_group"] = _inspector_group_for_area(selected_area)
-    st.session_state["power_mother"] = entry["mother"]
-    st.session_state["power_local"] = entry["local"]
+    st.session_state["power_mother"] = str(entry.get("mother", "")).strip()
+    st.session_state["power_local"] = str(entry.get("local", "")).strip()
     _clear_power_history_state()
     _mark_power_basic_info_changed()
+
+    # 검색 반영 여부를 별도 보존하여 아래 기본정보 선택값을 자주색으로 강조합니다.
+    st.session_state["power_station_search_applied"] = True
+    st.session_state["power_station_search_candidates"] = []
+    # duplicate radio key는 해당 위젯이 생성된 실행 중에는 직접 변경하지 않습니다.
+    st.session_state["power_station_search_status"] = "applied"
     st.session_state["power_station_search_notice"] = (
-        f"{entry['local']} 국사 정보를 불러왔습니다. · 담당자 {entry['inspectors']} · "
-        f"{entry['area']} · 모국 {entry['mother']}"
+        f"✅ {entry.get('local', '')} 국사 자동입력 완료 · "
+        f"담당자 {entry.get('inspectors', '')} · {selected_area} · "
+        f"모국 {entry.get('mother', '')}"
     )
+
+
+def _run_power_station_search() -> None:
+    """확인 버튼/Enter 제출 시 검색합니다. 1건이면 즉시 반영하고, 중복이면 후보만 표시합니다."""
+    query = str(st.session_state.get("power_station_search_query", "") or "").strip()
+    st.session_state["power_station_search_notice"] = ""
+    st.session_state["power_station_search_status"] = ""
+    st.session_state["power_station_search_candidates"] = []
+    st.session_state["power_station_search_choice"] = ""
+
+    if not query:
+        st.session_state["power_station_search_status"] = "empty"
+        return
+
+    normalized_query = _normalize_power_station_search(query)
+    matches = _search_power_station_entries(query)
+
+    # '송포'처럼 국소명이 정확히 일치하면 부분검색 결과보다 정확일치를 우선합니다.
+    exact_matches = [
+        entry for entry in matches
+        if _normalize_power_station_search(entry.get("local", "")) == normalized_query
+    ]
+    candidates = exact_matches if exact_matches else matches
+
+    if len(candidates) == 1:
+        _apply_power_station_search_entry(candidates[0])
+        return
+
+    if len(candidates) > 1:
+        candidate_ids = [entry["id"] for entry in candidates]
+        st.session_state["power_station_search_candidates"] = candidate_ids
+        st.session_state["power_station_search_choice"] = candidate_ids[0]
+        st.session_state["power_station_search_status"] = "multiple"
+        st.session_state["power_station_search_applied"] = False
+        return
+
+    st.session_state["power_station_search_status"] = "none"
+    st.session_state["power_station_search_applied"] = False
+
+
+def _confirm_power_station_search_choice() -> None:
+    """동일 이름/부분검색 후보 중 사용자가 선택한 한 곳을 최종 반영합니다."""
+    selected_id = str(st.session_state.get("power_station_search_choice", "") or "").strip()
+    entry = POWER_STATION_SEARCH_BY_ID.get(selected_id)
+    if not entry:
+        st.session_state["power_station_search_status"] = "choice_required"
+        return
+    _apply_power_station_search_entry(entry)
 
 
 def _inspector_group_for_area(area: str) -> str:
@@ -1444,6 +1495,8 @@ def _mark_power_basic_info_changed() -> None:
 
 def _on_power_worker_change() -> None:
     """담당자를 선택하면 권역을 자동 지정하고 기존 측정값은 보존합니다."""
+    st.session_state["power_station_search_applied"] = False
+    st.session_state["power_station_search_notice"] = ""
     _preserve_current_power_measurements()
     selected_worker = st.session_state.get("power_worker", "담당자 선택")
     previous_area = st.session_state.get("power_major_area", "권역 선택")
@@ -1469,6 +1522,8 @@ def _on_power_major_area_change() -> None:
 
 def _on_power_mother_change() -> None:
     """모국 변경 시 국소와 과거조회 상태만 초기화하고 측정값은 유지합니다."""
+    st.session_state["power_station_search_applied"] = False
+    st.session_state["power_station_search_notice"] = ""
     _preserve_current_power_measurements()
     st.session_state["power_local"] = "국소 선택"
     _clear_power_history_state()
@@ -2564,6 +2619,8 @@ def _clear_power_measurements_after_station_change() -> None:
     기본정보를 보완하면 모든 측정값이 사라지는 문제가 있었습니다.
     이제 측정값 초기화는 최종 전송 성공 후 `_reset_power_inspection()`에서만 수행합니다.
     """
+    st.session_state["power_station_search_applied"] = False
+    st.session_state["power_station_search_notice"] = ""
     _preserve_current_power_measurements()
     _clear_power_history_state()
     _mark_power_basic_info_changed()
@@ -3848,11 +3905,10 @@ with tab_power:
         -webkit-text-fill-color:#0F172A !important; min-height:48px !important; border:1.5px solid #94A3B8 !important;
     }
     div.st-key-power_worker label p, div.st-key-power_mother label p, div.st-key-power_local label p,
-    div.st-key-power_station_search_query label p, div.st-key-power_station_search_result label p {
+    div.st-key-power_station_search_query label p {
         font-size:clamp(.98rem,2.9vw,1.10rem) !important; font-weight:950 !important; color:#1E293B !important;
     }
-    div.st-key-power_worker [data-baseweb="select"], div.st-key-power_mother [data-baseweb="select"], div.st-key-power_local [data-baseweb="select"],
-    div.st-key-power_station_search_result [data-baseweb="select"] {
+    div.st-key-power_worker [data-baseweb="select"], div.st-key-power_mother [data-baseweb="select"], div.st-key-power_local [data-baseweb="select"] {
         width:100% !important; height:52px !important; min-height:52px !important; max-height:52px !important;
         box-sizing:border-box !important; border:2px solid #38BDF8 !important; border-radius:12px !important;
         background:#F0F9FF !important; box-shadow:0 5px 14px rgba(14,165,233,.12) !important;
@@ -3860,19 +3916,47 @@ with tab_power:
     }
     div.st-key-power_worker [data-baseweb="select"] > div,
     div.st-key-power_mother [data-baseweb="select"] > div,
-    div.st-key-power_local [data-baseweb="select"] > div,
-    div.st-key-power_station_search_result [data-baseweb="select"] > div {
+    div.st-key-power_local [data-baseweb="select"] > div {
         height:48px !important; min-height:48px !important; border:0 !important; border-radius:10px !important;
         background:transparent !important; box-shadow:none !important;
     }
     div.st-key-power_station_search_query input {
-        min-height:52px !important; border:2px solid #0EA5E9 !important; border-radius:12px !important;
-        background:#FFFFFF !important; box-shadow:0 5px 14px rgba(14,165,233,.12) !important;
-        font-size:clamp(1rem,3vw,1.12rem) !important; font-weight:900 !important;
+        min-height:54px !important; border:2.5px solid #7C3AED !important; border-radius:13px !important;
+        background:#FFFFFF !important; box-shadow:0 6px 16px rgba(124,58,237,.16) !important;
+        font-size:clamp(1.03rem,3vw,1.16rem) !important; font-weight:950 !important; color:#4C1D95 !important;
+        -webkit-text-fill-color:#4C1D95 !important;
     }
     .power-station-search-guide {
-        margin:2px 0 8px; padding:9px 11px; border-radius:11px; background:#F0F9FF;
-        border:1px solid #BAE6FD; color:#0C4A6E; font-size:.88rem; font-weight:800; line-height:1.45;
+        margin:2px 0 10px; padding:13px 14px; border-radius:15px;
+        background:linear-gradient(135deg,#FFF7F7 0%,#FAF5FF 48%,#EFF6FF 100%);
+        border:2px solid #7C3AED; border-left:7px solid #D71920;
+        box-shadow:0 8px 20px rgba(76,29,149,.13); color:#3B0764; line-height:1.5;
+    }
+    .power-station-search-guide .title { font-size:clamp(1.08rem,3.2vw,1.26rem); font-weight:950; color:#6D28D9; }
+    .power-station-search-guide .desc { margin-top:3px; font-size:.88rem; font-weight:800; color:#4B5563; }
+    .power-station-duplicate-guide {
+        margin:8px 0 7px; padding:9px 11px; border-radius:11px; background:#FFF7ED;
+        border:1px solid #FDBA74; color:#9A3412; font-size:.88rem; font-weight:900; line-height:1.45;
+    }
+    .power-station-applied-note {
+        margin:8px 0 10px; padding:10px 12px; border-radius:12px;
+        background:linear-gradient(135deg,#F5F3FF,#FFF1F2); border:1.5px solid #A78BFA;
+        color:#6D28D9; font-weight:950; line-height:1.5; box-shadow:0 4px 12px rgba(109,40,217,.09);
+    }
+    div.st-key-power_station_search_form button,
+    div.st-key-power_station_duplicate_form button {
+        min-height:54px !important; border-radius:13px !important; border:0 !important;
+        background:linear-gradient(135deg,#D71920 0%,#7C3AED 100%) !important;
+        color:#FFFFFF !important; font-weight:950 !important; box-shadow:0 7px 17px rgba(124,58,237,.20) !important;
+    }
+    div.st-key-power_station_search_form button *,
+    div.st-key-power_station_duplicate_form button * { color:#FFFFFF !important; -webkit-text-fill-color:#FFFFFF !important; }
+    div.st-key-power_station_search_choice [role="radiogroup"] {
+        padding:4px 2px 2px;
+    }
+    div.st-key-power_station_search_choice label {
+        margin:4px 0 !important; padding:8px 10px !important; border-radius:10px !important;
+        background:#FAF5FF !important; border:1px solid #DDD6FE !important;
     }
     .power-basic-auto-label {
         font-size:clamp(.98rem,2.9vw,1.10rem); font-weight:950; color:#1E293B; margin:0 0 6px 1px;
@@ -3887,6 +3971,10 @@ with tab_power:
         overflow:hidden;
     }
     .power-basic-auto-card.is-empty { color:#64748B; border-color:#CBD5E1; background:#F8FAFC; box-shadow:none; }
+    .power-basic-auto-card.search-applied {
+        color:#7C3AED; border-color:#8B5CF6; background:linear-gradient(135deg,#FAF5FF,#FFF1F2);
+        box-shadow:0 5px 14px rgba(124,58,237,.14);
+    }
     .power-basic-history-title {
         margin:14px 0 8px; padding-top:12px; border-top:1px solid #D8E3F2;
         color:#0B5CAB; font-size:clamp(1.02rem,3vw,1.16rem); font-weight:950;
@@ -3934,35 +4022,82 @@ with tab_power:
     with st.container(border=True):
         st.markdown('<div class="power-basic-title">👤 기본정보</div>', unsafe_allow_html=True)
 
-        st.markdown(
-            '<div class="power-station-search-guide">🔎 <b>국사명 빠른 검색</b> · 국소 이름만 입력한 뒤 검색 결과에서 해당 국사를 선택하면 아래 기본정보가 자동으로 채워집니다.</div>',
-            unsafe_allow_html=True,
-        )
-        station_query = st.text_input(
-            "국사 검색",
-            key="power_station_search_query",
-            placeholder="예: 송포",
-            help="국소명을 입력하고 Enter/완료를 누른 뒤 검색 결과를 선택하세요.",
-        )
-        station_matches = _search_power_station_entries(station_query)
-        if str(station_query or "").strip():
-            if station_matches:
-                station_result_options = [""] + [entry["id"] for entry in station_matches]
-                if st.session_state.get("power_station_search_result", "") not in station_result_options:
-                    st.session_state["power_station_search_result"] = ""
-                st.selectbox(
-                    f"검색 결과 ({len(station_matches)}건)",
-                    station_result_options,
-                    key="power_station_search_result",
-                    format_func=_power_station_search_label,
-                    on_change=_on_power_station_search_select,
-                )
-            else:
-                st.warning("입력한 이름과 일치하는 국사를 찾지 못했습니다. 국소명을 다시 확인해 주세요.")
+        # 국사 검색은 기존 기본정보보다 먼저, 별도 카드처럼 눈에 띄게 배치합니다.
+        with st.container(border=True):
+            st.markdown(
+                '<div class="power-station-search-guide">'
+                '<div class="title">📍 국사 검색 · 빠른 자동입력</div>'
+                '<div class="desc">예: <b>송포</b> 입력 → 오른쪽 <b>확인</b>. 한 곳이면 즉시 자동입력되고, 같은 이름이 여러 곳이면 아래 후보 중 하나만 선택하면 됩니다.</div>'
+                '</div>',
+                unsafe_allow_html=True,
+            )
 
-        station_search_notice = st.session_state.pop("power_station_search_notice", "")
-        if station_search_notice:
-            st.success(station_search_notice)
+            with st.form(key="power_station_search_form", clear_on_submit=False):
+                search_input_col, search_button_col = st.columns([4.2, 1.15], gap="small")
+                with search_input_col:
+                    st.text_input(
+                        "국사명",
+                        key="power_station_search_query",
+                        placeholder="예: 송포",
+                        help="국사명을 입력한 뒤 오른쪽 확인 버튼을 누르세요. 키보드 Enter로도 확인할 수 있습니다.",
+                    )
+                with search_button_col:
+                    st.markdown("<div style='height:1.70rem'></div>", unsafe_allow_html=True)
+                    search_submitted = st.form_submit_button("확인", use_container_width=True)
+
+            if search_submitted:
+                _run_power_station_search()
+
+            search_status = str(st.session_state.get("power_station_search_status", "") or "")
+            candidate_ids = list(st.session_state.get("power_station_search_candidates", []) or [])
+
+            if search_status == "empty":
+                st.warning("국사명을 먼저 입력해 주세요. 예: 송포")
+            elif search_status == "none":
+                st.warning("일치하는 국사를 찾지 못했습니다. 국사명을 다시 확인해 주세요.")
+            elif search_status == "multiple" and candidate_ids:
+                st.markdown(
+                    f'<div class="power-station-duplicate-guide">⚠️ 같은 이름 또는 유사한 국사가 {len(candidate_ids)}곳 있습니다. 아래에서 정확한 국사를 선택한 뒤 <b>선택 확인</b>을 눌러 주세요.</div>',
+                    unsafe_allow_html=True,
+                )
+                with st.form(key="power_station_duplicate_form", clear_on_submit=False):
+                    st.radio(
+                        "국사 선택",
+                        candidate_ids,
+                        key="power_station_search_choice",
+                        format_func=_power_station_search_label,
+                    )
+                    duplicate_submitted = st.form_submit_button("선택 확인", use_container_width=True)
+                if duplicate_submitted:
+                    _confirm_power_station_search_choice()
+
+            station_search_notice = str(st.session_state.get("power_station_search_notice", "") or "")
+            if station_search_notice:
+                st.markdown(
+                    f'<div class="power-station-applied-note">{html.escape(station_search_notice)}</div>',
+                    unsafe_allow_html=True,
+                )
+
+        # 검색으로 자동 반영된 경우 아래 기본정보의 선택값을 자주색으로 강조합니다.
+        if bool(st.session_state.get("power_station_search_applied", False)):
+            st.markdown(
+                """
+                <style>
+                div.st-key-power_worker [data-baseweb="select"],
+                div.st-key-power_mother [data-baseweb="select"],
+                div.st-key-power_local [data-baseweb="select"] {
+                    border-color:#8B5CF6 !important; background:#FAF5FF !important;
+                    box-shadow:0 5px 14px rgba(124,58,237,.14) !important;
+                }
+                div.st-key-power_worker [role="combobox"] *,
+                div.st-key-power_mother [role="combobox"] *,
+                div.st-key-power_local [role="combobox"] * {
+                    color:#7C3AED !important; -webkit-text-fill-color:#7C3AED !important; font-weight:950 !important;
+                }
+                </style>
+                """,
+                unsafe_allow_html=True,
+            )
 
         worker_options = ["담당자 선택"] + POWER_INSPECTOR_GROUP_OPTIONS
         if st.session_state.get("power_worker", "담당자 선택") not in worker_options:
@@ -3985,7 +4120,10 @@ with tab_power:
         if st.session_state.get("power_major_area", "권역 선택") != selected_area:
             st.session_state["power_major_area"] = selected_area
         with basic_row1[1]:
-            area_class = "power-basic-auto-card" if selected_area in POWER_REGION_DATA else "power-basic-auto-card is-empty"
+            if selected_area in POWER_REGION_DATA:
+                area_class = "power-basic-auto-card search-applied" if st.session_state.get("power_station_search_applied", False) else "power-basic-auto-card"
+            else:
+                area_class = "power-basic-auto-card is-empty"
             area_text = html.escape(selected_area if selected_area in POWER_REGION_DATA else "담당자를 선택하면 자동 표시됩니다")
             st.markdown(
                 f'<div class="power-basic-auto-label">주요 점검권역 *</div>'
