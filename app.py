@@ -1211,6 +1211,50 @@ POWER_INSPECTOR_MAJOR_AREA_MAP = {
     for person in region.get("담당자", [])
 }
 
+# ✅ 현장 기본정보 단축 입력용: 권역별 담당자 2명을 한 묶음으로 표시합니다.
+POWER_AREA_INSPECTOR_DISPLAY = {
+    area: ", ".join(
+        str(person).strip()
+        for person in region.get("담당자", [])
+        if str(person).strip()
+    )
+    for area, region in POWER_REGION_DATA.items()
+}
+POWER_INSPECTOR_GROUP_OPTIONS = [
+    display for display in POWER_AREA_INSPECTOR_DISPLAY.values() if display
+]
+POWER_INSPECTOR_DISPLAY_AREA_MAP = {
+    display: area
+    for area, display in POWER_AREA_INSPECTOR_DISPLAY.items()
+    if display
+}
+
+
+def _build_power_station_search_entries() -> list[dict]:
+    """국소명 하나로 권역·담당자·모국·국소를 찾을 수 있는 역색인을 만듭니다."""
+    entries: list[dict] = []
+    serial = 0
+    for area, region in POWER_REGION_DATA.items():
+        inspectors = POWER_AREA_INSPECTOR_DISPLAY.get(area, "")
+        station_map = region.get("모국_국소", {}) if isinstance(region, dict) else {}
+        for mother, locals_ in station_map.items():
+            for local in locals_:
+                serial += 1
+                entries.append({
+                    "id": f"power_station_{serial:03d}",
+                    "area": str(area).strip(),
+                    "inspectors": inspectors,
+                    "mother": str(mother).strip(),
+                    "local": str(local).strip(),
+                })
+    return entries
+
+
+POWER_STATION_SEARCH_ENTRIES = _build_power_station_search_entries()
+POWER_STATION_SEARCH_BY_ID = {
+    entry["id"]: entry for entry in POWER_STATION_SEARCH_ENTRIES
+}
+
 
 
 # 담당자에 따라 소속 조를 자동 표시합니다.
@@ -1264,7 +1308,93 @@ def _inspectors_for_major_area(area: str) -> list[str]:
 
 def _automatic_inspector_display(area: str) -> str:
     """권역을 선택하면 별도 선택 없이 담당자 2명을 가로로 표시·저장합니다."""
-    return ", ".join(_inspectors_for_major_area(area))
+    return POWER_AREA_INSPECTOR_DISPLAY.get(str(area or "").strip(), "")
+
+
+def _major_area_for_worker_value(worker: str) -> str:
+    """개별 담당자 또는 '담당자1, 담당자2' 묶음값에서 권역을 찾습니다."""
+    value = str(worker or "").strip()
+    if value in POWER_INSPECTOR_DISPLAY_AREA_MAP:
+        return POWER_INSPECTOR_DISPLAY_AREA_MAP[value]
+    return POWER_INSPECTOR_MAJOR_AREA_MAP.get(value, "권역 선택")
+
+
+def _power_worker_matches_area(worker: str, area: str) -> bool:
+    """과거 개별 담당자 값과 신규 2인 묶음값을 모두 허용합니다."""
+    worker_value = str(worker or "").strip()
+    area_value = str(area or "").strip()
+    if area_value not in POWER_REGION_DATA:
+        return False
+    if worker_value == _automatic_inspector_display(area_value):
+        return True
+    return worker_value in _inspectors_for_major_area(area_value)
+
+
+def _normalize_power_station_search(text: str) -> str:
+    return re.sub(r"[\s·._()#\-]", "", str(text or "").strip()).lower()
+
+
+def _search_power_station_entries(query: str, limit: int = 40) -> list[dict]:
+    """국소명을 우선으로 검색하고, 모국/권역명도 보조 검색합니다."""
+    normalized = _normalize_power_station_search(query)
+    if not normalized:
+        return []
+
+    scored: list[tuple[int, str, dict]] = []
+    for entry in POWER_STATION_SEARCH_ENTRIES:
+        local_key = _normalize_power_station_search(entry.get("local", ""))
+        mother_key = _normalize_power_station_search(entry.get("mother", ""))
+        area_key = _normalize_power_station_search(entry.get("area", ""))
+        if normalized == local_key:
+            rank = 0
+        elif local_key.startswith(normalized):
+            rank = 1
+        elif normalized in local_key:
+            rank = 2
+        elif normalized in mother_key:
+            rank = 3
+        elif normalized in area_key:
+            rank = 4
+        else:
+            continue
+        scored.append((rank, local_key, entry))
+
+    scored.sort(key=lambda item: (item[0], item[1], item[2].get("mother", ""), item[2].get("area", "")))
+    return [entry for _, _, entry in scored[:max(1, int(limit))]]
+
+
+def _power_station_search_label(entry_id: str) -> str:
+    if not entry_id:
+        return "검색된 국사를 선택하세요"
+    entry = POWER_STATION_SEARCH_BY_ID.get(str(entry_id), {})
+    if not entry:
+        return "검색 결과 없음"
+    return (
+        f"{entry.get('local', '')} · 모국 {entry.get('mother', '')} · "
+        f"담당자 {entry.get('inspectors', '')} · {entry.get('area', '')}"
+    )
+
+
+def _on_power_station_search_select() -> None:
+    """검색한 국사를 선택하면 기존 기본정보 4개 항목을 한 번에 채웁니다."""
+    selected_id = str(st.session_state.get("power_station_search_result", "") or "").strip()
+    entry = POWER_STATION_SEARCH_BY_ID.get(selected_id)
+    if not entry:
+        return
+
+    _preserve_current_power_measurements()
+    selected_area = entry["area"]
+    st.session_state["power_worker"] = _automatic_inspector_display(selected_area)
+    st.session_state["power_major_area"] = selected_area
+    st.session_state["power_inspector_group"] = _inspector_group_for_area(selected_area)
+    st.session_state["power_mother"] = entry["mother"]
+    st.session_state["power_local"] = entry["local"]
+    _clear_power_history_state()
+    _mark_power_basic_info_changed()
+    st.session_state["power_station_search_notice"] = (
+        f"{entry['local']} 국사 정보를 불러왔습니다. · 담당자 {entry['inspectors']} · "
+        f"{entry['area']} · 모국 {entry['mother']}"
+    )
 
 
 def _inspector_group_for_area(area: str) -> str:
@@ -1284,7 +1414,11 @@ def _sync_power_inspectors_from_area() -> None:
 
 def _update_power_inspector_group() -> None:
     selected_worker = st.session_state.get("power_worker", "담당자 선택")
-    st.session_state["power_inspector_group"] = _inspector_group_for_name(selected_worker)
+    selected_area = _major_area_for_worker_value(selected_worker)
+    if selected_area in POWER_REGION_DATA:
+        st.session_state["power_inspector_group"] = _inspector_group_for_area(selected_area)
+    else:
+        st.session_state["power_inspector_group"] = _inspector_group_for_name(selected_worker)
 
 
 def _clear_power_history_state() -> None:
@@ -1313,7 +1447,7 @@ def _on_power_worker_change() -> None:
     _preserve_current_power_measurements()
     selected_worker = st.session_state.get("power_worker", "담당자 선택")
     previous_area = st.session_state.get("power_major_area", "권역 선택")
-    selected_area = POWER_INSPECTOR_MAJOR_AREA_MAP.get(selected_worker, "권역 선택")
+    selected_area = _major_area_for_worker_value(selected_worker)
     st.session_state["power_major_area"] = selected_area
     _update_power_inspector_group()
     if selected_area != previous_area:
@@ -1909,9 +2043,11 @@ def _on_power_battery_set_change() -> None:
 
 def _power_basic_missing() -> list[str]:
     missing: list[str] = []
-    if st.session_state.get("power_worker", "담당자 선택") not in POWER_INSPECTOR_OPTIONS:
+    worker = str(st.session_state.get("power_worker", "담당자 선택")).strip()
+    major_area = str(st.session_state.get("power_major_area", "권역 선택")).strip()
+    if not _power_worker_matches_area(worker, major_area):
         missing.append("담당자")
-    if st.session_state.get("power_major_area", "권역 선택") == "권역 선택":
+    if major_area == "권역 선택" or major_area not in POWER_REGION_DATA:
         missing.append("주요 점검권역")
     if st.session_state.get("power_mother", "모국 선택") == "모국 선택":
         missing.append("모국")
@@ -2056,7 +2192,7 @@ def save_power_inspection_result(payload: dict) -> tuple[bool, str, str]:
 
         if not worker or worker == "담당자 선택":
             return False, "담당자를 선택해 주세요.", ""
-        if worker not in _inspectors_for_major_area(major_area):
+        if not _power_worker_matches_area(worker, major_area):
             return False, "선택한 담당자와 주요 점검권역 정보가 일치하지 않습니다.", ""
         area_map = _power_area_station_map(major_area)
         if mother not in area_map:
@@ -2750,7 +2886,7 @@ def _build_power_payload_from_state(final_confirmed: bool = False) -> dict:
     ] if group_count == 2 else [""] * 24
     return {
         "worker": worker,
-        "inspector_group": st.session_state.get("power_inspector_group", "") or _inspector_group_for_name(worker),
+        "inspector_group": st.session_state.get("power_inspector_group", "") or _inspector_group_for_area(st.session_state.get("power_major_area", "")) or _inspector_group_for_name(worker),
         "major_area": st.session_state.get("power_major_area", "권역 선택"),
         "mother": st.session_state.get("power_mother", "모국 선택"),
         "local": st.session_state.get("power_local", "국소 선택"),
@@ -2851,8 +2987,15 @@ def _render_power_auto_decimal_script() -> None:
         (() => {
           const rules = __POWER_RULES_JSON__;
           const explicitNextKeys = __POWER_NEXT_KEYS_JSON__;
-          const FOCUS_STORAGE_KEY = '__power_next_focus_key_v12__';
-          const SCROLL_STORAGE_KEY = '__power_scroll_y_v11__';
+          const FOCUS_STORAGE_KEY = '__power_next_focus_key_v13__';
+          const SCROLL_STORAGE_KEY = '__power_scroll_y_v13__';
+          const RUNTIME_STORAGE_KEY = '__power_numeric_runtime_v13__';
+
+          // Streamlit rerun이 반복되어도 이전 감시기/이벤트가 누적되지 않도록 먼저 정리합니다.
+          try {
+            const previousRuntime = window.parent[RUNTIME_STORAGE_KEY];
+            if (previousRuntime && typeof previousRuntime.cleanup === 'function') previousRuntime.cleanup();
+          } catch (e) {}
 
           function formatFixed(value, decimals, key) {
             if (value.includes('.')) {
@@ -3002,16 +3145,33 @@ def _render_power_auto_decimal_script() -> None:
             return nextItem;
           }
 
+          function prepareNumericInput(input, key) {
+            if (!input || !key || !Object.prototype.hasOwnProperty.call(rules, key)) return;
+            input.dataset.powerKey = key;
+            input.setAttribute('inputmode', 'decimal');
+            input.setAttribute('pattern', '[0-9.]*');
+            input.setAttribute('autocomplete', 'off');
+            input.setAttribute('autocapitalize', 'off');
+            input.setAttribute('enterkeyhint', 'next');
+            input.spellcheck = false;
+          }
+
+          function measurementKeyForInput(input) {
+            if (!input) return '';
+            for (const key of Object.keys(rules)) {
+              const wrapper = wrapperForKey(input.ownerDocument, key);
+              if (wrapper && wrapper.contains(input)) return key;
+            }
+            return '';
+          }
+
           function bindInput(doc, key, rule) {
             const wrapper = wrapperForKey(doc, key);
             const input = wrapper ? wrapper.querySelector('input') : null;
-            if (!input || input.dataset.powerDecimalBoundV11 === '1') return;
+            if (!input || input.dataset.powerDecimalBoundV13 === '1') return;
 
-            input.dataset.powerDecimalBoundV11 = '1';
-            input.dataset.powerKey = key;
-            input.setAttribute('inputmode', 'decimal');
-            input.setAttribute('autocomplete', 'off');
-            input.setAttribute('enterkeyhint', 'next');
+            input.dataset.powerDecimalBoundV13 = '1';
+            prepareNumericInput(input, key);
 
             const applyFormat = () => {
               const next = formatted(input.value, rule, key);
@@ -3068,20 +3228,47 @@ def _render_power_auto_decimal_script() -> None:
           restoreNextFocus();
 
           const doc = parentDocument();
+          let observer = null;
+          let timer = null;
+          let prepareFromEvent = null;
+
           if (doc) {
-            const observer = new MutationObserver(() => {
+            prepareFromEvent = (event) => {
+              const input = event && event.target;
+              if (!input || String(input.tagName || '').toLowerCase() !== 'input') return;
+              const key = measurementKeyForInput(input);
+              if (key) prepareNumericInput(input, key);
+            };
+            // 모바일에서 사용자가 새로 열린 2조 셀을 즉시 눌러도 포커스 전에 숫자키패드 속성을 먼저 적용합니다.
+            doc.addEventListener('pointerdown', prepareFromEvent, true);
+            doc.addEventListener('touchstart', prepareFromEvent, { capture: true, passive: true });
+            doc.addEventListener('focusin', prepareFromEvent, true);
+
+            observer = new MutationObserver(() => {
               bindInputs();
               restoreNextFocus();
             });
             observer.observe(doc.body, { childList: true, subtree: true });
-            window.setTimeout(() => observer.disconnect(), 120000);
           }
 
-          const timer = window.setInterval(() => {
+          timer = window.setInterval(() => {
             bindInputs();
             restoreNextFocus();
-          }, 300);
-          window.setTimeout(() => window.clearInterval(timer), 120000);
+          }, 250);
+
+          const cleanup = () => {
+            try { if (observer) observer.disconnect(); } catch (e) {}
+            try { if (timer) window.clearInterval(timer); } catch (e) {}
+            try {
+              if (doc && prepareFromEvent) {
+                doc.removeEventListener('pointerdown', prepareFromEvent, true);
+                doc.removeEventListener('touchstart', prepareFromEvent, true);
+                doc.removeEventListener('focusin', prepareFromEvent, true);
+              }
+            } catch (e) {}
+          };
+          try { window.parent[RUNTIME_STORAGE_KEY] = { cleanup }; } catch (e) {}
+          window.setTimeout(cleanup, 120000);
         })();
         </script>
     """
@@ -3463,19 +3650,24 @@ with tab_power:
         st.session_state["power_panel_nonce"] = 0
     unlocked_index = _power_unlocked_theme_index()
     _power_draft()
-    selected_worker_state = st.session_state.get("power_worker", "담당자 선택")
-    if selected_worker_state not in POWER_INSPECTOR_OPTIONS:
+    selected_worker_state = str(st.session_state.get("power_worker", "담당자 선택")).strip()
+    expected_area = _major_area_for_worker_value(selected_worker_state)
+    if expected_area in POWER_REGION_DATA:
+        # 과거 세션에 개별 담당자가 남아 있어도 현장 화면에서는 권역 담당자 2명을 한 묶음으로 통일합니다.
+        selected_worker_state = _automatic_inspector_display(expected_area)
+        st.session_state["power_worker"] = selected_worker_state
+    else:
         st.session_state["power_worker"] = "담당자 선택"
         selected_worker_state = "담당자 선택"
-    expected_area = POWER_INSPECTOR_MAJOR_AREA_MAP.get(selected_worker_state, "권역 선택")
+        expected_area = "권역 선택"
     if st.session_state.get("power_major_area", "권역 선택") != expected_area:
         st.session_state["power_major_area"] = expected_area
-    expected_group = _inspector_group_for_name(selected_worker_state)
+    expected_group = _inspector_group_for_area(expected_area) if expected_area in POWER_REGION_DATA else ""
     if st.session_state.get("power_inspector_group", "") != expected_group:
         st.session_state["power_inspector_group"] = expected_group
 
     st.markdown("### 🔋 국사 전원시설 정밀점검")
-    st.caption("담당자를 선택하면 주요 점검권역이 자동 표시됩니다. 같은 기본정보 블록에서 모국·국소를 선택하고 필요한 과거 측정값도 불러올 수 있습니다.")
+    st.caption("국사명을 검색해 선택하면 담당자 2명·주요 점검권역·모국·국소가 자동 입력됩니다. 기존 수동 선택 방식도 그대로 사용할 수 있습니다.")
 
     st.markdown("""
     <style>
@@ -3655,10 +3847,12 @@ with tab_power:
         font-size:clamp(1.04rem,3vw,1.18rem) !important; font-weight:900 !important; color:#0F172A !important;
         -webkit-text-fill-color:#0F172A !important; min-height:48px !important; border:1.5px solid #94A3B8 !important;
     }
-    div.st-key-power_worker label p, div.st-key-power_mother label p, div.st-key-power_local label p {
+    div.st-key-power_worker label p, div.st-key-power_mother label p, div.st-key-power_local label p,
+    div.st-key-power_station_search_query label p, div.st-key-power_station_search_result label p {
         font-size:clamp(.98rem,2.9vw,1.10rem) !important; font-weight:950 !important; color:#1E293B !important;
     }
-    div.st-key-power_worker [data-baseweb="select"], div.st-key-power_mother [data-baseweb="select"], div.st-key-power_local [data-baseweb="select"] {
+    div.st-key-power_worker [data-baseweb="select"], div.st-key-power_mother [data-baseweb="select"], div.st-key-power_local [data-baseweb="select"],
+    div.st-key-power_station_search_result [data-baseweb="select"] {
         width:100% !important; height:52px !important; min-height:52px !important; max-height:52px !important;
         box-sizing:border-box !important; border:2px solid #38BDF8 !important; border-radius:12px !important;
         background:#F0F9FF !important; box-shadow:0 5px 14px rgba(14,165,233,.12) !important;
@@ -3666,9 +3860,19 @@ with tab_power:
     }
     div.st-key-power_worker [data-baseweb="select"] > div,
     div.st-key-power_mother [data-baseweb="select"] > div,
-    div.st-key-power_local [data-baseweb="select"] > div {
+    div.st-key-power_local [data-baseweb="select"] > div,
+    div.st-key-power_station_search_result [data-baseweb="select"] > div {
         height:48px !important; min-height:48px !important; border:0 !important; border-radius:10px !important;
         background:transparent !important; box-shadow:none !important;
+    }
+    div.st-key-power_station_search_query input {
+        min-height:52px !important; border:2px solid #0EA5E9 !important; border-radius:12px !important;
+        background:#FFFFFF !important; box-shadow:0 5px 14px rgba(14,165,233,.12) !important;
+        font-size:clamp(1rem,3vw,1.12rem) !important; font-weight:900 !important;
+    }
+    .power-station-search-guide {
+        margin:2px 0 8px; padding:9px 11px; border-radius:11px; background:#F0F9FF;
+        border:1px solid #BAE6FD; color:#0C4A6E; font-size:.88rem; font-weight:800; line-height:1.45;
     }
     .power-basic-auto-label {
         font-size:clamp(.98rem,2.9vw,1.10rem); font-weight:950; color:#1E293B; margin:0 0 6px 1px;
@@ -3722,7 +3926,7 @@ with tab_power:
     </style>
     <div class="power-mobile-hero">
       <h3>새로운 전원 정밀점검 전용 공간</h3>
-      <p>담당자를 선택하면 주요 점검권역이 자동 표시되고, 해당 권역의 모국·국소만 선택할 수 있습니다. 기본정보와 과거 측정값 불러오기를 하나의 블록에서 처리합니다.</p>
+      <p>국사명을 검색해 선택하면 담당자 2명·주요 점검권역·모국·국소가 자동 입력됩니다. 기존 수동 선택과 과거 측정값 불러오기도 그대로 사용할 수 있습니다.</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -3730,9 +3934,43 @@ with tab_power:
     with st.container(border=True):
         st.markdown('<div class="power-basic-title">👤 기본정보</div>', unsafe_allow_html=True)
 
-        worker_options = ["담당자 선택"] + POWER_INSPECTOR_OPTIONS
+        st.markdown(
+            '<div class="power-station-search-guide">🔎 <b>국사명 빠른 검색</b> · 국소 이름만 입력한 뒤 검색 결과에서 해당 국사를 선택하면 아래 기본정보가 자동으로 채워집니다.</div>',
+            unsafe_allow_html=True,
+        )
+        station_query = st.text_input(
+            "국사 검색",
+            key="power_station_search_query",
+            placeholder="예: 송포",
+            help="국소명을 입력하고 Enter/완료를 누른 뒤 검색 결과를 선택하세요.",
+        )
+        station_matches = _search_power_station_entries(station_query)
+        if str(station_query or "").strip():
+            if station_matches:
+                station_result_options = [""] + [entry["id"] for entry in station_matches]
+                if st.session_state.get("power_station_search_result", "") not in station_result_options:
+                    st.session_state["power_station_search_result"] = ""
+                st.selectbox(
+                    f"검색 결과 ({len(station_matches)}건)",
+                    station_result_options,
+                    key="power_station_search_result",
+                    format_func=_power_station_search_label,
+                    on_change=_on_power_station_search_select,
+                )
+            else:
+                st.warning("입력한 이름과 일치하는 국사를 찾지 못했습니다. 국소명을 다시 확인해 주세요.")
+
+        station_search_notice = st.session_state.pop("power_station_search_notice", "")
+        if station_search_notice:
+            st.success(station_search_notice)
+
+        worker_options = ["담당자 선택"] + POWER_INSPECTOR_GROUP_OPTIONS
         if st.session_state.get("power_worker", "담당자 선택") not in worker_options:
-            st.session_state["power_worker"] = "담당자 선택"
+            legacy_area = _major_area_for_worker_value(st.session_state.get("power_worker", ""))
+            st.session_state["power_worker"] = (
+                _automatic_inspector_display(legacy_area)
+                if legacy_area in POWER_REGION_DATA else "담당자 선택"
+            )
 
         basic_row1 = st.columns(2, gap="small")
         with basic_row1[0]:
@@ -3743,7 +3981,7 @@ with tab_power:
                 on_change=_on_power_worker_change,
             )
 
-        selected_area = POWER_INSPECTOR_MAJOR_AREA_MAP.get(selected_worker, "권역 선택")
+        selected_area = _major_area_for_worker_value(selected_worker)
         if st.session_state.get("power_major_area", "권역 선택") != selected_area:
             st.session_state["power_major_area"] = selected_area
         with basic_row1[1]:
@@ -3881,8 +4119,10 @@ with tab_power:
     if basic_missing:
         st.caption("※ 담당자를 선택하면 주요 점검권역이 자동 표시됩니다. 모국·국소까지 선택해야 최종 전송할 수 있습니다.")
 
-    worker_summary = html.escape(str(st.session_state.get("power_worker", "")).strip() if st.session_state.get("power_worker") in POWER_INSPECTOR_OPTIONS else "담당자 미선택")
-    major_area_summary = html.escape(str(st.session_state.get("power_major_area", "권역 선택")).strip() or "권역 미선택")
+    worker_value = str(st.session_state.get("power_worker", "")).strip()
+    major_area_value = str(st.session_state.get("power_major_area", "권역 선택")).strip()
+    worker_summary = html.escape(worker_value if _power_worker_matches_area(worker_value, major_area_value) else "담당자 미선택")
+    major_area_summary = html.escape(major_area_value or "권역 미선택")
     draft_saved_at = html.escape(str(st.session_state.get("power_draft_saved_at", "")).strip() or "-")
     mother_summary = str(st.session_state.get("power_mother", "모국 선택"))
     local_summary = str(st.session_state.get("power_local", "국소 선택"))
@@ -4012,6 +4252,10 @@ with tab_power:
     current_theme = st.session_state.get("power_current_theme", POWER_THEME_ORDER[0])
     _hydrate_power_theme_from_draft(current_theme)
     panel_nonce = int(st.session_state.get("power_panel_nonce", 0) or 0)
+
+    # 측정 입력칸이 렌더링되기 전에 모바일 숫자키패드/자동 소수점 감시기를 먼저 설치합니다.
+    # 특히 1조→2조 화면 전환 직후 새로 생성되는 셀 입력에도 동일 규칙이 즉시 적용됩니다.
+    _render_power_auto_decimal_script()
 
     with st.expander(f"{POWER_THEME_ICON[current_theme]} {current_theme}", expanded=True):
         st.markdown(f'<div class="power-panel-marker" data-panel="{panel_nonce}"></div>', unsafe_allow_html=True)
@@ -4304,8 +4548,7 @@ with tab_power:
                 on_click=_complete_current_power_theme,
             )
 
-    _render_power_auto_decimal_script()
-    st.info("측정값은 화면과 분리된 임시저장소에 즉시 보존됩니다. 이전 메뉴를 다시 열어도 값이 유지되며, Enter/확인을 누르면 자동 소수점 적용 후 다음 입력칸으로 이동합니다.")
+    st.info("측정값은 화면과 분리된 임시저장소에 즉시 보존됩니다. 기본정보·특이사항을 제외한 측정 입력은 모바일 숫자키패드를 사용하며, Enter/확인을 누르면 자동 소수점 적용 후 다음 입력칸으로 이동합니다.")
 
 
 # --- [Tab 2: 법률 리스크/규정/계약 검토 & 감사보고서 작성] ---
