@@ -3363,6 +3363,111 @@ WORK_LOG_STATUS_OPTIONS = ["신규", "확인필요", "조치중", "재점검", "
 WORK_LOG_ITEM_OPTIONS = ["전원", "축전지", "접지", "냉방", "출입", "안전", "기타"]
 
 
+def _worklog_area_display(area: str) -> str:
+    """WORK LOG에서 권역을 담당자 + 주요 지역이 함께 보이는 현장형 표기로 변환합니다."""
+    area_value = str(area or "").strip()
+    if area_value not in POWER_REGION_DATA:
+        return "국사를 검색하면 자동 표시됩니다"
+
+    region = POWER_REGION_DATA.get(area_value, {})
+    inspectors = ", ".join(
+        str(person).strip()
+        for person in region.get("담당자", [])
+        if str(person).strip()
+    )
+
+    # 예: "1권역 · 파주·문산·동두천 등" -> "1권역: 이철순, 김수창 (파주, 문산, 동두천 등)"
+    if "·" in area_value:
+        area_no, coverage = area_value.split("·", 1)
+        coverage_text = ", ".join(
+            part.strip() for part in coverage.split("·") if part.strip()
+        )
+    else:
+        area_no = area_value
+        coverage_text = ""
+
+    if inspectors and coverage_text:
+        return f"{area_no.strip()}: {inspectors} ({coverage_text})"
+    if inspectors:
+        return f"{area_no.strip()}: {inspectors}"
+    return area_value
+
+
+def _worklog_station_search_label(entry_id: str) -> str:
+    """동일/유사 국사가 여러 곳일 때 WORK LOG 선택 후보를 알아보기 쉽게 표시합니다."""
+    entry = POWER_STATION_SEARCH_BY_ID.get(str(entry_id or ""), {})
+    if not entry:
+        return "검색 결과 없음"
+    area_display = _worklog_area_display(entry.get("area", ""))
+    return (
+        f"{entry.get('local', '')}  |  모국 {entry.get('mother', '')}  |  {area_display}"
+    )
+
+
+def _apply_worklog_station_search_entry(entry: dict) -> None:
+    """선택한 국사의 권역·모국·국소를 WORK LOG 전용 상태에 자동 반영합니다."""
+    if not entry:
+        return
+
+    selected_area = str(entry.get("area", "")).strip()
+    st.session_state["worklog_area_key"] = selected_area
+    st.session_state["worklog_mother"] = str(entry.get("mother", "")).strip()
+    st.session_state["worklog_local"] = str(entry.get("local", "")).strip()
+    st.session_state["worklog_station_search_applied"] = True
+    st.session_state["worklog_station_search_candidates"] = []
+    st.session_state["worklog_station_search_status"] = "applied"
+    st.session_state["worklog_station_search_notice"] = (
+        f"✅ {entry.get('local', '')} 국사 선택 완료 · "
+        f"{_worklog_area_display(selected_area)} · 모국 {entry.get('mother', '')}"
+    )
+
+
+def _run_worklog_station_search() -> None:
+    """정밀점검과 같은 국사 역색인을 사용해 WORK LOG 국사를 검색합니다."""
+    query = str(st.session_state.get("worklog_station_search_query", "") or "").strip()
+    st.session_state["worklog_station_search_notice"] = ""
+    st.session_state["worklog_station_search_status"] = ""
+    st.session_state["worklog_station_search_candidates"] = []
+    st.session_state["worklog_station_search_choice"] = ""
+
+    if not query:
+        st.session_state["worklog_station_search_status"] = "empty"
+        return
+
+    normalized_query = _normalize_power_station_search(query)
+    matches = _search_power_station_entries(query)
+    exact_matches = [
+        entry for entry in matches
+        if _normalize_power_station_search(entry.get("local", "")) == normalized_query
+    ]
+    candidates = exact_matches if exact_matches else matches
+
+    if len(candidates) == 1:
+        _apply_worklog_station_search_entry(candidates[0])
+        return
+
+    if len(candidates) > 1:
+        candidate_ids = [entry["id"] for entry in candidates]
+        st.session_state["worklog_station_search_candidates"] = candidate_ids
+        st.session_state["worklog_station_search_choice"] = candidate_ids[0]
+        st.session_state["worklog_station_search_status"] = "multiple"
+        st.session_state["worklog_station_search_applied"] = False
+        return
+
+    st.session_state["worklog_station_search_status"] = "none"
+    st.session_state["worklog_station_search_applied"] = False
+
+
+def _confirm_worklog_station_search_choice() -> None:
+    """WORK LOG 검색 후보 중 사용자가 고른 국사를 확정합니다."""
+    selected_id = str(st.session_state.get("worklog_station_search_choice", "") or "").strip()
+    entry = POWER_STATION_SEARCH_BY_ID.get(selected_id)
+    if not entry:
+        st.session_state["worklog_station_search_status"] = "choice_required"
+        return
+    _apply_worklog_station_search_entry(entry)
+
+
 def _worklog_secret_value(name: str, default=""):
     """WORK LOG 전용 Secrets를 평면/섹션 형식 모두에서 안전하게 읽습니다."""
     try:
@@ -3637,10 +3742,10 @@ def save_work_log(record: dict, photos: list) -> tuple[bool, str, str]:
     if not writer:
         return False, "작성자를 입력해 주세요.", ""
     if area not in POWER_REGION_DATA:
-        return False, "권역을 선택해 주세요.", ""
+        return False, "국사명을 검색하여 정확한 국사를 먼저 선택해 주세요.", ""
     area_map = POWER_REGION_DATA.get(area, {}).get("모국_국소", {})
     if mother not in area_map or local not in area_map.get(mother, []):
-        return False, "선택한 권역·모국·국소 조합이 올바르지 않습니다.", ""
+        return False, "선택한 국사의 권역·모국·국소 정보가 올바르지 않습니다. 국사를 다시 검색해 주세요.", ""
     if status not in WORK_LOG_STATUS_OPTIONS:
         return False, "상태이력 값이 올바르지 않습니다.", ""
     if not items:
@@ -3798,9 +3903,11 @@ def update_work_log(record_id: str, writer: str, status: str, action: str, follo
 
 def _worklog_reset_entry_widgets() -> None:
     keys = [
-        "worklog_writer", "worklog_area", "worklog_mother", "worklog_local", "worklog_status",
+        "worklog_writer", "worklog_area", "worklog_area_key", "worklog_mother", "worklog_local", "worklog_status",
         "worklog_items", "worklog_camera", "worklog_uploads", "worklog_issue", "worklog_action",
-        "worklog_followup", "worklog_remark",
+        "worklog_followup", "worklog_remark", "worklog_station_search_query",
+        "worklog_station_search_candidates", "worklog_station_search_choice", "worklog_station_search_status",
+        "worklog_station_search_notice", "worklog_station_search_applied",
     ]
     for key in keys:
         if key in st.session_state:
@@ -4323,19 +4430,82 @@ with tab_worklog:
 
             writer = st.text_input("작성자", placeholder="예: 정청운", key="worklog_writer")
 
-            area_options = ["권역 선택"] + list(POWER_REGION_DATA.keys())
-            area = st.selectbox("권역", area_options, key="worklog_area")
-            area_map = POWER_REGION_DATA.get(area, {}).get("모국_국소", {}) if area in POWER_REGION_DATA else {}
+            st.markdown("**📍 국사 검색 · 자동입력**")
+            st.caption("정밀점검과 같은 국사 기준정보를 사용합니다. 국사명만 검색·선택하면 권역·모국·국소가 자동 반영됩니다.")
 
-            mother_options = ["모국 선택"] + list(area_map.keys())
-            if st.session_state.get("worklog_mother") not in mother_options:
-                st.session_state["worklog_mother"] = "모국 선택"
-            mother = st.selectbox("모국", mother_options, key="worklog_mother")
+            with st.form(key="worklog_station_search_form", clear_on_submit=False):
+                station_search_col, station_search_btn_col = st.columns([4.2, 1.15], gap="small")
+                with station_search_col:
+                    st.text_input(
+                        "국사명",
+                        key="worklog_station_search_query",
+                        placeholder="예: 송포",
+                        help="국사명을 입력한 뒤 확인을 누르세요. 키보드 Enter로도 검색할 수 있습니다.",
+                    )
+                with station_search_btn_col:
+                    st.markdown("<div style='height:1.70rem'></div>", unsafe_allow_html=True)
+                    worklog_station_search_submitted = st.form_submit_button("확인", use_container_width=True)
 
-            local_options = ["국소 선택"] + list(area_map.get(mother, [])) if mother in area_map else ["국소 선택"]
-            if st.session_state.get("worklog_local") not in local_options:
-                st.session_state["worklog_local"] = "국소 선택"
-            local = st.selectbox("국소", local_options, key="worklog_local")
+            if worklog_station_search_submitted:
+                _run_worklog_station_search()
+
+            worklog_station_search_status = str(
+                st.session_state.get("worklog_station_search_status", "") or ""
+            )
+            worklog_station_candidate_ids = list(
+                st.session_state.get("worklog_station_search_candidates", []) or []
+            )
+
+            if worklog_station_search_status == "empty":
+                st.warning("국사명을 먼저 입력해 주세요. 예: 송포")
+            elif worklog_station_search_status == "none":
+                st.warning("일치하는 국사를 찾지 못했습니다. 국사명을 다시 확인해 주세요.")
+            elif worklog_station_search_status == "multiple" and worklog_station_candidate_ids:
+                st.info(
+                    f"같은 이름 또는 유사한 국사가 {len(worklog_station_candidate_ids)}곳 있습니다. "
+                    "아래에서 정확한 국사를 선택해 주세요."
+                )
+                with st.form(key="worklog_station_duplicate_form", clear_on_submit=False):
+                    st.radio(
+                        "국사 선택",
+                        worklog_station_candidate_ids,
+                        key="worklog_station_search_choice",
+                        format_func=_worklog_station_search_label,
+                    )
+                    worklog_station_choice_submitted = st.form_submit_button(
+                        "선택 확인", use_container_width=True
+                    )
+                if worklog_station_choice_submitted:
+                    _confirm_worklog_station_search_choice()
+
+            worklog_station_notice = str(
+                st.session_state.get("worklog_station_search_notice", "") or ""
+            )
+            if worklog_station_notice:
+                st.success(worklog_station_notice)
+
+            area = str(st.session_state.get("worklog_area_key", "") or "").strip()
+            mother = str(st.session_state.get("worklog_mother", "") or "").strip()
+            local = str(st.session_state.get("worklog_local", "") or "").strip()
+            area_display = _worklog_area_display(area)
+
+            st.markdown(
+                f"""<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0 12px;">
+                    <div style="grid-column:1/-1;background:#FAF5FF;border:1px solid #C4B5FD;border-radius:11px;padding:10px 12px;">
+                        <div style="font-size:.78rem;font-weight:900;color:#6D28D9;margin-bottom:3px;">권역</div>
+                        <div style="font-weight:950;color:#5B21B6;line-height:1.45;">{html.escape(area_display)}</div>
+                    </div>
+                    <div style="background:#F8FAFC;border:1px solid #CBD5E1;border-radius:11px;padding:10px 12px;">
+                        <div style="font-size:.78rem;font-weight:900;color:#64748B;margin-bottom:3px;">모국</div>
+                        <div style="font-weight:900;color:#24364B;">{html.escape(mother or '자동 표시')}</div>
+                    </div>
+                    <div style="background:#F8FAFC;border:1px solid #CBD5E1;border-radius:11px;padding:10px 12px;">
+                        <div style="font-size:.78rem;font-weight:900;color:#64748B;margin-bottom:3px;">국소</div>
+                        <div style="font-weight:900;color:#24364B;">{html.escape(local or '자동 표시')}</div>
+                    </div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
 
             status = st.radio(
                 "상태이력",
