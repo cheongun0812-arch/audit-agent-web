@@ -1550,6 +1550,7 @@ def _power_headers() -> list[str]:
     headers.extend([
         "보안접지_1종(Ω)", "보안접지_2종(Ω)", "보안접지_3종(Ω)",
         "통신용접지_메인(Ω)", "피뢰침접지(Ω)", "특이사항",
+        "사진수", "사진파일ID목록", "사진파일명목록",
     ])
     return headers
 
@@ -2232,8 +2233,9 @@ def _power_has_measurement(payload: dict) -> bool:
     return bool(str(payload.get("notes", "")).strip())
 
 
-def save_power_inspection_result(payload: dict) -> tuple[bool, str, str]:
-    """국사 전원시설 정밀점검 결과를 Google Sheet에 새 행으로 저장합니다."""
+def save_power_inspection_result(payload: dict, photos: list | None = None) -> tuple[bool, str, str]:
+    """국사 전원시설 정밀점검 결과와 선택 사진을 Google Sheet/Drive에 함께 저장합니다."""
+    photos = list(photos or [])[:WORK_LOG_MAX_PHOTOS]
     client = init_google_sheet_connection()
     if not client:
         return False, "구글 시트 연결 실패: Streamlit Secrets의 gcp_service_account 설정을 확인하세요.", ""
@@ -2276,6 +2278,36 @@ def save_power_inspection_result(payload: dict) -> tuple[bool, str, str]:
         inspection_id = hashlib.sha256(inspection_seed.encode("utf-8")).hexdigest()[:14]
         source_id = str(payload.get("source_inspection_id", "")).strip()
         source_saved_at = str(payload.get("source_saved_at", "")).strip()
+
+        # 정밀점검 사진은 WORK LOG와 동일한 비공개 Apps Script → Drive 경로로 저장합니다.
+        # 사진 저장이 실패하면 Google Sheets 행도 만들지 않아 기록/사진이 어긋나지 않도록 합니다.
+        photo_ids: list[str] = []
+        photo_names: list[str] = []
+        used_power_photo_names: set[str] = set()
+        if photos:
+            preflight_ok, preflight_message = _worklog_apps_script_healthcheck()
+            if not preflight_ok:
+                return False, f"사진 업로드 사전진단 실패: {preflight_message}", ""
+
+            for photo_index, photo in enumerate(photos, 1):
+                capture_stamp = _photo_capture_timestamp(photo, fallback_dt=now)
+                compressed, _safe_name, mime_type, photo_error = _worklog_compress_image(photo)
+                if not compressed:
+                    return False, f"{photo_index}번째 사진 처리 실패: {photo_error}", ""
+                base_drive_name = f"정밀점검_{capture_stamp}"
+                drive_name = f"{base_drive_name}.jpg"
+                duplicate_no = 2
+                while drive_name in used_power_photo_names:
+                    drive_name = f"{base_drive_name}_{duplicate_no:02d}.jpg"
+                    duplicate_no += 1
+                used_power_photo_names.add(drive_name)
+                photo_ok, drive_meta, upload_error = _worklog_upload_drive_image(
+                    compressed, drive_name, mime_type
+                )
+                if not photo_ok:
+                    return False, f"{photo_index}번째 사진 저장 실패: {upload_error}", ""
+                photo_ids.append(str(drive_meta.get("id", "") or ""))
+                photo_names.append(str(drive_meta.get("name", drive_name) or drive_name))
 
         row_map = {
             "저장일시": saved_at,
@@ -2322,6 +2354,9 @@ def save_power_inspection_result(payload: dict) -> tuple[bool, str, str]:
             "통신용접지_메인(Ω)": payload.get("telecom_ground", ""),
             "피뢰침접지(Ω)": payload.get("lightning_ground", ""),
             "특이사항": str(payload.get("notes", "")).strip(),
+            "사진수": len(photo_ids),
+            "사진파일ID목록": "|".join(photo_ids),
+            "사진파일명목록": "|".join(photo_names),
         }
 
         battery1_cells = list(payload.get("battery1_cells", []))[:24]
@@ -2368,7 +2403,8 @@ def save_power_inspection_result(payload: dict) -> tuple[bool, str, str]:
                     f"관리자에게 확인해 주세요. ({n_phase_error})"
                 ), inspection_id
 
-        return True, "측정값과 N상 전류가 Google Sheets에 정상 저장되었습니다.", inspection_id
+        photo_message = f" · 현장사진 {len(photo_ids)}장 Drive 저장" if photo_ids else ""
+        return True, f"측정값과 N상 전류가 Google Sheets에 정상 저장되었습니다.{photo_message}", inspection_id
     except Exception as e:
         return False, str(e), ""
 
@@ -3769,6 +3805,33 @@ def _worklog_make_id(now_dt: datetime.datetime | None = None) -> str:
     return f"WL-{now_dt.strftime('%Y%m%d-%H%M%S')}-{suffix}"
 
 
+def _photo_capture_timestamp(uploaded_file, fallback_dt: datetime.datetime | None = None) -> str:
+    """사진 EXIF 촬영시각을 우선 사용하고, 없으면 현재 한국시간을 파일명용 시각으로 반환합니다."""
+    fallback_dt = fallback_dt or _korea_now()
+    try:
+        from io import BytesIO
+        from PIL import Image
+
+        raw = uploaded_file.getvalue() if uploaded_file is not None else b""
+        if raw:
+            image = Image.open(BytesIO(raw))
+            exif = image.getexif()
+            # DateTimeOriginal(36867) → DateTimeDigitized(36868) → DateTime(306) 순서
+            for tag_id in (36867, 36868, 306):
+                value = str(exif.get(tag_id, "") or "").strip()
+                if not value:
+                    continue
+                for fmt in ("%Y:%m:%d %H:%M:%S", "%Y-%m-%d %H:%M:%S"):
+                    try:
+                        captured = datetime.datetime.strptime(value[:19], fmt)
+                        return captured.strftime("%Y%m%d_%H%M%S")
+                    except Exception:
+                        continue
+    except Exception:
+        pass
+    return fallback_dt.strftime("%Y%m%d_%H%M%S")
+
+
 def _worklog_compress_image(uploaded_file) -> tuple[bytes | None, str, str, str]:
     """현장 사진을 방향보정하고 1600px/약 450KB 수준 JPEG로 최적화합니다."""
     if uploaded_file is None:
@@ -3930,6 +3993,74 @@ def _worklog_download_drive_image(file_id: str) -> bytes | None:
     return None
 
 
+def _render_power_photo_download(record, key_prefix: str) -> None:
+    """정밀점검 1건에 연결된 비공개 Drive 사진을 전체보기/개별/ZIP 다운로드로 제공합니다."""
+    photo_ids = [
+        value.strip() for value in str(record.get("사진파일ID목록", "") or "").split("|") if value.strip()
+    ]
+    photo_names = [
+        value.strip() for value in str(record.get("사진파일명목록", "") or "").split("|") if value.strip()
+    ]
+    if not photo_ids:
+        st.info("이 정밀점검 기록에는 첨부된 사진이 없습니다.")
+        return
+
+    payloads = []
+    failed_count = 0
+    saved_stamp = re.sub(r"[^0-9]", "", str(record.get("저장일시", "") or ""))[:14] or _korea_now().strftime("%Y%m%d%H%M%S")
+    safe_local = re.sub(r"[^0-9A-Za-z가-힣_-]", "_", str(record.get("국소", "") or "정밀점검"))[:40] or "정밀점검"
+
+    for index, file_id in enumerate(photo_ids, 1):
+        photo_bytes = _worklog_download_drive_image(file_id)
+        if not photo_bytes:
+            failed_count += 1
+            continue
+        stored_name = photo_names[index - 1] if index - 1 < len(photo_names) else f"정밀점검_{saved_stamp}_{index:02d}.jpg"
+        download_name = stored_name if stored_name.lower().endswith(".jpg") else f"{stored_name}.jpg"
+        payloads.append({"index": index, "bytes": photo_bytes, "name": download_name})
+
+    if not payloads:
+        st.warning("사진 정보는 있으나 현재 파일을 읽을 수 없습니다. Drive 읽기 권한을 확인해 주세요.")
+        return
+
+    st.caption(f"첨부사진 {len(photo_ids)}장 · Drive 폴더는 공개하지 않고 이 화면에서만 조회·다운로드합니다.")
+    photo_cols = st.columns(2)
+    for pos, payload in enumerate(payloads):
+        with photo_cols[pos % 2]:
+            st.image(payload["bytes"], caption=f"사진 {payload['index']} / {len(photo_ids)}", use_container_width=True)
+            st.download_button(
+                "📥 사진 다운로드",
+                data=payload["bytes"],
+                file_name=payload["name"],
+                mime="image/jpeg",
+                use_container_width=True,
+                key=f"{key_prefix}_photo_{payload['index']}",
+            )
+
+    try:
+        from io import BytesIO
+        import zipfile
+
+        zip_buffer = BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w", compression=zipfile.ZIP_DEFLATED) as photo_zip:
+            for payload in payloads:
+                photo_zip.writestr(payload["name"], payload["bytes"])
+        zip_name = f"{safe_local}_정밀점검_{saved_stamp}_사진{len(payloads)}장.zip"
+        st.download_button(
+            f"📦 사진 {len(payloads)}장 전체 ZIP 다운로드",
+            data=zip_buffer.getvalue(),
+            file_name=zip_name,
+            mime="application/zip",
+            use_container_width=True,
+            key=f"{key_prefix}_zip",
+        )
+    except Exception as zip_error:
+        st.warning(f"사진 ZIP 파일을 만들지 못했습니다. 개별 다운로드를 이용해 주세요. ({zip_error})")
+
+    if failed_count:
+        st.warning(f"첨부사진 중 {failed_count}장은 현재 읽을 수 없어 표시하지 못했습니다.")
+
+
 def _worklog_collect_photos(camera_photo, uploaded_photos) -> list:
     """카메라 촬영 + 앨범 업로드를 중복 제거해 최대 10장으로 합칩니다."""
     candidates = []
@@ -4003,13 +4134,21 @@ def save_work_log(record: dict, photos: list) -> tuple[bool, str, str]:
     record_id = _worklog_make_id(now)
     photo_ids = []
     photo_names = []
+    used_worklog_photo_names: set[str] = set()
 
     # 사진은 기록 본문보다 먼저 업로드합니다. 사진 저장 실패 시 불완전한 기록 행을 만들지 않습니다.
     for index, photo in enumerate(photos[:WORK_LOG_MAX_PHOTOS], 1):
         compressed, safe_name, mime_type, error = _worklog_compress_image(photo)
         if not compressed:
             return False, f"{index}번째 사진 처리 실패: {error}", ""
-        drive_name = f"{record_id}_{index:02d}_{safe_name}"
+        capture_stamp = _photo_capture_timestamp(photo, fallback_dt=now)
+        base_drive_name = f"WORK LOG_{capture_stamp}"
+        drive_name = f"{base_drive_name}.jpg"
+        duplicate_no = 2
+        while drive_name in used_worklog_photo_names:
+            drive_name = f"{base_drive_name}_{duplicate_no:02d}.jpg"
+            duplicate_no += 1
+        used_worklog_photo_names.add(drive_name)
         ok, drive_meta, upload_error = _worklog_upload_drive_image(compressed, drive_name, mime_type)
         if not ok:
             return False, f"{index}번째 사진 저장 실패: {upload_error}", ""
@@ -5217,6 +5356,92 @@ with tab_worklog:
         if not selected_rows.empty:
             selected = selected_rows.iloc[0]
             st.markdown("---")
+            st.markdown("### 📷 첨부 현장사진")
+            st.caption(
+                f"기록ID: {selected_id} · {selected.get('모국','')} / {selected.get('국소','')} · "
+                "Drive 폴더는 공개하지 않고 이 화면에서만 조회·다운로드합니다."
+            )
+
+            selected_photo_ids = [
+                v.strip() for v in str(selected.get("사진파일ID목록", "") or "").split("|") if v.strip()
+            ]
+            selected_photo_names = [
+                v.strip() for v in str(selected.get("사진파일명목록", "") or "").split("|") if v.strip()
+            ]
+
+            photo_payloads = []
+            failed_photo_count = 0
+            local_for_name = str(selected.get("국소", "") or selected.get("모국", "") or "WORK_LOG").strip()
+            writer_for_name = str(selected.get("작성자", "") or "현장").strip()
+            saved_for_name = re.sub(r"[^0-9]", "", str(selected.get("저장일시", "") or ""))[:8] or _korea_now().strftime("%Y%m%d")
+            item_for_name = str(selected.get("점검항목", "") or "현장사진").split(",")[0].strip() or "현장사진"
+
+            safe_local = re.sub(r"[^0-9A-Za-z가-힣_-]", "_", local_for_name)[:40] or "WORK_LOG"
+            safe_writer = re.sub(r"[^0-9A-Za-z가-힣_-]", "_", writer_for_name)[:30] or "현장"
+            safe_item = re.sub(r"[^0-9A-Za-z가-힣_-]", "_", item_for_name)[:30] or "현장사진"
+
+            for photo_index, file_id in enumerate(selected_photo_ids, 1):
+                photo_bytes = _worklog_download_drive_image(file_id)
+                if not photo_bytes:
+                    failed_photo_count += 1
+                    continue
+                download_name = f"{safe_local}_{safe_item}_{safe_writer}_{saved_for_name}_{photo_index:02d}.jpg"
+                stored_name = selected_photo_names[photo_index - 1] if photo_index - 1 < len(selected_photo_names) else download_name
+                photo_payloads.append({
+                    "index": photo_index,
+                    "id": file_id,
+                    "bytes": photo_bytes,
+                    "download_name": download_name,
+                    "stored_name": stored_name,
+                })
+
+            if photo_payloads:
+                st.caption(f"첨부사진 {len(selected_photo_ids)}장 · 전체 보기 및 개별/일괄 다운로드")
+                photo_cols = st.columns(2)
+                for payload_pos, payload in enumerate(photo_payloads):
+                    with photo_cols[payload_pos % 2]:
+                        st.image(
+                            payload["bytes"],
+                            caption=f"사진 {payload['index']} / {len(selected_photo_ids)}",
+                            use_container_width=True,
+                        )
+                        st.download_button(
+                            "📥 사진 다운로드",
+                            data=payload["bytes"],
+                            file_name=payload["download_name"],
+                            mime="image/jpeg",
+                            use_container_width=True,
+                            key=f"worklog_photo_download_{selected_id}_{payload['index']}",
+                        )
+
+                try:
+                    from io import BytesIO
+                    import zipfile
+
+                    zip_buffer = BytesIO()
+                    with zipfile.ZipFile(zip_buffer, "w", compression=zipfile.ZIP_DEFLATED) as photo_zip:
+                        for payload in photo_payloads:
+                            photo_zip.writestr(payload["download_name"], payload["bytes"])
+                    zip_file_name = f"{safe_local}_WORK_LOG_{saved_for_name}_사진{len(photo_payloads)}장.zip"
+                    st.download_button(
+                        f"📦 사진 {len(photo_payloads)}장 전체 ZIP 다운로드",
+                        data=zip_buffer.getvalue(),
+                        file_name=zip_file_name,
+                        mime="application/zip",
+                        use_container_width=True,
+                        type="primary",
+                        key=f"worklog_photo_zip_{selected_id}",
+                    )
+                except Exception as zip_error:
+                    st.warning(f"사진 ZIP 파일을 만들지 못했습니다. 개별 다운로드를 이용해 주세요. ({zip_error})")
+
+                if failed_photo_count:
+                    st.warning(f"첨부사진 중 {failed_photo_count}장은 현재 읽을 수 없어 표시하지 못했습니다.")
+            elif selected_photo_ids:
+                st.warning("첨부사진 정보는 있으나 현재 사진 파일을 읽을 수 없습니다. Drive 읽기 권한을 확인해 주세요.")
+            else:
+                st.info("이 기록에는 첨부된 현장사진이 없습니다.")
+
             st.markdown("### 🔄 상태이력 · 조치 업데이트")
             st.caption(f"기록ID: {selected_id} · {selected.get('모국','')} / {selected.get('국소','')}")
             u1, u2 = st.columns(2)
@@ -5799,6 +6024,16 @@ with tab_power:
                 format_func=_power_history_label,
                 key="power_history_selected_index",
             )
+            selected_history_record = history_records[int(selected_history_index)]
+            selected_history_photo_count = len([
+                value for value in str(selected_history_record.get("사진파일ID목록", "") or "").split("|") if value.strip()
+            ])
+            if selected_history_photo_count:
+                with st.expander(f"📷 선택 기록 현장사진 {selected_history_photo_count}장 · 보기/다운로드", expanded=False):
+                    _render_power_photo_download(
+                        selected_history_record,
+                        key_prefix=f"power_history_{selected_history_record.get('점검ID', selected_history_index)}",
+                    )
             if st.button(
                 "↩️ 선택한 측정값 불러오기",
                 key="power_load_selected_history",
@@ -6140,6 +6375,27 @@ with tab_power:
                 placeholder="특이사항이 있을 때 여기에 입력하세요.",
             )
             st.caption("작성 예: 축전지 2조 미측정 사유 · 접지선 보완 필요 · 다음 점검 시 확인사항")
+
+            st.markdown("**📷 정밀점검 현장사진 (선택)**")
+            power_photo_c1, power_photo_c2 = st.columns(2, gap="small")
+            with power_photo_c1:
+                power_camera_photo = st.camera_input(
+                    "현장에서 바로 촬영",
+                    key="power_camera_photo",
+                )
+            with power_photo_c2:
+                power_uploaded_photos = st.file_uploader(
+                    "앨범/파일에서 선택",
+                    type=["jpg", "jpeg", "png", "webp"],
+                    accept_multiple_files=True,
+                    key="power_uploaded_photos",
+                ) or []
+            power_photos = _worklog_collect_photos(power_camera_photo, power_uploaded_photos)
+            st.caption(
+                f"선택 사진 {len(power_photos)}장 / 최대 {WORK_LOG_MAX_PHOTOS}장 · "
+                "저장 시 자동 방향보정·압축 후 비공개 Drive에 저장됩니다."
+            )
+
             payload_preview = _build_power_payload_from_state(final_confirmed=True)
             all_missing = _power_payload_missing_items(payload_preview)
             expected_count = max(_power_expected_item_count(payload_preview), 1)
@@ -6194,8 +6450,17 @@ with tab_power:
 
             if submit_power:
                 payload = _build_power_payload_from_state(final_confirmed=final_confirmed)
+                photo_signature = []
+                for photo in power_photos:
+                    try:
+                        photo_signature.append(hashlib.sha256(photo.getvalue()).hexdigest())
+                    except Exception:
+                        photo_signature.append(str(getattr(photo, "name", "photo")))
                 payload_signature = hashlib.sha256(
-                    json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
+                    json.dumps(
+                        {"payload": payload, "photos": photo_signature},
+                        ensure_ascii=False, sort_keys=True, default=str,
+                    ).encode("utf-8")
                 ).hexdigest()
                 now_ts = time.time()
                 last_signature = st.session_state.get("power_last_signature", "")
@@ -6203,8 +6468,12 @@ with tab_power:
                 if payload_signature == last_signature and (now_ts - last_saved_ts) < 30:
                     st.warning("같은 측정값이 방금 저장되었습니다. 중복 전송을 방지했습니다.")
                 else:
-                    with st.spinner("Google Sheets에 측정값을 저장하고 있습니다..."):
-                        ok, message, inspection_id = save_power_inspection_result(payload)
+                    save_spinner_text = (
+                        "Google Sheets와 Drive에 측정값·사진을 저장하고 있습니다..."
+                        if power_photos else "Google Sheets에 측정값을 저장하고 있습니다..."
+                    )
+                    with st.spinner(save_spinner_text):
+                        ok, message, inspection_id = save_power_inspection_result(payload, power_photos)
                     if ok:
                         st.session_state["power_last_signature"] = payload_signature
                         st.session_state["power_last_saved_ts"] = now_ts
@@ -6219,7 +6488,7 @@ with tab_power:
                 f'<div class="power-sheet-note"><b>📊 Google Sheets 저장 구조</b><br>'
                 f'스프레드시트: <b>{POWER_INSPECTION_SPREADSHEET_NAME}</b><br>'
                 f'워크시트: <b>{POWER_INSPECTION_SHEET_NAME}</b><br>'
-                '점검 1건은 새 행으로 추가됩니다. 최근 측정값을 불러온 경우 원본 점검ID와 원본 저장일시도 함께 기록됩니다.</div>',
+                '점검 1건은 새 행으로 추가됩니다. 사진은 비공개 Drive에 분리 저장되고 사진 ID/파일명만 시트에 연결 기록됩니다. 최근 측정값을 불러온 경우 원본 점검ID와 원본 저장일시도 함께 기록됩니다.</div>',
                 unsafe_allow_html=True,
             )
 
@@ -6803,6 +7072,33 @@ with tab_admin:
             "CSV와 Excel 다운로드에도 동일한 필터가 적용됩니다."
         )
         st.dataframe(display_df, use_container_width=True, hide_index=True, height=520)
+
+        photo_records_df = filtered_df[
+            filtered_df.get("사진파일ID목록", pd.Series(index=filtered_df.index, dtype=str)).astype(str).str.strip() != ""
+        ].copy()
+        if not photo_records_df.empty:
+            with st.expander("📷 정밀점검 현장사진 조회·다운로드", expanded=False):
+                photo_record_indices = photo_records_df.index.tolist()
+
+                def _power_admin_photo_label(row_index):
+                    row = photo_records_df.loc[row_index]
+                    count = len([v for v in str(row.get("사진파일ID목록", "") or "").split("|") if v.strip()])
+                    return (
+                        f"{row.get('저장일시','')} · {row.get('모국','')} / {row.get('국소','')} · "
+                        f"{row.get('점검자','')} · 사진 {count}장"
+                    )
+
+                selected_photo_row_index = st.selectbox(
+                    "사진을 확인할 정밀점검 기록",
+                    options=photo_record_indices,
+                    format_func=_power_admin_photo_label,
+                    key="power_admin_photo_record",
+                )
+                selected_photo_record = photo_records_df.loc[selected_photo_row_index]
+                _render_power_photo_download(
+                    selected_photo_record,
+                    key_prefix=f"power_admin_{selected_photo_record.get('점검ID', selected_photo_row_index)}",
+                )
 
         summary_df = pd.DataFrame(columns=["모국", "국소", "점검건수", "최근측정일시", "최근점검자"])
         if not filtered_df.empty:
