@@ -4660,6 +4660,51 @@ with tab_worklog:
         font-weight:700 !important;
     }
 
+    /* WORK LOG 조회 UI: PC는 대시보드 폭, 모바일은 조건+검색어 1행 / 불러오기 2행 */
+    div[data-testid="stElementContainer"]:has(.worklog-search-row-marker),
+    div[data-testid="stElementContainer"]:has(.worklog-recent-marker),
+    div[data-testid="stElementContainer"]:has(.worklog-sticky-close-marker) {
+        display:none !important;
+    }
+
+    @media (min-width:769px) {
+        div[data-testid="stHorizontalBlock"]:has(.worklog-search-row-marker) {
+            width:calc(50% - 6px) !important;
+            margin-left:calc(50% + 6px) !important;
+            gap:.45rem !important;
+            align-items:flex-end !important;
+        }
+    }
+
+    /* 조회 결과가 열려 있을 때만 생성되는 고정 닫기 버튼 */
+    div[data-testid="stElementContainer"]:has(.worklog-sticky-close-marker)
+      + div[data-testid="stElementContainer"],
+    .st-key-worklog_results_close {
+        position:fixed !important;
+        left:50% !important;
+        bottom:12px !important;
+        transform:translateX(-50%) !important;
+        width:min(410px, calc(100vw - 28px)) !important;
+        z-index:9999 !important;
+        padding:6px !important;
+        background:rgba(255,255,255,.96) !important;
+        border:1px solid #CBD5E1 !important;
+        border-radius:14px !important;
+        box-shadow:0 12px 30px rgba(15,23,42,.20) !important;
+        backdrop-filter:blur(10px);
+    }
+    div[data-testid="stElementContainer"]:has(.worklog-sticky-close-marker)
+      + div[data-testid="stElementContainer"] button,
+    .st-key-worklog_results_close button {
+        min-height:44px !important;
+        background:#D71920 !important;
+        color:#FFFFFF !important;
+        font-weight:950 !important;
+        border:none !important;
+        border-radius:10px !important;
+    }
+    .worklog-close-safe-space { height:72px; }
+
     @media (max-width:768px) {
         .worklog-overview { grid-template-columns:1fr; gap:7px; margin:6px 0 10px; }
         .worklog-hero { padding:12px 13px; border-radius:15px; min-height:auto; }
@@ -4690,6 +4735,49 @@ with tab_worklog:
         textarea[placeholder^="예: 다음"] {
             font-size:16px !important;
         }
+
+        /* 모바일: 검색 조건 + 검색어를 첫 줄, 불러오기를 둘째 줄 전체 폭으로 */
+        div[data-testid="stHorizontalBlock"]:has(.worklog-search-row-marker) {
+            display:grid !important;
+            grid-template-columns:minmax(0,.82fr) minmax(0,1.38fr) !important;
+            gap:6px !important;
+            width:100% !important;
+            margin:0 !important;
+            align-items:end !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(.worklog-search-row-marker)
+          > div[data-testid="column"] {
+            width:100% !important;
+            min-width:0 !important;
+            flex:unset !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(.worklog-search-row-marker)
+          > div[data-testid="column"]:nth-child(1) { grid-column:1; grid-row:1; }
+        div[data-testid="stHorizontalBlock"]:has(.worklog-search-row-marker)
+          > div[data-testid="column"]:nth-child(2) { grid-column:2; grid-row:1; }
+        div[data-testid="stHorizontalBlock"]:has(.worklog-search-row-marker)
+          > div[data-testid="column"]:nth-child(3) { grid-column:1 / -1; grid-row:2; }
+
+        /* 모바일: 기존 2열의 순서만 뒤집어 불러오기 바로 아래에 최근 기록 표시 */
+        div[data-testid="stHorizontalBlock"]:has(.worklog-recent-marker) {
+            display:flex !important;
+            flex-direction:column-reverse !important;
+            gap:.7rem !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(.worklog-recent-marker)
+          > div[data-testid="column"] {
+            width:100% !important;
+            min-width:0 !important;
+            flex:1 1 100% !important;
+        }
+
+        div[data-testid="stElementContainer"]:has(.worklog-sticky-close-marker)
+          + div[data-testid="stElementContainer"],
+        .st-key-worklog_results_close {
+            bottom:max(10px, env(safe-area-inset-bottom)) !important;
+            width:calc(100vw - 22px) !important;
+        }
+        .worklog-close-safe-space { height:78px; }
     }
     </style>
     """, unsafe_allow_html=True)
@@ -4700,6 +4788,19 @@ with tab_worklog:
         st.session_state["worklog_loaded_at"] = ""
     if "worklog_selected_id" not in st.session_state:
         st.session_state["worklog_selected_id"] = ""
+
+    def _worklog_close_loaded_results():
+        """조회 결과만 닫고 새 현장기록 작성 중 입력값은 보존합니다."""
+        st.session_state["worklog_df"] = None
+        st.session_state["worklog_loaded_at"] = ""
+        st.session_state["worklog_selected_id"] = ""
+        st.session_state["worklog_search"] = ""
+        st.session_state["worklog_filter"] = "전체"
+        for reset_key in (
+            "worklog_update_writer", "worklog_update_status", "worklog_update_action",
+            "worklog_update_followup", "worklog_update_remark",
+        ):
+            st.session_state.pop(reset_key, None)
 
     # PC/모바일 공용 상단: 왼쪽 MY WORK LOG 소개 + 오른쪽 미니 대시보드
     worklog_overview_slot = st.empty()
@@ -4714,24 +4815,25 @@ with tab_worklog:
             unsafe_allow_html=True,
         )
 
-    top_left, top_mid, top_right = st.columns([0.46, 0.22, 0.32], vertical_alignment="center")
-    with top_left:
-        worklog_search = st.text_input(
-            "WORK LOG 검색",
-            placeholder="국사, 작성자, 점검항목, 현상·특이사항 검색",
-            key="worklog_search",
-            label_visibility="collapsed",
-        ).strip()
-    with top_mid:
+    search_condition_col, search_text_col, search_load_col = st.columns(
+        [0.30, 0.46, 0.24], gap="small", vertical_alignment="bottom"
+    )
+    with search_condition_col:
+        st.markdown('<div class="worklog-search-row-marker"></div>', unsafe_allow_html=True)
         worklog_filter = st.selectbox(
-            "상태 필터",
+            "검색 조건",
             ["전체"] + WORK_LOG_STATUS_OPTIONS,
             key="worklog_filter",
-            label_visibility="collapsed",
         )
-    with top_right:
+    with search_text_col:
+        worklog_search = st.text_input(
+            "검색어",
+            placeholder="국사 · 작성자 · 점검항목 등",
+            key="worklog_search",
+        ).strip()
+    with search_load_col:
         refresh_worklog = st.button(
-            "🔄 최신 기록 불러오기",
+            "🔄 불러오기",
             use_container_width=True,
             type="primary",
             key="worklog_refresh",
@@ -4742,6 +4844,7 @@ with tab_worklog:
             try:
                 st.session_state["worklog_df"] = load_work_logs()
                 st.session_state["worklog_loaded_at"] = _korea_now().strftime("%Y-%m-%d %H:%M:%S")
+                st.session_state["worklog_selected_id"] = ""
             except Exception as error:
                 st.error(f"WORK LOG를 불러오지 못했습니다: {error}")
 
@@ -4997,11 +5100,12 @@ with tab_worklog:
                     st.error(f"❌ {message}")
 
     with recent_col:
+        st.markdown('<div class="worklog-recent-marker"></div>', unsafe_allow_html=True)
         with st.container(border=True):
             st.markdown('<div class="worklog-section-title">🕘 최근 기록</div>', unsafe_allow_html=True)
 
             if not isinstance(loaded_df, pd.DataFrame):
-                st.info("‘최신 기록 불러오기’를 누르면 최근 현장이력과 상태별 현황이 표시됩니다.")
+                st.info("검색 조건과 검색어를 정한 뒤 ‘불러오기’를 누르면 최근 현장이력이 표시됩니다.")
             else:
                 display_logs = loaded_df.copy()
                 if worklog_filter != "전체":
@@ -5122,6 +5226,16 @@ with tab_worklog:
                 st.markdown("#### 🕘 변경 이력")
                 history_display = history_df[[c for c in WORK_LOG_HISTORY_HEADERS if c in history_df.columns]].copy()
                 st.dataframe(history_display, use_container_width=True, hide_index=True)
+
+    if isinstance(st.session_state.get("worklog_df"), pd.DataFrame):
+        st.markdown('<div class="worklog-close-safe-space"></div>', unsafe_allow_html=True)
+        st.markdown('<div class="worklog-sticky-close-marker"></div>', unsafe_allow_html=True)
+        st.button(
+            "✕ 조회 닫기",
+            key="worklog_results_close",
+            use_container_width=True,
+            on_click=_worklog_close_loaded_results,
+        )
 
 
 # --- [Tab 1: 국사 전원시설 정밀점검] ---
