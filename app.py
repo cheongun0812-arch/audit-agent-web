@@ -3503,6 +3503,9 @@ def _worklog_photo_upload_token() -> str:
     return str(_worklog_secret_value("work_log_upload_token", "") or "").strip()
 
 
+WORK_LOG_PHOTO_ENGINE_VERSION = "V5-20260812-1945"
+
+
 def _worklog_normalize_apps_script_url() -> tuple[str, str]:
     """Apps Script 웹 앱의 영구 /exec URL만 허용합니다.
 
@@ -3542,65 +3545,157 @@ def _worklog_normalize_apps_script_url() -> tuple[str, str]:
     return f"https://script.google.com{path}", ""
 
 
+def _worklog_photo_config_status() -> tuple[bool, list[str]]:
+    """사진 업로드 Secrets 상태를 항목별로 진단합니다."""
+    issues: list[str] = []
+
+    raw_url = _worklog_photo_upload_url().strip()
+    token = _worklog_photo_upload_token().strip()
+
+    if not raw_url:
+        issues.append("photo_upload_url 누락")
+    else:
+        _, url_error = _worklog_normalize_apps_script_url()
+        if url_error:
+            issues.append(f"photo_upload_url 오류: {url_error}")
+
+    if not token:
+        issues.append("upload_token 누락")
+
+    return (len(issues) == 0), issues
+
+
 def _worklog_photo_upload_ready() -> bool:
-    url, url_error = _worklog_normalize_apps_script_url()
-    token = _worklog_photo_upload_token()
-    return bool(url and not url_error and token)
+    ready, _ = _worklog_photo_config_status()
+    return ready
+
+
+def _worklog_follow_apps_script_response(first_response, timeout: int = 30):
+    """Apps Script ContentService의 일회성 리디렉션을 즉시 따라가 최종 응답을 반환합니다."""
+    response = first_response
+    if first_response.status_code in {301, 302, 303, 307, 308}:
+        redirect_url = str(first_response.headers.get("Location", "") or "").strip()
+        if not redirect_url:
+            return None, "Apps Script 리디렉션에 Location 주소가 없습니다."
+        redirect_host = str(urlparse(redirect_url).netloc or "").lower()
+        if "script.googleusercontent.com" not in redirect_host:
+            return None, f"예상하지 않은 리디렉션 주소입니다: {redirect_host or '확인 불가'}"
+        try:
+            response = requests.get(
+                redirect_url,
+                timeout=timeout,
+                allow_redirects=True,
+                headers={
+                    "Accept": "application/json,text/plain,*/*",
+                    "User-Agent": "SMART-WORK-AI-AGENT/4.0",
+                },
+            )
+        except Exception as error:
+            return None, f"Apps Script 응답 리디렉션 처리 실패: {error}"
+    return response, ""
 
 
 def _worklog_apps_script_healthcheck() -> tuple[bool, str]:
-    """Streamlit 서버 관점에서 Apps Script /exec 공개 접근 가능 여부를 점검합니다.
+    """Streamlit 서버에서 GET과 실제 POST 경로를 모두 점검합니다.
 
-    사진을 만들지 않는 GET 진단입니다. 브라우저에서 성공해도 로그인 쿠키 때문에
-    Streamlit 서버에서는 실패할 수 있으므로 서버 측에서 직접 확인합니다.
+    브라우저 GET 성공은 로그인 쿠키 때문에 오판할 수 있으므로, 실제 사진 업로드와 같은
+    서버 측 POST도 아주 작은 요청으로 확인합니다. POST probe는 사진을 생성하지 않습니다.
+    현재 Apps Script doPost는 data가 없으면 '사진 데이터가 없습니다.' JSON을 반환하므로
+    이 응답을 POST 경로 정상의 증거로 사용합니다.
     """
     upload_url, url_error = _worklog_normalize_apps_script_url()
     if url_error:
         return False, url_error
-    if not _worklog_photo_upload_token():
+    upload_token = _worklog_photo_upload_token()
+    if not upload_token:
         return False, "[work_log] upload_token이 설정되지 않았습니다."
 
+    # 1) 익명 GET 확인
     try:
-        response = requests.get(
+        get_first = requests.get(
             upload_url,
             timeout=20,
-            allow_redirects=True,
+            allow_redirects=False,
             headers={
                 "Accept": "application/json,text/plain,*/*",
-                "User-Agent": "SMART-WORK-AI-AGENT/1.0",
+                "User-Agent": "SMART-WORK-AI-AGENT/4.0",
             },
         )
+        get_response, redirect_error = _worklog_follow_apps_script_response(get_first, timeout=20)
+        if redirect_error:
+            return False, f"GET 진단 실패: {redirect_error}"
+        if get_response is None or get_response.status_code != 200:
+            code = getattr(get_response, "status_code", get_first.status_code)
+            return False, (
+                f"GET 진단 실패 ({code}). Streamlit 서버가 Apps Script를 익명으로 열 수 없습니다. "
+                "웹 앱 배포의 접근 권한이 로그인 없이 허용되는지 확인해야 합니다."
+            )
+        if get_response.text.lstrip().lower().startswith("<!doctype html"):
+            return False, "GET 진단에서 JSON 대신 Google HTML이 반환되었습니다. 익명 접근 또는 배포 URL 문제입니다."
+        try:
+            get_json = get_response.json()
+        except Exception:
+            return False, f"GET 진단 응답이 JSON이 아닙니다: {get_response.text[:160]}"
+        if not bool(get_json.get("ok")):
+            return False, f"GET 진단 실패: {get_json}"
     except requests.Timeout:
-        return False, "Apps Script 연결 진단 시간이 초과되었습니다."
+        return False, "GET 진단 시간이 초과되었습니다."
     except Exception as error:
-        return False, f"Apps Script 연결 진단 오류: {error}"
+        return False, f"GET 진단 오류: {error}"
 
-    final_host = str(urlparse(response.url).netloc or "").lower()
-    content_type = str(response.headers.get("Content-Type", "") or "").lower()
-
-    if response.status_code != 200:
-        return False, (
-            f"Streamlit 서버에서 Apps Script GET 접근 실패 ({response.status_code}). "
-            f"최종 응답 호스트: {final_host or '확인 불가'}. "
-            "웹 앱 배포 권한이 '모든 사용자(로그인하지 않은 사용자 포함)'인지 확인하세요. "
-            "브라우저에서만 성공하는 경우 Google 로그인 쿠키 때문에 그렇게 보일 수 있습니다."
-        )
-
-    if "text/html" in content_type or response.text.lstrip().lower().startswith("<!doctype html"):
-        return False, (
-            "Apps Script가 JSON 대신 Google HTML 페이지를 반환했습니다. "
-            "배포 URL 또는 익명 접근 권한 설정이 올바르지 않을 가능성이 큽니다."
-        )
-
+    # 2) 실제 사진 업로드와 같은 POST 경로 확인. data는 의도적으로 비워 파일을 만들지 않습니다.
+    probe_payload = {
+        "token": upload_token,
+        "filename": "__worklog_probe__.jpg",
+        "mimeType": "image/jpeg",
+        "data": "",
+    }
+    probe_bytes = json.dumps(probe_payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     try:
-        result = response.json()
-    except Exception:
-        return False, f"Apps Script GET 응답이 JSON이 아닙니다: {response.text[:180]}"
+        post_first = requests.post(
+            upload_url,
+            data=probe_bytes,
+            headers={
+                "Content-Type": "text/plain; charset=utf-8",
+                "Accept": "application/json,text/plain,*/*",
+                "User-Agent": "SMART-WORK-AI-AGENT/4.0",
+            },
+            timeout=30,
+            allow_redirects=False,
+        )
+        post_response, redirect_error = _worklog_follow_apps_script_response(post_first, timeout=30)
+        if redirect_error:
+            return False, f"POST 진단 실패: {redirect_error}"
+        if post_response is None or post_response.status_code != 200:
+            code = getattr(post_response, "status_code", post_first.status_code)
+            body = getattr(post_response, "text", post_first.text)[:120]
+            return False, (
+                f"POST 진단 실패 ({code}). 브라우저 GET은 열려 있어도 Streamlit 서버의 POST가 차단된 상태입니다. "
+                f"응답: {body}"
+            )
+        if post_response.text.lstrip().lower().startswith("<!doctype html"):
+            return False, (
+                "POST 진단에서 Google HTML 페이지가 반환되었습니다. 이 경우 폴더/토큰 문제가 아니라 "
+                "웹 앱의 익명 POST 접근 또는 현재 /exec 배포 버전 문제입니다."
+            )
+        try:
+            post_json = post_response.json()
+        except Exception:
+            return False, f"POST 진단 응답이 JSON이 아닙니다: {post_response.text[:160]}"
 
-    if not bool(result.get("ok")):
-        return False, f"Apps Script GET 진단 실패: {result.get('error', result)}"
-
-    return True, "Apps Script /exec 주소와 Streamlit 서버의 익명 접근이 정상입니다."
+        # 현재 doPost에서 빈 data는 정상적으로 여기까지 도달하면 '사진 데이터가 없습니다.'를 반환합니다.
+        if bool(post_json.get("ok")):
+            return True, f"사진 연결 정상 · GET/POST 모두 통과 · PHOTO ENGINE {WORK_LOG_PHOTO_ENGINE_VERSION}"
+        error_text = str(post_json.get("error", "") or "")
+        if error_text == "사진 데이터가 없습니다.":
+            return True, f"사진 연결 정상 · GET/POST 모두 통과 · PHOTO ENGINE {WORK_LOG_PHOTO_ENGINE_VERSION}"
+        if error_text.lower() == "unauthorized":
+            return False, "POST는 Apps Script에 도달했지만 UPLOAD_TOKEN이 일치하지 않습니다."
+        return False, f"POST는 Apps Script에 도달했지만 doPost가 오류를 반환했습니다: {error_text or post_json}"
+    except requests.Timeout:
+        return False, "POST 진단 시간이 초과되었습니다."
+    except Exception as error:
+        return False, f"POST 진단 오류: {error}"
 
 
 @st.cache_resource
@@ -3738,18 +3833,17 @@ def _worklog_compress_image(uploaded_file) -> tuple[bytes | None, str, str, str]
 
 
 def _worklog_upload_drive_image(image_bytes: bytes, file_name: str, mime_type: str) -> tuple[bool, dict, str]:
-    """압축 사진 1장을 Apps Script 웹 앱을 통해 사용자 Google Drive에 저장합니다.
+    """압축 사진 1장을 Apps Script로 저장합니다.
 
-    Apps Script ContentService는 응답을 script.googleusercontent.com의 일회성 URL로
-    리디렉션하므로, 최초 POST와 응답 리디렉션을 분리해서 진단합니다.
+    JSON을 application/json으로 직접 보내지 않고 text/plain JSON으로 전송해 Apps Script 웹앱의
+    요청 파싱/보안 프런트엔드와의 호환성을 높입니다. ContentService 리디렉션은 즉시 분리 처리합니다.
     """
     upload_url, url_error = _worklog_normalize_apps_script_url()
     upload_token = _worklog_photo_upload_token()
-
     if url_error:
         return False, {}, url_error
     if not upload_token:
-        return False, {}, "Streamlit Secrets의 [work_log] upload_token이 설정되지 않았습니다. Apps Script의 UPLOAD_TOKEN과 동일한 값을 등록해 주세요."
+        return False, {}, "Streamlit Secrets의 [work_log] upload_token이 설정되지 않았습니다."
 
     try:
         payload = {
@@ -3760,96 +3854,47 @@ def _worklog_upload_drive_image(image_bytes: bytes, file_name: str, mime_type: s
         }
         payload_bytes = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 
-        # 중요: 최초 응답을 자동 리디렉션하지 않습니다.
-        # 그래야 /exec 자체 문제와 ContentService 리디렉션 문제를 구분할 수 있습니다.
         first = requests.post(
             upload_url,
             data=payload_bytes,
             headers={
                 "Content-Type": "text/plain; charset=utf-8",
                 "Accept": "application/json,text/plain,*/*",
-                "User-Agent": "SMART-WORK-AI-AGENT/1.0",
+                "User-Agent": "SMART-WORK-AI-AGENT/4.0",
+                "Cache-Control": "no-cache",
             },
             timeout=60,
             allow_redirects=False,
         )
-
-        # /exec 자체에서 404/403 등이 난 경우 doPost까지 도달하지 못한 것입니다.
-        if first.status_code not in {200, 301, 302, 303, 307, 308}:
-            health_ok, health_msg = _worklog_apps_script_healthcheck()
-            if first.status_code == 404:
-                return False, {}, (
-                    "Apps Script 원본 /exec 주소에서 POST 404가 발생했습니다. "
-                    "가장 가능성이 높은 원인은 ① 웹 앱 접근 권한이 익명 사용자에게 열려 있지 않음, "
-                    "② Secrets의 URL이 현재 배포의 /exec 주소가 아님, "
-                    "③ doPost가 포함된 최신 버전으로 배포가 갱신되지 않음입니다. "
-                    f"서버 GET 진단: {health_msg}"
-                )
-            return False, {}, (
-                f"Apps Script /exec POST 실패 ({first.status_code}). "
-                f"서버 GET 진단: {health_msg}. 응답: {first.text[:180]}"
-            )
-
-        response = first
-        if first.status_code in {301, 302, 303, 307, 308}:
-            redirect_url = str(first.headers.get("Location", "") or "").strip()
-            if not redirect_url:
-                return False, {}, "Apps Script가 리디렉션 응답을 보냈지만 Location 주소가 없습니다."
-            redirect_host = str(urlparse(redirect_url).netloc or "").lower()
-            if "script.googleusercontent.com" not in redirect_host:
-                return False, {}, (
-                    f"Apps Script 응답이 예상하지 않은 주소로 이동했습니다: {redirect_host or '확인 불가'}. "
-                    "웹 앱 배포/접근 권한을 확인해 주세요."
-                )
-            try:
-                response = requests.get(
-                    redirect_url,
-                    timeout=60,
-                    allow_redirects=True,
-                    headers={
-                        "Accept": "application/json,text/plain,*/*",
-                        "User-Agent": "SMART-WORK-AI-AGENT/1.0",
-                    },
-                )
-            except requests.Timeout:
-                return False, {}, (
-                    "Apps Script doPost 호출 후 결과 응답을 받는 단계에서 시간이 초과되었습니다. "
-                    "사진이 이미 생성되었을 수 있으므로 MY_WORK_LOG_PHOTOS 폴더를 먼저 확인한 뒤 다시 시도하세요."
-                )
-
-            if response.status_code != 200:
-                return False, {}, (
-                    f"Apps Script doPost는 호출되었지만 Google ContentService 응답 리디렉션 단계에서 "
-                    f"{response.status_code}가 발생했습니다. 사진이 이미 Drive에 생성되었을 수 있으므로 "
-                    "MY_WORK_LOG_PHOTOS 폴더를 먼저 확인하세요. 같은 사진을 즉시 재저장하면 중복될 수 있습니다."
-                )
-
+        response, redirect_error = _worklog_follow_apps_script_response(first, timeout=60)
+        if redirect_error:
+            return False, {}, redirect_error
+        if response is None:
+            return False, {}, "Apps Script 응답을 받지 못했습니다."
         if response.status_code != 200:
-            return False, {}, f"Apps Script 사진 저장 실패 ({response.status_code}): {response.text[:200]}"
-
-        content_type = str(response.headers.get("Content-Type", "") or "").lower()
-        if "text/html" in content_type or response.text.lstrip().lower().startswith("<!doctype html"):
             return False, {}, (
-                "Apps Script가 JSON 대신 Google HTML 페이지를 반환했습니다. "
-                "웹 앱의 접근 권한을 '모든 사용자(로그인하지 않은 사용자 포함)'로 배포했는지 확인하고, "
-                "Secrets에는 배포 관리 화면의 원본 /exec URL만 넣어 주세요."
+                f"PHOTO ENGINE {WORK_LOG_PHOTO_ENGINE_VERSION} · Apps Script POST 실패 ({response.status_code}). "
+                "이 오류는 Google Drive 폴더 문제가 아니라 /exec 배포 또는 익명 POST 접근 문제입니다."
             )
-
+        if response.text.lstrip().lower().startswith("<!doctype html"):
+            return False, {}, (
+                f"PHOTO ENGINE {WORK_LOG_PHOTO_ENGINE_VERSION} · Apps Script가 JSON 대신 Google HTML을 반환했습니다. "
+                "현재 /exec 배포의 익명 POST 접근이 허용되지 않았거나 운영 URL이 최신 배포가 아닙니다."
+            )
         try:
             result = response.json()
         except Exception:
-            return False, {}, f"Apps Script 응답을 JSON으로 읽지 못했습니다: {response.text[:200]}"
+            return False, {}, f"Apps Script 응답이 JSON이 아닙니다: {response.text[:180]}"
 
         if not bool(result.get("ok")):
-            error_text = str(result.get("error", "알 수 없는 오류"))
+            error_text = str(result.get("error", "알 수 없는 오류") or "알 수 없는 오류")
             if error_text.lower() == "unauthorized":
-                return False, {}, "Apps Script UPLOAD_TOKEN이 Streamlit Secrets의 upload_token과 일치하지 않습니다."
-            return False, {}, f"Apps Script 사진 저장 실패: {error_text}"
+                return False, {}, "Apps Script에는 도달했지만 UPLOAD_TOKEN이 일치하지 않습니다."
+            return False, {}, f"Apps Script doPost 오류: {error_text}"
 
         file_id = str(result.get("fileId", "") or "").strip()
         if not file_id:
-            return False, {}, "Apps Script 저장은 응답했지만 fileId가 없습니다. Apps Script doPost 코드를 확인해 주세요."
-
+            return False, {}, "Apps Script 저장 응답에 fileId가 없습니다."
         return True, {
             "id": file_id,
             "name": str(result.get("fileName", file_name) or file_name),
@@ -3857,7 +3902,7 @@ def _worklog_upload_drive_image(image_bytes: bytes, file_name: str, mime_type: s
             "mimeType": mime_type or "image/jpeg",
         }, ""
     except requests.Timeout:
-        return False, {}, "Apps Script 사진 저장 시간이 초과되었습니다. 네트워크 상태를 확인한 후 다시 저장해 주세요."
+        return False, {}, "Apps Script 사진 저장 시간이 초과되었습니다."
     except Exception as error:
         return False, {}, f"Apps Script 사진 저장 오류: {error}"
 
@@ -3939,7 +3984,20 @@ def save_work_log(record: dict, photos: list) -> tuple[bool, str, str]:
     if not any([issue, action, followup, remark, photos]):
         return False, "현상·특이사항, 조치내용, 후속조치, 비고 또는 사진 중 한 가지 이상을 남겨 주세요.", ""
     if photos and not _worklog_photo_upload_ready():
-        return False, "사진을 첨부하려면 Streamlit Secrets의 [work_log]에 photo_upload_url과 upload_token을 설정해 주세요. photo_upload_url은 Apps Script의 /exec 주소이고, upload_token은 Apps Script의 UPLOAD_TOKEN과 동일해야 합니다.", ""
+        _, config_issues = _worklog_photo_config_status()
+        issue_text = " / ".join(config_issues) if config_issues else "사진 업로드 설정 확인 필요"
+        return False, (
+            "사진 업로드 설정 오류: " + issue_text + ". "
+            "Streamlit Secrets의 [work_log]에는 photo_upload_url과 upload_token이 필요합니다. "
+            "photo_upload_url은 Apps Script 배포용 /exec 주소, upload_token은 Apps Script의 UPLOAD_TOKEN과 동일해야 합니다."
+        ), ""
+
+    # 사진이 있을 때는 실제 파일을 만들기 전에 GET+POST 연결을 먼저 검증합니다.
+    # 연결이 깨진 상태에서 사진 업로드를 반복해 중복/불완전 저장이 생기는 것을 방지합니다.
+    if photos:
+        preflight_ok, preflight_message = _worklog_apps_script_healthcheck()
+        if not preflight_ok:
+            return False, f"사진 업로드 사전진단 실패: {preflight_message}", ""
 
     now = _korea_now()
     record_id = _worklog_make_id(now)
@@ -4094,6 +4152,7 @@ def _worklog_reset_entry_widgets() -> None:
         "worklog_followup", "worklog_remark", "worklog_station_search_query",
         "worklog_station_search_candidates", "worklog_station_search_choice", "worklog_station_search_status",
         "worklog_station_search_notice", "worklog_station_search_applied",
+        "worklog_items_confirmed_notice",
     ]
     for key in keys:
         if key in st.session_state:
@@ -4481,28 +4540,95 @@ def _render_pledge_group(
 with tab_worklog:
     st.markdown("""
     <style>
+    .worklog-overview {
+        display:grid;
+        grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+        gap:12px;
+        margin:8px 0 14px;
+        align-items:stretch;
+    }
     .worklog-hero {
         position:relative; overflow:hidden;
         background:linear-gradient(135deg,#FFFFFF 0%,#FFF7F7 48%,#F8FAFC 100%);
         border:1px solid #F1C7CA; border-left:8px solid #D71920;
-        border-radius:20px; padding:20px 22px; margin:8px 0 14px;
-        box-shadow:0 10px 28px rgba(15,23,42,.08);
+        border-radius:18px; padding:15px 18px; margin:0;
+        min-height:122px;
+        box-shadow:0 8px 22px rgba(15,23,42,.07);
     }
     .worklog-hero:after {
-        content:'📝'; position:absolute; right:22px; top:7px;
-        font-size:72px; opacity:.09; transform:rotate(-6deg);
+        content:'📝'; position:absolute; right:18px; top:6px;
+        font-size:64px; opacity:.08; transform:rotate(-6deg);
     }
-    .worklog-hero .eyebrow { color:#D71920; font-size:.76rem; font-weight:950; letter-spacing:.12em; }
-    .worklog-hero h2 { color:#B91218; margin:3px 0 2px; font-size:clamp(1.75rem,4vw,2.45rem); font-weight:950; letter-spacing:-.035em; }
-    .worklog-hero .sub { color:#24364B; font-size:clamp(1.04rem,2.8vw,1.25rem); font-weight:900; }
-    .worklog-hero .desc { color:#64748B; margin-top:5px; font-weight:750; line-height:1.55; }
-    .worklog-section-title { color:#24364B; font-size:1.08rem; font-weight:950; margin:2px 0 8px; }
+    .worklog-hero .eyebrow { color:#D71920; font-size:.72rem; font-weight:950; letter-spacing:.12em; }
+    .worklog-hero h2 { color:#B91218; margin:3px 0 2px; font-size:clamp(1.55rem,3vw,2.05rem); font-weight:950; letter-spacing:-.035em; }
+    .worklog-hero .sub { color:#24364B; font-size:clamp(.96rem,2vw,1.12rem); font-weight:900; }
+    .worklog-hero .desc { color:#64748B; margin-top:5px; font-size:.88rem; font-weight:750; line-height:1.45; padding-right:42px; }
+
+    .worklog-section-title,
+    .worklog-field-title {
+        color:#24364B;
+        font-size:1.08rem;
+        font-weight:950;
+        line-height:1.25;
+        margin:8px 0 8px;
+        letter-spacing:-.015em;
+    }
+
+    .worklog-dashboard {
+        background:#FFFFFF;
+        border:1px solid #DCE5F1;
+        border-left:5px solid #0F4C81;
+        border-radius:18px;
+        padding:12px 13px;
+        min-height:122px;
+        display:flex;
+        flex-direction:column;
+        justify-content:center;
+        box-shadow:0 8px 22px rgba(15,23,42,.06);
+    }
+    .worklog-dashboard-label {
+        color:#64748B;
+        font-size:.72rem;
+        font-weight:900;
+        letter-spacing:.08em;
+        margin-bottom:8px;
+    }
+    .worklog-kpi-grid {
+        display:grid;
+        grid-template-columns:repeat(4,minmax(0,1fr));
+        gap:6px;
+        width:100%;
+    }
+    .worklog-kpi {
+        min-width:0;
+        display:flex;
+        align-items:baseline;
+        justify-content:center;
+        gap:3px;
+        padding:9px 3px;
+        border-radius:11px;
+        background:#F8FAFC;
+        border:1px solid #E2E8F0;
+        white-space:nowrap;
+        overflow:hidden;
+    }
+    .worklog-kpi .label { color:#64748B; font-size:.66rem; font-weight:900; letter-spacing:-.025em; }
+    .worklog-kpi .value { color:#0F3B66; font-size:1.08rem; font-weight:950; letter-spacing:-.04em; }
+    .worklog-kpi .unit { color:#64748B; font-size:.62rem; font-weight:850; }
+    .worklog-kpi.open { background:#FFF7ED; border-color:#FED7AA; }
+    .worklog-kpi.open .value { color:#C2410C; }
+    .worklog-kpi.doing { background:#FAF5FF; border-color:#E9D5FF; }
+    .worklog-kpi.doing .value { color:#7E22CE; }
+    .worklog-kpi.done { background:#F0FDF4; border-color:#BBF7D0; }
+    .worklog-kpi.done .value { color:#15803D; }
+
     .worklog-storage-note {
         background:#EFF6FF; border:1px solid #BFDBFE; border-left:5px solid #2563EB;
-        border-radius:14px; padding:11px 13px; color:#1E3A8A; font-weight:750; line-height:1.55;
+        border-radius:14px; padding:9px 12px; color:#1E3A8A; font-size:.86rem; font-weight:750; line-height:1.45;
     }
     .worklog-storage-note.ready { background:#F0FDF4; border-color:#BBF7D0; border-left-color:#16A34A; color:#166534; }
     .worklog-storage-note.warn { background:#FFF7ED; border-color:#FED7AA; border-left-color:#F97316; color:#9A3412; }
+
     .worklog-card {
         background:#FFFFFF; border:1px solid #DCE5F1; border-radius:16px;
         padding:14px 15px; margin:0 0 10px; box-shadow:0 6px 16px rgba(15,23,42,.055);
@@ -4517,6 +4643,7 @@ with tab_worklog:
     .worklog-badge.doing { color:#B45309; background:#FEF3C7; }
     .worklog-badge.recheck { color:#7E22CE; background:#F3E8FF; }
     .worklog-badge.done { color:#15803D; background:#DCFCE7; }
+
     .law-search-hero {
         display:flex; align-items:center; gap:12px; flex-wrap:wrap;
         background:linear-gradient(135deg,#EEF4FF,#F8FAFC); border:1px solid #C9D8EC;
@@ -4525,18 +4652,46 @@ with tab_worklog:
     }
     .law-search-hero b { font-size:1.15rem; font-weight:950; }
     .law-search-hero span { color:#64748B; font-weight:750; }
-    @media (max-width: 768px) {
-        .worklog-hero { padding:16px 14px; border-radius:16px; }
-        .worklog-hero:after { font-size:52px; right:9px; top:11px; }
+
+    input[placeholder="예: 송포"]::placeholder {
+        color:#94A3B8 !important;
+        -webkit-text-fill-color:#94A3B8 !important;
+        opacity:1 !important;
+        font-weight:700 !important;
+    }
+
+    @media (max-width:768px) {
+        .worklog-overview { grid-template-columns:1fr; gap:7px; margin:6px 0 10px; }
+        .worklog-hero { padding:12px 13px; border-radius:15px; min-height:auto; }
+        .worklog-hero:after { font-size:44px; right:7px; top:7px; }
+        .worklog-hero .eyebrow { font-size:.64rem; }
+        .worklog-hero h2 { font-size:1.42rem; }
+        .worklog-hero .sub { font-size:.92rem; }
+        .worklog-hero .desc { font-size:.75rem; line-height:1.36; padding-right:24px; }
+
+        .worklog-dashboard { min-height:auto; padding:7px 6px; border-radius:14px; }
+        .worklog-dashboard-label { display:none; }
+        .worklog-kpi-grid { grid-template-columns:repeat(4,minmax(0,1fr)); gap:3px; }
+        .worklog-kpi { padding:6px 1px; gap:2px; border-radius:8px; }
+        .worklog-kpi .label { font-size:.54rem; letter-spacing:-.055em; }
+        .worklog-kpi .value { font-size:.88rem; }
+        .worklog-kpi .unit { font-size:.52rem; }
+
+        .worklog-section-title,
+        .worklog-field-title { font-size:1.02rem; font-weight:950; margin:8px 0 7px; }
+
         .worklog-card { padding:12px 11px; }
+
+        input[placeholder="예: 송포"],
+        input[placeholder="예: 정청운"],
+        input[placeholder="필요한 추가 메모"],
+        textarea[placeholder^="예: 축전지"],
+        textarea[placeholder^="예: 단자"],
+        textarea[placeholder^="예: 다음"] {
+            font-size:16px !important;
+        }
     }
     </style>
-    <div class="worklog-hero">
-      <div class="eyebrow">FIELD HISTORY &amp; RECORD</div>
-      <h2>MY WORK LOG</h2>
-      <div class="sub">현장 기록 · 시설 이력</div>
-      <div class="desc">오늘의 현장 기록이 내일의 정확한 업무가 됩니다. 상태이력·점검항목·사진·조치사항을 국사별로 연결해 관리합니다.</div>
-    </div>
     """, unsafe_allow_html=True)
 
     if "worklog_df" not in st.session_state:
@@ -4546,27 +4701,21 @@ with tab_worklog:
     if "worklog_selected_id" not in st.session_state:
         st.session_state["worklog_selected_id"] = ""
 
-    photo_upload_ready = _worklog_photo_upload_ready()
+    # PC/모바일 공용 상단: 왼쪽 MY WORK LOG 소개 + 오른쪽 미니 대시보드
+    worklog_overview_slot = st.empty()
+
+    photo_upload_ready, photo_config_issues = _worklog_photo_config_status()
     if photo_upload_ready:
         st.markdown(
-            '<div class="worklog-storage-note ready">📷 사진 저장 준비 완료 · 사진은 최대 10장까지 자동 방향보정·리사이즈·압축 후 Apps Script를 통해 MY_WORK_LOG_PHOTOS에 안전하게 분리 저장됩니다.</div>',
+            '<div class="worklog-storage-note ready">📷 사진 저장 정상 · 촬영/선택 사진은 저장 시 자동 압축 후 MY_WORK_LOG_PHOTOS에 분리 저장됩니다.</div>',
             unsafe_allow_html=True,
         )
     else:
+        issue_html = html.escape(" / ".join(photo_config_issues) if photo_config_issues else "사진 업로드 설정 확인 필요")
         st.markdown(
-            '<div class="worklog-storage-note warn">📷 사진 업로드 연결 미설정 · 텍스트 기록은 바로 사용할 수 있습니다. 사진 첨부를 사용하려면 Streamlit Secrets의 <b>[work_log]</b>에 <b>photo_upload_url</b>과 <b>upload_token</b>을 설정해 주세요. 기존 내비·정밀점검 기능에는 영향이 없습니다.</div>',
+            f'<div class="worklog-storage-note warn">📷 사진 업로드 설정 확인 필요 · PHOTO ENGINE <b>{WORK_LOG_PHOTO_ENGINE_VERSION}</b><br><b>현재 진단:</b> {issue_html}<br>Streamlit Secrets의 <b>[work_log]</b>에 <b>photo_upload_url</b>과 <b>upload_token</b>을 확인해 주세요. 기존 내비·정밀점검 기능에는 영향이 없습니다.</div>',
             unsafe_allow_html=True,
         )
-
-    diag_left, diag_right = st.columns([0.78, 0.22], vertical_alignment="center")
-    with diag_right:
-        if st.button("🔎 사진 연결 진단", use_container_width=True, key="worklog_photo_healthcheck"):
-            with st.spinner("Streamlit 서버에서 Apps Script 연결을 확인하는 중입니다..."):
-                diag_ok, diag_message = _worklog_apps_script_healthcheck()
-            if diag_ok:
-                st.success(diag_message)
-            else:
-                st.error(diag_message)
 
     top_left, top_mid, top_right = st.columns([0.46, 0.22, 0.32], vertical_alignment="center")
     with top_left:
@@ -4609,11 +4758,41 @@ with tab_worklog:
     else:
         count_all = count_open = count_doing = count_done = 0
 
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("전체 기록", f"{count_all:,}건" if loaded_df is not None else "-")
-    m2.metric("미처리", f"{count_open:,}건" if loaded_df is not None else "-")
-    m3.metric("진행·재점검", f"{count_doing:,}건" if loaded_df is not None else "-")
-    m4.metric("완료", f"{count_done:,}건" if loaded_df is not None else "-")
+    count_all_text = f"{count_all:,}" if loaded_df is not None else "-"
+    count_open_text = f"{count_open:,}" if loaded_df is not None else "-"
+    count_doing_text = f"{count_doing:,}" if loaded_df is not None else "-"
+    count_done_text = f"{count_done:,}" if loaded_df is not None else "-"
+
+    worklog_overview_slot.markdown(
+        f"""
+        <div class="worklog-overview">
+          <div class="worklog-hero">
+            <div class="eyebrow">FIELD HISTORY &amp; RECORD</div>
+            <h2>MY WORK LOG</h2>
+            <div class="sub">현장 기록 · 시설 이력</div>
+            <div class="desc">오늘의 현장 기록이 내일의 정확한 업무가 됩니다. 상태이력·점검항목·사진·조치사항을 국사별로 연결해 관리합니다.</div>
+          </div>
+          <div class="worklog-dashboard">
+            <div class="worklog-dashboard-label">WORK LOG STATUS</div>
+            <div class="worklog-kpi-grid">
+              <div class="worklog-kpi">
+                <span class="label">전체 기록</span><span class="value">{count_all_text}</span><span class="unit">건</span>
+              </div>
+              <div class="worklog-kpi open">
+                <span class="label">미처리</span><span class="value">{count_open_text}</span><span class="unit">건</span>
+              </div>
+              <div class="worklog-kpi doing">
+                <span class="label">진행·재점검</span><span class="value">{count_doing_text}</span><span class="unit">건</span>
+              </div>
+              <div class="worklog-kpi done">
+                <span class="label">완료</span><span class="value">{count_done_text}</span><span class="unit">건</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
     if st.session_state.get("worklog_loaded_at"):
         st.caption(f"최근 기록 조회시각: {st.session_state['worklog_loaded_at']} · 화면 진입만으로는 Google Sheets를 자동 조회하지 않습니다.")
 
@@ -4624,9 +4803,15 @@ with tab_worklog:
             st.markdown('<div class="worklog-section-title">📝 새 현장기록</div>', unsafe_allow_html=True)
             st.caption("현장에서 10초 안에 남기고, 나중에 국사별 이력으로 다시 찾을 수 있도록 핵심 항목만 구성했습니다.")
 
-            writer = st.text_input("작성자", placeholder="예: 정청운", key="worklog_writer")
+            st.markdown('<div class="worklog-field-title">✍️ 작성자</div>', unsafe_allow_html=True)
+            writer = st.text_input(
+                "작성자",
+                placeholder="예: 정청운",
+                key="worklog_writer",
+                label_visibility="collapsed",
+            )
 
-            st.markdown("**📍 국사 검색 · 자동입력**")
+            st.markdown('<div class="worklog-field-title">📍 국사 검색 · 자동입력</div>', unsafe_allow_html=True)
             st.caption("정밀점검과 같은 국사 기준정보를 사용합니다. 국사명만 검색·선택하면 권역·모국·국소가 자동 반영됩니다.")
 
             with st.form(key="worklog_station_search_form", clear_on_submit=False):
@@ -4637,9 +4822,9 @@ with tab_worklog:
                         key="worklog_station_search_query",
                         placeholder="예: 송포",
                         help="국사명을 입력한 뒤 확인을 누르세요. 키보드 Enter로도 검색할 수 있습니다.",
+                        label_visibility="collapsed",
                     )
                 with station_search_btn_col:
-                    st.markdown("<div style='height:1.70rem'></div>", unsafe_allow_html=True)
                     worklog_station_search_submitted = st.form_submit_button("확인", use_container_width=True)
 
             if worklog_station_search_submitted:
@@ -4703,20 +4888,30 @@ with tab_worklog:
                 unsafe_allow_html=True,
             )
 
+            st.markdown('<div class="worklog-field-title">🔄 상태이력</div>', unsafe_allow_html=True)
             status = st.radio(
                 "상태이력",
                 WORK_LOG_STATUS_OPTIONS,
                 horizontal=True,
                 key="worklog_status",
+                label_visibility="collapsed",
             )
+
+            st.markdown('<div class="worklog-field-title">🧰 점검항목</div>', unsafe_allow_html=True)
             items = st.multiselect(
                 "점검항목",
                 WORK_LOG_ITEM_OPTIONS,
                 placeholder="전원 · 축전지 · 접지 · 냉방 · 출입 · 안전 · 기타",
                 key="worklog_items",
+                label_visibility="collapsed",
             )
+            if st.button("확인", key="worklog_items_ok", use_container_width=True):
+                selected_item_text = ", ".join(items) if items else "선택 없음"
+                st.session_state["worklog_items_confirmed_notice"] = f"선택 완료: {selected_item_text}"
+            if st.session_state.get("worklog_items_confirmed_notice"):
+                st.caption(st.session_state["worklog_items_confirmed_notice"])
 
-            st.markdown("**📷 현장사진**")
+            st.markdown('<div class="worklog-field-title">📷 현장사진</div>', unsafe_allow_html=True)
             photo_c1, photo_c2 = st.columns(2)
             with photo_c1:
                 camera_photo = st.camera_input("현장에서 바로 촬영", key="worklog_camera")
@@ -4730,25 +4925,37 @@ with tab_worklog:
             photos = _worklog_collect_photos(camera_photo, uploaded_photos)
             st.caption(f"선택 사진 {len(photos)}장 / 최대 {WORK_LOG_MAX_PHOTOS}장 · 저장 시 자동 압축(최대 변 1600px, 목표 약 450KB/장)")
 
+            st.markdown('<div class="worklog-field-title">📝 현상·특이사항</div>', unsafe_allow_html=True)
             issue = st.text_area(
                 "현상·특이사항",
                 placeholder="예: 축전지 1조 7번 셀 전압이 다른 셀보다 낮게 측정됨",
                 height=105,
                 key="worklog_issue",
+                label_visibility="collapsed",
             )
+            st.markdown('<div class="worklog-field-title">🛠️ 조치내용</div>', unsafe_allow_html=True)
             action = st.text_area(
                 "조치내용",
                 placeholder="예: 단자 상태 확인 및 재측정",
                 height=85,
                 key="worklog_action",
+                label_visibility="collapsed",
             )
+            st.markdown('<div class="worklog-field-title">🔁 후속조치</div>', unsafe_allow_html=True)
             followup = st.text_area(
                 "후속조치",
                 placeholder="예: 다음 방문 시 1조 7번 셀 재확인",
                 height=85,
                 key="worklog_followup",
+                label_visibility="collapsed",
             )
-            remark = st.text_input("비고", placeholder="필요한 추가 메모", key="worklog_remark")
+            st.markdown('<div class="worklog-field-title">📌 비고</div>', unsafe_allow_html=True)
+            remark = st.text_input(
+                "비고",
+                placeholder="필요한 추가 메모",
+                key="worklog_remark",
+                label_visibility="collapsed",
+            )
 
             save_log = st.button(
                 "💾 MY WORK LOG 저장",
