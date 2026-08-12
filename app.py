@@ -3489,8 +3489,24 @@ def _worklog_secret_value(name: str, default=""):
 
 
 def _worklog_drive_folder_id() -> str:
-    """사진을 저장할 Google Drive/Shared Drive 폴더 ID를 반환합니다."""
+    """하위 호환용 Google Drive 폴더 ID입니다. Apps Script 방식에서는 Script Properties의 FOLDER_ID가 실제 저장 위치를 결정합니다."""
     return str(_worklog_secret_value("work_log_drive_folder_id", "") or "").strip()
+
+
+def _worklog_photo_upload_url() -> str:
+    """MY WORK LOG 사진 업로드용 Google Apps Script 웹 앱(/exec) URL을 반환합니다."""
+    return str(_worklog_secret_value("work_log_photo_upload_url", "") or "").strip()
+
+
+def _worklog_photo_upload_token() -> str:
+    """Apps Script와 공유하는 사진 업로드 비밀 토큰을 반환합니다."""
+    return str(_worklog_secret_value("work_log_upload_token", "") or "").strip()
+
+
+def _worklog_photo_upload_ready() -> bool:
+    url = _worklog_photo_upload_url()
+    token = _worklog_photo_upload_token()
+    return bool(url and token and url.startswith("https://"))
 
 
 @st.cache_resource
@@ -3628,52 +3644,60 @@ def _worklog_compress_image(uploaded_file) -> tuple[bytes | None, str, str, str]
 
 
 def _worklog_upload_drive_image(image_bytes: bytes, file_name: str, mime_type: str) -> tuple[bool, dict, str]:
-    """압축된 사진 1장을 지정한 Google Drive/Shared Drive 폴더에 저장합니다."""
-    folder_id = _worklog_drive_folder_id()
-    if not folder_id:
-        return False, {}, "사진 저장용 work_log_drive_folder_id가 설정되지 않았습니다."
+    """압축 사진 1장을 Apps Script 웹 앱을 통해 사용자 Google Drive에 저장합니다.
 
-    token = _worklog_drive_access_token()
-    if not token:
-        return False, {}, "Google Drive 인증 토큰을 만들지 못했습니다. 서비스 계정 권한을 확인하세요."
+    서비스계정은 My Drive 저장 quota가 없으므로 신규 운영 방식은 Apps Script를 우선 사용합니다.
+    Apps Script는 배포 사용자 권한으로 실행되어 MY_WORK_LOG_PHOTOS 폴더에 파일을 생성합니다.
+    """
+    upload_url = _worklog_photo_upload_url()
+    upload_token = _worklog_photo_upload_token()
+
+    if not upload_url:
+        return False, {}, "Streamlit Secrets의 [work_log] photo_upload_url이 설정되지 않았습니다. Apps Script /exec URL을 등록해 주세요."
+    if not upload_token:
+        return False, {}, "Streamlit Secrets의 [work_log] upload_token이 설정되지 않았습니다. Apps Script의 UPLOAD_TOKEN과 동일한 값을 등록해 주세요."
+    if not upload_url.startswith("https://"):
+        return False, {}, "photo_upload_url 형식이 올바르지 않습니다. Apps Script의 /exec로 끝나는 HTTPS 웹 앱 URL을 사용해 주세요."
 
     try:
-        boundary = f"===============WORKLOG{time.time_ns()}=="
-        metadata = {
-            "name": file_name,
-            "parents": [folder_id],
-            "description": "SMART WORK AI AGENT · MY WORK LOG optimized field photo",
+        payload = {
+            "token": upload_token,
+            "filename": file_name,
+            "mimeType": mime_type or "image/jpeg",
+            "data": base64.b64encode(image_bytes).decode("ascii"),
         }
-        body = b"".join([
-            f"--{boundary}\r\n".encode(),
-            b"Content-Type: application/json; charset=UTF-8\r\n\r\n",
-            json.dumps(metadata, ensure_ascii=False).encode("utf-8"),
-            b"\r\n",
-            f"--{boundary}\r\n".encode(),
-            f"Content-Type: {mime_type}\r\n\r\n".encode(),
-            image_bytes,
-            b"\r\n",
-            f"--{boundary}--\r\n".encode(),
-        ])
         response = requests.post(
-            "https://www.googleapis.com/upload/drive/v3/files",
-            params={
-                "uploadType": "multipart",
-                "supportsAllDrives": "true",
-                "fields": "id,name,mimeType,size,webViewLink,thumbnailLink",
-            },
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Content-Type": f"multipart/related; boundary={boundary}",
-            },
-            data=body,
-            timeout=45,
+            upload_url,
+            json=payload,
+            timeout=60,
+            allow_redirects=True,
         )
-        if response.status_code not in (200, 201):
-            return False, {}, f"Google Drive 사진 저장 실패 ({response.status_code}): {response.text[:300]}"
-        return True, response.json(), ""
+        if response.status_code != 200:
+            return False, {}, f"Apps Script 사진 저장 실패 ({response.status_code}): {response.text[:300]}"
+
+        try:
+            result = response.json()
+        except Exception:
+            return False, {}, f"Apps Script 응답을 JSON으로 읽지 못했습니다: {response.text[:300]}"
+
+        if not bool(result.get("ok")):
+            return False, {}, f"Apps Script 사진 저장 실패: {result.get('error', '알 수 없는 오류')}"
+
+        file_id = str(result.get("fileId", "") or "").strip()
+        if not file_id:
+            return False, {}, "Apps Script 저장은 응답했지만 fileId가 없습니다. Apps Script doPost 코드를 확인해 주세요."
+
+        # 기존 WORK LOG 저장/조회 로직과 호환되는 Drive API 메타데이터 형태로 변환합니다.
+        return True, {
+            "id": file_id,
+            "name": str(result.get("fileName", file_name) or file_name),
+            "webViewLink": str(result.get("fileUrl", "") or ""),
+            "mimeType": mime_type or "image/jpeg",
+        }, ""
+    except requests.Timeout:
+        return False, {}, "Apps Script 사진 저장 시간이 초과되었습니다. 네트워크 상태를 확인한 후 다시 저장해 주세요."
     except Exception as error:
-        return False, {}, f"Google Drive 사진 저장 오류: {error}"
+        return False, {}, f"Apps Script 사진 저장 오류: {error}"
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -3752,8 +3776,8 @@ def save_work_log(record: dict, photos: list) -> tuple[bool, str, str]:
         return False, "점검항목을 한 개 이상 선택해 주세요.", ""
     if not any([issue, action, followup, remark, photos]):
         return False, "현상·특이사항, 조치내용, 후속조치, 비고 또는 사진 중 한 가지 이상을 남겨 주세요.", ""
-    if photos and not _worklog_drive_folder_id():
-        return False, "사진을 첨부하려면 Streamlit Secrets에 work_log_drive_folder_id를 먼저 설정해 주세요. 텍스트 기록만 저장하는 경우 사진을 제거하고 다시 저장할 수 있습니다.", ""
+    if photos and not _worklog_photo_upload_ready():
+        return False, "사진을 첨부하려면 Streamlit Secrets의 [work_log]에 photo_upload_url과 upload_token을 설정해 주세요. photo_upload_url은 Apps Script의 /exec 주소이고, upload_token은 Apps Script의 UPLOAD_TOKEN과 동일해야 합니다.", ""
 
     now = _korea_now()
     record_id = _worklog_make_id(now)
@@ -4360,15 +4384,15 @@ with tab_worklog:
     if "worklog_selected_id" not in st.session_state:
         st.session_state["worklog_selected_id"] = ""
 
-    drive_ready = bool(_worklog_drive_folder_id())
-    if drive_ready:
+    photo_upload_ready = _worklog_photo_upload_ready()
+    if photo_upload_ready:
         st.markdown(
-            '<div class="worklog-storage-note ready">📷 사진 저장 준비 완료 · 사진은 최대 10장까지 자동 방향보정·리사이즈·압축 후 Google Drive/Shared Drive에 분리 저장됩니다.</div>',
+            '<div class="worklog-storage-note ready">📷 사진 저장 준비 완료 · 사진은 최대 10장까지 자동 방향보정·리사이즈·압축 후 Apps Script를 통해 MY_WORK_LOG_PHOTOS에 안전하게 분리 저장됩니다.</div>',
             unsafe_allow_html=True,
         )
     else:
         st.markdown(
-            '<div class="worklog-storage-note warn">📷 사진 저장소 미설정 · 텍스트 기록은 바로 사용할 수 있습니다. 사진 첨부를 사용하려면 Secrets에 <b>work_log_drive_folder_id</b>를 설정해 주세요. 기존 내비·정밀점검 기능에는 영향이 없습니다.</div>',
+            '<div class="worklog-storage-note warn">📷 사진 업로드 연결 미설정 · 텍스트 기록은 바로 사용할 수 있습니다. 사진 첨부를 사용하려면 Streamlit Secrets의 <b>[work_log]</b>에 <b>photo_upload_url</b>과 <b>upload_token</b>을 설정해 주세요. 기존 내비·정밀점검 기능에는 영향이 없습니다.</div>',
             unsafe_allow_html=True,
         )
 
