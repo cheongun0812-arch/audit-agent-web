@@ -4745,18 +4745,44 @@ with tab_worklog:
             margin:0 !important;
             align-items:end !important;
         }
+        /* Streamlit 버전에 따라 컬럼 testid가 column / stColumn으로 달라질 수 있어 둘 다 대응 */
         div[data-testid="stHorizontalBlock"]:has(.worklog-search-row-marker)
-          > div[data-testid="column"] {
+          > div[data-testid="column"],
+        div[data-testid="stHorizontalBlock"]:has(.worklog-search-row-marker)
+          > div[data-testid="stColumn"] {
             width:100% !important;
+            max-width:none !important;
             min-width:0 !important;
             flex:unset !important;
         }
         div[data-testid="stHorizontalBlock"]:has(.worklog-search-row-marker)
-          > div[data-testid="column"]:nth-child(1) { grid-column:1; grid-row:1; }
+          > div[data-testid="column"]:nth-child(1),
         div[data-testid="stHorizontalBlock"]:has(.worklog-search-row-marker)
-          > div[data-testid="column"]:nth-child(2) { grid-column:2; grid-row:1; }
+          > div[data-testid="stColumn"]:nth-child(1) { grid-column:1; grid-row:1; }
         div[data-testid="stHorizontalBlock"]:has(.worklog-search-row-marker)
-          > div[data-testid="column"]:nth-child(3) { grid-column:1 / -1; grid-row:2; }
+          > div[data-testid="column"]:nth-child(2),
+        div[data-testid="stHorizontalBlock"]:has(.worklog-search-row-marker)
+          > div[data-testid="stColumn"]:nth-child(2) { grid-column:2; grid-row:1; }
+        div[data-testid="stHorizontalBlock"]:has(.worklog-search-row-marker)
+          > div[data-testid="column"]:nth-child(3),
+        div[data-testid="stHorizontalBlock"]:has(.worklog-search-row-marker)
+          > div[data-testid="stColumn"]:nth-child(3) {
+            grid-column:1 / -1 !important;
+            grid-row:2 !important;
+            width:100% !important;
+            max-width:none !important;
+        }
+        /* 불러오기 버튼은 모바일에서 검색영역 전체 폭 + 한 줄 고정 */
+        .st-key-worklog_refresh {
+            width:100% !important;
+            max-width:none !important;
+        }
+        .st-key-worklog_refresh button {
+            width:100% !important;
+            max-width:none !important;
+            min-height:46px !important;
+            white-space:nowrap !important;
+        }
 
         /* 모바일: 기존 2열의 순서만 뒤집어 불러오기 바로 아래에 최근 기록 표시 */
         div[data-testid="stHorizontalBlock"]:has(.worklog-recent-marker) {
