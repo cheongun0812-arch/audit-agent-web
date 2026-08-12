@@ -4705,12 +4705,9 @@ with tab_worklog:
     worklog_overview_slot = st.empty()
 
     photo_upload_ready, photo_config_issues = _worklog_photo_config_status()
-    if photo_upload_ready:
-        st.markdown(
-            '<div class="worklog-storage-note ready">📷 사진 저장 정상 · 촬영/선택 사진은 저장 시 자동 압축 후 MY_WORK_LOG_PHOTOS에 분리 저장됩니다.</div>',
-            unsafe_allow_html=True,
-        )
-    else:
+    # 정상 운영 시 사진 저장 안내 문구는 표시하지 않습니다.
+    # 설정 이상이 있을 때만 오류 원인을 보여 기존 사진 저장 안정성은 유지합니다.
+    if not photo_upload_ready:
         issue_html = html.escape(" / ".join(photo_config_issues) if photo_config_issues else "사진 업로드 설정 확인 필요")
         st.markdown(
             f'<div class="worklog-storage-note warn">📷 사진 업로드 설정 확인 필요 · PHOTO ENGINE <b>{WORK_LOG_PHOTO_ENGINE_VERSION}</b><br><b>현재 진단:</b> {issue_html}<br>Streamlit Secrets의 <b>[work_log]</b>에 <b>photo_upload_url</b>과 <b>upload_token</b>을 확인해 주세요. 기존 내비·정밀점검 기능에는 영향이 없습니다.</div>',
@@ -4898,14 +4895,22 @@ with tab_worklog:
             )
 
             st.markdown('<div class="worklog-field-title">🧰 점검항목</div>', unsafe_allow_html=True)
-            items = st.multiselect(
-                "점검항목",
-                WORK_LOG_ITEM_OPTIONS,
-                placeholder="전원 · 축전지 · 접지 · 냉방 · 출입 · 안전 · 기타",
-                key="worklog_items",
-                label_visibility="collapsed",
-            )
-            if st.button("확인", key="worklog_items_ok", use_container_width=True):
+            item_select_col, item_ok_col = st.columns([4.35, 1.0], gap="small", vertical_alignment="center")
+            with item_select_col:
+                items = st.multiselect(
+                    "점검항목",
+                    WORK_LOG_ITEM_OPTIONS,
+                    placeholder="전원 · 축전지 · 접지 · 냉방 · 출입 · 안전 · 기타",
+                    key="worklog_items",
+                    label_visibility="collapsed",
+                )
+            with item_ok_col:
+                worklog_items_ok = st.button(
+                    "확인",
+                    key="worklog_items_ok",
+                    use_container_width=True,
+                )
+            if worklog_items_ok:
                 selected_item_text = ", ".join(items) if items else "선택 없음"
                 st.session_state["worklog_items_confirmed_notice"] = f"선택 완료: {selected_item_text}"
             if st.session_state.get("worklog_items_confirmed_notice"):
