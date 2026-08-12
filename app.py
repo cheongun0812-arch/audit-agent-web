@@ -3503,10 +3503,104 @@ def _worklog_photo_upload_token() -> str:
     return str(_worklog_secret_value("work_log_upload_token", "") or "").strip()
 
 
+def _worklog_normalize_apps_script_url() -> tuple[str, str]:
+    """Apps Script 웹 앱의 영구 /exec URL만 허용합니다.
+
+    ContentService가 반환하는 script.googleusercontent.com 주소는 일회성 응답 URL이므로
+    Secrets에 저장하면 이후 404가 발생할 수 있습니다.
+    """
+    raw_url = _worklog_photo_upload_url().strip().strip('"').strip("'")
+    if not raw_url:
+        return "", "Streamlit Secrets의 [work_log] photo_upload_url이 비어 있습니다."
+    try:
+        parsed = urlparse(raw_url)
+    except Exception:
+        return "", "photo_upload_url을 URL로 해석할 수 없습니다."
+
+    host = str(parsed.netloc or "").lower().split(":")[0]
+    path = str(parsed.path or "").rstrip("/")
+
+    if parsed.scheme.lower() != "https":
+        return "", "photo_upload_url은 https:// 주소여야 합니다."
+    if host == "script.googleusercontent.com" or host.endswith(".script.googleusercontent.com"):
+        return "", (
+            "photo_upload_url에 Google의 일회성 리디렉션 주소(script.googleusercontent.com)가 들어 있습니다. "
+            "Apps Script의 '배포 관리'에서 복사한 https://script.google.com/macros/s/.../exec 원본 주소를 넣어 주세요."
+        )
+    if host != "script.google.com":
+        return "", (
+            f"photo_upload_url 호스트가 {host or '확인 불가'}입니다. "
+            "Apps Script 웹 앱의 원본 /exec 주소(https://script.google.com/macros/s/.../exec)를 사용해 주세요."
+        )
+    if path.endswith("/dev"):
+        return "", "photo_upload_url이 /dev 개발용 주소입니다. 실제 배포용 /exec 주소를 사용해 주세요."
+    if not re.fullmatch(r"/macros/s/[^/]+/exec", path):
+        return "", (
+            "photo_upload_url 형식이 Apps Script 배포용 /exec 주소와 일치하지 않습니다. "
+            "배포 → 배포 관리에서 '웹 앱 URL'을 다시 복사해 주세요."
+        )
+    return f"https://script.google.com{path}", ""
+
+
 def _worklog_photo_upload_ready() -> bool:
-    url = _worklog_photo_upload_url()
+    url, url_error = _worklog_normalize_apps_script_url()
     token = _worklog_photo_upload_token()
-    return bool(url and token and url.startswith("https://"))
+    return bool(url and not url_error and token)
+
+
+def _worklog_apps_script_healthcheck() -> tuple[bool, str]:
+    """Streamlit 서버 관점에서 Apps Script /exec 공개 접근 가능 여부를 점검합니다.
+
+    사진을 만들지 않는 GET 진단입니다. 브라우저에서 성공해도 로그인 쿠키 때문에
+    Streamlit 서버에서는 실패할 수 있으므로 서버 측에서 직접 확인합니다.
+    """
+    upload_url, url_error = _worklog_normalize_apps_script_url()
+    if url_error:
+        return False, url_error
+    if not _worklog_photo_upload_token():
+        return False, "[work_log] upload_token이 설정되지 않았습니다."
+
+    try:
+        response = requests.get(
+            upload_url,
+            timeout=20,
+            allow_redirects=True,
+            headers={
+                "Accept": "application/json,text/plain,*/*",
+                "User-Agent": "SMART-WORK-AI-AGENT/1.0",
+            },
+        )
+    except requests.Timeout:
+        return False, "Apps Script 연결 진단 시간이 초과되었습니다."
+    except Exception as error:
+        return False, f"Apps Script 연결 진단 오류: {error}"
+
+    final_host = str(urlparse(response.url).netloc or "").lower()
+    content_type = str(response.headers.get("Content-Type", "") or "").lower()
+
+    if response.status_code != 200:
+        return False, (
+            f"Streamlit 서버에서 Apps Script GET 접근 실패 ({response.status_code}). "
+            f"최종 응답 호스트: {final_host or '확인 불가'}. "
+            "웹 앱 배포 권한이 '모든 사용자(로그인하지 않은 사용자 포함)'인지 확인하세요. "
+            "브라우저에서만 성공하는 경우 Google 로그인 쿠키 때문에 그렇게 보일 수 있습니다."
+        )
+
+    if "text/html" in content_type or response.text.lstrip().lower().startswith("<!doctype html"):
+        return False, (
+            "Apps Script가 JSON 대신 Google HTML 페이지를 반환했습니다. "
+            "배포 URL 또는 익명 접근 권한 설정이 올바르지 않을 가능성이 큽니다."
+        )
+
+    try:
+        result = response.json()
+    except Exception:
+        return False, f"Apps Script GET 응답이 JSON이 아닙니다: {response.text[:180]}"
+
+    if not bool(result.get("ok")):
+        return False, f"Apps Script GET 진단 실패: {result.get('error', result)}"
+
+    return True, "Apps Script /exec 주소와 Streamlit 서버의 익명 접근이 정상입니다."
 
 
 @st.cache_resource
@@ -3646,18 +3740,16 @@ def _worklog_compress_image(uploaded_file) -> tuple[bytes | None, str, str, str]
 def _worklog_upload_drive_image(image_bytes: bytes, file_name: str, mime_type: str) -> tuple[bool, dict, str]:
     """압축 사진 1장을 Apps Script 웹 앱을 통해 사용자 Google Drive에 저장합니다.
 
-    서비스계정은 My Drive 저장 quota가 없으므로 신규 운영 방식은 Apps Script를 우선 사용합니다.
-    Apps Script는 배포 사용자 권한으로 실행되어 MY_WORK_LOG_PHOTOS 폴더에 파일을 생성합니다.
+    Apps Script ContentService는 응답을 script.googleusercontent.com의 일회성 URL로
+    리디렉션하므로, 최초 POST와 응답 리디렉션을 분리해서 진단합니다.
     """
-    upload_url = _worklog_photo_upload_url()
+    upload_url, url_error = _worklog_normalize_apps_script_url()
     upload_token = _worklog_photo_upload_token()
 
-    if not upload_url:
-        return False, {}, "Streamlit Secrets의 [work_log] photo_upload_url이 설정되지 않았습니다. Apps Script /exec URL을 등록해 주세요."
+    if url_error:
+        return False, {}, url_error
     if not upload_token:
         return False, {}, "Streamlit Secrets의 [work_log] upload_token이 설정되지 않았습니다. Apps Script의 UPLOAD_TOKEN과 동일한 값을 등록해 주세요."
-    if not upload_url.startswith("https://"):
-        return False, {}, "photo_upload_url 형식이 올바르지 않습니다. Apps Script의 /exec로 끝나는 HTTPS 웹 앱 URL을 사용해 주세요."
 
     try:
         payload = {
@@ -3666,28 +3758,98 @@ def _worklog_upload_drive_image(image_bytes: bytes, file_name: str, mime_type: s
             "mimeType": mime_type or "image/jpeg",
             "data": base64.b64encode(image_bytes).decode("ascii"),
         }
-        response = requests.post(
+        payload_bytes = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+
+        # 중요: 최초 응답을 자동 리디렉션하지 않습니다.
+        # 그래야 /exec 자체 문제와 ContentService 리디렉션 문제를 구분할 수 있습니다.
+        first = requests.post(
             upload_url,
-            json=payload,
+            data=payload_bytes,
+            headers={
+                "Content-Type": "text/plain; charset=utf-8",
+                "Accept": "application/json,text/plain,*/*",
+                "User-Agent": "SMART-WORK-AI-AGENT/1.0",
+            },
             timeout=60,
-            allow_redirects=True,
+            allow_redirects=False,
         )
+
+        # /exec 자체에서 404/403 등이 난 경우 doPost까지 도달하지 못한 것입니다.
+        if first.status_code not in {200, 301, 302, 303, 307, 308}:
+            health_ok, health_msg = _worklog_apps_script_healthcheck()
+            if first.status_code == 404:
+                return False, {}, (
+                    "Apps Script 원본 /exec 주소에서 POST 404가 발생했습니다. "
+                    "가장 가능성이 높은 원인은 ① 웹 앱 접근 권한이 익명 사용자에게 열려 있지 않음, "
+                    "② Secrets의 URL이 현재 배포의 /exec 주소가 아님, "
+                    "③ doPost가 포함된 최신 버전으로 배포가 갱신되지 않음입니다. "
+                    f"서버 GET 진단: {health_msg}"
+                )
+            return False, {}, (
+                f"Apps Script /exec POST 실패 ({first.status_code}). "
+                f"서버 GET 진단: {health_msg}. 응답: {first.text[:180]}"
+            )
+
+        response = first
+        if first.status_code in {301, 302, 303, 307, 308}:
+            redirect_url = str(first.headers.get("Location", "") or "").strip()
+            if not redirect_url:
+                return False, {}, "Apps Script가 리디렉션 응답을 보냈지만 Location 주소가 없습니다."
+            redirect_host = str(urlparse(redirect_url).netloc or "").lower()
+            if "script.googleusercontent.com" not in redirect_host:
+                return False, {}, (
+                    f"Apps Script 응답이 예상하지 않은 주소로 이동했습니다: {redirect_host or '확인 불가'}. "
+                    "웹 앱 배포/접근 권한을 확인해 주세요."
+                )
+            try:
+                response = requests.get(
+                    redirect_url,
+                    timeout=60,
+                    allow_redirects=True,
+                    headers={
+                        "Accept": "application/json,text/plain,*/*",
+                        "User-Agent": "SMART-WORK-AI-AGENT/1.0",
+                    },
+                )
+            except requests.Timeout:
+                return False, {}, (
+                    "Apps Script doPost 호출 후 결과 응답을 받는 단계에서 시간이 초과되었습니다. "
+                    "사진이 이미 생성되었을 수 있으므로 MY_WORK_LOG_PHOTOS 폴더를 먼저 확인한 뒤 다시 시도하세요."
+                )
+
+            if response.status_code != 200:
+                return False, {}, (
+                    f"Apps Script doPost는 호출되었지만 Google ContentService 응답 리디렉션 단계에서 "
+                    f"{response.status_code}가 발생했습니다. 사진이 이미 Drive에 생성되었을 수 있으므로 "
+                    "MY_WORK_LOG_PHOTOS 폴더를 먼저 확인하세요. 같은 사진을 즉시 재저장하면 중복될 수 있습니다."
+                )
+
         if response.status_code != 200:
-            return False, {}, f"Apps Script 사진 저장 실패 ({response.status_code}): {response.text[:300]}"
+            return False, {}, f"Apps Script 사진 저장 실패 ({response.status_code}): {response.text[:200]}"
+
+        content_type = str(response.headers.get("Content-Type", "") or "").lower()
+        if "text/html" in content_type or response.text.lstrip().lower().startswith("<!doctype html"):
+            return False, {}, (
+                "Apps Script가 JSON 대신 Google HTML 페이지를 반환했습니다. "
+                "웹 앱의 접근 권한을 '모든 사용자(로그인하지 않은 사용자 포함)'로 배포했는지 확인하고, "
+                "Secrets에는 배포 관리 화면의 원본 /exec URL만 넣어 주세요."
+            )
 
         try:
             result = response.json()
         except Exception:
-            return False, {}, f"Apps Script 응답을 JSON으로 읽지 못했습니다: {response.text[:300]}"
+            return False, {}, f"Apps Script 응답을 JSON으로 읽지 못했습니다: {response.text[:200]}"
 
         if not bool(result.get("ok")):
-            return False, {}, f"Apps Script 사진 저장 실패: {result.get('error', '알 수 없는 오류')}"
+            error_text = str(result.get("error", "알 수 없는 오류"))
+            if error_text.lower() == "unauthorized":
+                return False, {}, "Apps Script UPLOAD_TOKEN이 Streamlit Secrets의 upload_token과 일치하지 않습니다."
+            return False, {}, f"Apps Script 사진 저장 실패: {error_text}"
 
         file_id = str(result.get("fileId", "") or "").strip()
         if not file_id:
             return False, {}, "Apps Script 저장은 응답했지만 fileId가 없습니다. Apps Script doPost 코드를 확인해 주세요."
 
-        # 기존 WORK LOG 저장/조회 로직과 호환되는 Drive API 메타데이터 형태로 변환합니다.
         return True, {
             "id": file_id,
             "name": str(result.get("fileName", file_name) or file_name),
@@ -4395,6 +4557,16 @@ with tab_worklog:
             '<div class="worklog-storage-note warn">📷 사진 업로드 연결 미설정 · 텍스트 기록은 바로 사용할 수 있습니다. 사진 첨부를 사용하려면 Streamlit Secrets의 <b>[work_log]</b>에 <b>photo_upload_url</b>과 <b>upload_token</b>을 설정해 주세요. 기존 내비·정밀점검 기능에는 영향이 없습니다.</div>',
             unsafe_allow_html=True,
         )
+
+    diag_left, diag_right = st.columns([0.78, 0.22], vertical_alignment="center")
+    with diag_right:
+        if st.button("🔎 사진 연결 진단", use_container_width=True, key="worklog_photo_healthcheck"):
+            with st.spinner("Streamlit 서버에서 Apps Script 연결을 확인하는 중입니다..."):
+                diag_ok, diag_message = _worklog_apps_script_healthcheck()
+            if diag_ok:
+                st.success(diag_message)
+            else:
+                st.error(diag_message)
 
     top_left, top_mid, top_right = st.columns([0.46, 0.22, 0.32], vertical_alignment="center")
     with top_left:
