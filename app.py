@@ -710,7 +710,7 @@ def read_file(uploaded_file):
 
 
 def read_multiple_files(files, max_each: int = 12000) -> str:
-    """여러 파일을 감사보고서/법률검토 프롬프트에 안전하게 합칩니다."""
+    """여러 파일을 보고서/법률검토 프롬프트에 안전하게 합칩니다."""
     chunks = []
     for f in files or []:
         body = read_file(f)
@@ -820,7 +820,7 @@ def get_web_content(url):
 
 def build_legal_review_prompt(content: str, analysis_depth: str, doc_type: str, focus_area: str, company_position: str) -> str:
     return f"""[역할]
-당신은 대한민국 기업 감사실을 보조하는 법률·컴플라이언스 검토 전문가입니다.
+당신은 대한민국 기업 조사를 보조하는 법률·컴플라이언스 전문가입니다.
 
 [검토 대상]
 - 문서 유형: {doc_type}
@@ -832,7 +832,7 @@ def build_legal_review_prompt(content: str, analysis_depth: str, doc_type: str, 
 1. 업로드 문서에서 확인되는 사실과 AI의 법률적 판단/추정을 명확히 구분하세요.
 2. 대한민국 법령·판례·공정거래/하도급/개인정보/근로관계 등 관련 기준을 고려하되, 근거가 불충분하면 '추가 확인 필요'로 표시하세요.
 3. 실무자가 바로 사용할 수 있도록 '위험 조항', '리스크 이유', '개선 문안'을 구체적으로 제시하세요.
-4. 과도하게 단정하지 말고, 감사·법무 검토 문서에 적합한 객관적 문체로 작성하세요.
+4. 과도하게 단정하지 말고, 법무 검토 문서에 적합한 객관적 문체로 작성하세요.
 
 [출력 형식]
 ## 1. 핵심 결론
@@ -845,7 +845,7 @@ def build_legal_review_prompt(content: str, analysis_depth: str, doc_type: str, 
 - 조항별로 대체 문구 작성
 
 ## 4. 내부 검토 메모
-- 감사실/법무/사업부가 추가 확인해야 할 사항
+- 법무/사업부가 추가 확인해야 할 사항
 
 ## 5. 한계 및 추가 확인 필요사항
 - 문서에 없는 사실, 최신 법령 확인 필요사항, 외부 변호사 검토 필요사항
@@ -857,14 +857,14 @@ def build_legal_review_prompt(content: str, analysis_depth: str, doc_type: str, 
 
 def build_audit_report_prompt(mode: str, case_title: str, case_scope: str, report_tone: str, materials: str, regulations_text: str, refs_text: str) -> str:
     if "초안" in mode:
-        task = "감사보고서 초안을 생성"
-        output = "사건개요, 확인자료, 주요 사실관계, 쟁점, 판단, 리스크, 조치의견, 후속관리 항목을 포함한 공식 감사보고서 초안"
+        task = "보고서 초안을 생성"
+        output = "사건개요, 확인자료, 주요 사실관계, 쟁점, 판단, 리스크, 조치의견, 후속관리 항목을 포함한 공식 보고서 초안"
     else:
-        task = "감사보고서 초안을 검증·교정"
+        task = "보고서 초안을 검증·교정"
         output = "오탈자·논리비약·근거부족·표현위험·형식오류를 지적하고, 개선본과 수정 사유표를 제시"
 
     return f"""[역할]
-당신은 기업 감사실의 감사보고서 품질관리 담당자입니다.
+당신은 기업 조사 및 보고서 작성 품질관리 담당자입니다.
 
 [작업]
 - 작업 모드: {mode}
@@ -891,7 +891,7 @@ def build_audit_report_prompt(mode: str, case_title: str, case_scope: str, repor
 ## 4. 후속 조치안
 ## 5. 추가 확인 필요사항
 
-[감사 자료]
+[자료]
 {truncate_text(materials, 50000)}
 
 [회사 규정/판단 기준]
@@ -906,8 +906,8 @@ def build_chat_prompt(user_input: str, history: list[dict], mode: str) -> str:
     recent = history[-10:] if history else []
     history_text = "\n".join([f"{m.get('role')}: {m.get('content')}" for m in recent])
     return f"""[시스템 역할]
-당신은 대한민국 기업 감사실을 지원하는 Professional Legal & Audit Assistant입니다.
-감사, 컴플라이언스, 계약 검토, 개인정보, 하도급, 공정거래, 직장 내 괴롭힘, 내부통제 이슈에 대해 실무형으로 답변합니다.
+당신은 대한민국 기업 조사 및 검토를 지원하는 Professional Legal & AI Assistant입니다.
+컴플라이언스, 계약 검토, 개인정보, 하도급, 공정거래, 직장 내 괴롭힘, 내부통제 이슈에 대해 실무형으로 답변합니다.
 
 [응답 원칙]
 1. 결론을 먼저 제시하고, 근거와 실무 조치 순서로 설명하세요.
@@ -929,7 +929,7 @@ def build_chat_prompt(user_input: str, history: list[dict], mode: str) -> str:
 
 def build_summary_prompt(summary_mode: str, output_style: str, source_hint: str, body_text: str) -> str:
     return f"""[역할]
-당신은 기업 감사실과 컴플라이언스 부서를 위한 스마트 브리핑 분석가입니다.
+당신은 기업 컴플라이언스 부서를 위한 스마트 브리핑 분석가입니다.
 
 [요약 대상]
 - 요약 모드: {summary_mode}
@@ -4532,7 +4532,7 @@ tab_worklog, tab_power, tab_law, tab_admin = st.tabs([
 with tab_law:
     st.markdown(
         '<div class="law-search-hero"><b>⚖️ LAW SEARCH</b>'
-        '<span>기존 감사·법률 지원 기능을 한 곳에서 선택해 사용합니다.</span></div>',
+        '<span>기존 법률 지원 기능을 한 곳에서 선택해 사용합니다.</span></div>',
         unsafe_allow_html=True,
     )
     tab_doc, tab_chat, tab_summary = st.tabs([
@@ -6531,9 +6531,9 @@ with tab_power:
     st.info("측정값은 화면과 분리된 임시저장소에 즉시 보존됩니다. 기본정보·특이사항을 제외한 측정 입력은 모바일 숫자키패드를 사용하며, Enter/확인을 누르면 자동 소수점 적용 후 다음 입력칸으로 이동합니다.")
 
 
-# --- [Tab 2: 법률 리스크/규정/계약 검토 & 감사보고서 작성] ---
+# --- [Tab 2: 법률 리스크/규정/계약 검토 & 보고서 작성] ---
 with tab_doc:
-    st.markdown("### 📄 법률 검토 · 감사보고서 작성/검증")
+    st.markdown("### 📄 법률 검토 · 보고서 작성/검증")
 
     if "api_key" not in st.session_state:
         st.warning("🔒 로그인 후 이용 가능합니다.")
@@ -6541,11 +6541,11 @@ with tab_doc:
         st.markdown("""
         <div class="audit-message-v2">
             <h4>🧭 AI 검토 품질 업그레이드 적용</h4>
-            <p>최신 Gemini 모델 우선 선택, 검색 보강 옵션, 조항별 리스크 표, 수정문안, 감사보고서 품질검증 구조를 적용했습니다. 기존 법률 검토 기능은 그대로 유지됩니다.</p>
+            <p>최신 Gemini 모델 우선 선택, 검색 보강 옵션, 조항별 리스크 표, 수정문안, 보고서 품질검증 구조를 적용했습니다. 기존 법률 검토 기능은 그대로 유지됩니다.</p>
         </div>
         """, unsafe_allow_html=True)
 
-        cur1, cur2 = st.tabs(["⚖️ 법률 리스크 심층 검토", "🔍 감사보고서 작성·검증"])
+        cur1, cur2 = st.tabs(["⚖️ 법률 리스크 심층 검토", "🔍 보고서 작성·검증"])
 
         with cur1:
             st.markdown("#### ⚖️ 법률 리스크 정밀 검토")
@@ -6557,7 +6557,7 @@ with tab_doc:
             with col_a:
                 doc_type = st.selectbox(
                     "문서 유형",
-                    ["계약서", "약관/일반조건", "사내 규정", "공문/통지문", "감사·조사 자료", "기타"],
+                    ["계약서", "약관/일반조건", "사내 규정", "공문/통지문", "조사 자료", "기타"],
                     index=0,
                     key="cur1_doc_type"
                 )
@@ -6606,12 +6606,12 @@ with tab_doc:
                                 st.error(f"오류: {e}")
 
         with cur2:
-            st.markdown("#### 🔍 감사보고서 작성·검증")
-            st.caption("면담자료, 증거자료, 회사 규정, 기존 보고서를 바탕으로 감사보고서 초안 작성 또는 품질검증을 수행합니다.")
+            st.markdown("#### 🔍 보고서 작성·검증")
+            st.caption("면담자료, 증거자료, 회사 규정, 기존 보고서를 바탕으로 보고서 초안 작성 또는 품질검증을 수행합니다.")
 
             mode = st.radio(
                 "작업 모드",
-                ["🧾 감사보고서 초안 생성", "✅ 감사보고서 검증·교정(오탈자/논리/형식)"],
+                ["🧾 보고서 초안 생성", "✅ 보고서 검증·교정(오탈자/논리/형식)"],
                 horizontal=True,
                 key="cur2_mode"
             )
@@ -6620,7 +6620,7 @@ with tab_doc:
             with st.expander("🔐 보안·주의사항", expanded=False):
                 st.markdown(
                     "- 민감정보는 업로드 전 내부 보안 기준에 따라 비식별 처리하는 것이 안전합니다.\n"
-                    "- 본 기능은 감사 판단을 보조하는 도구이며, 최종 판단·결재 책임은 감사실에 있습니다.\n"
+                    "- 본 기능은 판단을 보조하는 도구이며, 최종 판단은 사용자에게 있습니다.\n"
                     "- 자료에 없는 사실은 생성하지 않도록 프롬프트에 제한을 두었습니다."
                 )
 
@@ -6631,7 +6631,7 @@ with tab_doc:
             draft_file = None
 
             if is_draft_mode:
-                st.markdown("### ① 감사 자료 입력")
+                st.markdown("### ① 자료 입력")
                 cL, cR = st.columns(2)
                 with cL:
                     interview_audio = st.file_uploader("🎧 면담 음성(mp3/wav/mp4) — 선택", type=["mp3", "wav", "mp4"], key="cur2_audio")
@@ -6647,7 +6647,7 @@ with tab_doc:
                 st.markdown("### ① 검증 대상 보고서 입력")
                 cL, cR = st.columns(2)
                 with cL:
-                    draft_text = st.text_area("검증할 감사보고서 붙여넣기", height=230, key="cur2_draft")
+                    draft_text = st.text_area("검증할 보고서 붙여넣기", height=230, key="cur2_draft")
                 with cR:
                     draft_file = st.file_uploader("또는 파일 업로드(PDF/DOCX/TXT)", type=["pdf", "docx", "txt"], key="cur2_draft_file")
 
@@ -6675,13 +6675,13 @@ with tab_doc:
             with row2:
                 report_tone = st.selectbox(
                     "문서 톤",
-                    ["감사보고서(공식·중립)", "보고서(간결·결정 중심)", "상신용(결재/조치 권고 중심)"],
+                    ["보고서(공식·중립)", "보고서(간결·결정 중심)", "상신용(결재/조치 권고 중심)"],
                     index=0,
                     key="cur2_tone"
                 )
             case_scope = st.text_area("사건 개요 요약 — 무엇을/언제/누가/어떤 경위로", height=120, key="cur2_scope")
 
-            if st.button("🧠 감사보고서 AI 실행", use_container_width=True, key="cur2_run"):
+            if st.button("🧠 보고서 AI 실행", use_container_width=True, key="cur2_run"):
                 materials = []
 
                 if is_draft_mode:
@@ -6710,9 +6710,9 @@ with tab_doc:
                 if not case_title.strip():
                     st.warning("⚠️ 사건명/건명을 입력해 주세요.")
                 elif not case_scope.strip() and not materials_text:
-                    st.warning("⚠️ 사건 개요 또는 감사 자료 중 하나 이상은 입력해야 합니다.")
+                    st.warning("⚠️ 사건 개요 또는 자료 중 하나 이상은 입력해야 합니다.")
                 else:
-                    with st.spinner("📑 감사보고서 품질 기준에 맞춰 처리 중입니다..."):
+                    with st.spinner("📑 보고서 품질 기준에 맞춰 처리 중입니다..."):
                         try:
                             prompt = build_audit_report_prompt(mode, case_title, case_scope, report_tone, materials_text, regulations_text, refs_text)
                             if is_draft_mode and interview_audio:
@@ -6737,8 +6737,8 @@ with tab_chat:
     else:
         st.markdown("""
         <div class="audit-message-v2">
-            <h4>🤝 감사·법률·컴플라이언스 전용 챗봇</h4>
-            <p>질문을 그대로 전달하지 않고, 감사실 업무 기준에 맞춘 역할·답변 구조·한계 고지를 적용합니다. 최신 이슈는 검색 보강 모드를 사용할 수 있습니다.</p>
+            <h4>🤝 법률·컴플라이언스 전용 챗봇</h4>
+            <p>질문을 그대로 전달하지 않고, 업무 기준에 맞춘 역할·답변 구조·한계 고지를 적용합니다. 최신 이슈는 검색 보강 모드를 사용할 수 있습니다.</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -6747,7 +6747,7 @@ with tab_chat:
 
         chat_mode = st.selectbox(
             "상담 모드",
-            ["감사·컴플라이언스 일반 상담", "최신 법령·판례·뉴스 검색 보강", "문서/보고서 문안 개선"],
+            ["컴플라이언스 일반 상담", "최신 법령·판례·뉴스 검색 보강", "문서/보고서 문안 개선"],
             index=0,
             key="chat_mode"
         )
@@ -6802,7 +6802,7 @@ with tab_summary:
         st_type = st.radio("입력 방식", ["URL (유튜브/웹)", "미디어 파일", "텍스트"], horizontal=True)
         summary_mode = st.selectbox(
             "요약 모드",
-            ["뉴스·보도자료 브리핑", "유튜브·교육영상 요약", "회의·면담 녹취 요약", "감사자료·증거자료 요약", "일반 요약"],
+            ["뉴스·보도자료 브리핑", "유튜브·교육영상 요약", "회의·면담 녹취 요약", "자료·증거자료 요약", "일반 요약"],
             index=0,
             key="summary_mode"
         )
