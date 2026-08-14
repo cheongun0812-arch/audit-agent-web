@@ -11,6 +11,7 @@ import time
 import glob
 import tempfile
 import hashlib
+import hmac
 import base64
 import html
 import json
@@ -710,7 +711,7 @@ def read_file(uploaded_file):
 
 
 def read_multiple_files(files, max_each: int = 12000) -> str:
-    """여러 파일을 보고서/법률검토 프롬프트에 안전하게 합칩니다."""
+    """여러 파일을 감사보고서/법률검토 프롬프트에 안전하게 합칩니다."""
     chunks = []
     for f in files or []:
         body = read_file(f)
@@ -820,7 +821,7 @@ def get_web_content(url):
 
 def build_legal_review_prompt(content: str, analysis_depth: str, doc_type: str, focus_area: str, company_position: str) -> str:
     return f"""[역할]
-당신은 대한민국 기업 조사를 보조하는 법률·컴플라이언스 전문가입니다.
+당신은 대한민국 기업 감사실을 보조하는 법률·컴플라이언스 검토 전문가입니다.
 
 [검토 대상]
 - 문서 유형: {doc_type}
@@ -832,7 +833,7 @@ def build_legal_review_prompt(content: str, analysis_depth: str, doc_type: str, 
 1. 업로드 문서에서 확인되는 사실과 AI의 법률적 판단/추정을 명확히 구분하세요.
 2. 대한민국 법령·판례·공정거래/하도급/개인정보/근로관계 등 관련 기준을 고려하되, 근거가 불충분하면 '추가 확인 필요'로 표시하세요.
 3. 실무자가 바로 사용할 수 있도록 '위험 조항', '리스크 이유', '개선 문안'을 구체적으로 제시하세요.
-4. 과도하게 단정하지 말고, 법무 검토 문서에 적합한 객관적 문체로 작성하세요.
+4. 과도하게 단정하지 말고, 감사·법무 검토 문서에 적합한 객관적 문체로 작성하세요.
 
 [출력 형식]
 ## 1. 핵심 결론
@@ -845,7 +846,7 @@ def build_legal_review_prompt(content: str, analysis_depth: str, doc_type: str, 
 - 조항별로 대체 문구 작성
 
 ## 4. 내부 검토 메모
-- 법무/사업부가 추가 확인해야 할 사항
+- 감사실/법무/사업부가 추가 확인해야 할 사항
 
 ## 5. 한계 및 추가 확인 필요사항
 - 문서에 없는 사실, 최신 법령 확인 필요사항, 외부 변호사 검토 필요사항
@@ -857,14 +858,14 @@ def build_legal_review_prompt(content: str, analysis_depth: str, doc_type: str, 
 
 def build_audit_report_prompt(mode: str, case_title: str, case_scope: str, report_tone: str, materials: str, regulations_text: str, refs_text: str) -> str:
     if "초안" in mode:
-        task = "보고서 초안을 생성"
-        output = "사건개요, 확인자료, 주요 사실관계, 쟁점, 판단, 리스크, 조치의견, 후속관리 항목을 포함한 공식 보고서 초안"
+        task = "감사보고서 초안을 생성"
+        output = "사건개요, 확인자료, 주요 사실관계, 쟁점, 판단, 리스크, 조치의견, 후속관리 항목을 포함한 공식 감사보고서 초안"
     else:
-        task = "보고서 초안을 검증·교정"
+        task = "감사보고서 초안을 검증·교정"
         output = "오탈자·논리비약·근거부족·표현위험·형식오류를 지적하고, 개선본과 수정 사유표를 제시"
 
     return f"""[역할]
-당신은 기업 조사 및 보고서 작성 품질관리 담당자입니다.
+당신은 기업 감사실의 감사보고서 품질관리 담당자입니다.
 
 [작업]
 - 작업 모드: {mode}
@@ -891,7 +892,7 @@ def build_audit_report_prompt(mode: str, case_title: str, case_scope: str, repor
 ## 4. 후속 조치안
 ## 5. 추가 확인 필요사항
 
-[자료]
+[감사 자료]
 {truncate_text(materials, 50000)}
 
 [회사 규정/판단 기준]
@@ -906,8 +907,8 @@ def build_chat_prompt(user_input: str, history: list[dict], mode: str) -> str:
     recent = history[-10:] if history else []
     history_text = "\n".join([f"{m.get('role')}: {m.get('content')}" for m in recent])
     return f"""[시스템 역할]
-당신은 대한민국 기업 조사 및 검토를 지원하는 Professional Legal & AI Assistant입니다.
-컴플라이언스, 계약 검토, 개인정보, 하도급, 공정거래, 직장 내 괴롭힘, 내부통제 이슈에 대해 실무형으로 답변합니다.
+당신은 대한민국 기업 감사실을 지원하는 Professional Legal & Audit Assistant입니다.
+감사, 컴플라이언스, 계약 검토, 개인정보, 하도급, 공정거래, 직장 내 괴롭힘, 내부통제 이슈에 대해 실무형으로 답변합니다.
 
 [응답 원칙]
 1. 결론을 먼저 제시하고, 근거와 실무 조치 순서로 설명하세요.
@@ -929,7 +930,7 @@ def build_chat_prompt(user_input: str, history: list[dict], mode: str) -> str:
 
 def build_summary_prompt(summary_mode: str, output_style: str, source_hint: str, body_text: str) -> str:
     return f"""[역할]
-당신은 기업 컴플라이언스 부서를 위한 스마트 브리핑 분석가입니다.
+당신은 기업 감사실과 컴플라이언스 부서를 위한 스마트 브리핑 분석가입니다.
 
 [요약 대상]
 - 요약 모드: {summary_mode}
@@ -3383,20 +3384,48 @@ def _render_power_auto_decimal_script() -> None:
 WORK_LOG_SPREADSHEET_NAME = "Audit_Result_2026"
 WORK_LOG_SHEET_NAME = "MY_WORK_LOG"
 WORK_LOG_HISTORY_SHEET_NAME = "MY_WORK_LOG_HISTORY"
+WORK_LOG_USER_SHEET_NAME = "MY_WORK_LOG_USERS"
+WORK_LOG_DELETE_AUDIT_SHEET_NAME = "MY_WORK_LOG_DELETED"
 WORK_LOG_MAX_PHOTOS = 10
 WORK_LOG_IMAGE_MAX_SIDE = 1600
 WORK_LOG_IMAGE_TARGET_BYTES = 450 * 1024
+WORK_LOG_PIN_ITERATIONS = 210_000
 
+# 기존 시트 열 순서를 절대 바꾸지 않고, 신규 권한 필드는 맨 뒤에 추가합니다.
 WORK_LOG_HEADERS = [
     "저장일시", "기록ID", "작성자", "권역", "모국", "국소", "상태", "점검항목",
     "현상_특이사항", "조치내용", "후속조치", "비고", "사진수", "사진파일ID목록",
-    "사진파일명목록", "최근수정일시",
+    "사진파일명목록", "최근수정일시", "작성자ID", "공개범위",
 ]
 WORK_LOG_HISTORY_HEADERS = [
-    "저장일시", "기록ID", "작성자", "상태", "변경구분", "조치내용", "후속조치", "비고",
+    "저장일시", "기록ID", "작성자", "상태", "변경구분", "조치내용", "후속조치", "비고", "작업자ID",
+]
+WORK_LOG_USER_HEADERS = [
+    "사용자ID", "이름", "사번", "PIN_SALT", "PIN_HASH", "PIN변경필요", "활성", "최근로그인", "최근PIN변경일시",
+]
+WORK_LOG_DELETE_AUDIT_HEADERS = [
+    "삭제일시", "기록ID", "작성자ID", "작성자", "삭제자ID", "삭제자", "공개범위", "사진수",
 ]
 WORK_LOG_STATUS_OPTIONS = ["신규", "확인필요", "조치중", "재점검", "완료"]
 WORK_LOG_ITEM_OPTIONS = ["전원", "축전지", "접지", "냉방", "출입", "안전", "기타"]
+WORK_LOG_VISIBILITY_OPTIONS = ["공개", "비공개"]
+
+# 최초 1회 로그인용 임시 PIN은 평문으로 코드에 저장하지 않습니다.
+# 사용자별 salt/PBKDF2-SHA256 해시만 포함하고, 첫 로그인 후 반드시 개인 PIN으로 변경합니다.
+WORK_LOG_USER_BOOTSTRAP = [
+    {"사용자ID": "U001", "이름": "정청운", "사번": "10001713", "PIN_SALT": "77ff49ed455e6c6b51e5e8e3f6e68921", "PIN_HASH": "ff38deac772008ad6ed30b908370cdb08daaf8c8af7c92acd98d04ab0a131025"},
+    {"사용자ID": "U002", "이름": "이학원", "사번": "10001612", "PIN_SALT": "29163715791f6e0de173505ce908e1f6", "PIN_HASH": "9af02cb87318de4c434d859b20d778da5e539224fbd5563a903b45882a61acbf"},
+    {"사용자ID": "U003", "이름": "이철순", "사번": "10002090", "PIN_SALT": "9d21a30d7f533d7257e1fbf9b68a9c7e", "PIN_HASH": "165f1524a77b67a66743956e0b5b93031629bc4eef90d878ccc1c6db64642024"},
+    {"사용자ID": "U004", "이름": "소순고", "사번": "81000020", "PIN_SALT": "d6f88aabb2f12124454cf42d46206f97", "PIN_HASH": "156470c71cafb4e04805360b477df19ececf2a7cfd7a81dd5351ba407aefda5f"},
+    {"사용자ID": "U005", "이름": "강만식", "사번": "10001009", "PIN_SALT": "f0cec3f7277cf5e796f92714da7d125f", "PIN_HASH": "776d6054c57e4b02b18cede3e51471818482dbd4e1a6b93719f57320df11b683"},
+    {"사용자ID": "U006", "이름": "이민우", "사번": "10001522", "PIN_SALT": "e1704544ebc2ebfb4b4d22e52ae9cb7d", "PIN_HASH": "b2272b01aa3376e1f4e32ecbac9506a42fdc2b5f26ffc49e308efc3724ac0117"},
+    {"사용자ID": "U007", "이름": "신진우", "사번": "10001405", "PIN_SALT": "f3d0dbdbe31c6c1469a32e97cf9a0305", "PIN_HASH": "b85531a80f0aed1a3ee39dd1be2daf1d329a2d61b9939f709ae624a3777c9600"},
+    {"사용자ID": "U008", "이름": "박동희", "사번": "10001280", "PIN_SALT": "624d54a5284f371b4841a147e77864fe", "PIN_HASH": "ca3612a95109d1ce32ad454783e6eaa4bf72db550587609dcbf39ab384cdbaca"},
+    {"사용자ID": "U009", "이름": "김태수", "사번": "10001923", "PIN_SALT": "448acac5e45481fde72570b185487cad", "PIN_HASH": "a7e40a1ce87dd9deff0f17a2a9844c68d923d51e573283926b0d7439be1b7e79"},
+    {"사용자ID": "U010", "이름": "김수창", "사번": "10002211", "PIN_SALT": "db0f5de3aa3b301cf20e3abd0109c25e", "PIN_HASH": "9d6307e65083acfa963f55c3fe814c2523c668134e01677022ef58f64876ddec"},
+]
+WORK_LOG_NAME_TO_USER_ID = {row["이름"]: row["사용자ID"] for row in WORK_LOG_USER_BOOTSTRAP}
+WORK_LOG_EMPLOYEE_TO_NAME = {row["사번"]: row["이름"] for row in WORK_LOG_USER_BOOTSTRAP}
 
 
 def _worklog_area_display(area: str) -> str:
@@ -3522,6 +3551,338 @@ def _worklog_secret_value(name: str, default=""):
     except Exception:
         pass
     return default
+
+
+
+def _worklog_hash_pin(pin: str, salt_hex: str) -> str:
+    """개인 PIN을 PBKDF2-SHA256으로 해시합니다. PIN 평문은 시트/코드에 저장하지 않습니다."""
+    try:
+        salt = bytes.fromhex(str(salt_hex or "").strip())
+    except Exception:
+        return ""
+    if not salt:
+        return ""
+    return hashlib.pbkdf2_hmac(
+        "sha256",
+        str(pin or "").encode("utf-8"),
+        salt,
+        WORK_LOG_PIN_ITERATIONS,
+    ).hex()
+
+
+def _worklog_ensure_headers(worksheet, desired_headers: list[str]) -> list[str]:
+    """기존 열 순서를 보존한 채 필요한 헤더만 맨 뒤에 추가합니다."""
+    try:
+        headers = [str(value).strip() for value in worksheet.row_values(1)]
+    except Exception:
+        headers = []
+
+    if not headers:
+        worksheet.append_row(desired_headers, value_input_option="USER_ENTERED")
+        return list(desired_headers)
+
+    missing = [header for header in desired_headers if header not in headers]
+    if missing:
+        try:
+            needed_cols = len(headers) + len(missing)
+            current_cols = int(getattr(worksheet, "col_count", 0) or 0)
+            if current_cols < needed_cols:
+                worksheet.add_cols(needed_cols - current_cols)
+        except Exception:
+            pass
+        for header in missing:
+            headers.append(header)
+            worksheet.update_cell(1, len(headers), header)
+    return headers
+
+
+def _worklog_ensure_user_sheet(spreadsheet):
+    """개인인증 사용자 시트를 생성하고 등록된 10명의 누락 행만 안전하게 보충합니다."""
+    try:
+        ws = spreadsheet.worksheet(WORK_LOG_USER_SHEET_NAME)
+    except Exception:
+        ws = spreadsheet.add_worksheet(
+            title=WORK_LOG_USER_SHEET_NAME,
+            rows=1000,
+            cols=max(len(WORK_LOG_USER_HEADERS) + 2, 12),
+        )
+        ws.append_row(WORK_LOG_USER_HEADERS, value_input_option="USER_ENTERED")
+
+    headers = _worklog_ensure_headers(ws, WORK_LOG_USER_HEADERS)
+    try:
+        values = ws.get_all_values()
+    except Exception:
+        values = []
+
+    existing_employee_numbers = set()
+    if values and headers and "사번" in headers:
+        employee_index = headers.index("사번")
+        for row in values[1:]:
+            if employee_index < len(row):
+                value = str(row[employee_index] or "").strip()
+                if value:
+                    existing_employee_numbers.add(value)
+
+    for bootstrap in WORK_LOG_USER_BOOTSTRAP:
+        employee_no = bootstrap["사번"]
+        if employee_no in existing_employee_numbers:
+            continue
+        row_map = {
+            **bootstrap,
+            "PIN변경필요": "Y",
+            "활성": "Y",
+            "최근로그인": "",
+            "최근PIN변경일시": "",
+        }
+        ws.append_row(
+            [row_map.get(header, "") for header in headers],
+            value_input_option="USER_ENTERED",
+        )
+        existing_employee_numbers.add(employee_no)
+    return ws
+
+
+def _worklog_read_user_by_employee(employee_no: str) -> tuple[object | None, dict, int | None]:
+    """사번으로 사용자 시트의 실제 행을 읽습니다."""
+    employee_no = re.sub(r"\D", "", str(employee_no or ""))
+    if not employee_no:
+        return None, {}, None
+
+    client = init_google_sheet_connection()
+    if not client:
+        return None, {}, None
+    try:
+        spreadsheet = client.open(WORK_LOG_SPREADSHEET_NAME)
+        ws = _worklog_ensure_user_sheet(spreadsheet)
+        values = ws.get_all_values()
+        if not values:
+            return ws, {}, None
+        headers = [str(value).strip() for value in values[0]]
+        if "사번" not in headers:
+            return ws, {}, None
+        employee_index = headers.index("사번")
+        for row_no, row in enumerate(values[1:], start=2):
+            current_no = str(row[employee_index] if employee_index < len(row) else "").strip()
+            if current_no == employee_no:
+                record = {
+                    header: (row[index] if index < len(row) else "")
+                    for index, header in enumerate(headers)
+                }
+                return ws, record, row_no
+        return ws, {}, None
+    except Exception:
+        return None, {}, None
+
+
+def _worklog_authenticate_user(employee_no: str, pin: str) -> tuple[bool, str, dict]:
+    """사번 + 개인 PIN을 검증합니다."""
+    employee_no = re.sub(r"\D", "", str(employee_no or ""))
+    pin = re.sub(r"\D", "", str(pin or ""))
+    if len(employee_no) < 6:
+        return False, "사번을 정확히 입력해 주세요.", {}
+    if len(pin) != 6:
+        return False, "개인 PIN 6자리를 입력해 주세요.", {}
+
+    now_ts = time.time()
+    locked_until = float(st.session_state.get("worklog_login_locked_until", 0) or 0)
+    if locked_until > now_ts:
+        remaining = max(1, int(locked_until - now_ts))
+        return False, f"로그인 실패가 반복되어 {remaining}초 후 다시 시도할 수 있습니다.", {}
+
+    ws, record, row_no = _worklog_read_user_by_employee(employee_no)
+    if ws is None or not record or row_no is None:
+        return False, "등록된 사번을 확인하지 못했습니다.", {}
+    if str(record.get("활성", "Y") or "Y").strip().upper() not in {"Y", "YES", "TRUE", "1", "활성"}:
+        return False, "현재 사용이 중지된 계정입니다. 관리자에게 문의해 주세요.", {}
+
+    expected_hash = str(record.get("PIN_HASH", "") or "").strip().lower()
+    salt_hex = str(record.get("PIN_SALT", "") or "").strip()
+    actual_hash = _worklog_hash_pin(pin, salt_hex).lower()
+    if not expected_hash or not actual_hash or not hmac.compare_digest(expected_hash, actual_hash):
+        failures = int(st.session_state.get("worklog_login_failures", 0) or 0) + 1
+        st.session_state["worklog_login_failures"] = failures
+        if failures >= 5:
+            st.session_state["worklog_login_failures"] = 0
+            st.session_state["worklog_login_locked_until"] = time.time() + 60
+            return False, "PIN이 일치하지 않습니다. 보안을 위해 60초 동안 로그인을 잠급니다.", {}
+        return False, f"사번 또는 PIN이 일치하지 않습니다. ({failures}/5)", {}
+
+    st.session_state["worklog_login_failures"] = 0
+    st.session_state["worklog_login_locked_until"] = 0
+    user = {
+        "user_id": str(record.get("사용자ID", "") or "").strip(),
+        "name": str(record.get("이름", "") or "").strip(),
+        "employee_no": employee_no,
+    }
+    if not user["user_id"] or not user["name"]:
+        return False, "사용자 등록정보가 올바르지 않습니다.", {}
+
+    try:
+        headers = [str(value).strip() for value in ws.row_values(1)]
+        if "최근로그인" in headers:
+            ws.update_cell(
+                row_no,
+                headers.index("최근로그인") + 1,
+                _korea_now().strftime("%Y-%m-%d %H:%M:%S"),
+            )
+    except Exception:
+        pass
+
+    must_change = str(record.get("PIN변경필요", "N") or "N").strip().upper() in {"Y", "YES", "TRUE", "1"}
+    user["must_change_pin"] = must_change
+    return True, f"{user['name']}님 인증되었습니다.", user
+
+
+def _worklog_change_pin(employee_no: str, new_pin: str, confirm_pin: str) -> tuple[bool, str]:
+    """현재 사용자의 개인 PIN을 새 6자리 PIN으로 변경합니다."""
+    employee_no = re.sub(r"\D", "", str(employee_no or ""))
+    new_pin = re.sub(r"\D", "", str(new_pin or ""))
+    confirm_pin = re.sub(r"\D", "", str(confirm_pin or ""))
+    if len(new_pin) != 6:
+        return False, "새 PIN은 숫자 6자리로 입력해 주세요."
+    if new_pin != confirm_pin:
+        return False, "새 PIN과 확인 PIN이 일치하지 않습니다."
+    if new_pin in {"000000", "111111", "123456", "654321", "121212", "777777"}:
+        return False, "추측하기 쉬운 PIN은 사용할 수 없습니다."
+    if employee_no and (new_pin in employee_no or employee_no.endswith(new_pin)):
+        return False, "사번에 포함된 숫자를 그대로 PIN으로 사용하지 마세요."
+
+    ws, record, row_no = _worklog_read_user_by_employee(employee_no)
+    if ws is None or not record or row_no is None:
+        return False, "사용자 계정을 찾지 못했습니다."
+
+    salt_hex = os.urandom(16).hex()
+    pin_hash = _worklog_hash_pin(new_pin, salt_hex)
+    if not pin_hash:
+        return False, "PIN 보안처리에 실패했습니다."
+
+    try:
+        headers = [str(value).strip() for value in ws.row_values(1)]
+        updates = {
+            "PIN_SALT": salt_hex,
+            "PIN_HASH": pin_hash,
+            "PIN변경필요": "N",
+            "최근PIN변경일시": _korea_now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        for header, value in updates.items():
+            if header in headers:
+                ws.update_cell(row_no, headers.index(header) + 1, value)
+        return True, "개인 PIN이 변경되었습니다."
+    except Exception as error:
+        return False, f"PIN 변경 실패: {error}"
+
+
+def _worklog_current_user() -> dict:
+    user = st.session_state.get("worklog_auth_user")
+    return user if isinstance(user, dict) else {}
+
+
+def _worklog_logout() -> None:
+    """MY WORK LOG 개인 세션만 종료하고 다른 앱 기능에는 영향을 주지 않습니다."""
+    for key in (
+        "worklog_auth_user", "worklog_pin_change_required", "worklog_show_pin_change",
+        "worklog_df", "worklog_loaded_at", "worklog_selected_id", "worklog_delete_pending_id",
+        "worklog_search", "worklog_filter",
+    ):
+        st.session_state.pop(key, None)
+
+
+def _worklog_user_id_from_name(name: str) -> str:
+    return str(WORK_LOG_NAME_TO_USER_ID.get(str(name or "").strip(), "") or "")
+
+
+def _worklog_record_owner_id(record) -> str:
+    explicit = str(record.get("작성자ID", "") or "").strip()
+    if explicit:
+        return explicit
+    return _worklog_user_id_from_name(record.get("작성자", ""))
+
+
+def _worklog_record_visibility(record) -> str:
+    value = str(record.get("공개범위", "") or "").strip()
+    return "비공개" if value == "비공개" else "공개"
+
+
+def _worklog_record_owned_by(record, auth_user: dict) -> bool:
+    if not auth_user:
+        return False
+    return _worklog_record_owner_id(record) == str(auth_user.get("user_id", "") or "").strip()
+
+
+def _worklog_filter_accessible_records(df: pd.DataFrame, auth_user: dict) -> pd.DataFrame:
+    """공개 기록 + 로그인 사용자의 비공개 기록만 반환합니다. 비공개는 검색 전 단계에서 차단합니다."""
+    if not isinstance(df, pd.DataFrame):
+        return pd.DataFrame(columns=WORK_LOG_HEADERS)
+    if df.empty:
+        return df.copy()
+
+    result = df.copy()
+    if "작성자ID" not in result.columns:
+        result["작성자ID"] = ""
+    if "공개범위" not in result.columns:
+        result["공개범위"] = ""
+
+    result["작성자ID"] = result.apply(
+        lambda row: str(row.get("작성자ID", "") or "").strip() or _worklog_user_id_from_name(row.get("작성자", "")),
+        axis=1,
+    )
+    result["공개범위"] = result["공개범위"].apply(
+        lambda value: "비공개" if str(value or "").strip() == "비공개" else "공개"
+    )
+
+    current_user_id = str(auth_user.get("user_id", "") or "").strip()
+    if not current_user_id:
+        return result.iloc[0:0].copy()
+
+    allowed = (result["공개범위"] == "공개") | (
+        (result["공개범위"] == "비공개") & (result["작성자ID"] == current_user_id)
+    )
+    return result[allowed].copy()
+
+
+def _worklog_login_dialog_body() -> None:
+    st.caption("팀 공유 기록과 개인 메모를 구분하기 위해 MY WORK LOG만 개인 인증을 사용합니다.")
+    with st.form("worklog_personal_login_form", clear_on_submit=False):
+        employee_no = st.text_input(
+            "사번",
+            placeholder="사번 입력",
+            max_chars=10,
+            key="worklog_login_employee_no",
+        )
+        pin = st.text_input(
+            "개인 PIN",
+            type="password",
+            placeholder="6자리 PIN",
+            max_chars=6,
+            key="worklog_login_pin",
+        )
+        submitted = st.form_submit_button("🔐 로그인", type="primary", use_container_width=True)
+
+    if submitted:
+        ok, message, user = _worklog_authenticate_user(employee_no, pin)
+        if ok:
+            st.session_state["worklog_auth_user"] = {
+                "user_id": user["user_id"],
+                "name": user["name"],
+                "employee_no": user["employee_no"],
+            }
+            st.session_state["worklog_pin_change_required"] = bool(user.get("must_change_pin"))
+            st.session_state["worklog_df"] = None
+            st.session_state["worklog_selected_id"] = ""
+            st.session_state.pop("worklog_login_pin", None)
+            st.success(message)
+            time.sleep(0.35)
+            st.rerun()
+        else:
+            st.error(message)
+
+
+if hasattr(st, "dialog"):
+    _worklog_login_dialog = st.dialog(
+        "🔐 MY WORK LOG 개인 인증",
+    )(_worklog_login_dialog_body)
+else:
+    _worklog_login_dialog = _worklog_login_dialog_body
 
 
 def _worklog_drive_folder_id() -> str:
@@ -3763,7 +4124,7 @@ def _worklog_drive_access_token() -> str:
 
 
 def _worklog_ensure_sheets(spreadsheet):
-    """WORK LOG 본문/상태이력 시트를 생성하고 헤더를 보장합니다."""
+    """WORK LOG 본문/상태이력 시트를 생성하고 기존 열 순서를 보존한 채 신규 헤더를 보장합니다."""
     try:
         ws = spreadsheet.worksheet(WORK_LOG_SHEET_NAME)
     except Exception:
@@ -3772,7 +4133,7 @@ def _worklog_ensure_sheets(spreadsheet):
             rows=10000,
             cols=max(len(WORK_LOG_HEADERS) + 4, 24),
         )
-        ws.append_row(WORK_LOG_HEADERS)
+        ws.append_row(WORK_LOG_HEADERS, value_input_option="USER_ENTERED")
 
     try:
         history_ws = spreadsheet.worksheet(WORK_LOG_HISTORY_SHEET_NAME)
@@ -3782,19 +4143,10 @@ def _worklog_ensure_sheets(spreadsheet):
             rows=20000,
             cols=max(len(WORK_LOG_HISTORY_HEADERS) + 4, 16),
         )
-        history_ws.append_row(WORK_LOG_HISTORY_HEADERS)
+        history_ws.append_row(WORK_LOG_HISTORY_HEADERS, value_input_option="USER_ENTERED")
 
-    # 신규 기능 전용 시트이므로 헤더가 비어 있는 경우에만 안전하게 초기화합니다.
-    try:
-        if not ws.row_values(1):
-            ws.append_row(WORK_LOG_HEADERS)
-    except Exception:
-        pass
-    try:
-        if not history_ws.row_values(1):
-            history_ws.append_row(WORK_LOG_HISTORY_HEADERS)
-    except Exception:
-        pass
+    _worklog_ensure_headers(ws, WORK_LOG_HEADERS)
+    _worklog_ensure_headers(history_ws, WORK_LOG_HISTORY_HEADERS)
     return ws, history_ws
 
 
@@ -3970,6 +4322,91 @@ def _worklog_upload_drive_image(image_bytes: bytes, file_name: str, mime_type: s
         return False, {}, f"Apps Script 사진 저장 오류: {error}"
 
 
+
+def _worklog_apps_script_file_action(action: str, file_ids: list[str]) -> tuple[bool, dict, str]:
+    """Apps Script 소유자 권한으로 Drive 파일을 휴지통 이동/복원합니다."""
+    normalized_ids = [str(value or "").strip() for value in file_ids if str(value or "").strip()]
+    if not normalized_ids:
+        return True, {"processedIds": []}, ""
+
+    upload_url, url_error = _worklog_normalize_apps_script_url()
+    upload_token = _worklog_photo_upload_token()
+    if url_error:
+        return False, {}, url_error
+    if not upload_token:
+        return False, {}, "[work_log] upload_token이 설정되지 않았습니다."
+
+    payload = {
+        "token": upload_token,
+        "action": action,
+        "fileIds": normalized_ids,
+    }
+    try:
+        first = requests.post(
+            upload_url,
+            data=json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+            headers={
+                "Content-Type": "text/plain; charset=utf-8",
+                "Accept": "application/json,text/plain,*/*",
+                "User-Agent": "SMART-WORK-AI-AGENT/5.0",
+                "Cache-Control": "no-cache",
+            },
+            timeout=60,
+            allow_redirects=False,
+        )
+        response, redirect_error = _worklog_follow_apps_script_response(first, timeout=60)
+        if redirect_error:
+            return False, {}, redirect_error
+        if response is None or response.status_code != 200:
+            code = getattr(response, "status_code", getattr(first, "status_code", ""))
+            return False, {}, f"Apps Script 파일 처리 요청 실패 ({code})"
+        if response.text.lstrip().lower().startswith("<!doctype html"):
+            return False, {}, "Apps Script가 JSON 대신 Google HTML을 반환했습니다. 최신 /exec 배포를 확인해 주세요."
+        try:
+            result = response.json()
+        except Exception:
+            return False, {}, f"Apps Script 파일 처리 응답이 JSON이 아닙니다: {response.text[:180]}"
+
+        if not bool(result.get("ok")):
+            error_text = str(result.get("error", "") or "")
+            if error_text.lower() == "unauthorized":
+                return False, result, "UPLOAD_TOKEN이 일치하지 않습니다."
+            if "사진 데이터가 없습니다" in error_text:
+                return False, result, (
+                    "현재 Apps Script 배포에는 사진 삭제 기능이 없습니다. "
+                    "V12와 함께 제공된 Apps Script V2로 교체 후 배포를 업데이트해 주세요."
+                )
+            return False, result, error_text or "Drive 파일 처리에 실패했습니다."
+        return True, result, ""
+    except requests.Timeout:
+        return False, {}, "Drive 파일 처리 시간이 초과되었습니다."
+    except Exception as error:
+        return False, {}, f"Drive 파일 처리 오류: {error}"
+
+
+def _worklog_trash_drive_files(file_ids: list[str]) -> tuple[bool, list[str], str]:
+    """사진 파일을 영구삭제하지 않고 사용자 Drive 휴지통으로 이동합니다."""
+    ok, result, error = _worklog_apps_script_file_action("trash_files", file_ids)
+    processed = [
+        str(value or "").strip()
+        for value in (result.get("processedIds", result.get("trashedIds", [])) or [])
+        if str(value or "").strip()
+    ]
+    if ok:
+        return True, processed, ""
+
+    # 부분 처리된 경우 로그 삭제를 중단하고 이미 휴지통으로 간 파일은 되돌립니다.
+    if processed:
+        _worklog_apps_script_file_action("restore_files", processed)
+    return False, [], error
+
+
+def _worklog_restore_drive_files(file_ids: list[str]) -> None:
+    normalized_ids = [str(value or "").strip() for value in file_ids if str(value or "").strip()]
+    if normalized_ids:
+        _worklog_apps_script_file_action("restore_files", normalized_ids)
+
+
 @st.cache_data(ttl=300, show_spinner=False)
 def _worklog_download_drive_image(file_id: str) -> bytes | None:
     """비공개 Drive 사진을 서비스 계정으로 읽어 최근 기록 썸네일에 사용합니다."""
@@ -4084,13 +4521,48 @@ def _worklog_collect_photos(camera_photo, uploaded_photos) -> list:
     return unique
 
 
+
+def _worklog_get_record_row(worksheet, record_id: str) -> tuple[dict, int | None, list[str]]:
+    """기록ID로 시트의 실제 행/레코드를 찾습니다."""
+    record_id = str(record_id or "").strip()
+    try:
+        values = worksheet.get_all_values()
+    except Exception:
+        return {}, None, []
+    if not values:
+        return {}, None, []
+    headers = [str(value).strip() for value in values[0]]
+    if "기록ID" not in headers:
+        return {}, None, headers
+    id_index = headers.index("기록ID")
+    for row_no, row in enumerate(values[1:], start=2):
+        current_id = str(row[id_index] if id_index < len(row) else "").strip()
+        if current_id == record_id:
+            record = {
+                header: (row[index] if index < len(row) else "")
+                for index, header in enumerate(headers)
+            }
+            return record, row_no, headers
+    return {}, None, headers
+
+
+def _worklog_can_access_record(record: dict, auth_user: dict) -> bool:
+    if not auth_user:
+        return False
+    if _worklog_record_visibility(record) == "공개":
+        return True
+    return _worklog_record_owned_by(record, auth_user)
+
+
 def save_work_log(record: dict, photos: list) -> tuple[bool, str, str]:
-    """현장기록과 상태이력을 저장하고, 사진이 있으면 압축 후 Drive에 분리 저장합니다."""
+    """로그인 사용자 소유의 현장기록을 저장하고 사진은 비공개 Drive에 분리 저장합니다."""
     client = init_google_sheet_connection()
     if not client:
         return False, "Google Sheets 연결 실패: 기존 gcp_service_account 설정을 확인하세요.", ""
 
     writer = str(record.get("작성자", "")).strip()
+    owner_id = str(record.get("작성자ID", "") or "").strip()
+    visibility = str(record.get("공개범위", "공개") or "공개").strip()
     area = str(record.get("권역", "")).strip()
     mother = str(record.get("모국", "")).strip()
     local = str(record.get("국소", "")).strip()
@@ -4101,8 +4573,13 @@ def save_work_log(record: dict, photos: list) -> tuple[bool, str, str]:
     followup = str(record.get("후속조치", "")).strip()
     remark = str(record.get("비고", "")).strip()
 
-    if not writer:
-        return False, "작성자를 입력해 주세요.", ""
+    expected_owner = _worklog_user_id_from_name(writer)
+    if not writer or not owner_id:
+        return False, "MY WORK LOG 개인 인증 정보를 확인하지 못했습니다. 다시 로그인해 주세요.", ""
+    if expected_owner and expected_owner != owner_id:
+        return False, "로그인 사용자와 작성자 정보가 일치하지 않습니다. 다시 로그인해 주세요.", ""
+    if visibility not in WORK_LOG_VISIBILITY_OPTIONS:
+        return False, "공개범위 값이 올바르지 않습니다.", ""
     if area not in POWER_REGION_DATA:
         return False, "국사명을 검색하여 정확한 국사를 먼저 선택해 주세요.", ""
     area_map = POWER_REGION_DATA.get(area, {}).get("모국_국소", {})
@@ -4123,8 +4600,6 @@ def save_work_log(record: dict, photos: list) -> tuple[bool, str, str]:
             "photo_upload_url은 Apps Script 배포용 /exec 주소, upload_token은 Apps Script의 UPLOAD_TOKEN과 동일해야 합니다."
         ), ""
 
-    # 사진이 있을 때는 실제 파일을 만들기 전에 GET+POST 연결을 먼저 검증합니다.
-    # 연결이 깨진 상태에서 사진 업로드를 반복해 중복/불완전 저장이 생기는 것을 방지합니다.
     if photos:
         preflight_ok, preflight_message = _worklog_apps_script_healthcheck()
         if not preflight_ok:
@@ -4136,7 +4611,6 @@ def save_work_log(record: dict, photos: list) -> tuple[bool, str, str]:
     photo_names = []
     used_worklog_photo_names: set[str] = set()
 
-    # 사진은 기록 본문보다 먼저 업로드합니다. 사진 저장 실패 시 불완전한 기록 행을 만들지 않습니다.
     for index, photo in enumerate(photos[:WORK_LOG_MAX_PHOTOS], 1):
         compressed, safe_name, mime_type, error = _worklog_compress_image(photo)
         if not compressed:
@@ -4176,18 +4650,40 @@ def save_work_log(record: dict, photos: list) -> tuple[bool, str, str]:
             "사진파일ID목록": "|".join(photo_ids),
             "사진파일명목록": "|".join(photo_names),
             "최근수정일시": saved_at,
+            "작성자ID": owner_id,
+            "공개범위": visibility,
         }
-        ws.append_row([row_map.get(header, "") for header in WORK_LOG_HEADERS], value_input_option="USER_ENTERED")
-        history_ws.append_row([
-            saved_at, record_id, writer, status, "신규 등록", action, followup, remark
-        ], value_input_option="USER_ENTERED")
-        return True, f"MY WORK LOG가 저장되었습니다. 사진 {len(photo_ids)}장", record_id
+        actual_headers = [str(value).strip() for value in ws.row_values(1)]
+        ws.append_row([row_map.get(header, "") for header in actual_headers], value_input_option="USER_ENTERED")
+
+        history_headers = [str(value).strip() for value in history_ws.row_values(1)]
+        history_map = {
+            "저장일시": saved_at,
+            "기록ID": record_id,
+            "작성자": writer,
+            "상태": status,
+            "변경구분": "신규 등록",
+            "조치내용": action,
+            "후속조치": followup,
+            "비고": remark,
+            "작업자ID": owner_id,
+        }
+        history_ws.append_row(
+            [history_map.get(header, "") for header in history_headers],
+            value_input_option="USER_ENTERED",
+        )
+        scope_text = "팀 공유" if visibility == "공개" else "나만 보기"
+        return True, f"MY WORK LOG가 저장되었습니다. · {scope_text} · 사진 {len(photo_ids)}장", record_id
     except Exception as error:
         return False, f"WORK LOG 저장 실패: {error}", ""
 
 
-def load_work_logs() -> pd.DataFrame:
-    """사용자가 직접 새로고침을 눌렀을 때만 누적 WORK LOG를 읽습니다."""
+def load_work_logs(auth_user: dict | None = None) -> pd.DataFrame:
+    """누적 WORK LOG를 읽은 뒤 공개 기록 + 로그인 사용자의 비공개 기록만 반환합니다."""
+    auth_user = auth_user or _worklog_current_user()
+    if not auth_user:
+        return pd.DataFrame(columns=WORK_LOG_HEADERS)
+
     client = init_google_sheet_connection()
     if not client:
         raise RuntimeError("Google Sheets 연결 실패")
@@ -4196,9 +4692,11 @@ def load_work_logs() -> pd.DataFrame:
         ws = spreadsheet.worksheet(WORK_LOG_SHEET_NAME)
     except Exception:
         return pd.DataFrame(columns=WORK_LOG_HEADERS)
+
     values = ws.get_all_values()
     if not values:
         return pd.DataFrame(columns=WORK_LOG_HEADERS)
+
     headers = [str(v).strip() for v in values[0]]
     rows = [
         [row[i] if i < len(row) else "" for i in range(len(headers))]
@@ -4209,20 +4707,31 @@ def load_work_logs() -> pd.DataFrame:
     for required in WORK_LOG_HEADERS:
         if required not in df.columns:
             df[required] = ""
+
+    df = _worklog_filter_accessible_records(df, auth_user)
     if not df.empty:
         df["_저장일시_dt"] = pd.to_datetime(df["저장일시"], errors="coerce")
         df = df.sort_values("_저장일시_dt", ascending=False, na_position="last")
     return df
 
 
-def load_work_log_history(record_id: str) -> pd.DataFrame:
+def load_work_log_history(record_id: str, auth_user: dict | None = None) -> pd.DataFrame:
+    """로그인 사용자가 볼 수 있는 기록에 대해서만 변경이력을 반환합니다."""
+    auth_user = auth_user or _worklog_current_user()
+    if not auth_user:
+        return pd.DataFrame(columns=WORK_LOG_HISTORY_HEADERS)
+
     client = init_google_sheet_connection()
     if not client:
         return pd.DataFrame(columns=WORK_LOG_HISTORY_HEADERS)
     try:
         spreadsheet = client.open(WORK_LOG_SPREADSHEET_NAME)
-        ws = spreadsheet.worksheet(WORK_LOG_HISTORY_SHEET_NAME)
-        records = ws.get_all_records()
+        main_ws, history_ws = _worklog_ensure_sheets(spreadsheet)
+        record, _, _ = _worklog_get_record_row(main_ws, record_id)
+        if not record or not _worklog_can_access_record(record, auth_user):
+            return pd.DataFrame(columns=WORK_LOG_HISTORY_HEADERS)
+
+        records = history_ws.get_all_records()
         df = pd.DataFrame(records).fillna("") if records else pd.DataFrame(columns=WORK_LOG_HISTORY_HEADERS)
         if not df.empty and "기록ID" in df.columns:
             df = df[df["기록ID"].astype(str) == str(record_id)]
@@ -4231,17 +4740,30 @@ def load_work_log_history(record_id: str) -> pd.DataFrame:
         return pd.DataFrame(columns=WORK_LOG_HISTORY_HEADERS)
 
 
-def update_work_log(record_id: str, writer: str, status: str, action: str, followup: str, remark: str) -> tuple[bool, str]:
-    """기존 기록의 상태/조치/후속조치를 갱신하고 이력 시트에는 변경 전 과정을 누적합니다."""
+def update_work_log(
+    record_id: str,
+    writer: str,
+    status: str,
+    action: str,
+    followup: str,
+    remark: str,
+    actor_user: dict | None = None,
+) -> tuple[bool, str]:
+    """공개 기록 또는 본인 비공개 기록만 갱신하고 실제 변경 사용자를 이력에 남깁니다."""
     record_id = str(record_id or "").strip()
-    writer = str(writer or "").strip()
     status = str(status or "").strip()
+    actor_user = actor_user or _worklog_current_user()
     if not record_id:
         return False, "변경할 기록ID가 없습니다."
-    if not writer:
-        return False, "변경 작성자를 입력해 주세요."
+    if not actor_user:
+        return False, "MY WORK LOG 개인 인증이 필요합니다."
     if status not in WORK_LOG_STATUS_OPTIONS:
         return False, "상태 값이 올바르지 않습니다."
+
+    actor_name = str(actor_user.get("name", "") or "").strip()
+    actor_id = str(actor_user.get("user_id", "") or "").strip()
+    if not actor_name or not actor_id:
+        return False, "로그인 사용자 정보를 확인하지 못했습니다."
 
     client = init_google_sheet_connection()
     if not client:
@@ -4249,20 +4771,11 @@ def update_work_log(record_id: str, writer: str, status: str, action: str, follo
     try:
         spreadsheet = client.open(WORK_LOG_SPREADSHEET_NAME)
         ws, history_ws = _worklog_ensure_sheets(spreadsheet)
-        values = ws.get_all_values()
-        if not values:
-            return False, "저장된 WORK LOG가 없습니다."
-        headers = [str(v).strip() for v in values[0]]
-        if "기록ID" not in headers:
-            return False, "WORK LOG 시트의 기록ID 헤더를 찾지 못했습니다."
-        id_index = headers.index("기록ID")
-        target_row = None
-        for row_no, row in enumerate(values[1:], start=2):
-            if id_index < len(row) and str(row[id_index]).strip() == record_id:
-                target_row = row_no
-                break
-        if target_row is None:
+        record, target_row, headers = _worklog_get_record_row(ws, record_id)
+        if not record or target_row is None:
             return False, f"기록ID {record_id}를 찾지 못했습니다."
+        if not _worklog_can_access_record(record, actor_user):
+            return False, "이 기록에 접근할 권한이 없습니다."
 
         now_text = _korea_now().strftime("%Y-%m-%d %H:%M:%S")
         updates = {
@@ -4275,13 +4788,200 @@ def update_work_log(record_id: str, writer: str, status: str, action: str, follo
         for header, value in updates.items():
             if header in headers:
                 ws.update_cell(target_row, headers.index(header) + 1, value)
-        history_ws.append_row([
-            now_text, record_id, writer, status, "상태/조치 변경",
-            updates["조치내용"], updates["후속조치"], updates["비고"],
-        ], value_input_option="USER_ENTERED")
+
+        history_headers = [str(value).strip() for value in history_ws.row_values(1)]
+        history_map = {
+            "저장일시": now_text,
+            "기록ID": record_id,
+            "작성자": actor_name,
+            "상태": status,
+            "변경구분": "상태/조치 변경",
+            "조치내용": updates["조치내용"],
+            "후속조치": updates["후속조치"],
+            "비고": updates["비고"],
+            "작업자ID": actor_id,
+        }
+        history_ws.append_row(
+            [history_map.get(header, "") for header in history_headers],
+            value_input_option="USER_ENTERED",
+        )
         return True, "상태이력과 조치내용이 업데이트되었습니다."
     except Exception as error:
         return False, f"WORK LOG 업데이트 실패: {error}"
+
+
+def update_work_log_visibility(
+    record_id: str,
+    new_visibility: str,
+    actor_user: dict | None = None,
+) -> tuple[bool, str]:
+    """작성자 본인만 자신의 과거/현재 WORK LOG 공개범위를 변경합니다.
+
+    기존 자료에 작성자ID/공개범위가 비어 있어도 등록된 작성자 이름으로 소유권을
+    복원한 뒤 명시값을 저장합니다. 공개범위 변경 사실은 MY_WORK_LOG_HISTORY에 남깁니다.
+    """
+    record_id = str(record_id or "").strip()
+    new_visibility = str(new_visibility or "").strip()
+    actor_user = actor_user or _worklog_current_user()
+
+    if not record_id:
+        return False, "변경할 기록ID가 없습니다."
+    if not actor_user:
+        return False, "MY WORK LOG 개인 인증이 필요합니다."
+    if new_visibility not in WORK_LOG_VISIBILITY_OPTIONS:
+        return False, "공개범위 값이 올바르지 않습니다."
+
+    actor_name = str(actor_user.get("name", "") or "").strip()
+    actor_id = str(actor_user.get("user_id", "") or "").strip()
+    if not actor_name or not actor_id:
+        return False, "로그인 사용자 정보를 확인하지 못했습니다."
+
+    client = init_google_sheet_connection()
+    if not client:
+        return False, "Google Sheets 연결 실패"
+
+    try:
+        spreadsheet = client.open(WORK_LOG_SPREADSHEET_NAME)
+        ws, history_ws = _worklog_ensure_sheets(spreadsheet)
+        record, target_row, headers = _worklog_get_record_row(ws, record_id)
+        if not record or target_row is None:
+            return False, f"기록ID {record_id}를 찾지 못했습니다."
+        if not _worklog_record_owned_by(record, actor_user):
+            return False, "공개범위는 본인이 작성한 기록만 변경할 수 있습니다."
+
+        old_visibility = _worklog_record_visibility(record)
+        owner_id = _worklog_record_owner_id(record) or actor_id
+        now_text = _korea_now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # 과거 자료의 빈 권한 필드도 이 시점에 명시값으로 보완합니다.
+        updates = {
+            "작성자ID": owner_id,
+            "공개범위": new_visibility,
+            "최근수정일시": now_text,
+        }
+        for header, value in updates.items():
+            if header in headers:
+                ws.update_cell(target_row, headers.index(header) + 1, value)
+
+        if old_visibility != new_visibility:
+            history_headers = [str(value).strip() for value in history_ws.row_values(1)]
+            history_map = {
+                "저장일시": now_text,
+                "기록ID": record_id,
+                "작성자": actor_name,
+                "상태": str(record.get("상태", "") or "").strip(),
+                "변경구분": f"공개범위 변경: {old_visibility} → {new_visibility}",
+                "조치내용": "",
+                "후속조치": "",
+                "비고": "",
+                "작업자ID": actor_id,
+            }
+            history_ws.append_row(
+                [history_map.get(header, "") for header in history_headers],
+                value_input_option="USER_ENTERED",
+            )
+
+        if old_visibility == new_visibility:
+            return True, f"현재 공개범위가 이미 '{new_visibility}'입니다."
+        scope_text = "🌐 공개 · 팀 공유" if new_visibility == "공개" else "🔒 비공개 · 나만 보기"
+        return True, f"공개범위를 {scope_text}(으)로 변경했습니다. 사진 열람 권한도 같은 범위를 따릅니다."
+    except Exception as error:
+        return False, f"공개범위 변경 실패: {error}"
+
+
+def _worklog_ensure_delete_audit_sheet(spreadsheet):
+    try:
+        ws = spreadsheet.worksheet(WORK_LOG_DELETE_AUDIT_SHEET_NAME)
+    except Exception:
+        ws = spreadsheet.add_worksheet(
+            title=WORK_LOG_DELETE_AUDIT_SHEET_NAME,
+            rows=5000,
+            cols=max(len(WORK_LOG_DELETE_AUDIT_HEADERS) + 2, 12),
+        )
+        ws.append_row(WORK_LOG_DELETE_AUDIT_HEADERS, value_input_option="USER_ENTERED")
+    _worklog_ensure_headers(ws, WORK_LOG_DELETE_AUDIT_HEADERS)
+    return ws
+
+
+def delete_work_log(record_id: str, auth_user: dict | None = None) -> tuple[bool, str]:
+    """작성자 본인의 WORK LOG 1건과 연결 사진을 함께 삭제합니다. 사진은 Drive 휴지통으로 이동합니다."""
+    auth_user = auth_user or _worklog_current_user()
+    record_id = str(record_id or "").strip()
+    if not auth_user:
+        return False, "MY WORK LOG 개인 인증이 필요합니다."
+    if not record_id:
+        return False, "삭제할 기록ID가 없습니다."
+
+    client = init_google_sheet_connection()
+    if not client:
+        return False, "Google Sheets 연결 실패"
+
+    trashed_photo_ids: list[str] = []
+    try:
+        spreadsheet = client.open(WORK_LOG_SPREADSHEET_NAME)
+        ws, history_ws = _worklog_ensure_sheets(spreadsheet)
+        record, target_row, headers = _worklog_get_record_row(ws, record_id)
+        if not record or target_row is None:
+            return False, "삭제할 기록을 찾지 못했습니다."
+        if not _worklog_record_owned_by(record, auth_user):
+            return False, "본인이 작성한 기록만 삭제할 수 있습니다."
+
+        photo_ids = [
+            value.strip()
+            for value in str(record.get("사진파일ID목록", "") or "").split("|")
+            if value.strip()
+        ]
+        if photo_ids:
+            photo_ok, trashed_photo_ids, photo_error = _worklog_trash_drive_files(photo_ids)
+            if not photo_ok:
+                return False, f"기록은 삭제하지 않았습니다. 연결 사진 정리에 실패했습니다: {photo_error}"
+
+        # 본문을 지우기 전에 삭제 감사 메타데이터를 준비합니다. 개인 메모 내용 자체는 감사시트에 복제하지 않습니다.
+        deleted_at = _korea_now().strftime("%Y-%m-%d %H:%M:%S")
+        audit_map = {
+            "삭제일시": deleted_at,
+            "기록ID": record_id,
+            "작성자ID": _worklog_record_owner_id(record),
+            "작성자": str(record.get("작성자", "") or "").strip(),
+            "삭제자ID": str(auth_user.get("user_id", "") or "").strip(),
+            "삭제자": str(auth_user.get("name", "") or "").strip(),
+            "공개범위": _worklog_record_visibility(record),
+            "사진수": len(photo_ids),
+        }
+
+        # 이력은 아래 행부터 지워 행번호 변화를 방지합니다.
+        history_values = history_ws.get_all_values()
+        if history_values:
+            history_headers = [str(value).strip() for value in history_values[0]]
+            if "기록ID" in history_headers:
+                id_index = history_headers.index("기록ID")
+                delete_rows = [
+                    row_no
+                    for row_no, row in enumerate(history_values[1:], start=2)
+                    if id_index < len(row) and str(row[id_index]).strip() == record_id
+                ]
+                for row_no in reversed(delete_rows):
+                    history_ws.delete_rows(row_no)
+
+        ws.delete_rows(target_row)
+
+        audit_warning = ""
+        try:
+            audit_ws = _worklog_ensure_delete_audit_sheet(spreadsheet)
+            audit_headers = [str(value).strip() for value in audit_ws.row_values(1)]
+            audit_ws.append_row(
+                [audit_map.get(header, "") for header in audit_headers],
+                value_input_option="USER_ENTERED",
+            )
+        except Exception as audit_error:
+            audit_warning = f" · 삭제 감사기록 저장 경고: {audit_error}"
+
+        return True, f"WORK LOG 1건을 삭제했습니다. 연결 사진 {len(photo_ids)}장은 Drive 휴지통으로 이동했습니다.{audit_warning}"
+    except Exception as error:
+        # 본문 삭제가 실패했는데 사진만 휴지통으로 간 경우 자동 복원합니다.
+        if trashed_photo_ids:
+            _worklog_restore_drive_files(trashed_photo_ids)
+        return False, f"WORK LOG 삭제 실패: {error}"
 
 
 def _worklog_reset_entry_widgets() -> None:
@@ -4291,7 +4991,7 @@ def _worklog_reset_entry_widgets() -> None:
         "worklog_followup", "worklog_remark", "worklog_station_search_query",
         "worklog_station_search_candidates", "worklog_station_search_choice", "worklog_station_search_status",
         "worklog_station_search_notice", "worklog_station_search_applied",
-        "worklog_items_confirmed_notice",
+        "worklog_items_confirmed_notice", "worklog_visibility",
     ]
     for key in keys:
         if key in st.session_state:
@@ -4445,8 +5145,8 @@ div[data-testid="stTabs"] > div[role="tablist"] {
     box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08) !important;
 }
 div[data-testid="stTabs"] button[role="tab"] {
-    min-height: 54px !important;
-    padding: 10px 16px !important;
+    min-height: 62px !important;
+    padding: 12px 18px !important;
     border-radius: 16px !important;
     border: 1px solid #D8E3F2 !important;
     background: #FFFFFF !important;
@@ -4456,8 +5156,10 @@ div[data-testid="stTabs"] button[role="tab"] {
     transition: all 0.18s ease-in-out !important;
 }
 div[data-testid="stTabs"] button[role="tab"] p {
-    font-size: clamp(1.02rem, 2.6vw, 1.14rem) !important;
+    font-size: clamp(1.16rem, 2.2vw, 1.30rem) !important;
     font-weight: 950 !important;
+    letter-spacing: -0.02em !important;
+    line-height: 1.2 !important;
     margin: 0 !important;
 }
 div[data-testid="stTabs"] button[role="tab"]:hover {
@@ -4498,7 +5200,8 @@ div[data-testid="stTabs"] div[role="tabpanel"] {
 @media (max-width: 768px) {
     section.main .block-container { padding-left:.65rem !important; padding-right:.65rem !important; padding-top:.75rem !important; }
     div[data-testid="stTabs"] > div[role="tablist"] { padding:7px !important; gap:7px !important; border-radius:15px !important; }
-    div[data-testid="stTabs"] button[role="tab"] { flex:0 0 auto !important; min-width:142px !important; min-height:52px !important; padding:8px 11px !important; }
+    div[data-testid="stTabs"] button[role="tab"] { flex:0 0 auto !important; min-width:154px !important; min-height:56px !important; padding:9px 13px !important; }
+    div[data-testid="stTabs"] button[role="tab"] p { font-size:1.08rem !important; }
     .smart-navi-launch-wrap { justify-content: stretch; }
     .smart-navi-launch { width: 100%; box-sizing: border-box; }
     .smart-work-brand { margin-bottom: 14px; }
@@ -4532,7 +5235,7 @@ tab_worklog, tab_power, tab_law, tab_admin = st.tabs([
 with tab_law:
     st.markdown(
         '<div class="law-search-hero"><b>⚖️ LAW SEARCH</b>'
-        '<span>기존 법률 지원 기능을 한 곳에서 선택해 사용합니다.</span></div>',
+        '<span>기존 감사·법률 지원 기능을 한 곳에서 선택해 사용합니다.</span></div>',
         unsafe_allow_html=True,
     )
     tab_doc, tab_chat, tab_summary = st.tabs([
@@ -4944,549 +5647,844 @@ with tab_worklog:
         }
         .worklog-close-safe-space { height:78px; }
     }
+
+    .worklog-auth-card {
+        background:linear-gradient(135deg,#FFFFFF 0%,#F8FAFC 100%);
+        border:1px solid #CBD5E1;
+        border-left:6px solid #D71920;
+        border-radius:18px;
+        padding:18px 20px;
+        margin:8px 0 14px;
+        box-shadow:0 8px 22px rgba(15,23,42,.07);
+    }
+    .worklog-auth-title { color:#24364B; font-size:1.28rem; font-weight:950; margin-bottom:5px; }
+    .worklog-auth-desc { color:#64748B; font-size:.92rem; font-weight:760; line-height:1.55; }
+    .worklog-userbar {
+        display:flex; align-items:center; justify-content:space-between; gap:10px;
+        background:#EEF6FF; border:1px solid #BFDBFE; border-radius:14px;
+        padding:10px 13px; margin:4px 0 10px;
+    }
+    .worklog-userbar .name { color:#0F3B66; font-size:1rem; font-weight:950; }
+    .worklog-userbar .meta { color:#64748B; font-size:.78rem; font-weight:760; margin-top:2px; }
+    .worklog-privacy-guide {
+        display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:6px 0 8px;
+    }
+    .worklog-privacy-guide .public,
+    .worklog-privacy-guide .private {
+        border-radius:12px; padding:9px 11px; line-height:1.4;
+        font-size:.82rem; font-weight:760;
+    }
+    .worklog-privacy-guide .public { background:#EFF6FF; border:1px solid #BFDBFE; color:#1E40AF; }
+    .worklog-privacy-guide .private { background:#FFF7ED; border:1px solid #FED7AA; color:#9A3412; }
+    .worklog-privacy-badge {
+        display:inline-flex; align-items:center; padding:3px 8px; border-radius:999px;
+        font-size:.72rem; font-weight:950; white-space:nowrap; margin-left:5px;
+    }
+    .worklog-privacy-badge.public { background:#DBEAFE; color:#1D4ED8; }
+    .worklog-privacy-badge.private { background:#FFEDD5; color:#C2410C; }
+    .worklog-visibility-manage {
+        background:#F8FAFC; border:1px solid #CBD5E1; border-left:5px solid #2563EB;
+        border-radius:14px; padding:11px 13px; margin:12px 0 8px;
+        color:#334155; font-size:.86rem; font-weight:760; line-height:1.5;
+    }
+    .worklog-visibility-manage.private {
+        background:#FFF7ED; border-color:#FED7AA; border-left-color:#F97316; color:#9A3412;
+    }
+    .worklog-delete-box {
+        background:#FFF7F7; border:1px solid #FECACA; border-left:5px solid #DC2626;
+        border-radius:14px; padding:11px 13px; margin-top:12px;
+    }
+
+    @media (max-width:768px) {
+        .worklog-auth-card { padding:14px 13px; border-radius:15px; }
+        .worklog-privacy-guide { grid-template-columns:1fr; gap:5px; }
+        .worklog-userbar { align-items:flex-start; }
+    }
     </style>
     """, unsafe_allow_html=True)
 
-    if "worklog_df" not in st.session_state:
-        st.session_state["worklog_df"] = None
-    if "worklog_loaded_at" not in st.session_state:
-        st.session_state["worklog_loaded_at"] = ""
-    if "worklog_selected_id" not in st.session_state:
-        st.session_state["worklog_selected_id"] = ""
 
-    def _worklog_close_loaded_results():
-        """조회 결과만 닫고 새 현장기록 작성 중 입력값은 보존합니다."""
-        st.session_state["worklog_df"] = None
-        st.session_state["worklog_loaded_at"] = ""
-        st.session_state["worklog_selected_id"] = ""
-        st.session_state["worklog_search"] = ""
-        st.session_state["worklog_filter"] = "전체"
-        for reset_key in (
-            "worklog_update_writer", "worklog_update_status", "worklog_update_action",
-            "worklog_update_followup", "worklog_update_remark",
-        ):
-            st.session_state.pop(reset_key, None)
+    worklog_auth_user = _worklog_current_user()
 
-    # PC/모바일 공용 상단: 왼쪽 MY WORK LOG 소개 + 오른쪽 미니 대시보드
-    worklog_overview_slot = st.empty()
-
-    photo_upload_ready, photo_config_issues = _worklog_photo_config_status()
-    # 정상 운영 시 사진 저장 안내 문구는 표시하지 않습니다.
-    # 설정 이상이 있을 때만 오류 원인을 보여 기존 사진 저장 안정성은 유지합니다.
-    if not photo_upload_ready:
-        issue_html = html.escape(" / ".join(photo_config_issues) if photo_config_issues else "사진 업로드 설정 확인 필요")
+    if not worklog_auth_user:
         st.markdown(
-            f'<div class="worklog-storage-note warn">📷 사진 업로드 설정 확인 필요 · PHOTO ENGINE <b>{WORK_LOG_PHOTO_ENGINE_VERSION}</b><br><b>현재 진단:</b> {issue_html}<br>Streamlit Secrets의 <b>[work_log]</b>에 <b>photo_upload_url</b>과 <b>upload_token</b>을 확인해 주세요. 기존 내비·정밀점검 기능에는 영향이 없습니다.</div>',
+            '<div class="worklog-auth-card">'
+            '<div class="worklog-auth-title">🔐 MY WORK LOG 개인 인증</div>'
+            '<div class="worklog-auth-desc">'
+            'MY WORK LOG는 팀 공용 업무기록과 개인 업무메모를 함께 사용합니다. '
+            '개인 인증 후 공개 기록은 팀과 공유하고, 비공개 기록은 작성한 본인만 검색·조회할 수 있습니다.<br><br>'
+            '<b>🌐 공개 · 팀 공유</b> — 업무 공유가 필요한 기록<br>'
+            '<b>🔒 비공개 · 나만 보기</b> — 기억용 메모·개인 업무기록'
+            '</div></div>',
             unsafe_allow_html=True,
         )
+        auth_button_col, auth_info_col = st.columns([1.5, 3.5], gap="small", vertical_alignment="center")
+        with auth_button_col:
+            if st.button(
+                "🔐 개인 인증 시작",
+                key="worklog_open_login",
+                type="primary",
+                use_container_width=True,
+            ):
+                _worklog_login_dialog()
+        with auth_info_col:
+            st.caption("사번 + 개인 PIN으로 로그인합니다. 최초 로그인 시 임시 PIN을 개인 PIN으로 변경해야 합니다.")
 
-    search_condition_col, search_text_col, search_load_col = st.columns(
-        [0.30, 0.46, 0.24], gap="small", vertical_alignment="bottom"
-    )
-    with search_condition_col:
-        st.markdown('<div class="worklog-search-row-marker"></div>', unsafe_allow_html=True)
-        worklog_filter = st.selectbox(
-            "검색 조건",
-            ["전체"] + WORK_LOG_STATUS_OPTIONS,
-            key="worklog_filter",
+    elif bool(st.session_state.get("worklog_pin_change_required", False)):
+        st.markdown(
+            '<div class="worklog-auth-card">'
+            '<div class="worklog-auth-title">🔑 최초 로그인 · 개인 PIN 설정</div>'
+            '<div class="worklog-auth-desc">보안을 위해 배부받은 임시 PIN은 최초 로그인에서 한 번만 사용합니다. '
+            '앞으로 사용할 숫자 6자리 개인 PIN으로 변경해 주세요.</div></div>',
+            unsafe_allow_html=True,
         )
-    with search_text_col:
-        worklog_search = st.text_input(
-            "검색어",
-            placeholder="국사 · 작성자 · 점검항목 등",
-            key="worklog_search",
-        ).strip()
-    with search_load_col:
-        refresh_worklog = st.button(
-            "🔄 불러오기",
-            use_container_width=True,
-            type="primary",
-            key="worklog_refresh",
-        )
+        with st.form("worklog_first_pin_change_form", clear_on_submit=False):
+            first_new_pin = st.text_input("새 개인 PIN", type="password", max_chars=6, key="worklog_first_new_pin")
+            first_confirm_pin = st.text_input("새 PIN 확인", type="password", max_chars=6, key="worklog_first_confirm_pin")
+            first_pin_submit = st.form_submit_button("🔐 개인 PIN 설정 완료", type="primary", use_container_width=True)
+        if first_pin_submit:
+            first_ok, first_message = _worklog_change_pin(
+                str(worklog_auth_user.get("employee_no", "") or ""),
+                first_new_pin,
+                first_confirm_pin,
+            )
+            if first_ok:
+                st.session_state["worklog_pin_change_required"] = False
+                st.success(first_message)
+                time.sleep(0.4)
+                st.rerun()
+            else:
+                st.error(first_message)
+        st.button("로그아웃", key="worklog_first_login_logout", on_click=_worklog_logout)
 
-    if refresh_worklog:
-        with st.spinner("Google Sheets에서 MY WORK LOG를 불러오는 중입니다..."):
-            try:
-                st.session_state["worklog_df"] = load_work_logs()
-                st.session_state["worklog_loaded_at"] = _korea_now().strftime("%Y-%m-%d %H:%M:%S")
-                st.session_state["worklog_selected_id"] = ""
-            except Exception as error:
-                st.error(f"WORK LOG를 불러오지 못했습니다: {error}")
-
-    loaded_df = st.session_state.get("worklog_df")
-    if isinstance(loaded_df, pd.DataFrame):
-        summary_source = loaded_df.copy()
-        count_open = int(summary_source["상태"].isin(["신규", "확인필요"]).sum()) if not summary_source.empty else 0
-        count_doing = int(summary_source["상태"].isin(["조치중", "재점검"]).sum()) if not summary_source.empty else 0
-        count_done = int((summary_source["상태"] == "완료").sum()) if not summary_source.empty else 0
-        count_all = int(len(summary_source))
     else:
-        count_all = count_open = count_doing = count_done = 0
-
-    count_all_text = f"{count_all:,}" if loaded_df is not None else "-"
-    count_open_text = f"{count_open:,}" if loaded_df is not None else "-"
-    count_doing_text = f"{count_doing:,}" if loaded_df is not None else "-"
-    count_done_text = f"{count_done:,}" if loaded_df is not None else "-"
-
-    worklog_overview_slot.markdown(
-        f"""
-        <div class="worklog-overview">
-          <div class="worklog-hero">
-            <div class="eyebrow">FIELD HISTORY &amp; RECORD</div>
-            <h2>MY WORK LOG</h2>
-            <div class="sub">현장 기록 · 시설 이력</div>
-            <div class="desc">오늘의 현장 기록이 내일의 정확한 업무가 됩니다. 상태이력·점검항목·사진·조치사항을 국사별로 연결해 관리합니다.</div>
-          </div>
-          <div class="worklog-dashboard">
-            <div class="worklog-dashboard-label">WORK LOG STATUS</div>
-            <div class="worklog-kpi-grid">
-              <div class="worklog-kpi">
-                <span class="label">전체 기록</span><span class="value">{count_all_text}</span><span class="unit">건</span>
-              </div>
-              <div class="worklog-kpi open">
-                <span class="label">미처리</span><span class="value">{count_open_text}</span><span class="unit">건</span>
-              </div>
-              <div class="worklog-kpi doing">
-                <span class="label">진행·재점검</span><span class="value">{count_doing_text}</span><span class="unit">건</span>
-              </div>
-              <div class="worklog-kpi done">
-                <span class="label">완료</span><span class="value">{count_done_text}</span><span class="unit">건</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    if st.session_state.get("worklog_loaded_at"):
-        st.caption(f"최근 기록 조회시각: {st.session_state['worklog_loaded_at']} · 화면 진입만으로는 Google Sheets를 자동 조회하지 않습니다.")
-
-    entry_col, recent_col = st.columns([0.94, 1.06], gap="large")
-
-    with entry_col:
-        with st.container(border=True):
-            st.markdown('<div class="worklog-section-title">📝 새 현장기록</div>', unsafe_allow_html=True)
-            st.caption("현장에서 10초 안에 남기고, 나중에 국사별 이력으로 다시 찾을 수 있도록 핵심 항목만 구성했습니다.")
-
-            st.markdown('<div class="worklog-field-title">✍️ 작성자</div>', unsafe_allow_html=True)
-            writer = st.text_input(
-                "작성자",
-                placeholder="예: 정청운",
-                key="worklog_writer",
-                label_visibility="collapsed",
-            )
-
-            st.markdown('<div class="worklog-field-title">📍 국사 검색 · 자동입력</div>', unsafe_allow_html=True)
-            st.caption("정밀점검과 같은 국사 기준정보를 사용합니다. 국사명만 검색·선택하면 권역·모국·국소가 자동 반영됩니다.")
-
-            with st.form(key="worklog_station_search_form", clear_on_submit=False):
-                station_search_col, station_search_btn_col = st.columns([4.2, 1.15], gap="small")
-                with station_search_col:
-                    st.text_input(
-                        "국사명",
-                        key="worklog_station_search_query",
-                        placeholder="예: 송포",
-                        help="국사명을 입력한 뒤 확인을 누르세요. 키보드 Enter로도 검색할 수 있습니다.",
-                        label_visibility="collapsed",
-                    )
-                with station_search_btn_col:
-                    worklog_station_search_submitted = st.form_submit_button("확인", use_container_width=True)
-
-            if worklog_station_search_submitted:
-                _run_worklog_station_search()
-
-            worklog_station_search_status = str(
-                st.session_state.get("worklog_station_search_status", "") or ""
-            )
-            worklog_station_candidate_ids = list(
-                st.session_state.get("worklog_station_search_candidates", []) or []
-            )
-
-            if worklog_station_search_status == "empty":
-                st.warning("국사명을 먼저 입력해 주세요. 예: 송포")
-            elif worklog_station_search_status == "none":
-                st.warning("일치하는 국사를 찾지 못했습니다. 국사명을 다시 확인해 주세요.")
-            elif worklog_station_search_status == "multiple" and worklog_station_candidate_ids:
-                st.info(
-                    f"같은 이름 또는 유사한 국사가 {len(worklog_station_candidate_ids)}곳 있습니다. "
-                    "아래에서 정확한 국사를 선택해 주세요."
-                )
-                with st.form(key="worklog_station_duplicate_form", clear_on_submit=False):
-                    st.radio(
-                        "국사 선택",
-                        worklog_station_candidate_ids,
-                        key="worklog_station_search_choice",
-                        format_func=_worklog_station_search_label,
-                    )
-                    worklog_station_choice_submitted = st.form_submit_button(
-                        "선택 확인", use_container_width=True
-                    )
-                if worklog_station_choice_submitted:
-                    _confirm_worklog_station_search_choice()
-
-            worklog_station_notice = str(
-                st.session_state.get("worklog_station_search_notice", "") or ""
-            )
-            if worklog_station_notice:
-                st.success(worklog_station_notice)
-
-            area = str(st.session_state.get("worklog_area_key", "") or "").strip()
-            mother = str(st.session_state.get("worklog_mother", "") or "").strip()
-            local = str(st.session_state.get("worklog_local", "") or "").strip()
-            area_display = _worklog_area_display(area)
-
+        auth_user = worklog_auth_user
+        user_employee = str(auth_user.get("employee_no", "") or "")
+        masked_employee = ("••••" + user_employee[-4:]) if len(user_employee) >= 4 else user_employee
+        userbar_col, pin_col, logout_col = st.columns([5.2, 1.45, 1.25], gap="small", vertical_alignment="center")
+        with userbar_col:
             st.markdown(
-                f"""<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0 12px;">
-                    <div style="grid-column:1/-1;background:#FAF5FF;border:1px solid #C4B5FD;border-radius:11px;padding:10px 12px;">
-                        <div style="font-size:.78rem;font-weight:900;color:#6D28D9;margin-bottom:3px;">권역</div>
-                        <div style="font-weight:950;color:#5B21B6;line-height:1.45;">{html.escape(area_display)}</div>
-                    </div>
-                    <div style="background:#F8FAFC;border:1px solid #CBD5E1;border-radius:11px;padding:10px 12px;">
-                        <div style="font-size:.78rem;font-weight:900;color:#64748B;margin-bottom:3px;">모국</div>
-                        <div style="font-weight:900;color:#24364B;">{html.escape(mother or '자동 표시')}</div>
-                    </div>
-                    <div style="background:#F8FAFC;border:1px solid #CBD5E1;border-radius:11px;padding:10px 12px;">
-                        <div style="font-size:.78rem;font-weight:900;color:#64748B;margin-bottom:3px;">국소</div>
-                        <div style="font-weight:900;color:#24364B;">{html.escape(local or '자동 표시')}</div>
-                    </div>
-                </div>""",
+                f'<div class="worklog-userbar"><div><div class="name">👤 {html.escape(str(auth_user.get("name","")))}</div>'
+                f'<div class="meta">MY WORK LOG 개인 인증 · 사번 {html.escape(masked_employee)}</div></div></div>',
+                unsafe_allow_html=True,
+            )
+        with pin_col:
+            if st.button("🔑 PIN 변경", key="worklog_pin_change_toggle", use_container_width=True):
+                st.session_state["worklog_show_pin_change"] = not bool(st.session_state.get("worklog_show_pin_change", False))
+        with logout_col:
+            st.button("로그아웃", key="worklog_logout", use_container_width=True, on_click=_worklog_logout)
+
+        if st.session_state.get("worklog_show_pin_change"):
+            with st.container(border=True):
+                st.markdown("#### 🔑 개인 PIN 변경")
+                with st.form("worklog_regular_pin_change_form", clear_on_submit=True):
+                    current_pin = st.text_input("현재 PIN", type="password", max_chars=6)
+                    new_pin = st.text_input("새 PIN", type="password", max_chars=6)
+                    new_pin_confirm = st.text_input("새 PIN 확인", type="password", max_chars=6)
+                    pin_change_submit = st.form_submit_button("PIN 변경", type="primary", use_container_width=True)
+                if pin_change_submit:
+                    verify_ok, verify_message, _ = _worklog_authenticate_user(user_employee, current_pin)
+                    if not verify_ok:
+                        st.error(f"현재 PIN 확인 실패: {verify_message}")
+                    else:
+                        pin_ok, pin_message = _worklog_change_pin(user_employee, new_pin, new_pin_confirm)
+                        if pin_ok:
+                            st.session_state["worklog_show_pin_change"] = False
+                            st.success(pin_message)
+                            time.sleep(0.4)
+                            st.rerun()
+                        else:
+                            st.error(pin_message)
+
+        if "worklog_df" not in st.session_state:
+            st.session_state["worklog_df"] = None
+        if "worklog_loaded_at" not in st.session_state:
+            st.session_state["worklog_loaded_at"] = ""
+        if "worklog_selected_id" not in st.session_state:
+            st.session_state["worklog_selected_id"] = ""
+
+        def _worklog_close_loaded_results():
+            """조회 결과만 닫고 새 현장기록 작성 중 입력값은 보존합니다."""
+            st.session_state["worklog_df"] = None
+            st.session_state["worklog_loaded_at"] = ""
+            st.session_state["worklog_selected_id"] = ""
+            st.session_state["worklog_search"] = ""
+            st.session_state["worklog_filter"] = "전체"
+            for reset_key in (
+                "worklog_update_writer", "worklog_update_status", "worklog_update_action",
+                "worklog_update_followup", "worklog_update_remark",
+            ):
+                st.session_state.pop(reset_key, None)
+
+        # PC/모바일 공용 상단: 왼쪽 MY WORK LOG 소개 + 오른쪽 미니 대시보드
+        worklog_overview_slot = st.empty()
+
+        photo_upload_ready, photo_config_issues = _worklog_photo_config_status()
+        # 정상 운영 시 사진 저장 안내 문구는 표시하지 않습니다.
+        # 설정 이상이 있을 때만 오류 원인을 보여 기존 사진 저장 안정성은 유지합니다.
+        if not photo_upload_ready:
+            issue_html = html.escape(" / ".join(photo_config_issues) if photo_config_issues else "사진 업로드 설정 확인 필요")
+            st.markdown(
+                f'<div class="worklog-storage-note warn">📷 사진 업로드 설정 확인 필요 · PHOTO ENGINE <b>{WORK_LOG_PHOTO_ENGINE_VERSION}</b><br><b>현재 진단:</b> {issue_html}<br>Streamlit Secrets의 <b>[work_log]</b>에 <b>photo_upload_url</b>과 <b>upload_token</b>을 확인해 주세요. 기존 내비·정밀점검 기능에는 영향이 없습니다.</div>',
                 unsafe_allow_html=True,
             )
 
-            st.markdown('<div class="worklog-field-title">🔄 상태이력</div>', unsafe_allow_html=True)
-            status = st.radio(
-                "상태이력",
-                WORK_LOG_STATUS_OPTIONS,
-                horizontal=True,
-                key="worklog_status",
-                label_visibility="collapsed",
+        search_condition_col, search_text_col, search_load_col = st.columns(
+            [0.30, 0.46, 0.24], gap="small", vertical_alignment="bottom"
+        )
+        with search_condition_col:
+            st.markdown('<div class="worklog-search-row-marker"></div>', unsafe_allow_html=True)
+            worklog_filter = st.selectbox(
+                "검색 조건",
+                ["전체", "🌐 공개", "🔒 내 비공개"] + WORK_LOG_STATUS_OPTIONS,
+                key="worklog_filter",
             )
-
-            st.markdown('<div class="worklog-field-title">🧰 점검항목</div>', unsafe_allow_html=True)
-            item_select_col, item_ok_col = st.columns([4.35, 1.0], gap="small", vertical_alignment="center")
-            with item_select_col:
-                items = st.multiselect(
-                    "점검항목",
-                    WORK_LOG_ITEM_OPTIONS,
-                    placeholder="전원 · 축전지 · 접지 · 냉방 · 출입 · 안전 · 기타",
-                    key="worklog_items",
-                    label_visibility="collapsed",
-                )
-            with item_ok_col:
-                worklog_items_ok = st.button(
-                    "확인",
-                    key="worklog_items_ok",
-                    use_container_width=True,
-                )
-            if worklog_items_ok:
-                selected_item_text = ", ".join(items) if items else "선택 없음"
-                st.session_state["worklog_items_confirmed_notice"] = f"선택 완료: {selected_item_text}"
-            if st.session_state.get("worklog_items_confirmed_notice"):
-                st.caption(st.session_state["worklog_items_confirmed_notice"])
-
-            st.markdown('<div class="worklog-field-title">📷 현장사진</div>', unsafe_allow_html=True)
-            photo_c1, photo_c2 = st.columns(2)
-            with photo_c1:
-                camera_photo = st.camera_input("현장에서 바로 촬영", key="worklog_camera")
-            with photo_c2:
-                uploaded_photos = st.file_uploader(
-                    "앨범/파일에서 선택",
-                    type=["jpg", "jpeg", "png", "webp"],
-                    accept_multiple_files=True,
-                    key="worklog_uploads",
-                ) or []
-            photos = _worklog_collect_photos(camera_photo, uploaded_photos)
-            st.caption(f"선택 사진 {len(photos)}장 / 최대 {WORK_LOG_MAX_PHOTOS}장 · 저장 시 자동 압축(최대 변 1600px, 목표 약 450KB/장)")
-
-            st.markdown('<div class="worklog-field-title">📝 현상·특이사항</div>', unsafe_allow_html=True)
-            issue = st.text_area(
-                "현상·특이사항",
-                placeholder="예: 축전지 1조 7번 셀 전압이 다른 셀보다 낮게 측정됨",
-                height=105,
-                key="worklog_issue",
-                label_visibility="collapsed",
-            )
-            st.markdown('<div class="worklog-field-title">🛠️ 조치내용</div>', unsafe_allow_html=True)
-            action = st.text_area(
-                "조치내용",
-                placeholder="예: 단자 상태 확인 및 재측정",
-                height=85,
-                key="worklog_action",
-                label_visibility="collapsed",
-            )
-            st.markdown('<div class="worklog-field-title">🔁 후속조치</div>', unsafe_allow_html=True)
-            followup = st.text_area(
-                "후속조치",
-                placeholder="예: 다음 방문 시 1조 7번 셀 재확인",
-                height=85,
-                key="worklog_followup",
-                label_visibility="collapsed",
-            )
-            st.markdown('<div class="worklog-field-title">📌 비고</div>', unsafe_allow_html=True)
-            remark = st.text_input(
-                "비고",
-                placeholder="필요한 추가 메모",
-                key="worklog_remark",
-                label_visibility="collapsed",
-            )
-
-            save_log = st.button(
-                "💾 MY WORK LOG 저장",
+        with search_text_col:
+            worklog_search = st.text_input(
+                "검색어",
+                placeholder="국사 · 작성자 · 점검항목 등",
+                key="worklog_search",
+            ).strip()
+        with search_load_col:
+            refresh_worklog = st.button(
+                "🔄 불러오기",
                 use_container_width=True,
                 type="primary",
-                key="worklog_save",
-            )
-            if save_log:
-                record = {
-                    "작성자": writer,
-                    "권역": area,
-                    "모국": mother,
-                    "국소": local,
-                    "상태": status,
-                    "점검항목": items,
-                    "현상_특이사항": issue,
-                    "조치내용": action,
-                    "후속조치": followup,
-                    "비고": remark,
-                }
-                with st.spinner("현장 기록과 사진을 안전하게 저장하고 있습니다..."):
-                    ok, message, record_id = save_work_log(record, photos)
-                if ok:
-                    st.success(f"✅ {message} · 기록ID: {record_id}")
-                    try:
-                        st.session_state["worklog_df"] = load_work_logs()
-                        st.session_state["worklog_loaded_at"] = _korea_now().strftime("%Y-%m-%d %H:%M:%S")
-                    except Exception:
-                        pass
-                    _worklog_reset_entry_widgets()
-                    time.sleep(0.8)
-                    st.rerun()
-                else:
-                    st.error(f"❌ {message}")
-
-    with recent_col:
-        st.markdown('<div class="worklog-recent-marker"></div>', unsafe_allow_html=True)
-        with st.container(border=True):
-            st.markdown('<div class="worklog-section-title">🕘 최근 기록</div>', unsafe_allow_html=True)
-
-            if not isinstance(loaded_df, pd.DataFrame):
-                st.info("검색 조건과 검색어를 정한 뒤 ‘불러오기’를 누르면 최근 현장이력이 표시됩니다.")
-            else:
-                display_logs = loaded_df.copy()
-                if worklog_filter != "전체":
-                    display_logs = display_logs[display_logs["상태"].astype(str) == worklog_filter]
-                if worklog_search:
-                    search_cols = [
-                        "작성자", "권역", "모국", "국소", "상태", "점검항목",
-                        "현상_특이사항", "조치내용", "후속조치", "비고",
-                    ]
-                    mask = display_logs[search_cols].apply(
-                        lambda row: row.astype(str).str.contains(worklog_search, case=False, na=False).any(),
-                        axis=1,
-                    )
-                    display_logs = display_logs[mask]
-
-                if display_logs.empty:
-                    st.warning("조건에 맞는 WORK LOG가 없습니다.")
-                else:
-                    for _, log in display_logs.head(12).iterrows():
-                        record_id = str(log.get("기록ID", "")).strip()
-                        status_value = str(log.get("상태", "신규")).strip()
-                        badge_class = {
-                            "신규": "new", "확인필요": "wait", "조치중": "doing",
-                            "재점검": "recheck", "완료": "done",
-                        }.get(status_value, "wait")
-                        place_text = f"{str(log.get('모국','')).strip()} · {str(log.get('국소','')).strip()}"
-                        main_note = str(log.get("현상_특이사항", "")).strip() or str(log.get("조치내용", "")).strip() or "기록 내용 없음"
-                        saved_text = str(log.get("저장일시", "")).strip()
-                        items_text = str(log.get("점검항목", "")).strip()
-                        photo_ids = [v for v in str(log.get("사진파일ID목록", "")).split("|") if v.strip()]
-
-                        st.markdown(
-                            f'<div class="worklog-card">'
-                            f'<div class="worklog-card-top"><div>'
-                            f'<div class="worklog-place">📍 {html.escape(place_text)}</div>'
-                            f'<div class="worklog-meta">{html.escape(items_text)} · {html.escape(saved_text)} · {html.escape(str(log.get("작성자","")))}</div>'
-                            f'</div><span class="worklog-badge {badge_class}">{html.escape(status_value)}</span></div>'
-                            f'<div class="worklog-body">{html.escape(main_note)}</div>'
-                            f'</div>',
-                            unsafe_allow_html=True,
-                        )
-
-                        if photo_ids:
-                            thumbnail_ids = photo_ids[:4]
-                            thumb_cols = st.columns(len(thumbnail_ids))
-                            for photo_index, file_id in enumerate(thumbnail_ids):
-                                with thumb_cols[photo_index]:
-                                    photo_bytes = _worklog_download_drive_image(file_id)
-                                    if photo_bytes:
-                                        st.image(photo_bytes, use_container_width=True)
-                            if len(photo_ids) > 4:
-                                st.caption(f"📷 사진 {len(photo_ids)}장 · 화면에는 처음 4장만 미리보기")
-
-                        action_c1, action_c2 = st.columns(2)
-                        with action_c1:
-                            if st.button("상세·조치", key=f"worklog_detail_{record_id}", use_container_width=True):
-                                st.session_state["worklog_selected_id"] = record_id
-                                st.rerun()
-                        with action_c2:
-                            if status_value != "완료":
-                                if st.button("✅ 완료", key=f"worklog_done_{record_id}", use_container_width=True):
-                                    ok, msg = update_work_log(
-                                        record_id,
-                                        str(log.get("작성자", "")) or "현장 사용자",
-                                        "완료",
-                                        str(log.get("조치내용", "")),
-                                        str(log.get("후속조치", "")),
-                                        str(log.get("비고", "")),
-                                    )
-                                    if ok:
-                                        st.session_state["worklog_df"] = load_work_logs()
-                                        st.success(msg)
-                                        st.rerun()
-                                    else:
-                                        st.error(msg)
-                            else:
-                                st.button("완료됨", disabled=True, key=f"worklog_done_disabled_{record_id}", use_container_width=True)
-
-    selected_id = str(st.session_state.get("worklog_selected_id", "") or "").strip()
-    if selected_id and isinstance(st.session_state.get("worklog_df"), pd.DataFrame):
-        current_df = st.session_state["worklog_df"]
-        selected_rows = current_df[current_df["기록ID"].astype(str) == selected_id]
-        if not selected_rows.empty:
-            selected = selected_rows.iloc[0]
-            st.markdown("---")
-            st.markdown("### 📷 첨부 현장사진")
-            st.caption(
-                f"기록ID: {selected_id} · {selected.get('모국','')} / {selected.get('국소','')} · "
-                "Drive 폴더는 공개하지 않고 이 화면에서만 조회·다운로드합니다."
+                key="worklog_refresh",
             )
 
-            selected_photo_ids = [
-                v.strip() for v in str(selected.get("사진파일ID목록", "") or "").split("|") if v.strip()
-            ]
-            selected_photo_names = [
-                v.strip() for v in str(selected.get("사진파일명목록", "") or "").split("|") if v.strip()
-            ]
-
-            photo_payloads = []
-            failed_photo_count = 0
-            local_for_name = str(selected.get("국소", "") or selected.get("모국", "") or "WORK_LOG").strip()
-            writer_for_name = str(selected.get("작성자", "") or "현장").strip()
-            saved_for_name = re.sub(r"[^0-9]", "", str(selected.get("저장일시", "") or ""))[:8] or _korea_now().strftime("%Y%m%d")
-            item_for_name = str(selected.get("점검항목", "") or "현장사진").split(",")[0].strip() or "현장사진"
-
-            safe_local = re.sub(r"[^0-9A-Za-z가-힣_-]", "_", local_for_name)[:40] or "WORK_LOG"
-            safe_writer = re.sub(r"[^0-9A-Za-z가-힣_-]", "_", writer_for_name)[:30] or "현장"
-            safe_item = re.sub(r"[^0-9A-Za-z가-힣_-]", "_", item_for_name)[:30] or "현장사진"
-
-            for photo_index, file_id in enumerate(selected_photo_ids, 1):
-                photo_bytes = _worklog_download_drive_image(file_id)
-                if not photo_bytes:
-                    failed_photo_count += 1
-                    continue
-                download_name = f"{safe_local}_{safe_item}_{safe_writer}_{saved_for_name}_{photo_index:02d}.jpg"
-                stored_name = selected_photo_names[photo_index - 1] if photo_index - 1 < len(selected_photo_names) else download_name
-                photo_payloads.append({
-                    "index": photo_index,
-                    "id": file_id,
-                    "bytes": photo_bytes,
-                    "download_name": download_name,
-                    "stored_name": stored_name,
-                })
-
-            if photo_payloads:
-                st.caption(f"첨부사진 {len(selected_photo_ids)}장 · 전체 보기 및 개별/일괄 다운로드")
-                photo_cols = st.columns(2)
-                for payload_pos, payload in enumerate(photo_payloads):
-                    with photo_cols[payload_pos % 2]:
-                        st.image(
-                            payload["bytes"],
-                            caption=f"사진 {payload['index']} / {len(selected_photo_ids)}",
-                            use_container_width=True,
-                        )
-                        st.download_button(
-                            "📥 사진 다운로드",
-                            data=payload["bytes"],
-                            file_name=payload["download_name"],
-                            mime="image/jpeg",
-                            use_container_width=True,
-                            key=f"worklog_photo_download_{selected_id}_{payload['index']}",
-                        )
-
+        if refresh_worklog:
+            with st.spinner("Google Sheets에서 MY WORK LOG를 불러오는 중입니다..."):
                 try:
-                    from io import BytesIO
-                    import zipfile
+                    st.session_state["worklog_df"] = load_work_logs(auth_user)
+                    st.session_state["worklog_loaded_at"] = _korea_now().strftime("%Y-%m-%d %H:%M:%S")
+                    st.session_state["worklog_selected_id"] = ""
+                except Exception as error:
+                    st.error(f"WORK LOG를 불러오지 못했습니다: {error}")
 
-                    zip_buffer = BytesIO()
-                    with zipfile.ZipFile(zip_buffer, "w", compression=zipfile.ZIP_DEFLATED) as photo_zip:
-                        for payload in photo_payloads:
-                            photo_zip.writestr(payload["download_name"], payload["bytes"])
-                    zip_file_name = f"{safe_local}_WORK_LOG_{saved_for_name}_사진{len(photo_payloads)}장.zip"
-                    st.download_button(
-                        f"📦 사진 {len(photo_payloads)}장 전체 ZIP 다운로드",
-                        data=zip_buffer.getvalue(),
-                        file_name=zip_file_name,
-                        mime="application/zip",
+        loaded_df = st.session_state.get("worklog_df")
+        if isinstance(loaded_df, pd.DataFrame):
+            summary_source = loaded_df.copy()
+            count_open = int(summary_source["상태"].isin(["신규", "확인필요"]).sum()) if not summary_source.empty else 0
+            count_doing = int(summary_source["상태"].isin(["조치중", "재점검"]).sum()) if not summary_source.empty else 0
+            count_done = int((summary_source["상태"] == "완료").sum()) if not summary_source.empty else 0
+            count_all = int(len(summary_source))
+        else:
+            count_all = count_open = count_doing = count_done = 0
+
+        count_all_text = f"{count_all:,}" if loaded_df is not None else "-"
+        count_open_text = f"{count_open:,}" if loaded_df is not None else "-"
+        count_doing_text = f"{count_doing:,}" if loaded_df is not None else "-"
+        count_done_text = f"{count_done:,}" if loaded_df is not None else "-"
+
+        worklog_overview_slot.markdown(
+            f"""
+            <div class="worklog-overview">
+              <div class="worklog-hero">
+                <div class="eyebrow">FIELD HISTORY &amp; RECORD</div>
+                <h2>MY WORK LOG</h2>
+                <div class="sub">현장 기록 · 시설 이력</div>
+                <div class="desc">오늘의 현장 기록이 내일의 정확한 업무가 됩니다. 상태이력·점검항목·사진·조치사항을 국사별로 연결해 관리합니다.</div>
+              </div>
+              <div class="worklog-dashboard">
+                <div class="worklog-dashboard-label">WORK LOG STATUS</div>
+                <div class="worklog-kpi-grid">
+                  <div class="worklog-kpi">
+                    <span class="label">전체 기록</span><span class="value">{count_all_text}</span><span class="unit">건</span>
+                  </div>
+                  <div class="worklog-kpi open">
+                    <span class="label">미처리</span><span class="value">{count_open_text}</span><span class="unit">건</span>
+                  </div>
+                  <div class="worklog-kpi doing">
+                    <span class="label">진행·재점검</span><span class="value">{count_doing_text}</span><span class="unit">건</span>
+                  </div>
+                  <div class="worklog-kpi done">
+                    <span class="label">완료</span><span class="value">{count_done_text}</span><span class="unit">건</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        if st.session_state.get("worklog_loaded_at"):
+            st.caption(f"최근 기록 조회시각: {st.session_state['worklog_loaded_at']} · 화면 진입만으로는 Google Sheets를 자동 조회하지 않습니다.")
+
+        entry_col, recent_col = st.columns([0.94, 1.06], gap="large")
+
+        with entry_col:
+            with st.container(border=True):
+                st.markdown('<div class="worklog-section-title">📝 새 현장기록</div>', unsafe_allow_html=True)
+                st.caption("현장에서 10초 안에 남기고, 나중에 국사별 이력으로 다시 찾을 수 있도록 핵심 항목만 구성했습니다.")
+
+                st.markdown('<div class="worklog-field-title">✍️ 작성자</div>', unsafe_allow_html=True)
+                writer = str(auth_user.get("name", "") or "").strip()
+                st.markdown(
+                    f'<div class="worklog-userbar"><div><div class="name">👤 {html.escape(writer)}</div>'
+                    f'<div class="meta">개인 인증된 사용자 · 작성자는 자동으로 고정됩니다.</div></div></div>',
+                    unsafe_allow_html=True,
+                )
+
+                st.markdown('<div class="worklog-field-title">🔐 공개범위</div>', unsafe_allow_html=True)
+                visibility_label = st.radio(
+                    "공개범위",
+                    ["🌐 공개 · 팀 공유", "🔒 비공개 · 나만 보기"],
+                    horizontal=True,
+                    key="worklog_visibility",
+                    label_visibility="collapsed",
+                )
+                visibility = "비공개" if visibility_label.startswith("🔒") else "공개"
+                st.markdown(
+                    '<div class="worklog-privacy-guide">'
+                    '<div class="public"><b>🌐 공개 · 팀 공유</b><br>업무 공유가 필요한 기록입니다. 인증된 팀원이 검색·조회할 수 있습니다.</div>'
+                    '<div class="private"><b>🔒 비공개 · 나만 보기</b><br>개인 업무메모입니다. 작성한 본인만 검색·조회·사진 다운로드할 수 있습니다.</div>'
+                    '</div>',
+                    unsafe_allow_html=True,
+                )
+
+                st.markdown('<div class="worklog-field-title">📍 국사 검색 · 자동입력</div>', unsafe_allow_html=True)
+                st.caption("정밀점검과 같은 국사 기준정보를 사용합니다. 국사명만 검색·선택하면 권역·모국·국소가 자동 반영됩니다.")
+
+                with st.form(key="worklog_station_search_form", clear_on_submit=False):
+                    station_search_col, station_search_btn_col = st.columns([4.2, 1.15], gap="small")
+                    with station_search_col:
+                        st.text_input(
+                            "국사명",
+                            key="worklog_station_search_query",
+                            placeholder="예: 송포",
+                            help="국사명을 입력한 뒤 확인을 누르세요. 키보드 Enter로도 검색할 수 있습니다.",
+                            label_visibility="collapsed",
+                        )
+                    with station_search_btn_col:
+                        worklog_station_search_submitted = st.form_submit_button("확인", use_container_width=True)
+
+                if worklog_station_search_submitted:
+                    _run_worklog_station_search()
+
+                worklog_station_search_status = str(
+                    st.session_state.get("worklog_station_search_status", "") or ""
+                )
+                worklog_station_candidate_ids = list(
+                    st.session_state.get("worklog_station_search_candidates", []) or []
+                )
+
+                if worklog_station_search_status == "empty":
+                    st.warning("국사명을 먼저 입력해 주세요. 예: 송포")
+                elif worklog_station_search_status == "none":
+                    st.warning("일치하는 국사를 찾지 못했습니다. 국사명을 다시 확인해 주세요.")
+                elif worklog_station_search_status == "multiple" and worklog_station_candidate_ids:
+                    st.info(
+                        f"같은 이름 또는 유사한 국사가 {len(worklog_station_candidate_ids)}곳 있습니다. "
+                        "아래에서 정확한 국사를 선택해 주세요."
+                    )
+                    with st.form(key="worklog_station_duplicate_form", clear_on_submit=False):
+                        st.radio(
+                            "국사 선택",
+                            worklog_station_candidate_ids,
+                            key="worklog_station_search_choice",
+                            format_func=_worklog_station_search_label,
+                        )
+                        worklog_station_choice_submitted = st.form_submit_button(
+                            "선택 확인", use_container_width=True
+                        )
+                    if worklog_station_choice_submitted:
+                        _confirm_worklog_station_search_choice()
+
+                worklog_station_notice = str(
+                    st.session_state.get("worklog_station_search_notice", "") or ""
+                )
+                if worklog_station_notice:
+                    st.success(worklog_station_notice)
+
+                area = str(st.session_state.get("worklog_area_key", "") or "").strip()
+                mother = str(st.session_state.get("worklog_mother", "") or "").strip()
+                local = str(st.session_state.get("worklog_local", "") or "").strip()
+                area_display = _worklog_area_display(area)
+
+                st.markdown(
+                    f"""<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0 12px;">
+                        <div style="grid-column:1/-1;background:#FAF5FF;border:1px solid #C4B5FD;border-radius:11px;padding:10px 12px;">
+                            <div style="font-size:.78rem;font-weight:900;color:#6D28D9;margin-bottom:3px;">권역</div>
+                            <div style="font-weight:950;color:#5B21B6;line-height:1.45;">{html.escape(area_display)}</div>
+                        </div>
+                        <div style="background:#F8FAFC;border:1px solid #CBD5E1;border-radius:11px;padding:10px 12px;">
+                            <div style="font-size:.78rem;font-weight:900;color:#64748B;margin-bottom:3px;">모국</div>
+                            <div style="font-weight:900;color:#24364B;">{html.escape(mother or '자동 표시')}</div>
+                        </div>
+                        <div style="background:#F8FAFC;border:1px solid #CBD5E1;border-radius:11px;padding:10px 12px;">
+                            <div style="font-size:.78rem;font-weight:900;color:#64748B;margin-bottom:3px;">국소</div>
+                            <div style="font-weight:900;color:#24364B;">{html.escape(local or '자동 표시')}</div>
+                        </div>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+
+                st.markdown('<div class="worklog-field-title">🔄 상태이력</div>', unsafe_allow_html=True)
+                status = st.radio(
+                    "상태이력",
+                    WORK_LOG_STATUS_OPTIONS,
+                    horizontal=True,
+                    key="worklog_status",
+                    label_visibility="collapsed",
+                )
+
+                st.markdown('<div class="worklog-field-title">🧰 점검항목</div>', unsafe_allow_html=True)
+                item_select_col, item_ok_col = st.columns([4.35, 1.0], gap="small", vertical_alignment="center")
+                with item_select_col:
+                    items = st.multiselect(
+                        "점검항목",
+                        WORK_LOG_ITEM_OPTIONS,
+                        placeholder="전원 · 축전지 · 접지 · 냉방 · 출입 · 안전 · 기타",
+                        key="worklog_items",
+                        label_visibility="collapsed",
+                    )
+                with item_ok_col:
+                    worklog_items_ok = st.button(
+                        "확인",
+                        key="worklog_items_ok",
                         use_container_width=True,
-                        type="primary",
-                        key=f"worklog_photo_zip_{selected_id}",
                     )
-                except Exception as zip_error:
-                    st.warning(f"사진 ZIP 파일을 만들지 못했습니다. 개별 다운로드를 이용해 주세요. ({zip_error})")
+                if worklog_items_ok:
+                    selected_item_text = ", ".join(items) if items else "선택 없음"
+                    st.session_state["worklog_items_confirmed_notice"] = f"선택 완료: {selected_item_text}"
+                if st.session_state.get("worklog_items_confirmed_notice"):
+                    st.caption(st.session_state["worklog_items_confirmed_notice"])
 
-                if failed_photo_count:
-                    st.warning(f"첨부사진 중 {failed_photo_count}장은 현재 읽을 수 없어 표시하지 못했습니다.")
-            elif selected_photo_ids:
-                st.warning("첨부사진 정보는 있으나 현재 사진 파일을 읽을 수 없습니다. Drive 읽기 권한을 확인해 주세요.")
-            else:
-                st.info("이 기록에는 첨부된 현장사진이 없습니다.")
+                st.markdown('<div class="worklog-field-title">📷 현장사진</div>', unsafe_allow_html=True)
+                photo_c1, photo_c2 = st.columns(2)
+                with photo_c1:
+                    camera_photo = st.camera_input("현장에서 바로 촬영", key="worklog_camera")
+                with photo_c2:
+                    uploaded_photos = st.file_uploader(
+                        "앨범/파일에서 선택",
+                        type=["jpg", "jpeg", "png", "webp"],
+                        accept_multiple_files=True,
+                        key="worklog_uploads",
+                    ) or []
+                photos = _worklog_collect_photos(camera_photo, uploaded_photos)
+                st.caption(f"선택 사진 {len(photos)}장 / 최대 {WORK_LOG_MAX_PHOTOS}장 · 저장 시 자동 압축(최대 변 1600px, 목표 약 450KB/장)")
 
-            st.markdown("### 🔄 상태이력 · 조치 업데이트")
-            st.caption(f"기록ID: {selected_id} · {selected.get('모국','')} / {selected.get('국소','')}")
-            u1, u2 = st.columns(2)
-            with u1:
-                update_writer = st.text_input("변경 작성자", value=str(selected.get("작성자", "")), key="worklog_update_writer")
-                current_status = str(selected.get("상태", "신규"))
-                status_index = WORK_LOG_STATUS_OPTIONS.index(current_status) if current_status in WORK_LOG_STATUS_OPTIONS else 0
-                update_status = st.selectbox("변경 상태", WORK_LOG_STATUS_OPTIONS, index=status_index, key="worklog_update_status")
-                update_action = st.text_area("조치내용", value=str(selected.get("조치내용", "")), height=100, key="worklog_update_action")
-            with u2:
-                update_followup = st.text_area("후속조치", value=str(selected.get("후속조치", "")), height=100, key="worklog_update_followup")
-                update_remark = st.text_area("비고", value=str(selected.get("비고", "")), height=100, key="worklog_update_remark")
+                st.markdown('<div class="worklog-field-title">📝 현상·특이사항</div>', unsafe_allow_html=True)
+                issue = st.text_area(
+                    "현상·특이사항",
+                    placeholder="예: 축전지 1조 7번 셀 전압이 다른 셀보다 낮게 측정됨",
+                    height=105,
+                    key="worklog_issue",
+                    label_visibility="collapsed",
+                )
+                st.markdown('<div class="worklog-field-title">🛠️ 조치내용</div>', unsafe_allow_html=True)
+                action = st.text_area(
+                    "조치내용",
+                    placeholder="예: 단자 상태 확인 및 재측정",
+                    height=85,
+                    key="worklog_action",
+                    label_visibility="collapsed",
+                )
+                st.markdown('<div class="worklog-field-title">🔁 후속조치</div>', unsafe_allow_html=True)
+                followup = st.text_area(
+                    "후속조치",
+                    placeholder="예: 다음 방문 시 1조 7번 셀 재확인",
+                    height=85,
+                    key="worklog_followup",
+                    label_visibility="collapsed",
+                )
+                st.markdown('<div class="worklog-field-title">📌 비고</div>', unsafe_allow_html=True)
+                remark = st.text_input(
+                    "비고",
+                    placeholder="필요한 추가 메모",
+                    key="worklog_remark",
+                    label_visibility="collapsed",
+                )
 
-            uc1, uc2 = st.columns(2)
-            with uc1:
-                if st.button("💾 상태·조치 저장", type="primary", use_container_width=True, key="worklog_update_save"):
-                    ok, msg = update_work_log(
-                        selected_id, update_writer, update_status, update_action, update_followup, update_remark
-                    )
+                save_log = st.button(
+                    "💾 MY WORK LOG 저장",
+                    use_container_width=True,
+                    type="primary",
+                    key="worklog_save",
+                )
+                if save_log:
+                    record = {
+                        "작성자": writer,
+                        "작성자ID": str(auth_user.get("user_id", "") or "").strip(),
+                        "공개범위": visibility,
+                        "권역": area,
+                        "모국": mother,
+                        "국소": local,
+                        "상태": status,
+                        "점검항목": items,
+                        "현상_특이사항": issue,
+                        "조치내용": action,
+                        "후속조치": followup,
+                        "비고": remark,
+                    }
+                    with st.spinner("현장 기록과 사진을 안전하게 저장하고 있습니다..."):
+                        ok, message, record_id = save_work_log(record, photos)
                     if ok:
-                        st.session_state["worklog_df"] = load_work_logs()
-                        st.success(msg)
+                        st.success(f"✅ {message} · 기록ID: {record_id}")
+                        try:
+                            st.session_state["worklog_df"] = load_work_logs(auth_user)
+                            st.session_state["worklog_loaded_at"] = _korea_now().strftime("%Y-%m-%d %H:%M:%S")
+                        except Exception:
+                            pass
+                        _worklog_reset_entry_widgets()
+                        time.sleep(0.8)
                         st.rerun()
                     else:
-                        st.error(msg)
-            with uc2:
-                if st.button("닫기", use_container_width=True, key="worklog_update_close"):
-                    st.session_state["worklog_selected_id"] = ""
-                    st.rerun()
+                        st.error(f"❌ {message}")
 
-            history_df = load_work_log_history(selected_id)
-            if not history_df.empty:
-                st.markdown("#### 🕘 변경 이력")
-                history_display = history_df[[c for c in WORK_LOG_HISTORY_HEADERS if c in history_df.columns]].copy()
-                st.dataframe(history_display, use_container_width=True, hide_index=True)
+        with recent_col:
+            st.markdown('<div class="worklog-recent-marker"></div>', unsafe_allow_html=True)
+            with st.container(border=True):
+                st.markdown('<div class="worklog-section-title">🕘 최근 기록</div>', unsafe_allow_html=True)
 
-    if isinstance(st.session_state.get("worklog_df"), pd.DataFrame):
-        st.markdown('<div class="worklog-close-safe-space"></div>', unsafe_allow_html=True)
-        st.markdown('<div class="worklog-sticky-close-marker"></div>', unsafe_allow_html=True)
-        st.button(
-            "✕ 조회 닫기",
-            key="worklog_results_close",
-            use_container_width=True,
-            on_click=_worklog_close_loaded_results,
-        )
+                if not isinstance(loaded_df, pd.DataFrame):
+                    st.info("검색 조건과 검색어를 정한 뒤 ‘불러오기’를 누르면 최근 현장이력이 표시됩니다.")
+                else:
+                    display_logs = loaded_df.copy()
+                    if worklog_filter == "🌐 공개":
+                        display_logs = display_logs[display_logs["공개범위"].astype(str) == "공개"]
+                    elif worklog_filter == "🔒 내 비공개":
+                        display_logs = display_logs[display_logs["공개범위"].astype(str) == "비공개"]
+                    elif worklog_filter in WORK_LOG_STATUS_OPTIONS:
+                        display_logs = display_logs[display_logs["상태"].astype(str) == worklog_filter]
+                    if worklog_search:
+                        search_cols = [
+                            "작성자", "권역", "모국", "국소", "상태", "점검항목",
+                            "현상_특이사항", "조치내용", "후속조치", "비고",
+                        ]
+                        mask = display_logs[search_cols].apply(
+                            lambda row: row.astype(str).str.contains(worklog_search, case=False, na=False).any(),
+                            axis=1,
+                        )
+                        display_logs = display_logs[mask]
+
+                    if display_logs.empty:
+                        st.warning("조건에 맞는 WORK LOG가 없습니다.")
+                    else:
+                        for _, log in display_logs.head(12).iterrows():
+                            record_id = str(log.get("기록ID", "")).strip()
+                            status_value = str(log.get("상태", "신규")).strip()
+                            badge_class = {
+                                "신규": "new", "확인필요": "wait", "조치중": "doing",
+                                "재점검": "recheck", "완료": "done",
+                            }.get(status_value, "wait")
+                            place_text = f"{str(log.get('모국','')).strip()} · {str(log.get('국소','')).strip()}"
+                            main_note = str(log.get("현상_특이사항", "")).strip() or str(log.get("조치내용", "")).strip() or "기록 내용 없음"
+                            saved_text = str(log.get("저장일시", "")).strip()
+                            items_text = str(log.get("점검항목", "")).strip()
+                            privacy_value = _worklog_record_visibility(log)
+                            privacy_class = "private" if privacy_value == "비공개" else "public"
+                            privacy_text = "🔒 나만 보기" if privacy_value == "비공개" else "🌐 팀 공유"
+                            photo_ids = [v for v in str(log.get("사진파일ID목록", "")).split("|") if v.strip()]
+
+                            st.markdown(
+                                f'<div class="worklog-card">'
+                                f'<div class="worklog-card-top"><div>'
+                                f'<div class="worklog-place">📍 {html.escape(place_text)}'
+                                f'<span class="worklog-privacy-badge {privacy_class}">{privacy_text}</span></div>'
+                                f'<div class="worklog-meta">{html.escape(items_text)} · {html.escape(saved_text)} · {html.escape(str(log.get("작성자","")))}</div>'
+                                f'</div><span class="worklog-badge {badge_class}">{html.escape(status_value)}</span></div>'
+                                f'<div class="worklog-body">{html.escape(main_note)}</div>'
+                                f'</div>',
+                                unsafe_allow_html=True,
+                            )
+
+                            if photo_ids:
+                                thumbnail_ids = photo_ids[:4]
+                                thumb_cols = st.columns(len(thumbnail_ids))
+                                for photo_index, file_id in enumerate(thumbnail_ids):
+                                    with thumb_cols[photo_index]:
+                                        photo_bytes = _worklog_download_drive_image(file_id)
+                                        if photo_bytes:
+                                            st.image(photo_bytes, use_container_width=True)
+                                if len(photo_ids) > 4:
+                                    st.caption(f"📷 사진 {len(photo_ids)}장 · 화면에는 처음 4장만 미리보기")
+
+                            action_c1, action_c2 = st.columns(2)
+                            with action_c1:
+                                if st.button("상세·조치", key=f"worklog_detail_{record_id}", use_container_width=True):
+                                    st.session_state["worklog_selected_id"] = record_id
+                                    st.rerun()
+                            with action_c2:
+                                if status_value != "완료":
+                                    if st.button("✅ 완료", key=f"worklog_done_{record_id}", use_container_width=True):
+                                        ok, msg = update_work_log(
+                                            record_id,
+                                            str(auth_user.get("name", "") or "현장 사용자"),
+                                            "완료",
+                                            str(log.get("조치내용", "")),
+                                            str(log.get("후속조치", "")),
+                                            str(log.get("비고", "")),
+                                            actor_user=auth_user,
+                                        )
+                                        if ok:
+                                            st.session_state["worklog_df"] = load_work_logs(auth_user)
+                                            st.success(msg)
+                                            st.rerun()
+                                        else:
+                                            st.error(msg)
+                                else:
+                                    st.button("완료됨", disabled=True, key=f"worklog_done_disabled_{record_id}", use_container_width=True)
+
+        selected_id = str(st.session_state.get("worklog_selected_id", "") or "").strip()
+        if selected_id and isinstance(st.session_state.get("worklog_df"), pd.DataFrame):
+            current_df = st.session_state["worklog_df"]
+            selected_rows = current_df[current_df["기록ID"].astype(str) == selected_id]
+            if not selected_rows.empty:
+                selected = selected_rows.iloc[0]
+                st.markdown("---")
+                st.markdown("### 📷 첨부 현장사진")
+                st.caption(
+                    f"기록ID: {selected_id} · {selected.get('모국','')} / {selected.get('국소','')} · "
+                    "Drive 폴더는 공개하지 않고 이 화면에서만 조회·다운로드합니다."
+                )
+
+                selected_photo_ids = [
+                    v.strip() for v in str(selected.get("사진파일ID목록", "") or "").split("|") if v.strip()
+                ]
+                selected_photo_names = [
+                    v.strip() for v in str(selected.get("사진파일명목록", "") or "").split("|") if v.strip()
+                ]
+
+                photo_payloads = []
+                failed_photo_count = 0
+                local_for_name = str(selected.get("국소", "") or selected.get("모국", "") or "WORK_LOG").strip()
+                writer_for_name = str(selected.get("작성자", "") or "현장").strip()
+                saved_for_name = re.sub(r"[^0-9]", "", str(selected.get("저장일시", "") or ""))[:8] or _korea_now().strftime("%Y%m%d")
+                item_for_name = str(selected.get("점검항목", "") or "현장사진").split(",")[0].strip() or "현장사진"
+
+                safe_local = re.sub(r"[^0-9A-Za-z가-힣_-]", "_", local_for_name)[:40] or "WORK_LOG"
+                safe_writer = re.sub(r"[^0-9A-Za-z가-힣_-]", "_", writer_for_name)[:30] or "현장"
+                safe_item = re.sub(r"[^0-9A-Za-z가-힣_-]", "_", item_for_name)[:30] or "현장사진"
+
+                for photo_index, file_id in enumerate(selected_photo_ids, 1):
+                    photo_bytes = _worklog_download_drive_image(file_id)
+                    if not photo_bytes:
+                        failed_photo_count += 1
+                        continue
+                    download_name = f"{safe_local}_{safe_item}_{safe_writer}_{saved_for_name}_{photo_index:02d}.jpg"
+                    stored_name = selected_photo_names[photo_index - 1] if photo_index - 1 < len(selected_photo_names) else download_name
+                    photo_payloads.append({
+                        "index": photo_index,
+                        "id": file_id,
+                        "bytes": photo_bytes,
+                        "download_name": download_name,
+                        "stored_name": stored_name,
+                    })
+
+                if photo_payloads:
+                    st.caption(f"첨부사진 {len(selected_photo_ids)}장 · 전체 보기 및 개별/일괄 다운로드")
+                    photo_cols = st.columns(2)
+                    for payload_pos, payload in enumerate(photo_payloads):
+                        with photo_cols[payload_pos % 2]:
+                            st.image(
+                                payload["bytes"],
+                                caption=f"사진 {payload['index']} / {len(selected_photo_ids)}",
+                                use_container_width=True,
+                            )
+                            st.download_button(
+                                "📥 사진 다운로드",
+                                data=payload["bytes"],
+                                file_name=payload["download_name"],
+                                mime="image/jpeg",
+                                use_container_width=True,
+                                key=f"worklog_photo_download_{selected_id}_{payload['index']}",
+                            )
+
+                    try:
+                        from io import BytesIO
+                        import zipfile
+
+                        zip_buffer = BytesIO()
+                        with zipfile.ZipFile(zip_buffer, "w", compression=zipfile.ZIP_DEFLATED) as photo_zip:
+                            for payload in photo_payloads:
+                                photo_zip.writestr(payload["download_name"], payload["bytes"])
+                        zip_file_name = f"{safe_local}_WORK_LOG_{saved_for_name}_사진{len(photo_payloads)}장.zip"
+                        st.download_button(
+                            f"📦 사진 {len(photo_payloads)}장 전체 ZIP 다운로드",
+                            data=zip_buffer.getvalue(),
+                            file_name=zip_file_name,
+                            mime="application/zip",
+                            use_container_width=True,
+                            type="primary",
+                            key=f"worklog_photo_zip_{selected_id}",
+                        )
+                    except Exception as zip_error:
+                        st.warning(f"사진 ZIP 파일을 만들지 못했습니다. 개별 다운로드를 이용해 주세요. ({zip_error})")
+
+                    if failed_photo_count:
+                        st.warning(f"첨부사진 중 {failed_photo_count}장은 현재 읽을 수 없어 표시하지 못했습니다.")
+                elif selected_photo_ids:
+                    st.warning("첨부사진 정보는 있으나 현재 사진 파일을 읽을 수 없습니다. Drive 읽기 권한을 확인해 주세요.")
+                else:
+                    st.info("이 기록에는 첨부된 현장사진이 없습니다.")
+
+                # V13: 기록 소유자는 과거/현재 자료 모두 공개 ↔ 비공개를 언제든 변경할 수 있습니다.
+                is_owner = _worklog_record_owned_by(selected, auth_user)
+                current_visibility = _worklog_record_visibility(selected)
+                current_visibility_label = (
+                    "🌐 공개 · 팀 공유" if current_visibility == "공개" else "🔒 비공개 · 나만 보기"
+                )
+                visibility_box_class = "private" if current_visibility == "비공개" else "public"
+                st.markdown("### 🔐 공개범위 관리")
+                st.markdown(
+                    f'<div class="worklog-visibility-manage {visibility_box_class}">'
+                    f'<b>현재 공개범위: {html.escape(current_visibility_label)}</b><br>'
+                    '공개 기록은 인증된 팀원이 검색·조회할 수 있고, 비공개 기록은 작성한 본인만 검색·조회·사진 다운로드할 수 있습니다. '
+                    '공개범위를 바꾸면 연결 사진도 같은 권한을 따르며, 다른 사용자의 화면에는 다음 조회부터 반영됩니다.</div>',
+                    unsafe_allow_html=True,
+                )
+
+                if is_owner:
+                    visibility_options = ["🌐 공개 · 팀 공유", "🔒 비공개 · 나만 보기"]
+                    visibility_manage_key = f"worklog_manage_visibility_{selected_id}"
+                    if visibility_manage_key not in st.session_state:
+                        st.session_state[visibility_manage_key] = current_visibility_label
+                    managed_visibility_label = st.radio(
+                        "내 기록 공개범위 변경",
+                        visibility_options,
+                        horizontal=True,
+                        key=visibility_manage_key,
+                        label_visibility="collapsed",
+                    )
+                    new_visibility = "비공개" if managed_visibility_label.startswith("🔒") else "공개"
+                    change_needed = new_visibility != current_visibility
+                    if st.button(
+                        "💾 공개범위 변경 저장" if change_needed else "현재 공개범위 유지",
+                        type="primary" if change_needed else "secondary",
+                        use_container_width=True,
+                        disabled=not change_needed,
+                        key=f"worklog_visibility_save_{selected_id}",
+                    ):
+                        with st.spinner("공개범위를 변경하고 권한을 반영하고 있습니다..."):
+                            visibility_ok, visibility_message = update_work_log_visibility(
+                                selected_id, new_visibility, actor_user=auth_user
+                            )
+                        if visibility_ok:
+                            st.session_state["worklog_df"] = load_work_logs(auth_user)
+                            st.session_state["worklog_selected_id"] = selected_id
+                            st.success(visibility_message)
+                            time.sleep(0.5)
+                            st.rerun()
+                        else:
+                            st.error(visibility_message)
+                else:
+                    st.caption("※ 공개범위 변경 권한은 이 기록을 작성한 본인에게만 있습니다.")
+
+                st.markdown("### 🔄 상태이력 · 조치 업데이트")
+                st.caption(f"기록ID: {selected_id} · {selected.get('모국','')} / {selected.get('국소','')}")
+                u1, u2 = st.columns(2)
+                with u1:
+                    update_writer = str(auth_user.get("name", "") or "").strip()
+                    st.text_input(
+                        "변경 작성자",
+                        value=update_writer,
+                        disabled=True,
+                        key="worklog_update_writer",
+                        help="상태·조치 변경 이력에는 현재 로그인 사용자가 자동 기록됩니다.",
+                    )
+                    current_status = str(selected.get("상태", "신규"))
+                    status_index = WORK_LOG_STATUS_OPTIONS.index(current_status) if current_status in WORK_LOG_STATUS_OPTIONS else 0
+                    update_status = st.selectbox("변경 상태", WORK_LOG_STATUS_OPTIONS, index=status_index, key="worklog_update_status")
+                    update_action = st.text_area("조치내용", value=str(selected.get("조치내용", "")), height=100, key="worklog_update_action")
+                with u2:
+                    update_followup = st.text_area("후속조치", value=str(selected.get("후속조치", "")), height=100, key="worklog_update_followup")
+                    update_remark = st.text_area("비고", value=str(selected.get("비고", "")), height=100, key="worklog_update_remark")
+
+                uc1, uc2 = st.columns(2)
+                with uc1:
+                    if st.button("💾 상태·조치 저장", type="primary", use_container_width=True, key="worklog_update_save"):
+                        ok, msg = update_work_log(
+                            selected_id,
+                            update_writer,
+                            update_status,
+                            update_action,
+                            update_followup,
+                            update_remark,
+                            actor_user=auth_user,
+                        )
+                        if ok:
+                            st.session_state["worklog_df"] = load_work_logs(auth_user)
+                            st.success(msg)
+                            st.rerun()
+                        else:
+                            st.error(msg)
+                with uc2:
+                    if st.button("닫기", use_container_width=True, key="worklog_update_close"):
+                        st.session_state["worklog_selected_id"] = ""
+                        st.session_state.pop("worklog_delete_pending_id", None)
+                        st.rerun()
+
+                if is_owner:
+                    delete_photo_count = len([
+                        value for value in str(selected.get("사진파일ID목록", "") or "").split("|") if value.strip()
+                    ])
+                    st.markdown(
+                        f'<div class="worklog-delete-box"><b>🗑️ 내 기록 삭제</b><br>'
+                        f'본인이 작성한 기록만 삭제할 수 있습니다. 삭제 시 연결 사진 {delete_photo_count}장은 '
+                        'Google Drive에서 영구삭제하지 않고 휴지통으로 이동합니다.</div>',
+                        unsafe_allow_html=True,
+                    )
+                    pending_delete_id = str(st.session_state.get("worklog_delete_pending_id", "") or "").strip()
+                    if pending_delete_id != selected_id:
+                        if st.button(
+                            "🗑️ 이 기록 삭제",
+                            key=f"worklog_delete_request_{selected_id}",
+                            use_container_width=True,
+                        ):
+                            st.session_state["worklog_delete_pending_id"] = selected_id
+                            st.rerun()
+                    else:
+                        st.warning(
+                            f"정말 삭제하시겠습니까? · {selected.get('모국','')} / {selected.get('국소','')} · "
+                            f"{selected.get('저장일시','')} · 사진 {delete_photo_count}장"
+                        )
+                        delete_yes, delete_no = st.columns(2)
+                        with delete_yes:
+                            if st.button(
+                                "삭제 확정",
+                                type="primary",
+                                use_container_width=True,
+                                key=f"worklog_delete_confirm_{selected_id}",
+                            ):
+                                with st.spinner("내 기록과 연결 사진을 안전하게 정리하고 있습니다..."):
+                                    delete_ok, delete_message = delete_work_log(selected_id, auth_user)
+                                if delete_ok:
+                                    st.session_state["worklog_df"] = load_work_logs(auth_user)
+                                    st.session_state["worklog_selected_id"] = ""
+                                    st.session_state.pop("worklog_delete_pending_id", None)
+                                    st.success(delete_message)
+                                    time.sleep(0.6)
+                                    st.rerun()
+                                else:
+                                    st.error(delete_message)
+                        with delete_no:
+                            if st.button(
+                                "취소",
+                                use_container_width=True,
+                                key=f"worklog_delete_cancel_{selected_id}",
+                            ):
+                                st.session_state.pop("worklog_delete_pending_id", None)
+                                st.rerun()
+                else:
+                    st.caption("※ 삭제 권한은 이 기록을 작성한 본인에게만 있습니다.")
+
+                history_df = load_work_log_history(selected_id, auth_user)
+                if not history_df.empty:
+                    st.markdown("#### 🕘 변경 이력")
+                    history_display = history_df[[c for c in WORK_LOG_HISTORY_HEADERS if c in history_df.columns]].copy()
+                    st.dataframe(history_display, use_container_width=True, hide_index=True)
+
+        if isinstance(st.session_state.get("worklog_df"), pd.DataFrame):
+            st.markdown('<div class="worklog-close-safe-space"></div>', unsafe_allow_html=True)
+            st.markdown('<div class="worklog-sticky-close-marker"></div>', unsafe_allow_html=True)
+            st.button(
+                "✕ 조회 닫기",
+                key="worklog_results_close",
+                use_container_width=True,
+                on_click=_worklog_close_loaded_results,
+            )
+
 
 
 # --- [Tab 1: 국사 전원시설 정밀점검] ---
@@ -6531,9 +7529,9 @@ with tab_power:
     st.info("측정값은 화면과 분리된 임시저장소에 즉시 보존됩니다. 기본정보·특이사항을 제외한 측정 입력은 모바일 숫자키패드를 사용하며, Enter/확인을 누르면 자동 소수점 적용 후 다음 입력칸으로 이동합니다.")
 
 
-# --- [Tab 2: 법률 리스크/규정/계약 검토 & 보고서 작성] ---
+# --- [Tab 2: 법률 리스크/규정/계약 검토 & 감사보고서 작성] ---
 with tab_doc:
-    st.markdown("### 📄 법률 검토 · 보고서 작성/검증")
+    st.markdown("### 📄 법률 검토 · 감사보고서 작성/검증")
 
     if "api_key" not in st.session_state:
         st.warning("🔒 로그인 후 이용 가능합니다.")
@@ -6541,11 +7539,11 @@ with tab_doc:
         st.markdown("""
         <div class="audit-message-v2">
             <h4>🧭 AI 검토 품질 업그레이드 적용</h4>
-            <p>최신 Gemini 모델 우선 선택, 검색 보강 옵션, 조항별 리스크 표, 수정문안, 보고서 품질검증 구조를 적용했습니다. 기존 법률 검토 기능은 그대로 유지됩니다.</p>
+            <p>최신 Gemini 모델 우선 선택, 검색 보강 옵션, 조항별 리스크 표, 수정문안, 감사보고서 품질검증 구조를 적용했습니다. 기존 법률 검토 기능은 그대로 유지됩니다.</p>
         </div>
         """, unsafe_allow_html=True)
 
-        cur1, cur2 = st.tabs(["⚖️ 법률 리스크 심층 검토", "🔍 보고서 작성·검증"])
+        cur1, cur2 = st.tabs(["⚖️ 법률 리스크 심층 검토", "🔍 감사보고서 작성·검증"])
 
         with cur1:
             st.markdown("#### ⚖️ 법률 리스크 정밀 검토")
@@ -6557,7 +7555,7 @@ with tab_doc:
             with col_a:
                 doc_type = st.selectbox(
                     "문서 유형",
-                    ["계약서", "약관/일반조건", "사내 규정", "공문/통지문", "조사 자료", "기타"],
+                    ["계약서", "약관/일반조건", "사내 규정", "공문/통지문", "감사·조사 자료", "기타"],
                     index=0,
                     key="cur1_doc_type"
                 )
@@ -6606,12 +7604,12 @@ with tab_doc:
                                 st.error(f"오류: {e}")
 
         with cur2:
-            st.markdown("#### 🔍 보고서 작성·검증")
-            st.caption("면담자료, 증거자료, 회사 규정, 기존 보고서를 바탕으로 보고서 초안 작성 또는 품질검증을 수행합니다.")
+            st.markdown("#### 🔍 감사보고서 작성·검증")
+            st.caption("면담자료, 증거자료, 회사 규정, 기존 보고서를 바탕으로 감사보고서 초안 작성 또는 품질검증을 수행합니다.")
 
             mode = st.radio(
                 "작업 모드",
-                ["🧾 보고서 초안 생성", "✅ 보고서 검증·교정(오탈자/논리/형식)"],
+                ["🧾 감사보고서 초안 생성", "✅ 감사보고서 검증·교정(오탈자/논리/형식)"],
                 horizontal=True,
                 key="cur2_mode"
             )
@@ -6620,7 +7618,7 @@ with tab_doc:
             with st.expander("🔐 보안·주의사항", expanded=False):
                 st.markdown(
                     "- 민감정보는 업로드 전 내부 보안 기준에 따라 비식별 처리하는 것이 안전합니다.\n"
-                    "- 본 기능은 판단을 보조하는 도구이며, 최종 판단은 사용자에게 있습니다.\n"
+                    "- 본 기능은 감사 판단을 보조하는 도구이며, 최종 판단·결재 책임은 감사실에 있습니다.\n"
                     "- 자료에 없는 사실은 생성하지 않도록 프롬프트에 제한을 두었습니다."
                 )
 
@@ -6631,7 +7629,7 @@ with tab_doc:
             draft_file = None
 
             if is_draft_mode:
-                st.markdown("### ① 자료 입력")
+                st.markdown("### ① 감사 자료 입력")
                 cL, cR = st.columns(2)
                 with cL:
                     interview_audio = st.file_uploader("🎧 면담 음성(mp3/wav/mp4) — 선택", type=["mp3", "wav", "mp4"], key="cur2_audio")
@@ -6647,7 +7645,7 @@ with tab_doc:
                 st.markdown("### ① 검증 대상 보고서 입력")
                 cL, cR = st.columns(2)
                 with cL:
-                    draft_text = st.text_area("검증할 보고서 붙여넣기", height=230, key="cur2_draft")
+                    draft_text = st.text_area("검증할 감사보고서 붙여넣기", height=230, key="cur2_draft")
                 with cR:
                     draft_file = st.file_uploader("또는 파일 업로드(PDF/DOCX/TXT)", type=["pdf", "docx", "txt"], key="cur2_draft_file")
 
@@ -6675,13 +7673,13 @@ with tab_doc:
             with row2:
                 report_tone = st.selectbox(
                     "문서 톤",
-                    ["보고서(공식·중립)", "보고서(간결·결정 중심)", "상신용(결재/조치 권고 중심)"],
+                    ["감사보고서(공식·중립)", "보고서(간결·결정 중심)", "상신용(결재/조치 권고 중심)"],
                     index=0,
                     key="cur2_tone"
                 )
             case_scope = st.text_area("사건 개요 요약 — 무엇을/언제/누가/어떤 경위로", height=120, key="cur2_scope")
 
-            if st.button("🧠 보고서 AI 실행", use_container_width=True, key="cur2_run"):
+            if st.button("🧠 감사보고서 AI 실행", use_container_width=True, key="cur2_run"):
                 materials = []
 
                 if is_draft_mode:
@@ -6710,9 +7708,9 @@ with tab_doc:
                 if not case_title.strip():
                     st.warning("⚠️ 사건명/건명을 입력해 주세요.")
                 elif not case_scope.strip() and not materials_text:
-                    st.warning("⚠️ 사건 개요 또는 자료 중 하나 이상은 입력해야 합니다.")
+                    st.warning("⚠️ 사건 개요 또는 감사 자료 중 하나 이상은 입력해야 합니다.")
                 else:
-                    with st.spinner("📑 보고서 품질 기준에 맞춰 처리 중입니다..."):
+                    with st.spinner("📑 감사보고서 품질 기준에 맞춰 처리 중입니다..."):
                         try:
                             prompt = build_audit_report_prompt(mode, case_title, case_scope, report_tone, materials_text, regulations_text, refs_text)
                             if is_draft_mode and interview_audio:
@@ -6737,8 +7735,8 @@ with tab_chat:
     else:
         st.markdown("""
         <div class="audit-message-v2">
-            <h4>🤝 법률·컴플라이언스 전용 챗봇</h4>
-            <p>질문을 그대로 전달하지 않고, 업무 기준에 맞춘 역할·답변 구조·한계 고지를 적용합니다. 최신 이슈는 검색 보강 모드를 사용할 수 있습니다.</p>
+            <h4>🤝 감사·법률·컴플라이언스 전용 챗봇</h4>
+            <p>질문을 그대로 전달하지 않고, 감사실 업무 기준에 맞춘 역할·답변 구조·한계 고지를 적용합니다. 최신 이슈는 검색 보강 모드를 사용할 수 있습니다.</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -6747,7 +7745,7 @@ with tab_chat:
 
         chat_mode = st.selectbox(
             "상담 모드",
-            ["컴플라이언스 일반 상담", "최신 법령·판례·뉴스 검색 보강", "문서/보고서 문안 개선"],
+            ["감사·컴플라이언스 일반 상담", "최신 법령·판례·뉴스 검색 보강", "문서/보고서 문안 개선"],
             index=0,
             key="chat_mode"
         )
@@ -6802,7 +7800,7 @@ with tab_summary:
         st_type = st.radio("입력 방식", ["URL (유튜브/웹)", "미디어 파일", "텍스트"], horizontal=True)
         summary_mode = st.selectbox(
             "요약 모드",
-            ["뉴스·보도자료 브리핑", "유튜브·교육영상 요약", "회의·면담 녹취 요약", "자료·증거자료 요약", "일반 요약"],
+            ["뉴스·보도자료 브리핑", "유튜브·교육영상 요약", "회의·면담 녹취 요약", "감사자료·증거자료 요약", "일반 요약"],
             index=0,
             key="summary_mode"
         )
