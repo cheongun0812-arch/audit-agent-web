@@ -3375,7 +3375,7 @@ def _render_power_auto_decimal_script() -> None:
 
 
 # ==========================================
-# 8-3. MY WORK LOG · 현장 기록 / 시설 이력
+# 8-3. MY WORK LOG · 현장 기록 / 시설 이력 · V14
 #      - 기존 전원 정밀점검 로직과 완전히 분리
 #      - 텍스트/상태이력: Google Sheets
 #      - 사진: Google Drive/Shared Drive (선택 설정)
@@ -3410,19 +3410,21 @@ WORK_LOG_STATUS_OPTIONS = ["신규", "확인필요", "조치중", "재점검", "
 WORK_LOG_ITEM_OPTIONS = ["전원", "축전지", "접지", "냉방", "출입", "안전", "기타"]
 WORK_LOG_VISIBILITY_OPTIONS = ["공개", "비공개"]
 
-# 최초 1회 로그인용 임시 PIN은 평문으로 코드에 저장하지 않습니다.
-# 사용자별 salt/PBKDF2-SHA256 해시만 포함하고, 첫 로그인 후 반드시 개인 PIN으로 변경합니다.
+# 최초 1회 로그인 공통 임시 PIN은 000000입니다.
+# 평문 PIN 자체는 사용자 시트에 저장하지 않고, 사용자별 salt/PBKDF2-SHA256 해시만 저장합니다.
+# 최초 로그인 후 반드시 본인만 아는 6자리 개인 PIN으로 변경해야 계속 사용할 수 있습니다.
+WORK_LOG_INITIAL_PIN = "000000"
 WORK_LOG_USER_BOOTSTRAP = [
-    {"사용자ID": "U001", "이름": "정청운", "사번": "10001713", "PIN_SALT": "77ff49ed455e6c6b51e5e8e3f6e68921", "PIN_HASH": "ff38deac772008ad6ed30b908370cdb08daaf8c8af7c92acd98d04ab0a131025"},
-    {"사용자ID": "U002", "이름": "이학원", "사번": "10001612", "PIN_SALT": "29163715791f6e0de173505ce908e1f6", "PIN_HASH": "9af02cb87318de4c434d859b20d778da5e539224fbd5563a903b45882a61acbf"},
-    {"사용자ID": "U003", "이름": "이철순", "사번": "10002090", "PIN_SALT": "9d21a30d7f533d7257e1fbf9b68a9c7e", "PIN_HASH": "165f1524a77b67a66743956e0b5b93031629bc4eef90d878ccc1c6db64642024"},
-    {"사용자ID": "U004", "이름": "소순고", "사번": "81000020", "PIN_SALT": "d6f88aabb2f12124454cf42d46206f97", "PIN_HASH": "156470c71cafb4e04805360b477df19ececf2a7cfd7a81dd5351ba407aefda5f"},
-    {"사용자ID": "U005", "이름": "강만식", "사번": "10001009", "PIN_SALT": "f0cec3f7277cf5e796f92714da7d125f", "PIN_HASH": "776d6054c57e4b02b18cede3e51471818482dbd4e1a6b93719f57320df11b683"},
-    {"사용자ID": "U006", "이름": "이민우", "사번": "10001522", "PIN_SALT": "e1704544ebc2ebfb4b4d22e52ae9cb7d", "PIN_HASH": "b2272b01aa3376e1f4e32ecbac9506a42fdc2b5f26ffc49e308efc3724ac0117"},
-    {"사용자ID": "U007", "이름": "신진우", "사번": "10001405", "PIN_SALT": "f3d0dbdbe31c6c1469a32e97cf9a0305", "PIN_HASH": "b85531a80f0aed1a3ee39dd1be2daf1d329a2d61b9939f709ae624a3777c9600"},
-    {"사용자ID": "U008", "이름": "박동희", "사번": "10001280", "PIN_SALT": "624d54a5284f371b4841a147e77864fe", "PIN_HASH": "ca3612a95109d1ce32ad454783e6eaa4bf72db550587609dcbf39ab384cdbaca"},
-    {"사용자ID": "U009", "이름": "김태수", "사번": "10001923", "PIN_SALT": "448acac5e45481fde72570b185487cad", "PIN_HASH": "a7e40a1ce87dd9deff0f17a2a9844c68d923d51e573283926b0d7439be1b7e79"},
-    {"사용자ID": "U010", "이름": "김수창", "사번": "10002211", "PIN_SALT": "db0f5de3aa3b301cf20e3abd0109c25e", "PIN_HASH": "9d6307e65083acfa963f55c3fe814c2523c668134e01677022ef58f64876ddec"},
+    {"사용자ID": "U001", "이름": "정청운", "사번": "10001713", "PIN_SALT": "de28394a671befb76a8fd8ec1b904d72", "PIN_HASH": "8fb388bf36dd783aeda3bbfd362b5b035df14ef1d11b64bb078085e521a4f295"},
+    {"사용자ID": "U002", "이름": "이학원", "사번": "10001612", "PIN_SALT": "2fcd8fad516f3d7b0719729fc9f60996", "PIN_HASH": "6d7041143724825e28f813004029a15caca9a580635878eb8c8a1e82217b7e19"},
+    {"사용자ID": "U003", "이름": "이철순", "사번": "10002090", "PIN_SALT": "c5e1143a554e05ec9051b537281b9a1a", "PIN_HASH": "7aec4643550243e931bdaaa4ea931f3ed6ea0dcf4a53555971a0289d7ce15bae"},
+    {"사용자ID": "U004", "이름": "소순고", "사번": "81000020", "PIN_SALT": "3d2a67162bfd799901747c7e5e716e5e", "PIN_HASH": "cee9feacb954b53343986b93c87b8d3fccab7d1fc6492a879549af01a5dab886"},
+    {"사용자ID": "U005", "이름": "강만식", "사번": "10001009", "PIN_SALT": "7bfa69aaf3b2a6ece51c5fc5ac25d0d2", "PIN_HASH": "45c73984e01f3d857682124f4ce167feb4e4f2ed8178dda4fbeb05dc34eeec97"},
+    {"사용자ID": "U006", "이름": "이민우", "사번": "10001522", "PIN_SALT": "18a1a33b692c2a2142e1eabe56cdd6ff", "PIN_HASH": "cc667aeef9fe18ad0d7772cef1ee26091ad8fb311c102cc8c8691f25a7e927f7"},
+    {"사용자ID": "U007", "이름": "신진우", "사번": "10001405", "PIN_SALT": "00a1ec0138defc16e5845bb54ddc3c6d", "PIN_HASH": "4daf3b870e8f289b15a5b59a933fed897141858405724bd48efe84fd6de1772b"},
+    {"사용자ID": "U008", "이름": "박동희", "사번": "10001280", "PIN_SALT": "27dd2fbd801a3cc0d8cc53b9436e11f6", "PIN_HASH": "9bf8757c5b114e3b051afece0bbb5fd41adc4acbab696d5f810552fd0525b4a7"},
+    {"사용자ID": "U009", "이름": "김태수", "사번": "10001923", "PIN_SALT": "02bd5b1d4eedb7103955495269126453", "PIN_HASH": "6bf64d324a844f33de7b04203dbcfb3c42d6cb44785a0c6680eefc3b8462fceb"},
+    {"사용자ID": "U010", "이름": "김수창", "사번": "10002211", "PIN_SALT": "41b790666a4e7c4654df4c3bb57d3680", "PIN_HASH": "c1ef17186b3dea51c524663a11fec23d7a65b4b2f898123b513afd4e35aed741"},
 ]
 WORK_LOG_NAME_TO_USER_ID = {row["이름"]: row["사용자ID"] for row in WORK_LOG_USER_BOOTSTRAP}
 WORK_LOG_EMPLOYEE_TO_NAME = {row["사번"]: row["이름"] for row in WORK_LOG_USER_BOOTSTRAP}
@@ -3597,7 +3599,7 @@ def _worklog_ensure_headers(worksheet, desired_headers: list[str]) -> list[str]:
 
 
 def _worklog_ensure_user_sheet(spreadsheet):
-    """개인인증 사용자 시트를 생성하고 등록된 10명의 누락 행만 안전하게 보충합니다."""
+    """개인인증 사용자 시트를 생성하고, 최초 PIN 미변경 계정은 공통 임시 PIN 000000으로 안전하게 동기화합니다."""
     try:
         ws = spreadsheet.worksheet(WORK_LOG_USER_SHEET_NAME)
     except Exception:
@@ -3609,38 +3611,49 @@ def _worklog_ensure_user_sheet(spreadsheet):
         ws.append_row(WORK_LOG_USER_HEADERS, value_input_option="USER_ENTERED")
 
     headers = _worklog_ensure_headers(ws, WORK_LOG_USER_HEADERS)
-    try:
-        values = ws.get_all_values()
-    except Exception:
-        values = []
-
-    existing_employee_numbers = set()
-    if values and headers and "사번" in headers:
-        employee_index = headers.index("사번")
-        for row in values[1:]:
-            if employee_index < len(row):
-                value = str(row[employee_index] or "").strip()
-                if value:
-                    existing_employee_numbers.add(value)
+    values = ws.get_all_values()
+    employee_index = headers.index("사번") if "사번" in headers else None
+    existing_rows: dict[str, tuple[int, list[str]]] = {}
+    if values and employee_index is not None:
+        for row_no, row in enumerate(values[1:], start=2):
+            value = str(row[employee_index] if employee_index < len(row) else "" or "").strip()
+            if value:
+                existing_rows[value] = (row_no, row)
 
     for bootstrap in WORK_LOG_USER_BOOTSTRAP:
         employee_no = bootstrap["사번"]
-        if employee_no in existing_employee_numbers:
+        existing = existing_rows.get(employee_no)
+        if existing is None:
+            row_map = {
+                **bootstrap,
+                "PIN변경필요": "Y",
+                "활성": "Y",
+                "최근로그인": "",
+                "최근PIN변경일시": "",
+            }
+            ws.append_row(
+                [row_map.get(header, "") for header in headers],
+                value_input_option="USER_ENTERED",
+            )
             continue
-        row_map = {
-            **bootstrap,
-            "PIN변경필요": "Y",
-            "활성": "Y",
-            "최근로그인": "",
-            "최근PIN변경일시": "",
-        }
-        ws.append_row(
-            [row_map.get(header, "") for header in headers],
-            value_input_option="USER_ENTERED",
-        )
-        existing_employee_numbers.add(employee_no)
-    return ws
 
+        row_no, row = existing
+        row_map = {header: (row[idx] if idx < len(row) else "") for idx, header in enumerate(headers)}
+        must_change = str(row_map.get("PIN변경필요", "") or "").strip().upper() in {"Y", "YES", "TRUE", "1"}
+
+        # V12/V13에서 개인별 임시 PIN이 이미 배정되었더라도 아직 본인 PIN으로 바꾸지 않은 계정만
+        # V14 공통 최초 PIN 000000으로 전환합니다. 이미 PIN변경필요=N인 사용자의 개인 PIN은 절대 건드리지 않습니다.
+        if must_change:
+            initial_updates = {
+                "PIN_SALT": bootstrap["PIN_SALT"],
+                "PIN_HASH": bootstrap["PIN_HASH"],
+                "PIN변경필요": "Y",
+            }
+            for header, value in initial_updates.items():
+                if header in headers and str(row_map.get(header, "") or "") != str(value):
+                    ws.update_cell(row_no, headers.index(header) + 1, value)
+
+    return ws
 
 def _worklog_read_user_by_employee(employee_no: str) -> tuple[object | None, dict, int | None]:
     """사번으로 사용자 시트의 실제 행을 읽습니다."""
@@ -3841,7 +3854,7 @@ def _worklog_filter_accessible_records(df: pd.DataFrame, auth_user: dict) -> pd.
 
 
 def _worklog_login_dialog_body() -> None:
-    st.caption("팀 공유 기록과 개인 메모를 구분하기 위해 MY WORK LOG만 개인 인증을 사용합니다.")
+    st.caption("팀 공유 기록과 개인 메모를 구분하기 위해 MY WORK LOG만 개인 인증을 사용합니다. 최초 로그인 공통 PIN은 000000입니다.")
     with st.form("worklog_personal_login_form", clear_on_submit=False):
         employee_no = st.text_input(
             "사번",
@@ -3852,7 +3865,7 @@ def _worklog_login_dialog_body() -> None:
         pin = st.text_input(
             "개인 PIN",
             type="password",
-            placeholder="6자리 PIN",
+            placeholder="최초 000000 / 이후 개인 PIN",
             max_chars=6,
             key="worklog_login_pin",
         )
@@ -5380,6 +5393,8 @@ def _render_pledge_group(
 
 # --- [Top Tab: MY WORK LOG · 현장 기록 / 시설 이력] ---
 with tab_worklog:
+    # 조회를 닫았을 때 돌아올 MY WORK LOG 전용 상단 기준점입니다.
+    st.markdown('<div id="worklog-top-anchor" style="height:1px;scroll-margin-top:18px;"></div>', unsafe_allow_html=True)
     st.markdown("""
     <style>
     .worklog-overview {
@@ -5704,6 +5719,32 @@ with tab_worklog:
     """, unsafe_allow_html=True)
 
 
+    if st.session_state.pop("worklog_scroll_to_top", False):
+        components.html(
+            """
+            <script>
+            (function () {
+              let tries = 0;
+              function goTop() {
+                try {
+                  const w = window.parent;
+                  const d = w.document;
+                  const anchor = d.getElementById('worklog-top-anchor');
+                  if (anchor) {
+                    anchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    return;
+                  }
+                } catch (e) {}
+                tries += 1;
+                if (tries < 24) window.setTimeout(goTop, 70);
+              }
+              window.setTimeout(goTop, 90);
+            })();
+            </script>
+            """,
+            height=1,
+        )
+
     worklog_auth_user = _worklog_current_user()
 
     if not worklog_auth_user:
@@ -5728,13 +5769,13 @@ with tab_worklog:
             ):
                 _worklog_login_dialog()
         with auth_info_col:
-            st.caption("사번 + 개인 PIN으로 로그인합니다. 최초 로그인 시 임시 PIN을 개인 PIN으로 변경해야 합니다.")
+            st.caption("사번 + 개인 PIN으로 로그인합니다. 최초 로그인 공통 PIN은 000000이며, 로그인 직후 본인 PIN으로 반드시 변경합니다.")
 
     elif bool(st.session_state.get("worklog_pin_change_required", False)):
         st.markdown(
             '<div class="worklog-auth-card">'
             '<div class="worklog-auth-title">🔑 최초 로그인 · 개인 PIN 설정</div>'
-            '<div class="worklog-auth-desc">보안을 위해 배부받은 임시 PIN은 최초 로그인에서 한 번만 사용합니다. '
+            '<div class="worklog-auth-desc">최초 로그인 공통 PIN 000000은 한 번만 사용합니다. '
             '앞으로 사용할 숫자 6자리 개인 PIN으로 변경해 주세요.</div></div>',
             unsafe_allow_html=True,
         )
@@ -5804,12 +5845,13 @@ with tab_worklog:
             st.session_state["worklog_selected_id"] = ""
 
         def _worklog_close_loaded_results():
-            """조회 결과만 닫고 새 현장기록 작성 중 입력값은 보존합니다."""
+            """조회 결과만 닫고 새 현장기록 작성 중 입력값은 보존한 뒤 WORK LOG 상단으로 이동합니다."""
             st.session_state["worklog_df"] = None
             st.session_state["worklog_loaded_at"] = ""
             st.session_state["worklog_selected_id"] = ""
             st.session_state["worklog_search"] = ""
             st.session_state["worklog_filter"] = "전체"
+            st.session_state["worklog_scroll_to_top"] = True
             for reset_key in (
                 "worklog_update_writer", "worklog_update_status", "worklog_update_action",
                 "worklog_update_followup", "worklog_update_remark",
