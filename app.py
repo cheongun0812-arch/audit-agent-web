@@ -3795,7 +3795,7 @@ def _worklog_logout() -> None:
     for key in (
         "worklog_auth_user", "worklog_pin_change_required", "worklog_show_pin_change",
         "worklog_df", "worklog_loaded_at", "worklog_selected_id", "worklog_delete_pending_id",
-        "worklog_search", "worklog_filter",
+        "worklog_search", "worklog_filter", "worklog_public_scope",
     ):
         st.session_state.pop(key, None)
 
@@ -5517,7 +5517,7 @@ with tab_worklog:
         font-weight:700 !important;
     }
 
-    /* WORK LOG 조회 UI: PC는 대시보드 폭, 모바일은 조건+검색어 1행 / 불러오기 2행 */
+    /* WORK LOG 조회 UI: PC는 대시보드 폭, 모바일은 공개 조회 시 조건+범위 / 검색어 / 불러오기 순으로 배치 */
     div[data-testid="stElementContainer"]:has(.worklog-search-row-marker),
     div[data-testid="stElementContainer"]:has(.worklog-recent-marker),
     div[data-testid="stElementContainer"]:has(.worklog-sticky-close-marker) {
@@ -5628,6 +5628,31 @@ with tab_worklog:
             grid-row:2 !important;
             width:100% !important;
             max-width:none !important;
+        }
+
+        /* V15 공개 조회: 1행=검색조건+내/전체, 2행=검색어, 3행=불러오기 전체 폭 */
+        div[data-testid="stHorizontalBlock"]:has(.worklog-public-scope-marker) {
+            grid-template-columns:minmax(0,1fr) minmax(0,1fr) !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(.worklog-public-scope-marker)
+          > div[data-testid="column"]:nth-child(1),
+        div[data-testid="stHorizontalBlock"]:has(.worklog-public-scope-marker)
+          > div[data-testid="stColumn"]:nth-child(1) { grid-column:1; grid-row:1; }
+        div[data-testid="stHorizontalBlock"]:has(.worklog-public-scope-marker)
+          > div[data-testid="column"]:nth-child(2),
+        div[data-testid="stHorizontalBlock"]:has(.worklog-public-scope-marker)
+          > div[data-testid="stColumn"]:nth-child(2) { grid-column:2; grid-row:1; }
+        div[data-testid="stHorizontalBlock"]:has(.worklog-public-scope-marker)
+          > div[data-testid="column"]:nth-child(3),
+        div[data-testid="stHorizontalBlock"]:has(.worklog-public-scope-marker)
+          > div[data-testid="stColumn"]:nth-child(3) {
+            grid-column:1 / -1 !important; grid-row:2 !important; width:100% !important; max-width:none !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(.worklog-public-scope-marker)
+          > div[data-testid="column"]:nth-child(4),
+        div[data-testid="stHorizontalBlock"]:has(.worklog-public-scope-marker)
+          > div[data-testid="stColumn"]:nth-child(4) {
+            grid-column:1 / -1 !important; grid-row:3 !important; width:100% !important; max-width:none !important;
         }
         /* 불러오기 버튼은 모바일에서 검색영역 전체 폭 + 한 줄 고정 */
         .st-key-worklog_refresh {
@@ -5851,6 +5876,7 @@ with tab_worklog:
             st.session_state["worklog_selected_id"] = ""
             st.session_state["worklog_search"] = ""
             st.session_state["worklog_filter"] = "전체"
+            st.session_state["worklog_public_scope"] = "👤 내 기록"
             st.session_state["worklog_scroll_to_top"] = True
             for reset_key in (
                 "worklog_update_writer", "worklog_update_status", "worklog_update_action",
@@ -5871,9 +5897,18 @@ with tab_worklog:
                 unsafe_allow_html=True,
             )
 
-        search_condition_col, search_text_col, search_load_col = st.columns(
-            [0.30, 0.46, 0.24], gap="small", vertical_alignment="bottom"
-        )
+        # V15: 공개 조회는 "내 기록 / 전체 기록"을 선택할 수 있게 하고 검색어 폭을 줄입니다.
+        public_filter_for_layout = str(st.session_state.get("worklog_filter", "전체") or "전체") == "🌐 공개"
+        if public_filter_for_layout:
+            search_condition_col, public_scope_col, search_text_col, search_load_col = st.columns(
+                [0.24, 0.23, 0.31, 0.22], gap="small", vertical_alignment="bottom"
+            )
+        else:
+            search_condition_col, search_text_col, search_load_col = st.columns(
+                [0.30, 0.46, 0.24], gap="small", vertical_alignment="bottom"
+            )
+            public_scope_col = None
+
         with search_condition_col:
             st.markdown('<div class="worklog-search-row-marker"></div>', unsafe_allow_html=True)
             worklog_filter = st.selectbox(
@@ -5881,6 +5916,25 @@ with tab_worklog:
                 ["전체", "🌐 공개", "🔒 내 비공개"] + WORK_LOG_STATUS_OPTIONS,
                 key="worklog_filter",
             )
+
+        worklog_public_scope = str(st.session_state.get("worklog_public_scope", "👤 내 기록") or "👤 내 기록")
+        if worklog_filter == "🌐 공개":
+            # Streamlit은 위젯 변경 시 즉시 rerun되므로 공개 선택 이후에는 4열 레이아웃으로 다시 그려집니다.
+            if public_scope_col is not None:
+                with public_scope_col:
+                    st.markdown('<div class="worklog-public-scope-marker"></div>', unsafe_allow_html=True)
+                    worklog_public_scope = st.selectbox(
+                        "공개 기록 범위",
+                        ["👤 내 기록", "👥 전체 기록"],
+                        key="worklog_public_scope",
+                        help="내 기록은 로그인한 본인이 작성한 공개 기록만, 전체 기록은 모든 사용자의 공개 기록을 조회합니다.",
+                    )
+            else:
+                st.session_state["worklog_public_scope"] = "👤 내 기록"
+                worklog_public_scope = "👤 내 기록"
+        else:
+            worklog_public_scope = "👤 내 기록"
+
         with search_text_col:
             worklog_search = st.text_input(
                 "검색어",
@@ -6174,6 +6228,257 @@ with tab_worklog:
                     else:
                         st.error(f"❌ {message}")
 
+        def _render_worklog_inline_detail(selected, selected_id: str) -> None:
+            """선택한 최근 기록의 기존 상세·조치 화면을 해당 카드 바로 아래에 렌더링합니다."""
+            st.markdown("---")
+            st.markdown("### 📷 첨부 현장사진")
+            st.caption(
+                f"기록ID: {selected_id} · {selected.get('모국','')} / {selected.get('국소','')} · "
+                "Drive 폴더는 공개하지 않고 이 화면에서만 조회·다운로드합니다."
+            )
+
+            selected_photo_ids = [
+                v.strip() for v in str(selected.get("사진파일ID목록", "") or "").split("|") if v.strip()
+            ]
+            selected_photo_names = [
+                v.strip() for v in str(selected.get("사진파일명목록", "") or "").split("|") if v.strip()
+            ]
+
+            photo_payloads = []
+            failed_photo_count = 0
+            local_for_name = str(selected.get("국소", "") or selected.get("모국", "") or "WORK_LOG").strip()
+            writer_for_name = str(selected.get("작성자", "") or "현장").strip()
+            saved_for_name = re.sub(r"[^0-9]", "", str(selected.get("저장일시", "") or ""))[:8] or _korea_now().strftime("%Y%m%d")
+            item_for_name = str(selected.get("점검항목", "") or "현장사진").split(",")[0].strip() or "현장사진"
+
+            safe_local = re.sub(r"[^0-9A-Za-z가-힣_-]", "_", local_for_name)[:40] or "WORK_LOG"
+            safe_writer = re.sub(r"[^0-9A-Za-z가-힣_-]", "_", writer_for_name)[:30] or "현장"
+            safe_item = re.sub(r"[^0-9A-Za-z가-힣_-]", "_", item_for_name)[:30] or "현장사진"
+
+            for photo_index, file_id in enumerate(selected_photo_ids, 1):
+                photo_bytes = _worklog_download_drive_image(file_id)
+                if not photo_bytes:
+                    failed_photo_count += 1
+                    continue
+                download_name = f"{safe_local}_{safe_item}_{safe_writer}_{saved_for_name}_{photo_index:02d}.jpg"
+                stored_name = selected_photo_names[photo_index - 1] if photo_index - 1 < len(selected_photo_names) else download_name
+                photo_payloads.append({
+                    "index": photo_index,
+                    "id": file_id,
+                    "bytes": photo_bytes,
+                    "download_name": download_name,
+                    "stored_name": stored_name,
+                })
+
+            if photo_payloads:
+                st.caption(f"첨부사진 {len(selected_photo_ids)}장 · 전체 보기 및 개별/일괄 다운로드")
+                photo_cols = st.columns(2)
+                for payload_pos, payload in enumerate(photo_payloads):
+                    with photo_cols[payload_pos % 2]:
+                        st.image(
+                            payload["bytes"],
+                            caption=f"사진 {payload['index']} / {len(selected_photo_ids)}",
+                            use_container_width=True,
+                        )
+                        st.download_button(
+                            "📥 사진 다운로드",
+                            data=payload["bytes"],
+                            file_name=payload["download_name"],
+                            mime="image/jpeg",
+                            use_container_width=True,
+                            key=f"worklog_photo_download_{selected_id}_{payload['index']}",
+                        )
+
+                try:
+                    from io import BytesIO
+                    import zipfile
+
+                    zip_buffer = BytesIO()
+                    with zipfile.ZipFile(zip_buffer, "w", compression=zipfile.ZIP_DEFLATED) as photo_zip:
+                        for payload in photo_payloads:
+                            photo_zip.writestr(payload["download_name"], payload["bytes"])
+                    zip_file_name = f"{safe_local}_WORK_LOG_{saved_for_name}_사진{len(photo_payloads)}장.zip"
+                    st.download_button(
+                        f"📦 사진 {len(photo_payloads)}장 전체 ZIP 다운로드",
+                        data=zip_buffer.getvalue(),
+                        file_name=zip_file_name,
+                        mime="application/zip",
+                        use_container_width=True,
+                        type="primary",
+                        key=f"worklog_photo_zip_{selected_id}",
+                    )
+                except Exception as zip_error:
+                    st.warning(f"사진 ZIP 파일을 만들지 못했습니다. 개별 다운로드를 이용해 주세요. ({zip_error})")
+
+                if failed_photo_count:
+                    st.warning(f"첨부사진 중 {failed_photo_count}장은 현재 읽을 수 없어 표시하지 못했습니다.")
+            elif selected_photo_ids:
+                st.warning("첨부사진 정보는 있으나 현재 사진 파일을 읽을 수 없습니다. Drive 읽기 권한을 확인해 주세요.")
+            else:
+                st.info("이 기록에는 첨부된 현장사진이 없습니다.")
+
+            # V13: 기록 소유자는 과거/현재 자료 모두 공개 ↔ 비공개를 언제든 변경할 수 있습니다.
+            is_owner = _worklog_record_owned_by(selected, auth_user)
+            current_visibility = _worklog_record_visibility(selected)
+            current_visibility_label = (
+                "🌐 공개 · 팀 공유" if current_visibility == "공개" else "🔒 비공개 · 나만 보기"
+            )
+            visibility_box_class = "private" if current_visibility == "비공개" else "public"
+            st.markdown("### 🔐 공개범위 관리")
+            st.markdown(
+                f'<div class="worklog-visibility-manage {visibility_box_class}">'
+                f'<b>현재 공개범위: {html.escape(current_visibility_label)}</b><br>'
+                '공개 기록은 인증된 팀원이 검색·조회할 수 있고, 비공개 기록은 작성한 본인만 검색·조회·사진 다운로드할 수 있습니다. '
+                '공개범위를 바꾸면 연결 사진도 같은 권한을 따르며, 다른 사용자의 화면에는 다음 조회부터 반영됩니다.</div>',
+                unsafe_allow_html=True,
+            )
+
+            if is_owner:
+                visibility_options = ["🌐 공개 · 팀 공유", "🔒 비공개 · 나만 보기"]
+                visibility_manage_key = f"worklog_manage_visibility_{selected_id}"
+                if visibility_manage_key not in st.session_state:
+                    st.session_state[visibility_manage_key] = current_visibility_label
+                managed_visibility_label = st.radio(
+                    "내 기록 공개범위 변경",
+                    visibility_options,
+                    horizontal=True,
+                    key=visibility_manage_key,
+                    label_visibility="collapsed",
+                )
+                new_visibility = "비공개" if managed_visibility_label.startswith("🔒") else "공개"
+                change_needed = new_visibility != current_visibility
+                if st.button(
+                    "💾 공개범위 변경 저장" if change_needed else "현재 공개범위 유지",
+                    type="primary" if change_needed else "secondary",
+                    use_container_width=True,
+                    disabled=not change_needed,
+                    key=f"worklog_visibility_save_{selected_id}",
+                ):
+                    with st.spinner("공개범위를 변경하고 권한을 반영하고 있습니다..."):
+                        visibility_ok, visibility_message = update_work_log_visibility(
+                            selected_id, new_visibility, actor_user=auth_user
+                        )
+                    if visibility_ok:
+                        st.session_state["worklog_df"] = load_work_logs(auth_user)
+                        st.session_state["worklog_selected_id"] = selected_id
+                        st.success(visibility_message)
+                        time.sleep(0.5)
+                        st.rerun()
+                    else:
+                        st.error(visibility_message)
+            else:
+                st.caption("※ 공개범위 변경 권한은 이 기록을 작성한 본인에게만 있습니다.")
+
+            st.markdown("### 🔄 상태이력 · 조치 업데이트")
+            st.caption(f"기록ID: {selected_id} · {selected.get('모국','')} / {selected.get('국소','')}")
+            u1, u2 = st.columns(2)
+            with u1:
+                update_writer = str(auth_user.get("name", "") or "").strip()
+                st.text_input(
+                    "변경 작성자",
+                    value=update_writer,
+                    disabled=True,
+                    key="worklog_update_writer",
+                    help="상태·조치 변경 이력에는 현재 로그인 사용자가 자동 기록됩니다.",
+                )
+                current_status = str(selected.get("상태", "신규"))
+                status_index = WORK_LOG_STATUS_OPTIONS.index(current_status) if current_status in WORK_LOG_STATUS_OPTIONS else 0
+                update_status = st.selectbox("변경 상태", WORK_LOG_STATUS_OPTIONS, index=status_index, key="worklog_update_status")
+                update_action = st.text_area("조치내용", value=str(selected.get("조치내용", "")), height=100, key="worklog_update_action")
+            with u2:
+                update_followup = st.text_area("후속조치", value=str(selected.get("후속조치", "")), height=100, key="worklog_update_followup")
+                update_remark = st.text_area("비고", value=str(selected.get("비고", "")), height=100, key="worklog_update_remark")
+
+            uc1, uc2 = st.columns(2)
+            with uc1:
+                if st.button("💾 상태·조치 저장", type="primary", use_container_width=True, key="worklog_update_save"):
+                    ok, msg = update_work_log(
+                        selected_id,
+                        update_writer,
+                        update_status,
+                        update_action,
+                        update_followup,
+                        update_remark,
+                        actor_user=auth_user,
+                    )
+                    if ok:
+                        st.session_state["worklog_df"] = load_work_logs(auth_user)
+                        st.success(msg)
+                        st.rerun()
+                    else:
+                        st.error(msg)
+            with uc2:
+                if st.button("닫기", use_container_width=True, key="worklog_update_close"):
+                    st.session_state["worklog_selected_id"] = ""
+                    st.session_state.pop("worklog_delete_pending_id", None)
+                    for detail_key in (
+                        "worklog_update_writer", "worklog_update_status", "worklog_update_action",
+                        "worklog_update_followup", "worklog_update_remark",
+                    ):
+                        st.session_state.pop(detail_key, None)
+                    st.rerun()
+
+            if is_owner:
+                delete_photo_count = len([
+                    value for value in str(selected.get("사진파일ID목록", "") or "").split("|") if value.strip()
+                ])
+                st.markdown(
+                    f'<div class="worklog-delete-box"><b>🗑️ 내 기록 삭제</b><br>'
+                    f'본인이 작성한 기록만 삭제할 수 있습니다. 삭제 시 연결 사진 {delete_photo_count}장은 '
+                    'Google Drive에서 영구삭제하지 않고 휴지통으로 이동합니다.</div>',
+                    unsafe_allow_html=True,
+                )
+                pending_delete_id = str(st.session_state.get("worklog_delete_pending_id", "") or "").strip()
+                if pending_delete_id != selected_id:
+                    if st.button(
+                        "🗑️ 이 기록 삭제",
+                        key=f"worklog_delete_request_{selected_id}",
+                        use_container_width=True,
+                    ):
+                        st.session_state["worklog_delete_pending_id"] = selected_id
+                        st.rerun()
+                else:
+                    st.warning(
+                        f"정말 삭제하시겠습니까? · {selected.get('모국','')} / {selected.get('국소','')} · "
+                        f"{selected.get('저장일시','')} · 사진 {delete_photo_count}장"
+                    )
+                    delete_yes, delete_no = st.columns(2)
+                    with delete_yes:
+                        if st.button(
+                            "삭제 확정",
+                            type="primary",
+                            use_container_width=True,
+                            key=f"worklog_delete_confirm_{selected_id}",
+                        ):
+                            with st.spinner("내 기록과 연결 사진을 안전하게 정리하고 있습니다..."):
+                                delete_ok, delete_message = delete_work_log(selected_id, auth_user)
+                            if delete_ok:
+                                st.session_state["worklog_df"] = load_work_logs(auth_user)
+                                st.session_state["worklog_selected_id"] = ""
+                                st.session_state.pop("worklog_delete_pending_id", None)
+                                st.success(delete_message)
+                                time.sleep(0.6)
+                                st.rerun()
+                            else:
+                                st.error(delete_message)
+                    with delete_no:
+                        if st.button(
+                            "취소",
+                            use_container_width=True,
+                            key=f"worklog_delete_cancel_{selected_id}",
+                        ):
+                            st.session_state.pop("worklog_delete_pending_id", None)
+                            st.rerun()
+            else:
+                st.caption("※ 삭제 권한은 이 기록을 작성한 본인에게만 있습니다.")
+
+            history_df = load_work_log_history(selected_id, auth_user)
+            if not history_df.empty:
+                st.markdown("#### 🕘 변경 이력")
+                history_display = history_df[[c for c in WORK_LOG_HISTORY_HEADERS if c in history_df.columns]].copy()
+                st.dataframe(history_display, use_container_width=True, hide_index=True)
+
+
         with recent_col:
             st.markdown('<div class="worklog-recent-marker"></div>', unsafe_allow_html=True)
             with st.container(border=True):
@@ -6185,6 +6490,11 @@ with tab_worklog:
                     display_logs = loaded_df.copy()
                     if worklog_filter == "🌐 공개":
                         display_logs = display_logs[display_logs["공개범위"].astype(str) == "공개"]
+                        if worklog_public_scope == "👤 내 기록":
+                            current_user_id = str(auth_user.get("user_id", "") or "").strip()
+                            display_logs = display_logs[
+                                display_logs["작성자ID"].astype(str).str.strip() == current_user_id
+                            ]
                     elif worklog_filter == "🔒 내 비공개":
                         display_logs = display_logs[display_logs["공개범위"].astype(str) == "비공개"]
                     elif worklog_filter in WORK_LOG_STATUS_OPTIONS:
@@ -6245,6 +6555,14 @@ with tab_worklog:
                             action_c1, action_c2 = st.columns(2)
                             with action_c1:
                                 if st.button("상세·조치", key=f"worklog_detail_{record_id}", use_container_width=True):
+                                    previous_detail_id = str(st.session_state.get("worklog_selected_id", "") or "").strip()
+                                    if previous_detail_id != record_id:
+                                        for detail_key in (
+                                            "worklog_update_writer", "worklog_update_status", "worklog_update_action",
+                                            "worklog_update_followup", "worklog_update_remark",
+                                        ):
+                                            st.session_state.pop(detail_key, None)
+                                        st.session_state.pop("worklog_delete_pending_id", None)
                                     st.session_state["worklog_selected_id"] = record_id
                                     st.rerun()
                             with action_c2:
@@ -6268,254 +6586,10 @@ with tab_worklog:
                                 else:
                                     st.button("완료됨", disabled=True, key=f"worklog_done_disabled_{record_id}", use_container_width=True)
 
-        selected_id = str(st.session_state.get("worklog_selected_id", "") or "").strip()
-        if selected_id and isinstance(st.session_state.get("worklog_df"), pd.DataFrame):
-            current_df = st.session_state["worklog_df"]
-            selected_rows = current_df[current_df["기록ID"].astype(str) == selected_id]
-            if not selected_rows.empty:
-                selected = selected_rows.iloc[0]
-                st.markdown("---")
-                st.markdown("### 📷 첨부 현장사진")
-                st.caption(
-                    f"기록ID: {selected_id} · {selected.get('모국','')} / {selected.get('국소','')} · "
-                    "Drive 폴더는 공개하지 않고 이 화면에서만 조회·다운로드합니다."
-                )
-
-                selected_photo_ids = [
-                    v.strip() for v in str(selected.get("사진파일ID목록", "") or "").split("|") if v.strip()
-                ]
-                selected_photo_names = [
-                    v.strip() for v in str(selected.get("사진파일명목록", "") or "").split("|") if v.strip()
-                ]
-
-                photo_payloads = []
-                failed_photo_count = 0
-                local_for_name = str(selected.get("국소", "") or selected.get("모국", "") or "WORK_LOG").strip()
-                writer_for_name = str(selected.get("작성자", "") or "현장").strip()
-                saved_for_name = re.sub(r"[^0-9]", "", str(selected.get("저장일시", "") or ""))[:8] or _korea_now().strftime("%Y%m%d")
-                item_for_name = str(selected.get("점검항목", "") or "현장사진").split(",")[0].strip() or "현장사진"
-
-                safe_local = re.sub(r"[^0-9A-Za-z가-힣_-]", "_", local_for_name)[:40] or "WORK_LOG"
-                safe_writer = re.sub(r"[^0-9A-Za-z가-힣_-]", "_", writer_for_name)[:30] or "현장"
-                safe_item = re.sub(r"[^0-9A-Za-z가-힣_-]", "_", item_for_name)[:30] or "현장사진"
-
-                for photo_index, file_id in enumerate(selected_photo_ids, 1):
-                    photo_bytes = _worklog_download_drive_image(file_id)
-                    if not photo_bytes:
-                        failed_photo_count += 1
-                        continue
-                    download_name = f"{safe_local}_{safe_item}_{safe_writer}_{saved_for_name}_{photo_index:02d}.jpg"
-                    stored_name = selected_photo_names[photo_index - 1] if photo_index - 1 < len(selected_photo_names) else download_name
-                    photo_payloads.append({
-                        "index": photo_index,
-                        "id": file_id,
-                        "bytes": photo_bytes,
-                        "download_name": download_name,
-                        "stored_name": stored_name,
-                    })
-
-                if photo_payloads:
-                    st.caption(f"첨부사진 {len(selected_photo_ids)}장 · 전체 보기 및 개별/일괄 다운로드")
-                    photo_cols = st.columns(2)
-                    for payload_pos, payload in enumerate(photo_payloads):
-                        with photo_cols[payload_pos % 2]:
-                            st.image(
-                                payload["bytes"],
-                                caption=f"사진 {payload['index']} / {len(selected_photo_ids)}",
-                                use_container_width=True,
-                            )
-                            st.download_button(
-                                "📥 사진 다운로드",
-                                data=payload["bytes"],
-                                file_name=payload["download_name"],
-                                mime="image/jpeg",
-                                use_container_width=True,
-                                key=f"worklog_photo_download_{selected_id}_{payload['index']}",
-                            )
-
-                    try:
-                        from io import BytesIO
-                        import zipfile
-
-                        zip_buffer = BytesIO()
-                        with zipfile.ZipFile(zip_buffer, "w", compression=zipfile.ZIP_DEFLATED) as photo_zip:
-                            for payload in photo_payloads:
-                                photo_zip.writestr(payload["download_name"], payload["bytes"])
-                        zip_file_name = f"{safe_local}_WORK_LOG_{saved_for_name}_사진{len(photo_payloads)}장.zip"
-                        st.download_button(
-                            f"📦 사진 {len(photo_payloads)}장 전체 ZIP 다운로드",
-                            data=zip_buffer.getvalue(),
-                            file_name=zip_file_name,
-                            mime="application/zip",
-                            use_container_width=True,
-                            type="primary",
-                            key=f"worklog_photo_zip_{selected_id}",
-                        )
-                    except Exception as zip_error:
-                        st.warning(f"사진 ZIP 파일을 만들지 못했습니다. 개별 다운로드를 이용해 주세요. ({zip_error})")
-
-                    if failed_photo_count:
-                        st.warning(f"첨부사진 중 {failed_photo_count}장은 현재 읽을 수 없어 표시하지 못했습니다.")
-                elif selected_photo_ids:
-                    st.warning("첨부사진 정보는 있으나 현재 사진 파일을 읽을 수 없습니다. Drive 읽기 권한을 확인해 주세요.")
-                else:
-                    st.info("이 기록에는 첨부된 현장사진이 없습니다.")
-
-                # V13: 기록 소유자는 과거/현재 자료 모두 공개 ↔ 비공개를 언제든 변경할 수 있습니다.
-                is_owner = _worklog_record_owned_by(selected, auth_user)
-                current_visibility = _worklog_record_visibility(selected)
-                current_visibility_label = (
-                    "🌐 공개 · 팀 공유" if current_visibility == "공개" else "🔒 비공개 · 나만 보기"
-                )
-                visibility_box_class = "private" if current_visibility == "비공개" else "public"
-                st.markdown("### 🔐 공개범위 관리")
-                st.markdown(
-                    f'<div class="worklog-visibility-manage {visibility_box_class}">'
-                    f'<b>현재 공개범위: {html.escape(current_visibility_label)}</b><br>'
-                    '공개 기록은 인증된 팀원이 검색·조회할 수 있고, 비공개 기록은 작성한 본인만 검색·조회·사진 다운로드할 수 있습니다. '
-                    '공개범위를 바꾸면 연결 사진도 같은 권한을 따르며, 다른 사용자의 화면에는 다음 조회부터 반영됩니다.</div>',
-                    unsafe_allow_html=True,
-                )
-
-                if is_owner:
-                    visibility_options = ["🌐 공개 · 팀 공유", "🔒 비공개 · 나만 보기"]
-                    visibility_manage_key = f"worklog_manage_visibility_{selected_id}"
-                    if visibility_manage_key not in st.session_state:
-                        st.session_state[visibility_manage_key] = current_visibility_label
-                    managed_visibility_label = st.radio(
-                        "내 기록 공개범위 변경",
-                        visibility_options,
-                        horizontal=True,
-                        key=visibility_manage_key,
-                        label_visibility="collapsed",
-                    )
-                    new_visibility = "비공개" if managed_visibility_label.startswith("🔒") else "공개"
-                    change_needed = new_visibility != current_visibility
-                    if st.button(
-                        "💾 공개범위 변경 저장" if change_needed else "현재 공개범위 유지",
-                        type="primary" if change_needed else "secondary",
-                        use_container_width=True,
-                        disabled=not change_needed,
-                        key=f"worklog_visibility_save_{selected_id}",
-                    ):
-                        with st.spinner("공개범위를 변경하고 권한을 반영하고 있습니다..."):
-                            visibility_ok, visibility_message = update_work_log_visibility(
-                                selected_id, new_visibility, actor_user=auth_user
-                            )
-                        if visibility_ok:
-                            st.session_state["worklog_df"] = load_work_logs(auth_user)
-                            st.session_state["worklog_selected_id"] = selected_id
-                            st.success(visibility_message)
-                            time.sleep(0.5)
-                            st.rerun()
-                        else:
-                            st.error(visibility_message)
-                else:
-                    st.caption("※ 공개범위 변경 권한은 이 기록을 작성한 본인에게만 있습니다.")
-
-                st.markdown("### 🔄 상태이력 · 조치 업데이트")
-                st.caption(f"기록ID: {selected_id} · {selected.get('모국','')} / {selected.get('국소','')}")
-                u1, u2 = st.columns(2)
-                with u1:
-                    update_writer = str(auth_user.get("name", "") or "").strip()
-                    st.text_input(
-                        "변경 작성자",
-                        value=update_writer,
-                        disabled=True,
-                        key="worklog_update_writer",
-                        help="상태·조치 변경 이력에는 현재 로그인 사용자가 자동 기록됩니다.",
-                    )
-                    current_status = str(selected.get("상태", "신규"))
-                    status_index = WORK_LOG_STATUS_OPTIONS.index(current_status) if current_status in WORK_LOG_STATUS_OPTIONS else 0
-                    update_status = st.selectbox("변경 상태", WORK_LOG_STATUS_OPTIONS, index=status_index, key="worklog_update_status")
-                    update_action = st.text_area("조치내용", value=str(selected.get("조치내용", "")), height=100, key="worklog_update_action")
-                with u2:
-                    update_followup = st.text_area("후속조치", value=str(selected.get("후속조치", "")), height=100, key="worklog_update_followup")
-                    update_remark = st.text_area("비고", value=str(selected.get("비고", "")), height=100, key="worklog_update_remark")
-
-                uc1, uc2 = st.columns(2)
-                with uc1:
-                    if st.button("💾 상태·조치 저장", type="primary", use_container_width=True, key="worklog_update_save"):
-                        ok, msg = update_work_log(
-                            selected_id,
-                            update_writer,
-                            update_status,
-                            update_action,
-                            update_followup,
-                            update_remark,
-                            actor_user=auth_user,
-                        )
-                        if ok:
-                            st.session_state["worklog_df"] = load_work_logs(auth_user)
-                            st.success(msg)
-                            st.rerun()
-                        else:
-                            st.error(msg)
-                with uc2:
-                    if st.button("닫기", use_container_width=True, key="worklog_update_close"):
-                        st.session_state["worklog_selected_id"] = ""
-                        st.session_state.pop("worklog_delete_pending_id", None)
-                        st.rerun()
-
-                if is_owner:
-                    delete_photo_count = len([
-                        value for value in str(selected.get("사진파일ID목록", "") or "").split("|") if value.strip()
-                    ])
-                    st.markdown(
-                        f'<div class="worklog-delete-box"><b>🗑️ 내 기록 삭제</b><br>'
-                        f'본인이 작성한 기록만 삭제할 수 있습니다. 삭제 시 연결 사진 {delete_photo_count}장은 '
-                        'Google Drive에서 영구삭제하지 않고 휴지통으로 이동합니다.</div>',
-                        unsafe_allow_html=True,
-                    )
-                    pending_delete_id = str(st.session_state.get("worklog_delete_pending_id", "") or "").strip()
-                    if pending_delete_id != selected_id:
-                        if st.button(
-                            "🗑️ 이 기록 삭제",
-                            key=f"worklog_delete_request_{selected_id}",
-                            use_container_width=True,
-                        ):
-                            st.session_state["worklog_delete_pending_id"] = selected_id
-                            st.rerun()
-                    else:
-                        st.warning(
-                            f"정말 삭제하시겠습니까? · {selected.get('모국','')} / {selected.get('국소','')} · "
-                            f"{selected.get('저장일시','')} · 사진 {delete_photo_count}장"
-                        )
-                        delete_yes, delete_no = st.columns(2)
-                        with delete_yes:
-                            if st.button(
-                                "삭제 확정",
-                                type="primary",
-                                use_container_width=True,
-                                key=f"worklog_delete_confirm_{selected_id}",
-                            ):
-                                with st.spinner("내 기록과 연결 사진을 안전하게 정리하고 있습니다..."):
-                                    delete_ok, delete_message = delete_work_log(selected_id, auth_user)
-                                if delete_ok:
-                                    st.session_state["worklog_df"] = load_work_logs(auth_user)
-                                    st.session_state["worklog_selected_id"] = ""
-                                    st.session_state.pop("worklog_delete_pending_id", None)
-                                    st.success(delete_message)
-                                    time.sleep(0.6)
-                                    st.rerun()
-                                else:
-                                    st.error(delete_message)
-                        with delete_no:
-                            if st.button(
-                                "취소",
-                                use_container_width=True,
-                                key=f"worklog_delete_cancel_{selected_id}",
-                            ):
-                                st.session_state.pop("worklog_delete_pending_id", None)
-                                st.rerun()
-                else:
-                    st.caption("※ 삭제 권한은 이 기록을 작성한 본인에게만 있습니다.")
-
-                history_df = load_work_log_history(selected_id, auth_user)
-                if not history_df.empty:
-                    st.markdown("#### 🕘 변경 이력")
-                    history_display = history_df[[c for c in WORK_LOG_HISTORY_HEADERS if c in history_df.columns]].copy()
-                    st.dataframe(history_display, use_container_width=True, hide_index=True)
+                            # V15: 상세·조치 편집은 선택한 카드 바로 아래에 삽입하고, 다음 기록은 그 아래에 이어집니다.
+                            active_detail_id = str(st.session_state.get("worklog_selected_id", "") or "").strip()
+                            if active_detail_id == record_id:
+                                _render_worklog_inline_detail(log, record_id)
 
         if isinstance(st.session_state.get("worklog_df"), pd.DataFrame):
             st.markdown('<div class="worklog-close-safe-space"></div>', unsafe_allow_html=True)
