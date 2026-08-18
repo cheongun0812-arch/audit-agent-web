@@ -5259,7 +5259,7 @@ st.markdown("""
     <span>SMART WORK <b>AI AGENT</b></span>
   </div>
   <div class="smart-work-brand-subtitle">Integrated Field &amp; Business Assistant System</div>
-  <div class="smart-work-brand-version">FINAL V19 · 최종 업로드 2026.08.18</div>
+  <div class="smart-work-brand-version">FINAL V20 · 최종 업로드 2026.08.18</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -5674,14 +5674,38 @@ with tab_worklog:
     .worklog-hero .sub { color:#24364B; font-size:clamp(.96rem,2vw,1.12rem); font-weight:900; }
     .worklog-hero .desc { color:#64748B; margin-top:5px; font-size:.88rem; font-weight:750; line-height:1.45; padding-right:42px; }
 
-    .worklog-section-title,
-    .worklog-field-title {
+    .worklog-section-title {
         color:#24364B;
         font-size:1.15rem;
         font-weight:950;
         line-height:1.25;
         margin:8px 0 8px;
         letter-spacing:-.015em;
+    }
+    .worklog-entry-title {
+        color:#102A43;
+        font-size:1.34rem;
+        font-weight:950;
+        line-height:1.25;
+        margin:3px 0 10px;
+        letter-spacing:-.025em;
+    }
+    .worklog-field-title {
+        display:flex;
+        align-items:center;
+        width:clamp(230px,52%,360px);
+        max-width:100%;
+        box-sizing:border-box;
+        color:#102A43;
+        background:#E4F3DE;
+        border-left:4px solid #4C8B50;
+        border-radius:4px;
+        padding:5px 10px;
+        font-size:1.10rem;
+        font-weight:950;
+        line-height:1.25;
+        margin:14px 0 9px;
+        letter-spacing:-.018em;
     }
 
     .worklog-dashboard {
@@ -5832,8 +5856,15 @@ with tab_worklog:
         .worklog-kpi .value { font-size:.88rem; }
         .worklog-kpi .unit { font-size:.52rem; }
 
-        .worklog-section-title,
-        .worklog-field-title { font-size:1.02rem; font-weight:950; margin:8px 0 7px; }
+        .worklog-section-title { font-size:1.02rem; font-weight:950; margin:8px 0 7px; }
+        .worklog-entry-title { font-size:1.24rem; margin:2px 0 9px; }
+        .worklog-field-title {
+            width:min(92%,340px);
+            font-size:1.04rem;
+            font-weight:950;
+            padding:5px 9px;
+            margin:13px 0 8px;
+        }
 
         .worklog-card { padding:12px 11px; }
 
@@ -6428,10 +6459,8 @@ with tab_worklog:
         entry_col, recent_col = st.columns([0.94, 1.06], gap="large")
 
         with entry_col:
+            st.markdown('<div class="worklog-entry-title">📝 새 현장기록</div>', unsafe_allow_html=True)
             with st.container(border=True):
-                st.markdown('<div class="worklog-section-title">📝 새 현장기록</div>', unsafe_allow_html=True)
-                st.caption("현장에서 10초 안에 남기고, 나중에 국사별 이력으로 다시 찾을 수 있도록 핵심 항목만 구성했습니다.")
-
                 st.markdown('<div class="worklog-field-title">✍️ 작성자</div>', unsafe_allow_html=True)
                 writer = str(auth_user.get("name", "") or "").strip()
                 st.markdown(
