@@ -5237,7 +5237,7 @@ def delete_work_log(record_id: str, auth_user: dict | None = None) -> tuple[bool
 def _worklog_reset_entry_widgets() -> None:
     keys = [
         "worklog_writer", "worklog_area", "worklog_area_key", "worklog_mother", "worklog_local", "worklog_status",
-        "worklog_items", "worklog_camera", "worklog_uploads", "worklog_issue", "worklog_action",
+        "worklog_items", "worklog_uploads", "worklog_issue", "worklog_action",
         "worklog_followup", "worklog_remark", "worklog_station_search_query",
         "worklog_station_search_candidates", "worklog_station_search_choice", "worklog_station_search_status",
         "worklog_station_search_notice", "worklog_station_search_applied",
@@ -5259,6 +5259,7 @@ st.markdown("""
     <span>SMART WORK <b>AI AGENT</b></span>
   </div>
   <div class="smart-work-brand-subtitle">Integrated Field &amp; Business Assistant System</div>
+  <div class="smart-work-brand-version">FINAL V19 · 최종 업로드 2026.08.18</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -5317,6 +5318,21 @@ st.markdown("""
     color: #64748B;
     font-size: .92rem;
     font-weight: 750;
+}
+.smart-work-brand-version {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 8px;
+    padding: 4px 11px;
+    border: 1px solid #CBD5E1;
+    border-radius: 999px;
+    background: #F8FAFC;
+    color: #475569;
+    font-size: .80rem;
+    font-weight: 850;
+    letter-spacing: .01em;
+    line-height: 1.25;
 }
 
 /* 외부 스마트 내비 메뉴 1개: 기존 Streamlit 탭은 그대로 유지 */
@@ -6550,17 +6566,13 @@ with tab_worklog:
                     st.caption(st.session_state["worklog_items_confirmed_notice"])
 
                 st.markdown('<div class="worklog-field-title">📷 현장사진</div>', unsafe_allow_html=True)
-                photo_c1, photo_c2 = st.columns(2)
-                with photo_c1:
-                    camera_photo = st.camera_input("현장에서 바로 촬영", key="worklog_camera")
-                with photo_c2:
-                    uploaded_photos = st.file_uploader(
-                        "앨범/파일에서 선택",
-                        type=["jpg", "jpeg", "png", "webp"],
-                        accept_multiple_files=True,
-                        key="worklog_uploads",
-                    ) or []
-                photos = _worklog_collect_photos(camera_photo, uploaded_photos)
+                uploaded_photos = st.file_uploader(
+                    "앨범/파일에서 선택",
+                    type=["jpg", "jpeg", "png", "webp"],
+                    accept_multiple_files=True,
+                    key="worklog_uploads",
+                ) or []
+                photos = _worklog_collect_photos(None, uploaded_photos)
                 st.caption(f"선택 사진 {len(photos)}장 / 최대 {WORK_LOG_MAX_PHOTOS}장 · 저장 시 자동 압축(최대 변 1600px, 목표 약 450KB/장)")
 
                 st.markdown('<div class="worklog-field-title">📝 현상·특이사항</div>', unsafe_allow_html=True)
@@ -7894,20 +7906,13 @@ with tab_power:
             st.caption("작성 예: 축전지 2조 미측정 사유 · 접지선 보완 필요 · 다음 점검 시 확인사항")
 
             st.markdown("**📷 정밀점검 현장사진 (선택)**")
-            power_photo_c1, power_photo_c2 = st.columns(2, gap="small")
-            with power_photo_c1:
-                power_camera_photo = st.camera_input(
-                    "현장에서 바로 촬영",
-                    key="power_camera_photo",
-                )
-            with power_photo_c2:
-                power_uploaded_photos = st.file_uploader(
-                    "앨범/파일에서 선택",
-                    type=["jpg", "jpeg", "png", "webp"],
-                    accept_multiple_files=True,
-                    key="power_uploaded_photos",
-                ) or []
-            power_photos = _worklog_collect_photos(power_camera_photo, power_uploaded_photos)
+            power_uploaded_photos = st.file_uploader(
+                "앨범/파일에서 선택",
+                type=["jpg", "jpeg", "png", "webp"],
+                accept_multiple_files=True,
+                key="power_uploaded_photos",
+            ) or []
+            power_photos = _worklog_collect_photos(None, power_uploaded_photos)
             st.caption(
                 f"선택 사진 {len(power_photos)}장 / 최대 {WORK_LOG_MAX_PHOTOS}장 · "
                 "저장 시 자동 방향보정·압축 후 비공개 Drive에 저장됩니다."
@@ -8001,14 +8006,6 @@ with tab_power:
                     else:
                         st.error(f"❌ 저장 실패: {message}")
 
-            st.markdown(
-                f'<div class="power-sheet-note"><b>📊 Google Sheets 저장 구조</b><br>'
-                f'스프레드시트: <b>{POWER_INSPECTION_SPREADSHEET_NAME}</b><br>'
-                f'워크시트: <b>{POWER_INSPECTION_SHEET_NAME}</b><br>'
-                '점검 1건은 새 행으로 추가됩니다. 사진은 비공개 Drive에 분리 저장되고 사진 ID/파일명만 시트에 연결 기록됩니다. 최근 측정값을 불러온 경우 원본 점검ID와 원본 저장일시도 함께 기록됩니다.</div>',
-                unsafe_allow_html=True,
-            )
-
         show_theme_complete_button = not (
             current_theme == "축전지 측정"
             and st.session_state.get("power_battery_exit_stage") == "ask_group2_complete"
@@ -8045,7 +8042,8 @@ with tab_power:
                 on_click=_complete_current_power_theme,
             )
 
-    st.info("측정값은 화면과 분리된 임시저장소에 즉시 보존됩니다. 기본정보·특이사항을 제외한 측정 입력은 모바일 숫자키패드를 사용하며, Enter/확인을 누르면 자동 소수점 적용 후 다음 입력칸으로 이동합니다.")
+    if current_theme != "최종 확인·전송":
+        st.info("측정값은 화면과 분리된 임시저장소에 즉시 보존됩니다. 기본정보·특이사항을 제외한 측정 입력은 모바일 숫자키패드를 사용하며, Enter/확인을 누르면 자동 소수점 적용 후 다음 입력칸으로 이동합니다.")
 
 
 # --- [Tab 2: 법률 리스크/규정/계약 검토 & 감사보고서 작성] ---
