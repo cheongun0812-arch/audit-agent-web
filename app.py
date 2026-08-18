@@ -3402,6 +3402,7 @@ WORK_LOG_HISTORY_HEADERS = [
 ]
 WORK_LOG_USER_HEADERS = [
     "사용자ID", "이름", "사번", "PIN_SALT", "PIN_HASH", "PIN변경필요", "활성", "최근로그인", "최근PIN변경일시",
+    "QUICK_SALT", "QUICK_HASH", "QUICK설정일시",
 ]
 WORK_LOG_DELETE_AUDIT_HEADERS = [
     "삭제일시", "기록ID", "작성자ID", "작성자", "삭제자ID", "삭제자", "공개범위", "사진수",
@@ -3411,8 +3412,9 @@ WORK_LOG_ITEM_OPTIONS = ["전원", "축전지", "접지", "냉방", "출입", "�
 WORK_LOG_VISIBILITY_OPTIONS = ["공개", "비공개"]
 
 # 최초 1회 로그인 공통 임시 PIN은 000000입니다.
-# 평문 PIN 자체는 사용자 시트에 저장하지 않고, 사용자별 salt/PBKDF2-SHA256 해시만 저장합니다.
-# 최초 로그인 후 반드시 본인만 아는 6자리 개인 PIN으로 변경해야 계속 사용할 수 있습니다.
+# 최초 인증 후에는 "영문+숫자 혼합 4자리 간편 접속코드"를 설정하여 이후 접속에 사용합니다.
+# 6자리 개인 PIN은 간편 접속코드를 잊었을 때 사용하는 복구용 인증수단으로 유지합니다.
+# PIN과 간편 접속코드는 모두 평문으로 저장하지 않고, 사용자별 salt/PBKDF2-SHA256 해시만 저장합니다.
 WORK_LOG_INITIAL_PIN = "000000"
 WORK_LOG_USER_BOOTSTRAP = [
     {"사용자ID": "U001", "이름": "정청운", "사번": "10001713", "PIN_SALT": "de28394a671befb76a8fd8ec1b904d72", "PIN_HASH": "8fb388bf36dd783aeda3bbfd362b5b035df14ef1d11b64bb078085e521a4f295"},
@@ -3687,6 +3689,239 @@ def _worklog_read_user_by_employee(employee_no: str) -> tuple[object | None, dic
         return None, {}, None
 
 
+
+def _worklog_normalize_quick_code(value: str) -> str:
+    """간편 접속코드를 대문자 영문+숫자 4자리로 정규화합니다."""
+    return str(value or "").strip().upper()
+
+
+def _worklog_validate_quick_code(value: str) -> tuple[bool, str, str]:
+    """간편 접속코드 형식과 추측하기 쉬운 값을 점검합니다."""
+    code = _worklog_normalize_quick_code(value)
+    if len(code) != 4:
+        return False, "간편 접속코드는 영문+숫자 4자리로 입력해 주세요.", ""
+    if not re.fullmatch(r"[A-Z0-9]{4}", code):
+        return False, "간편 접속코드는 영문(A-Z)과 숫자(0-9)만 사용할 수 있습니다.", ""
+    if code.isalpha() or code.isdigit():
+        return False, "보안을 위해 영문과 숫자를 함께 사용해 주세요. 예: A7K2", ""
+    if code in {"A1B2", "AB12", "1A2B", "Q1W2", "A123", "ABC1"}:
+        return False, "너무 단순한 접속코드는 피해주세요. 다른 4자리 조합을 사용해 주세요.", ""
+    return True, "", code
+
+
+def _worklog_read_all_users():
+    """MY_WORK_LOG_USERS의 모든 사용자 행을 읽어 간편 접속코드 인증/중복확인에 사용합니다."""
+    client = init_google_sheet_connection()
+    if not client:
+        return None, [], []
+    try:
+        spreadsheet = client.open(WORK_LOG_SPREADSHEET_NAME)
+        ws = _worklog_ensure_user_sheet(spreadsheet)
+        values = ws.get_all_values()
+        if not values:
+            return ws, [], []
+        headers = [str(value).strip() for value in values[0]]
+        rows = []
+        for row_no, row in enumerate(values[1:], start=2):
+            if not any(str(cell or "").strip() for cell in row):
+                continue
+            record = {
+                header: (row[index] if index < len(row) else "")
+                for index, header in enumerate(headers)
+            }
+            rows.append((row_no, record))
+        return ws, headers, rows
+    except Exception:
+        return None, [], []
+
+
+def _worklog_quick_code_is_duplicate(code: str, exclude_employee_no: str = "") -> bool:
+    """다른 활성 사용자와 동일한 간편 접속코드인지 해시 비교로 확인합니다."""
+    ok, _, normalized = _worklog_validate_quick_code(code)
+    if not ok:
+        return False
+    exclude_employee_no = re.sub(r"\D", "", str(exclude_employee_no or ""))
+    ws, headers, rows = _worklog_read_all_users()
+    if ws is None:
+        return False
+
+    for _, record in rows:
+        employee_no = re.sub(r"\D", "", str(record.get("사번", "") or ""))
+        if exclude_employee_no and employee_no == exclude_employee_no:
+            continue
+        if str(record.get("활성", "Y") or "Y").strip().upper() not in {"Y", "YES", "TRUE", "1", "활성"}:
+            continue
+        expected_hash = str(record.get("QUICK_HASH", "") or "").strip().lower()
+        salt_hex = str(record.get("QUICK_SALT", "") or "").strip()
+        if not expected_hash or not salt_hex:
+            continue
+        actual_hash = _worklog_hash_pin(normalized, salt_hex).lower()
+        if actual_hash and hmac.compare_digest(expected_hash, actual_hash):
+            return True
+    return False
+
+
+def _worklog_set_quick_code(employee_no: str, quick_code: str, confirm_code: str) -> tuple[bool, str]:
+    """인증된 사용자의 4자리 간편 접속코드를 생성/변경합니다."""
+    employee_no = re.sub(r"\D", "", str(employee_no or ""))
+    ok, message, normalized = _worklog_validate_quick_code(quick_code)
+    if not ok:
+        return False, message
+    confirm_normalized = _worklog_normalize_quick_code(confirm_code)
+    if normalized != confirm_normalized:
+        return False, "간편 접속코드와 확인값이 일치하지 않습니다."
+    if _worklog_quick_code_is_duplicate(normalized, exclude_employee_no=employee_no):
+        return False, "이미 다른 사용자가 사용 중인 접속코드입니다. 다른 4자리 조합을 선택해 주세요."
+
+    ws, record, row_no = _worklog_read_user_by_employee(employee_no)
+    if ws is None or not record or row_no is None:
+        return False, "사용자 계정을 찾지 못했습니다."
+
+    salt_hex = os.urandom(16).hex()
+    quick_hash = _worklog_hash_pin(normalized, salt_hex)
+    if not quick_hash:
+        return False, "간편 접속코드 보안처리에 실패했습니다."
+
+    try:
+        headers = [str(value).strip() for value in ws.row_values(1)]
+        updates = {
+            "QUICK_SALT": salt_hex,
+            "QUICK_HASH": quick_hash,
+            "QUICK설정일시": _korea_now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        for header, value in updates.items():
+            if header in headers:
+                ws.update_cell(row_no, headers.index(header) + 1, value)
+        return True, "간편 접속코드가 설정되었습니다. 다음 접속부터는 이 4자리 코드만 입력하면 됩니다."
+    except Exception as error:
+        return False, f"간편 접속코드 저장 실패: {error}"
+
+
+def _worklog_complete_first_auth_setup(
+    employee_no: str,
+    quick_code: str,
+    confirm_quick_code: str,
+    recovery_pin: str,
+    confirm_recovery_pin: str,
+) -> tuple[bool, str]:
+    """최초 000000 인증 후 간편 접속코드 + 복구용 개인 PIN을 한 번에 설정합니다."""
+    employee_no = re.sub(r"\D", "", str(employee_no or ""))
+    ok, message, normalized_quick = _worklog_validate_quick_code(quick_code)
+    if not ok:
+        return False, message
+    if normalized_quick != _worklog_normalize_quick_code(confirm_quick_code):
+        return False, "간편 접속코드와 확인값이 일치하지 않습니다."
+    if _worklog_quick_code_is_duplicate(normalized_quick, exclude_employee_no=employee_no):
+        return False, "이미 다른 사용자가 사용 중인 접속코드입니다. 다른 4자리 조합을 선택해 주세요."
+
+    recovery_pin = re.sub(r"\D", "", str(recovery_pin or ""))
+    confirm_recovery_pin = re.sub(r"\D", "", str(confirm_recovery_pin or ""))
+    if len(recovery_pin) != 6:
+        return False, "복구용 개인 PIN은 숫자 6자리로 입력해 주세요."
+    if recovery_pin != confirm_recovery_pin:
+        return False, "복구용 개인 PIN과 확인 PIN이 일치하지 않습니다."
+    if recovery_pin in {"000000", "111111", "123456", "654321", "121212", "777777"}:
+        return False, "복구용 PIN은 추측하기 쉬운 숫자를 사용할 수 없습니다."
+    if employee_no and (recovery_pin in employee_no or employee_no.endswith(recovery_pin)):
+        return False, "사번에 포함된 숫자를 그대로 복구용 PIN으로 사용하지 마세요."
+
+    ws, record, row_no = _worklog_read_user_by_employee(employee_no)
+    if ws is None or not record or row_no is None:
+        return False, "사용자 계정을 찾지 못했습니다."
+
+    pin_salt = os.urandom(16).hex()
+    quick_salt = os.urandom(16).hex()
+    pin_hash = _worklog_hash_pin(recovery_pin, pin_salt)
+    quick_hash = _worklog_hash_pin(normalized_quick, quick_salt)
+    if not pin_hash or not quick_hash:
+        return False, "인증정보 보안처리에 실패했습니다."
+
+    now_text = _korea_now().strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        headers = [str(value).strip() for value in ws.row_values(1)]
+        updates = {
+            "PIN_SALT": pin_salt,
+            "PIN_HASH": pin_hash,
+            "PIN변경필요": "N",
+            "최근PIN변경일시": now_text,
+            "QUICK_SALT": quick_salt,
+            "QUICK_HASH": quick_hash,
+            "QUICK설정일시": now_text,
+        }
+        for header, value in updates.items():
+            if header in headers:
+                ws.update_cell(row_no, headers.index(header) + 1, value)
+        return True, "개인 인증 설정이 완료되었습니다. 다음 접속부터는 4자리 간편 접속코드만 입력하면 됩니다."
+    except Exception as error:
+        return False, f"최초 인증정보 설정 실패: {error}"
+
+
+def _worklog_authenticate_quick_code(quick_code: str) -> tuple[bool, str, dict]:
+    """4자리 간편 접속코드만으로 사용자를 찾아 MY WORK LOG에 인증합니다."""
+    ok, message, normalized = _worklog_validate_quick_code(quick_code)
+    if not ok:
+        return False, message, {}
+
+    now_ts = time.time()
+    locked_until = float(st.session_state.get("worklog_login_locked_until", 0) or 0)
+    if locked_until > now_ts:
+        remaining = max(1, int(locked_until - now_ts))
+        return False, f"로그인 실패가 반복되어 {remaining}초 후 다시 시도할 수 있습니다.", {}
+
+    ws, headers, rows = _worklog_read_all_users()
+    if ws is None:
+        return False, "사용자 인증정보를 불러오지 못했습니다.", {}
+
+    matches = []
+    for row_no, record in rows:
+        if str(record.get("활성", "Y") or "Y").strip().upper() not in {"Y", "YES", "TRUE", "1", "활성"}:
+            continue
+        # 최초 000000 단계가 끝나지 않은 계정은 간편 로그인 대상에서 제외합니다.
+        must_change = str(record.get("PIN변경필요", "N") or "N").strip().upper() in {"Y", "YES", "TRUE", "1"}
+        if must_change:
+            continue
+        expected_hash = str(record.get("QUICK_HASH", "") or "").strip().lower()
+        salt_hex = str(record.get("QUICK_SALT", "") or "").strip()
+        if not expected_hash or not salt_hex:
+            continue
+        actual_hash = _worklog_hash_pin(normalized, salt_hex).lower()
+        if actual_hash and hmac.compare_digest(expected_hash, actual_hash):
+            matches.append((row_no, record))
+
+    if len(matches) != 1:
+        failures = int(st.session_state.get("worklog_login_failures", 0) or 0) + 1
+        st.session_state["worklog_login_failures"] = failures
+        if failures >= 5:
+            st.session_state["worklog_login_failures"] = 0
+            st.session_state["worklog_login_locked_until"] = time.time() + 60
+            return False, "접속코드가 일치하지 않습니다. 보안을 위해 60초 동안 로그인을 잠급니다.", {}
+        return False, f"간편 접속코드를 확인해 주세요. ({failures}/5)", {}
+
+    row_no, record = matches[0]
+    user = {
+        "user_id": str(record.get("사용자ID", "") or "").strip(),
+        "name": str(record.get("이름", "") or "").strip(),
+        "employee_no": re.sub(r"\D", "", str(record.get("사번", "") or "")),
+        "must_change_pin": False,
+        "has_quick_code": True,
+    }
+    if not user["user_id"] or not user["name"] or not user["employee_no"]:
+        return False, "사용자 등록정보가 올바르지 않습니다.", {}
+
+    st.session_state["worklog_login_failures"] = 0
+    st.session_state["worklog_login_locked_until"] = 0
+    try:
+        if "최근로그인" in headers:
+            ws.update_cell(
+                row_no,
+                headers.index("최근로그인") + 1,
+                _korea_now().strftime("%Y-%m-%d %H:%M:%S"),
+            )
+    except Exception:
+        pass
+    return True, f"{user['name']}님으로 간편 인증되었습니다.", user
+
+
 def _worklog_authenticate_user(employee_no: str, pin: str) -> tuple[bool, str, dict]:
     """사번 + 개인 PIN을 검증합니다."""
     employee_no = re.sub(r"\D", "", str(employee_no or ""))
@@ -3743,11 +3978,12 @@ def _worklog_authenticate_user(employee_no: str, pin: str) -> tuple[bool, str, d
 
     must_change = str(record.get("PIN변경필요", "N") or "N").strip().upper() in {"Y", "YES", "TRUE", "1"}
     user["must_change_pin"] = must_change
+    user["has_quick_code"] = bool(str(record.get("QUICK_HASH", "") or "").strip())
     return True, f"{user['name']}님 인증되었습니다.", user
 
 
 def _worklog_change_pin(employee_no: str, new_pin: str, confirm_pin: str) -> tuple[bool, str]:
-    """현재 사용자의 개인 PIN을 새 6자리 PIN으로 변경합니다."""
+    """현재 사용자의 복구용 개인 PIN을 새 6자리 PIN으로 변경합니다."""
     employee_no = re.sub(r"\D", "", str(employee_no or ""))
     new_pin = re.sub(r"\D", "", str(new_pin or ""))
     confirm_pin = re.sub(r"\D", "", str(confirm_pin or ""))
@@ -3780,7 +4016,7 @@ def _worklog_change_pin(employee_no: str, new_pin: str, confirm_pin: str) -> tup
         for header, value in updates.items():
             if header in headers:
                 ws.update_cell(row_no, headers.index(header) + 1, value)
-        return True, "개인 PIN이 변경되었습니다."
+        return True, "복구용 개인 PIN이 변경되었습니다."
     except Exception as error:
         return False, f"PIN 변경 실패: {error}"
 
@@ -3793,8 +4029,8 @@ def _worklog_current_user() -> dict:
 def _worklog_logout() -> None:
     """MY WORK LOG 개인 세션만 종료하고 다른 앱 기능에는 영향을 주지 않습니다."""
     for key in (
-        "worklog_auth_user", "worklog_pin_change_required", "worklog_show_pin_change",
-        "worklog_df", "worklog_loaded_at", "worklog_selected_id", "worklog_delete_pending_id",
+        "worklog_auth_user", "worklog_pin_change_required", "worklog_quick_setup_required", "worklog_show_pin_change",
+        "worklog_show_auth_settings", "worklog_df", "worklog_loaded_at", "worklog_selected_id", "worklog_delete_pending_id",
         "worklog_search", "worklog_filter", "worklog_public_scope",
     ):
         st.session_state.pop(key, None)
@@ -3854,7 +4090,7 @@ def _worklog_filter_accessible_records(df: pd.DataFrame, auth_user: dict) -> pd.
 
 
 def _worklog_login_dialog_body() -> None:
-    st.caption("팀 공유 기록과 개인 메모를 구분하기 위해 MY WORK LOG만 개인 인증을 사용합니다. 최초 로그인 공통 PIN은 000000입니다.")
+    st.caption("처음 사용하는 경우 사번 + 000000으로 인증합니다. 간편 접속코드를 잊었다면 사번 + 복구용 개인 PIN으로 다시 인증할 수 있습니다.")
     with st.form("worklog_personal_login_form", clear_on_submit=False):
         employee_no = st.text_input(
             "사번",
@@ -3865,7 +4101,7 @@ def _worklog_login_dialog_body() -> None:
         pin = st.text_input(
             "개인 PIN",
             type="password",
-            placeholder="최초 000000 / 이후 개인 PIN",
+            placeholder="최초 000000 / 이후 복구용 개인 PIN",
             max_chars=6,
             key="worklog_login_pin",
         )
@@ -3880,6 +4116,7 @@ def _worklog_login_dialog_body() -> None:
                 "employee_no": user["employee_no"],
             }
             st.session_state["worklog_pin_change_required"] = bool(user.get("must_change_pin"))
+            st.session_state["worklog_quick_setup_required"] = not bool(user.get("has_quick_code"))
             st.session_state["worklog_df"] = None
             st.session_state["worklog_selected_id"] = ""
             st.session_state.pop("worklog_login_pin", None)
@@ -5128,7 +5365,7 @@ st.markdown("""
 }
 .smart-navi-launch-title {
     color: #24364B;
-    font-size: 1.02rem;
+    font-size: 1.10rem;
     font-weight: 950;
     white-space: nowrap;
 }
@@ -5169,7 +5406,7 @@ div[data-testid="stTabs"] button[role="tab"] {
     transition: all 0.18s ease-in-out !important;
 }
 div[data-testid="stTabs"] button[role="tab"] p {
-    font-size: clamp(1.16rem, 2.2vw, 1.30rem) !important;
+    font-size: clamp(1.22rem, 2.35vw, 1.38rem) !important;
     font-weight: 950 !important;
     letter-spacing: -0.02em !important;
     line-height: 1.2 !important;
@@ -5214,7 +5451,7 @@ div[data-testid="stTabs"] div[role="tabpanel"] {
     section.main .block-container { padding-left:.65rem !important; padding-right:.65rem !important; padding-top:.75rem !important; }
     div[data-testid="stTabs"] > div[role="tablist"] { padding:7px !important; gap:7px !important; border-radius:15px !important; }
     div[data-testid="stTabs"] button[role="tab"] { flex:0 0 auto !important; min-width:154px !important; min-height:56px !important; padding:9px 13px !important; }
-    div[data-testid="stTabs"] button[role="tab"] p { font-size:1.08rem !important; }
+    div[data-testid="stTabs"] button[role="tab"] p { font-size:1.14rem !important; font-weight:950 !important; }
     .smart-navi-launch-wrap { justify-content: stretch; }
     .smart-navi-launch { width: 100%; box-sizing: border-box; }
     .smart-work-brand { margin-bottom: 14px; }
@@ -5424,7 +5661,7 @@ with tab_worklog:
     .worklog-section-title,
     .worklog-field-title {
         color:#24364B;
-        font-size:1.08rem;
+        font-size:1.15rem;
         font-weight:950;
         line-height:1.25;
         margin:8px 0 8px;
@@ -5697,8 +5934,15 @@ with tab_worklog:
         margin:8px 0 14px;
         box-shadow:0 8px 22px rgba(15,23,42,.07);
     }
-    .worklog-auth-title { color:#24364B; font-size:1.28rem; font-weight:950; margin-bottom:5px; }
-    .worklog-auth-desc { color:#64748B; font-size:.92rem; font-weight:760; line-height:1.55; }
+    .worklog-auth-title { color:#24364B; font-size:1.36rem; font-weight:950; margin-bottom:5px; }
+    .worklog-auth-desc { color:#64748B; font-size:.94rem; font-weight:800; line-height:1.55; }
+    .worklog-quick-login {
+        background:linear-gradient(135deg,#F8FBFF 0%,#EEF6FF 100%);
+        border:1px solid #BFDBFE; border-left:6px solid #2563EB;
+        border-radius:16px; padding:12px 14px; margin:8px 0 10px;
+    }
+    .worklog-quick-login-title { color:#0F3B66; font-size:1.08rem; font-weight:950; margin-bottom:3px; }
+    .worklog-quick-login-desc { color:#64748B; font-size:.84rem; font-weight:800; line-height:1.45; }
     .worklog-userbar {
         display:flex; align-items:center; justify-content:space-between; gap:10px;
         background:#EEF6FF; border:1px solid #BFDBFE; border-radius:14px;
@@ -5733,6 +5977,19 @@ with tab_worklog:
     .worklog-delete-box {
         background:#FFF7F7; border:1px solid #FECACA; border-left:5px solid #DC2626;
         border-radius:14px; padding:11px 13px; margin-top:12px;
+    }
+
+    /* 현장 가독성: MY WORK LOG 주요 메뉴/버튼/필드 라벨을 한 단계 굵고 크게 */
+    .st-key-worklog_refresh button p,
+    .st-key-worklog_results_close button p,
+    .st-key-worklog_auth_settings_toggle button p,
+    .st-key-worklog_logout button p {
+        font-weight:950 !important;
+        font-size:1rem !important;
+    }
+    div[data-testid="stForm"] label p,
+    div[data-testid="stSelectbox"] label p {
+        font-weight:850 !important;
     }
 
     @media (max-width:768px) {
@@ -5778,86 +6035,232 @@ with tab_worklog:
             '<div class="worklog-auth-title">🔐 MY WORK LOG 개인 인증</div>'
             '<div class="worklog-auth-desc">'
             'MY WORK LOG는 팀 공용 업무기록과 개인 업무메모를 함께 사용합니다. '
-            '개인 인증 후 공개 기록은 팀과 공유하고, 비공개 기록은 작성한 본인만 검색·조회할 수 있습니다.<br><br>'
+            '최초 1회 본인 확인을 마치면 다음 접속부터는 본인이 설정한 <b>영문+숫자 4자리 간편 접속코드</b>만 입력하면 됩니다.<br><br>'
             '<b>🌐 공개 · 팀 공유</b> — 업무 공유가 필요한 기록<br>'
             '<b>🔒 비공개 · 나만 보기</b> — 기억용 메모·개인 업무기록'
             '</div></div>',
             unsafe_allow_html=True,
         )
-        auth_button_col, auth_info_col = st.columns([1.5, 3.5], gap="small", vertical_alignment="center")
+
+        st.markdown(
+            '<div class="worklog-quick-login">'
+            '<div class="worklog-quick-login-title">⚡ 간편 인증</div>'
+            '<div class="worklog-quick-login-desc">이미 최초 인증을 마친 사용자는 4자리 접속코드만 입력하세요.</div>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+        with st.form("worklog_quick_login_form", clear_on_submit=False):
+            quick_login_code = st.text_input(
+                "간편 접속코드",
+                type="password",
+                placeholder="영문+숫자 4자리",
+                max_chars=4,
+                key="worklog_quick_login_code",
+            )
+            quick_login_submit = st.form_submit_button(
+                "⚡ 간편 인증",
+                type="primary",
+                use_container_width=True,
+            )
+
+        if quick_login_submit:
+            quick_ok, quick_message, quick_user = _worklog_authenticate_quick_code(quick_login_code)
+            if quick_ok:
+                st.session_state["worklog_auth_user"] = {
+                    "user_id": quick_user["user_id"],
+                    "name": quick_user["name"],
+                    "employee_no": quick_user["employee_no"],
+                }
+                st.session_state["worklog_pin_change_required"] = False
+                st.session_state["worklog_quick_setup_required"] = False
+                st.session_state["worklog_df"] = None
+                st.session_state["worklog_selected_id"] = ""
+                st.session_state.pop("worklog_quick_login_code", None)
+                st.success(quick_message)
+                time.sleep(0.3)
+                st.rerun()
+            else:
+                st.error(quick_message)
+
+        auth_button_col, auth_info_col = st.columns([1.9, 3.1], gap="small", vertical_alignment="center")
         with auth_button_col:
             if st.button(
-                "🔐 개인 인증 시작",
+                "처음 사용 · 접속코드 분실",
                 key="worklog_open_login",
-                type="primary",
                 use_container_width=True,
             ):
                 _worklog_login_dialog()
         with auth_info_col:
-            st.caption("사번 + 개인 PIN으로 로그인합니다. 최초 로그인 공통 PIN은 000000이며, 로그인 직후 본인 PIN으로 반드시 변경합니다.")
+            st.caption("처음 사용: 사번 + 000000 · 접속코드 분실: 사번 + 복구용 개인 PIN")
 
     elif bool(st.session_state.get("worklog_pin_change_required", False)):
+        setup_name = html.escape(str(worklog_auth_user.get("name", "") or "사용자"))
         st.markdown(
             '<div class="worklog-auth-card">'
-            '<div class="worklog-auth-title">🔑 최초 로그인 · 개인 PIN 설정</div>'
-            '<div class="worklog-auth-desc">최초 로그인 공통 PIN 000000은 한 번만 사용합니다. '
-            '앞으로 사용할 숫자 6자리 개인 PIN으로 변경해 주세요.</div></div>',
+            f'<div class="worklog-auth-title">✅ {setup_name}님 인증 완료</div>'
+            '<div class="worklog-auth-desc">'
+            '최초 본인 확인이 완료되었습니다. 다음 접속부터 편하게 사용할 <b>영문+숫자 4자리 간편 접속코드</b>를 설정하세요. '
+            '간편 접속코드를 잊었을 때를 대비해 복구용 숫자 6자리 개인 PIN도 함께 설정합니다.'
+            '</div></div>',
             unsafe_allow_html=True,
         )
-        with st.form("worklog_first_pin_change_form", clear_on_submit=False):
-            first_new_pin = st.text_input("새 개인 PIN", type="password", max_chars=6, key="worklog_first_new_pin")
-            first_confirm_pin = st.text_input("새 PIN 확인", type="password", max_chars=6, key="worklog_first_confirm_pin")
-            first_pin_submit = st.form_submit_button("🔐 개인 PIN 설정 완료", type="primary", use_container_width=True)
-        if first_pin_submit:
-            first_ok, first_message = _worklog_change_pin(
-                str(worklog_auth_user.get("employee_no", "") or ""),
-                first_new_pin,
-                first_confirm_pin,
+        with st.form("worklog_first_auth_setup_form", clear_on_submit=False):
+            first_quick_code = st.text_input(
+                "간편 접속코드",
+                type="password",
+                max_chars=4,
+                placeholder="예: K7M2",
+                key="worklog_first_quick_code",
             )
-            if first_ok:
+            first_quick_confirm = st.text_input(
+                "접속코드 확인",
+                type="password",
+                max_chars=4,
+                key="worklog_first_quick_confirm",
+            )
+            first_recovery_pin = st.text_input(
+                "복구용 개인 PIN",
+                type="password",
+                max_chars=6,
+                placeholder="숫자 6자리",
+                key="worklog_first_recovery_pin",
+            )
+            first_recovery_confirm = st.text_input(
+                "복구 PIN 확인",
+                type="password",
+                max_chars=6,
+                key="worklog_first_recovery_confirm",
+            )
+            first_setup_submit = st.form_submit_button(
+                "🔐 간편 인증 설정 완료",
+                type="primary",
+                use_container_width=True,
+            )
+        if first_setup_submit:
+            setup_ok, setup_message = _worklog_complete_first_auth_setup(
+                str(worklog_auth_user.get("employee_no", "") or ""),
+                first_quick_code,
+                first_quick_confirm,
+                first_recovery_pin,
+                first_recovery_confirm,
+            )
+            if setup_ok:
                 st.session_state["worklog_pin_change_required"] = False
-                st.success(first_message)
+                st.session_state["worklog_quick_setup_required"] = False
+                st.success(setup_message)
+                time.sleep(0.45)
+                st.rerun()
+            else:
+                st.error(setup_message)
+        st.button("로그아웃", key="worklog_first_login_logout", on_click=_worklog_logout)
+
+    elif bool(st.session_state.get("worklog_quick_setup_required", False)):
+        setup_name = html.escape(str(worklog_auth_user.get("name", "") or "사용자"))
+        st.markdown(
+            '<div class="worklog-auth-card">'
+            f'<div class="worklog-auth-title">⚡ {setup_name}님 · 간편 접속코드 설정</div>'
+            '<div class="worklog-auth-desc">'
+            '기존 개인 PIN 인증은 그대로 유지됩니다. 앞으로는 영문+숫자 4자리 접속코드만 입력해 빠르게 연결할 수 있습니다.'
+            '</div></div>',
+            unsafe_allow_html=True,
+        )
+        with st.form("worklog_existing_user_quick_setup_form", clear_on_submit=False):
+            existing_quick_code = st.text_input(
+                "간편 접속코드",
+                type="password",
+                max_chars=4,
+                placeholder="예: K7M2",
+                key="worklog_existing_quick_code",
+            )
+            existing_quick_confirm = st.text_input(
+                "접속코드 확인",
+                type="password",
+                max_chars=4,
+                key="worklog_existing_quick_confirm",
+            )
+            existing_quick_submit = st.form_submit_button(
+                "⚡ 간편 접속코드 설정",
+                type="primary",
+                use_container_width=True,
+            )
+        if existing_quick_submit:
+            quick_ok, quick_message = _worklog_set_quick_code(
+                str(worklog_auth_user.get("employee_no", "") or ""),
+                existing_quick_code,
+                existing_quick_confirm,
+            )
+            if quick_ok:
+                st.session_state["worklog_quick_setup_required"] = False
+                st.success(quick_message)
                 time.sleep(0.4)
                 st.rerun()
             else:
-                st.error(first_message)
-        st.button("로그아웃", key="worklog_first_login_logout", on_click=_worklog_logout)
+                st.error(quick_message)
+        st.button("로그아웃", key="worklog_existing_quick_logout", on_click=_worklog_logout)
 
     else:
         auth_user = worklog_auth_user
         user_employee = str(auth_user.get("employee_no", "") or "")
         masked_employee = ("••••" + user_employee[-4:]) if len(user_employee) >= 4 else user_employee
-        userbar_col, pin_col, logout_col = st.columns([5.2, 1.45, 1.25], gap="small", vertical_alignment="center")
+        userbar_col, auth_manage_col, logout_col = st.columns([5.2, 1.8, 1.25], gap="small", vertical_alignment="center")
         with userbar_col:
             st.markdown(
                 f'<div class="worklog-userbar"><div><div class="name">👤 {html.escape(str(auth_user.get("name","")))}</div>'
-                f'<div class="meta">MY WORK LOG 개인 인증 · 사번 {html.escape(masked_employee)}</div></div></div>',
+                f'<div class="meta">MY WORK LOG 간편 인증 · 사번 {html.escape(masked_employee)}</div></div></div>',
                 unsafe_allow_html=True,
             )
-        with pin_col:
-            if st.button("🔑 PIN 변경", key="worklog_pin_change_toggle", use_container_width=True):
-                st.session_state["worklog_show_pin_change"] = not bool(st.session_state.get("worklog_show_pin_change", False))
+        with auth_manage_col:
+            if st.button("🔑 인증정보", key="worklog_auth_settings_toggle", use_container_width=True):
+                st.session_state["worklog_show_auth_settings"] = not bool(st.session_state.get("worklog_show_auth_settings", False))
         with logout_col:
             st.button("로그아웃", key="worklog_logout", use_container_width=True, on_click=_worklog_logout)
 
-        if st.session_state.get("worklog_show_pin_change"):
+        if st.session_state.get("worklog_show_auth_settings"):
             with st.container(border=True):
-                st.markdown("#### 🔑 개인 PIN 변경")
+                st.markdown("#### ⚡ 간편 접속코드 변경")
+                st.caption("다음 접속부터 사용할 영문+숫자 4자리 코드를 변경합니다.")
+                with st.form("worklog_quick_code_change_form", clear_on_submit=True):
+                    current_quick = st.text_input("현재 접속코드", type="password", max_chars=4)
+                    new_quick = st.text_input("새 접속코드", type="password", max_chars=4)
+                    new_quick_confirm = st.text_input("새 접속코드 확인", type="password", max_chars=4)
+                    quick_change_submit = st.form_submit_button(
+                        "접속코드 변경",
+                        type="primary",
+                        use_container_width=True,
+                    )
+                if quick_change_submit:
+                    verify_ok, verify_message, verify_user = _worklog_authenticate_quick_code(current_quick)
+                    if not verify_ok or str(verify_user.get("employee_no", "") or "") != user_employee:
+                        st.error("현재 접속코드를 확인하지 못했습니다.")
+                    else:
+                        quick_ok, quick_message = _worklog_set_quick_code(
+                            user_employee,
+                            new_quick,
+                            new_quick_confirm,
+                        )
+                        if quick_ok:
+                            st.success(quick_message)
+                            time.sleep(0.35)
+                            st.rerun()
+                        else:
+                            st.error(quick_message)
+
+                st.markdown("#### 🔐 복구용 개인 PIN 변경")
+                st.caption("간편 접속코드를 잊었을 때 사번과 함께 사용하는 숫자 6자리 PIN입니다.")
                 with st.form("worklog_regular_pin_change_form", clear_on_submit=True):
-                    current_pin = st.text_input("현재 PIN", type="password", max_chars=6)
-                    new_pin = st.text_input("새 PIN", type="password", max_chars=6)
-                    new_pin_confirm = st.text_input("새 PIN 확인", type="password", max_chars=6)
-                    pin_change_submit = st.form_submit_button("PIN 변경", type="primary", use_container_width=True)
+                    current_pin = st.text_input("현재 복구 PIN", type="password", max_chars=6)
+                    new_pin = st.text_input("새 복구 PIN", type="password", max_chars=6)
+                    new_pin_confirm = st.text_input("새 복구 PIN 확인", type="password", max_chars=6)
+                    pin_change_submit = st.form_submit_button("복구 PIN 변경", use_container_width=True)
                 if pin_change_submit:
                     verify_ok, verify_message, _ = _worklog_authenticate_user(user_employee, current_pin)
                     if not verify_ok:
-                        st.error(f"현재 PIN 확인 실패: {verify_message}")
+                        st.error(f"현재 복구 PIN 확인 실패: {verify_message}")
                     else:
                         pin_ok, pin_message = _worklog_change_pin(user_employee, new_pin, new_pin_confirm)
                         if pin_ok:
-                            st.session_state["worklog_show_pin_change"] = False
                             st.success(pin_message)
-                            time.sleep(0.4)
+                            time.sleep(0.35)
                             st.rerun()
                         else:
                             st.error(pin_message)
