@@ -4165,7 +4165,7 @@ def _worklog_photo_upload_token() -> str:
     return str(_worklog_secret_value("work_log_upload_token", "") or "").strip()
 
 
-WORK_LOG_PHOTO_ENGINE_VERSION = "V7-20260819-MOBILE-SAFE"
+WORK_LOG_PHOTO_ENGINE_VERSION = "V8-20260819-RAW-RECEIPT"
 
 
 def _worklog_normalize_apps_script_url() -> tuple[str, str]:
@@ -4471,20 +4471,79 @@ def _worklog_photo_health_cached(max_age_seconds: int = 120) -> tuple[bool, str]
     return bool(ok), str(message or "")
 
 
-def _worklog_render_photo_queue_status(photos: list, queue_key: str, health_key: str) -> None:
-    """사용자가 저장 전에 사진 수신 여부를 눈으로 확인할 수 있게 표시합니다."""
+def _worklog_capture_single_photo_callback(
+    uploader_key: str,
+    queue_key: str,
+    nonce_key: str,
+    notice_key: str,
+    raw_receipt_key: str,
+    health_key: str,
+) -> None:
+    """모바일 1장 선택을 callback에서 즉시 수신/압축/큐 저장합니다."""
+    file_obj = st.session_state.get(uploader_key)
+    if file_obj is None:
+        return
+
+    meta = _worklog_uploaded_file_meta(file_obj)
+    st.session_state[raw_receipt_key] = {
+        "received": True,
+        "name": meta.get("name", ""),
+        "mime": meta.get("mime", ""),
+        "ext": meta.get("ext", ""),
+        "size": int(meta.get("size", 0) or 0),
+        "at": _korea_now().strftime("%H:%M:%S"),
+    }
+
+    added, queued_count, errors = _worklog_queue_selected_photos(queue_key, [file_obj])
+    if errors:
+        st.session_state[notice_key] = " / ".join(errors[:2])
+    elif added:
+        st.session_state[notice_key] = f"사진 1장 처리 완료 · 현재 {queued_count}장"
+        health_ok, health_message = _worklog_photo_health_cached()
+        st.session_state[health_key] = {
+            "ok": health_ok,
+            "message": health_message,
+        }
+    else:
+        st.session_state[notice_key] = "사진을 수신했지만 새 사진으로 추가되지 않았습니다. 동일 사진 여부를 확인해 주세요."
+
+    # 같은 모바일 picker를 재사용하지 않고 다음 선택부터 완전히 새 widget key를 사용합니다.
+    st.session_state[nonce_key] = int(st.session_state.get(nonce_key, 0) or 0) + 1
+
+
+def _worklog_render_photo_pipeline_status(
+    photos: list,
+    queue_key: str,
+    raw_receipt_key: str,
+    health_key: str,
+) -> None:
+    """원본 수신 → 처리 완료 → Drive 연결 상태를 서로 분리하여 표시합니다."""
+    raw_receipt = st.session_state.get(raw_receipt_key)
     queue = list(st.session_state.get(queue_key, []) or [])
+
+    if isinstance(raw_receipt, dict) and raw_receipt.get("received"):
+        raw_name = str(raw_receipt.get("name", "") or "파일명 미확인")
+        raw_ext = str(raw_receipt.get("ext", "") or raw_receipt.get("mime", "") or "형식 미확인")
+        raw_size = int(raw_receipt.get("size", 0) or 0)
+        st.info(
+            f"① 휴대폰 → 서버 원본 수신 완료 · {raw_name} · {raw_ext} · "
+            f"약 {raw_size / 1024:.0f}KB"
+        )
+    else:
+        st.caption("① 휴대폰 → 서버 원본 수신: 아직 없음")
+
     if not photos:
-        st.caption("📷 사진 서버 수신: 0장")
+        if isinstance(raw_receipt, dict) and raw_receipt.get("received"):
+            st.warning("② 사진 처리 완료: 0장 · 원본은 도착했지만 압축/형식 처리 단계에서 큐에 들어가지 못했습니다.")
+        else:
+            st.caption("② 사진 처리 완료: 0장")
         return
 
     total_bytes = sum(int(item.get("bytes", 0) or 0) for item in queue if isinstance(item, dict))
     st.success(
-        f"✅ 사진 서버 수신 완료 · {len(photos)}장 · "
-        f"압축 후 약 {total_bytes / 1024:.0f}KB"
+        f"② 사진 처리 완료 · {len(photos)}장 · 압축 후 약 {total_bytes / 1024:.0f}KB"
     )
 
-    # 최대 10장이므로 모바일에서도 2열 썸네일로 실제 수신 사진을 확인할 수 있습니다.
     preview_cols = st.columns(2, gap="small")
     for index, photo in enumerate(photos):
         with preview_cols[index % 2]:
@@ -4496,13 +4555,15 @@ def _worklog_render_photo_queue_status(photos: list, queue_key: str, health_key:
     health = st.session_state.get(health_key)
     if isinstance(health, dict):
         if bool(health.get("ok")):
-            st.caption("🟢 Drive 사진 저장 연결 확인 완료")
+            st.caption("③ Drive 사진 저장 연결: 정상")
         else:
             st.warning(
-                "🟠 사진은 서버에 정상 수신됐지만 Drive 저장 연결 점검에 실패했습니다. "
-                "기록 본문은 저장되며 사진은 나중에 다시 추가할 수 있습니다. "
+                "③ Drive 사진 저장 연결: 점검 실패 · 기록 본문은 저장되며 사진은 나중에 다시 추가할 수 있습니다. "
                 f"원인: {str(health.get('message', '') or '연결 확인 필요')}"
             )
+    else:
+        st.caption("③ Drive 사진 저장 연결: 아직 점검 전")
+
 
 
 def _photo_capture_timestamp(uploaded_file, fallback_dt: datetime.datetime | None = None) -> str:
@@ -5582,6 +5643,7 @@ def _worklog_reset_entry_widgets() -> None:
             or key_text.startswith("worklog_photo_queue_")
             or key_text.startswith("worklog_photo_upload_nonce_")
             or key_text.startswith("worklog_photo_queue_notice_")
+            or key_text.startswith("worklog_photo_raw_receipt_")
             or key_text.endswith("_health")
         ):
             del st.session_state[key]
@@ -5604,7 +5666,7 @@ st.markdown("""
     <span>SMART WORK <b>AI AGENT</b></span>
   </div>
   <div class="smart-work-brand-subtitle">Integrated Field &amp; Business Assistant System</div>
-  <div class="smart-work-brand-version">FINAL V25 · MOBILE PHOTO SAFE · 최종 업로드 2026.08.19</div>
+  <div class="smart-work-brand-version">FINAL V26 · MOBILE PHOTO RECEIPT · 최종 업로드 2026.08.19</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -6977,29 +7039,24 @@ with tab_worklog:
                 worklog_photo_nonce_key = f"worklog_photo_upload_nonce_{entry_generation}"
                 worklog_photo_notice_key = f"worklog_photo_queue_notice_{entry_generation}"
                 worklog_photo_nonce = int(st.session_state.get(worklog_photo_nonce_key, 0) or 0)
-                uploaded_photos = st.file_uploader(
-                    "앨범/파일에서 선택",
+                worklog_raw_receipt_key = f"worklog_photo_raw_receipt_{entry_generation}"
+                worklog_health_key = f"{worklog_photo_queue_key}_health"
+                worklog_uploader_key = entry_key(f"uploads_{worklog_photo_nonce}")
+                st.file_uploader(
+                    "사진 1장 추가 · 카메라/앨범/파일",
                     type=["jpg", "jpeg", "png", "webp", "heic", "heif"],
-                    accept_multiple_files=True,
-                    key=entry_key(f"uploads_{worklog_photo_nonce}"),
-                ) or []
-                if uploaded_photos:
-                    _added_count, _queued_count, _queue_errors = _worklog_queue_selected_photos(
-                        worklog_photo_queue_key, uploaded_photos
-                    )
-                    if _queue_errors:
-                        st.session_state[worklog_photo_notice_key] = " / ".join(_queue_errors[:2])
-                    else:
-                        st.session_state[worklog_photo_notice_key] = (
-                            f"사진 {_added_count}장 추가 · 현재 {_queued_count}장"
-                        )
-                        health_ok, health_message = _worklog_photo_health_cached()
-                        st.session_state[f"{worklog_photo_queue_key}_health"] = {
-                            "ok": health_ok,
-                            "message": health_message,
-                        }
-                    st.session_state[worklog_photo_nonce_key] = worklog_photo_nonce + 1
-                    st.rerun()
+                    accept_multiple_files=False,
+                    key=worklog_uploader_key,
+                    on_change=_worklog_capture_single_photo_callback,
+                    args=(
+                        worklog_uploader_key,
+                        worklog_photo_queue_key,
+                        worklog_photo_nonce_key,
+                        worklog_photo_notice_key,
+                        worklog_raw_receipt_key,
+                        worklog_health_key,
+                    ),
+                )
 
                 queue_notice = str(st.session_state.pop(worklog_photo_notice_key, "") or "").strip()
                 if queue_notice:
@@ -7009,10 +7066,11 @@ with tab_worklog:
                         st.success(queue_notice)
 
                 photos = _worklog_queued_photo_objects(worklog_photo_queue_key)
-                _worklog_render_photo_queue_status(
+                _worklog_render_photo_pipeline_status(
                     photos,
                     worklog_photo_queue_key,
-                    f"{worklog_photo_queue_key}_health",
+                    worklog_raw_receipt_key,
+                    worklog_health_key,
                 )
                 photo_info_col, photo_clear_col = st.columns([4.0, 1.2], gap="small", vertical_alignment="center")
                 with photo_info_col:
@@ -7203,27 +7261,27 @@ with tab_worklog:
                 detail_queue_key = f"worklog_detail_photo_queue_{selected_id}"
                 detail_nonce_key = f"worklog_detail_photo_nonce_{selected_id}"
                 detail_nonce = int(st.session_state.get(detail_nonce_key, 0) or 0)
-                detail_uploads = st.file_uploader(
-                    "사진 추가 · 카메라/앨범/파일",
+                detail_notice_key = f"worklog_detail_photo_notice_{selected_id}"
+                detail_raw_receipt_key = f"worklog_detail_photo_raw_receipt_{selected_id}"
+                detail_health_key = f"{detail_queue_key}_health"
+                detail_uploader_key = f"worklog_detail_uploads_{selected_id}_{detail_nonce}"
+                st.file_uploader(
+                    "사진 1장 추가 · 카메라/앨범/파일",
                     type=["jpg", "jpeg", "png", "webp", "heic", "heif"],
-                    accept_multiple_files=True,
-                    key=f"worklog_detail_uploads_{selected_id}_{detail_nonce}",
-                ) or []
-                if detail_uploads:
-                    d_added, d_total, d_errors = _worklog_queue_selected_photos(detail_queue_key, detail_uploads)
-                    st.session_state[detail_nonce_key] = detail_nonce + 1
-                    if d_errors:
-                        st.session_state[f"worklog_detail_photo_notice_{selected_id}"] = " / ".join(d_errors[:2])
-                    else:
-                        st.session_state[f"worklog_detail_photo_notice_{selected_id}"] = f"추가 대기 사진 {d_total}장"
-                        health_ok, health_message = _worklog_photo_health_cached()
-                        st.session_state[f"{detail_queue_key}_health"] = {
-                            "ok": health_ok,
-                            "message": health_message,
-                        }
-                    st.rerun()
+                    accept_multiple_files=False,
+                    key=detail_uploader_key,
+                    on_change=_worklog_capture_single_photo_callback,
+                    args=(
+                        detail_uploader_key,
+                        detail_queue_key,
+                        detail_nonce_key,
+                        detail_notice_key,
+                        detail_raw_receipt_key,
+                        detail_health_key,
+                    ),
+                )
 
-                detail_notice = str(st.session_state.pop(f"worklog_detail_photo_notice_{selected_id}", "") or "")
+                detail_notice = str(st.session_state.pop(detail_notice_key, "") or "")
                 if detail_notice:
                     if "실패" in detail_notice or "못했습니다" in detail_notice:
                         st.warning(detail_notice)
@@ -7231,10 +7289,11 @@ with tab_worklog:
                         st.success(detail_notice)
 
                 detail_photos = _worklog_queued_photo_objects(detail_queue_key)
-                _worklog_render_photo_queue_status(
+                _worklog_render_photo_pipeline_status(
                     detail_photos,
                     detail_queue_key,
-                    f"{detail_queue_key}_health",
+                    detail_raw_receipt_key,
+                    detail_health_key,
                 )
                 if detail_photos:
                     add_photo_c1, add_photo_c2 = st.columns([3.8, 1.4], gap="small")
@@ -8445,31 +8504,27 @@ with tab_power:
             power_photo_queue_key = "power_photo_queue"
             power_photo_nonce_key = "power_photo_upload_nonce"
             power_photo_nonce = int(st.session_state.get(power_photo_nonce_key, 0) or 0)
-            power_uploaded_photos = st.file_uploader(
-                "앨범/파일에서 선택",
+            power_notice_key = "power_photo_queue_notice"
+            power_raw_receipt_key = "power_photo_raw_receipt"
+            power_health_key = f"{power_photo_queue_key}_health"
+            power_uploader_key = f"power_uploaded_photos_{power_photo_nonce}"
+            st.file_uploader(
+                "사진 1장 추가 · 카메라/앨범/파일",
                 type=["jpg", "jpeg", "png", "webp", "heic", "heif"],
-                accept_multiple_files=True,
-                key=f"power_uploaded_photos_{power_photo_nonce}",
-            ) or []
-            if power_uploaded_photos:
-                _added_count, _queued_count, _queue_errors = _worklog_queue_selected_photos(
-                    power_photo_queue_key, power_uploaded_photos
-                )
-                if _queue_errors:
-                    st.session_state["power_photo_queue_notice"] = " / ".join(_queue_errors[:2])
-                else:
-                    st.session_state["power_photo_queue_notice"] = (
-                        f"사진 {_added_count}장 추가 · 현재 {_queued_count}장"
-                    )
-                    health_ok, health_message = _worklog_photo_health_cached()
-                    st.session_state[f"{power_photo_queue_key}_health"] = {
-                        "ok": health_ok,
-                        "message": health_message,
-                    }
-                st.session_state[power_photo_nonce_key] = power_photo_nonce + 1
-                st.rerun()
+                accept_multiple_files=False,
+                key=power_uploader_key,
+                on_change=_worklog_capture_single_photo_callback,
+                args=(
+                    power_uploader_key,
+                    power_photo_queue_key,
+                    power_photo_nonce_key,
+                    power_notice_key,
+                    power_raw_receipt_key,
+                    power_health_key,
+                ),
+            )
 
-            power_queue_notice = str(st.session_state.pop("power_photo_queue_notice", "") or "").strip()
+            power_queue_notice = str(st.session_state.pop(power_notice_key, "") or "").strip()
             if power_queue_notice:
                 if "실패" in power_queue_notice or "못했습니다" in power_queue_notice or "최대" in power_queue_notice:
                     st.warning(power_queue_notice)
@@ -8477,10 +8532,11 @@ with tab_power:
                     st.success(power_queue_notice)
 
             power_photos = _worklog_queued_photo_objects(power_photo_queue_key)
-            _worklog_render_photo_queue_status(
+            _worklog_render_photo_pipeline_status(
                 power_photos,
                 power_photo_queue_key,
-                f"{power_photo_queue_key}_health",
+                power_raw_receipt_key,
+                power_health_key,
             )
             power_photo_info_col, power_photo_clear_col = st.columns(
                 [4.0, 1.2], gap="small", vertical_alignment="center"
