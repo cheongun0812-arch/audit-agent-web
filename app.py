@@ -4045,7 +4045,7 @@ def _worklog_logout() -> None:
     """MY WORK LOG 개인 세션만 종료하고 다른 앱 기능에는 영향을 주지 않습니다."""
     for key in (
         "worklog_auth_user", "worklog_pin_change_required", "worklog_quick_setup_required", "worklog_show_pin_change",
-        "worklog_show_auth_settings", "worklog_df", "worklog_loaded_at", "worklog_selected_id", "worklog_delete_pending_id",
+        "worklog_show_auth_settings", "worklog_df", "worklog_loaded_at", "worklog_selected_id", "worklog_selected_ui_key", "worklog_delete_pending_id",
         "worklog_search", "worklog_filter", "worklog_public_scope",
     ):
         st.session_state.pop(key, None)
@@ -5693,7 +5693,7 @@ st.markdown("""
     <span>SMART WORK <b>AI AGENT</b></span>
   </div>
   <div class="smart-work-brand-subtitle">Integrated Field &amp; Business Assistant System</div>
-  <div class="smart-work-brand-version">FINAL V28 · COMPACT PHOTO LIST · 최종 업로드 2026.08.19</div>
+  <div class="smart-work-brand-version">FINAL V29 · DUPLICATE KEY FIX · 최종 업로드 2026.08.20</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -6760,12 +6760,15 @@ with tab_worklog:
             st.session_state["worklog_loaded_at"] = ""
         if "worklog_selected_id" not in st.session_state:
             st.session_state["worklog_selected_id"] = ""
+        if "worklog_selected_ui_key" not in st.session_state:
+            st.session_state["worklog_selected_ui_key"] = ""
 
         def _worklog_close_loaded_results():
             """조회 결과만 닫고 새 현장기록 작성 중 입력값은 보존한 뒤 WORK LOG 상단으로 이동합니다."""
             st.session_state["worklog_df"] = None
             st.session_state["worklog_loaded_at"] = ""
             st.session_state["worklog_selected_id"] = ""
+            st.session_state["worklog_selected_ui_key"] = ""
             st.session_state["worklog_search"] = ""
             st.session_state["worklog_filter"] = "전체"
             st.session_state["worklog_public_scope"] = "👤 내 기록"
@@ -6847,6 +6850,7 @@ with tab_worklog:
                     st.session_state["worklog_df"] = load_work_logs(auth_user)
                     st.session_state["worklog_loaded_at"] = _korea_now().strftime("%Y-%m-%d %H:%M:%S")
                     st.session_state["worklog_selected_id"] = ""
+                    st.session_state["worklog_selected_ui_key"] = ""
                 except Exception as error:
                     st.error(f"WORK LOG를 불러오지 못했습니다: {error}")
 
@@ -7508,6 +7512,7 @@ with tab_worklog:
             with uc2:
                 if st.button("닫기", use_container_width=True, key="worklog_update_close"):
                     st.session_state["worklog_selected_id"] = ""
+                    st.session_state["worklog_selected_ui_key"] = ""
                     st.session_state.pop("worklog_delete_pending_id", None)
                     for detail_key in (
                         "worklog_update_writer", "worklog_update_status", "worklog_update_action",
@@ -7553,6 +7558,7 @@ with tab_worklog:
                             if delete_ok:
                                 st.session_state["worklog_df"] = load_work_logs(auth_user)
                                 st.session_state["worklog_selected_id"] = ""
+                                st.session_state["worklog_selected_ui_key"] = ""
                                 st.session_state.pop("worklog_delete_pending_id", None)
                                 st.success(delete_message)
                                 time.sleep(0.6)
@@ -7611,8 +7617,14 @@ with tab_worklog:
                     if display_logs.empty:
                         st.warning("조건에 맞는 WORK LOG가 없습니다.")
                     else:
-                        for _, log in display_logs.head(12).iterrows():
+                        for display_pos, (_, log) in enumerate(display_logs.head(12).iterrows(), start=1):
                             record_id = str(log.get("기록ID", "")).strip()
+                            saved_for_key = str(log.get("저장일시", "") or "").strip()
+                            writer_for_key = str(log.get("작성자", "") or "").strip()
+                            station_for_key = f"{str(log.get('모국','')).strip()}|{str(log.get('국소','')).strip()}"
+                            ui_seed = f"{record_id}|{saved_for_key}|{writer_for_key}|{station_for_key}|{display_pos}"
+                            ui_suffix = hashlib.sha256(ui_seed.encode("utf-8")).hexdigest()[:10]
+                            ui_record_key = f"{record_id or 'legacy'}_{display_pos}_{ui_suffix}"
                             status_value = str(log.get("상태", "신규")).strip()
                             badge_class = {
                                 "신규": "new", "확인필요": "wait", "조치중": "doing",
@@ -7652,20 +7664,38 @@ with tab_worklog:
 
                             action_c1, action_c2 = st.columns(2)
                             with action_c1:
-                                if st.button("상세·조치", key=f"worklog_detail_{record_id}", use_container_width=True):
-                                    previous_detail_id = str(st.session_state.get("worklog_selected_id", "") or "").strip()
-                                    if previous_detail_id != record_id:
-                                        for detail_key in (
-                                            "worklog_update_writer", "worklog_update_status", "worklog_update_action",
-                                            "worklog_update_followup", "worklog_update_remark",
-                                        ):
-                                            st.session_state.pop(detail_key, None)
-                                        st.session_state.pop("worklog_delete_pending_id", None)
-                                    st.session_state["worklog_selected_id"] = record_id
-                                    st.rerun()
+                                if record_id:
+                                    if st.button("상세·조치", key=f"worklog_detail_{ui_record_key}", use_container_width=True):
+                                        previous_detail_id = str(st.session_state.get("worklog_selected_id", "") or "").strip()
+                                        previous_ui_key = str(st.session_state.get("worklog_selected_ui_key", "") or "").strip()
+                                        if previous_detail_id != record_id or previous_ui_key != ui_record_key:
+                                            for detail_key in (
+                                                "worklog_update_writer", "worklog_update_status", "worklog_update_action",
+                                                "worklog_update_followup", "worklog_update_remark",
+                                            ):
+                                                st.session_state.pop(detail_key, None)
+                                            st.session_state.pop("worklog_delete_pending_id", None)
+                                        st.session_state["worklog_selected_id"] = record_id
+                                        st.session_state["worklog_selected_ui_key"] = ui_record_key
+                                        st.rerun()
+                                else:
+                                    st.button(
+                                        "상세·조치",
+                                        key=f"worklog_detail_legacy_disabled_{ui_record_key}",
+                                        use_container_width=True,
+                                        disabled=True,
+                                    )
+                                    st.caption("이전 형식 기록 · 기록ID 없음")
                             with action_c2:
-                                if status_value != "완료":
-                                    if st.button("✅ 완료", key=f"worklog_done_{record_id}", use_container_width=True):
+                                if not record_id:
+                                    st.button(
+                                        "처리 불가",
+                                        disabled=True,
+                                        key=f"worklog_done_legacy_disabled_{ui_record_key}",
+                                        use_container_width=True,
+                                    )
+                                elif status_value != "완료":
+                                    if st.button("✅ 완료", key=f"worklog_done_{ui_record_key}", use_container_width=True):
                                         ok, msg = update_work_log(
                                             record_id,
                                             str(auth_user.get("name", "") or "현장 사용자"),
@@ -7682,11 +7712,12 @@ with tab_worklog:
                                         else:
                                             st.error(msg)
                                 else:
-                                    st.button("완료됨", disabled=True, key=f"worklog_done_disabled_{record_id}", use_container_width=True)
+                                    st.button("완료됨", disabled=True, key=f"worklog_done_disabled_{ui_record_key}", use_container_width=True)
 
-                            # V15: 상세·조치 편집은 선택한 카드 바로 아래에 삽입하고, 다음 기록은 그 아래에 이어집니다.
+                            # 카드의 논리 기록ID와 화면 UI key를 함께 비교하여 중복 ID가 있어도 상세창은 1개만 엽니다.
                             active_detail_id = str(st.session_state.get("worklog_selected_id", "") or "").strip()
-                            if active_detail_id == record_id:
+                            active_ui_key = str(st.session_state.get("worklog_selected_ui_key", "") or "").strip()
+                            if record_id and active_detail_id == record_id and active_ui_key == ui_record_key:
                                 _render_worklog_inline_detail(log, record_id)
 
         if isinstance(st.session_state.get("worklog_df"), pd.DataFrame):
