@@ -4165,7 +4165,7 @@ def _worklog_photo_upload_token() -> str:
     return str(_worklog_secret_value("work_log_upload_token", "") or "").strip()
 
 
-WORK_LOG_PHOTO_ENGINE_VERSION = "V8-20260819-RAW-RECEIPT"
+WORK_LOG_PHOTO_ENGINE_VERSION = "V10-20260819-COMPACT-LIST"
 
 
 def _worklog_normalize_apps_script_url() -> tuple[str, str]:
@@ -4471,44 +4471,50 @@ def _worklog_photo_health_cached(max_age_seconds: int = 120) -> tuple[bool, str]
     return bool(ok), str(message or "")
 
 
-def _worklog_capture_single_photo_callback(
-    uploader_key: str,
+def _worklog_process_photo_submission(
+    uploaded_files,
     queue_key: str,
-    nonce_key: str,
     notice_key: str,
     raw_receipt_key: str,
     health_key: str,
-) -> None:
-    """모바일 1장 선택을 callback에서 즉시 수신/압축/큐 저장합니다."""
-    file_obj = st.session_state.get(uploader_key)
-    if file_obj is None:
-        return
+) -> tuple[int, int, list[str]]:
+    """폼 제출이 완료된 뒤 사진을 처리합니다. 모바일 picker와 처리 rerun을 분리합니다."""
+    files = list(uploaded_files or [])
+    if not files:
+        st.session_state[notice_key] = "선택된 사진이 없습니다."
+        return 0, len(st.session_state.get(queue_key, []) or []), []
 
-    meta = _worklog_uploaded_file_meta(file_obj)
+    metas = [_worklog_uploaded_file_meta(file_obj) for file_obj in files]
     st.session_state[raw_receipt_key] = {
         "received": True,
-        "name": meta.get("name", ""),
-        "mime": meta.get("mime", ""),
-        "ext": meta.get("ext", ""),
-        "size": int(meta.get("size", 0) or 0),
+        "count": len(files),
+        "size": sum(int(meta.get("size", 0) or 0) for meta in metas),
+        "files": metas,
         "at": _korea_now().strftime("%H:%M:%S"),
     }
 
-    added, queued_count, errors = _worklog_queue_selected_photos(queue_key, [file_obj])
+    added, queued_count, errors = _worklog_queue_selected_photos(queue_key, files)
     if errors:
-        st.session_state[notice_key] = " / ".join(errors[:2])
+        st.session_state[notice_key] = (
+            f"원본 {len(files)}장 수신 · {added}장 처리 완료 · " + " / ".join(errors[:2])
+        )
     elif added:
-        st.session_state[notice_key] = f"사진 1장 처리 완료 · 현재 {queued_count}장"
+        st.session_state[notice_key] = (
+            f"원본 {len(files)}장 수신 · {added}장 처리 완료 · 현재 {queued_count}장"
+        )
+    else:
+        st.session_state[notice_key] = (
+            f"원본 {len(files)}장은 수신했지만 새 사진으로 추가되지 않았습니다. 동일 사진 여부를 확인해 주세요."
+        )
+
+    if added:
         health_ok, health_message = _worklog_photo_health_cached()
         st.session_state[health_key] = {
             "ok": health_ok,
             "message": health_message,
         }
-    else:
-        st.session_state[notice_key] = "사진을 수신했지만 새 사진으로 추가되지 않았습니다. 동일 사진 여부를 확인해 주세요."
+    return added, queued_count, errors
 
-    # 같은 모바일 picker를 재사용하지 않고 다음 선택부터 완전히 새 widget key를 사용합니다.
-    st.session_state[nonce_key] = int(st.session_state.get(nonce_key, 0) or 0) + 1
 
 
 def _worklog_render_photo_pipeline_status(
@@ -4522,35 +4528,54 @@ def _worklog_render_photo_pipeline_status(
     queue = list(st.session_state.get(queue_key, []) or [])
 
     if isinstance(raw_receipt, dict) and raw_receipt.get("received"):
-        raw_name = str(raw_receipt.get("name", "") or "파일명 미확인")
-        raw_ext = str(raw_receipt.get("ext", "") or raw_receipt.get("mime", "") or "형식 미확인")
+        raw_count = int(raw_receipt.get("count", 0) or 0)
         raw_size = int(raw_receipt.get("size", 0) or 0)
         st.info(
-            f"① 휴대폰 → 서버 원본 수신 완료 · {raw_name} · {raw_ext} · "
-            f"약 {raw_size / 1024:.0f}KB"
+            f"① 최근 선택 원본 수신 완료 · {raw_count}장 · "
+            f"원본 합계 약 {raw_size / (1024 * 1024):.1f}MB"
         )
     else:
-        st.caption("① 휴대폰 → 서버 원본 수신: 아직 없음")
+        st.caption("① 최근 선택 원본 수신: 아직 없음")
 
     if not photos:
         if isinstance(raw_receipt, dict) and raw_receipt.get("received"):
-            st.warning("② 사진 처리 완료: 0장 · 원본은 도착했지만 압축/형식 처리 단계에서 큐에 들어가지 못했습니다.")
+            st.warning("② 누적 사진 처리 완료: 0장 · 원본은 도착했지만 압축/형식 처리 단계에서 큐에 들어가지 못했습니다.")
         else:
-            st.caption("② 사진 처리 완료: 0장")
+            st.caption("② 누적 사진 처리 완료: 0장")
         return
 
     total_bytes = sum(int(item.get("bytes", 0) or 0) for item in queue if isinstance(item, dict))
     st.success(
-        f"② 사진 처리 완료 · {len(photos)}장 · 압축 후 약 {total_bytes / 1024:.0f}KB"
+        f"② 누적 사진 처리 완료 · {len(photos)}장 / 최대 {WORK_LOG_MAX_PHOTOS}장 · 압축 후 약 {total_bytes / 1024:.0f}KB"
     )
 
-    preview_cols = st.columns(2, gap="small")
-    for index, photo in enumerate(photos):
-        with preview_cols[index % 2]:
-            try:
-                st.image(photo.getvalue(), caption=f"{index + 1}번 사진", use_container_width=True)
-            except Exception:
-                st.caption(f"{index + 1}번 사진 · 미리보기 생성 실패")
+    # 업로드 단계에서는 큰 썸네일을 표시하지 않습니다.
+    # 최대 10장의 첨부 대기 파일명을 작은 고정 높이 목록으로만 보여 화면 이동을 최소화합니다.
+    file_rows = []
+    for index, item in enumerate(queue[:WORK_LOG_MAX_PHOTOS], 1):
+        if not isinstance(item, dict):
+            continue
+        queued_name = str(item.get("name", "") or f"photo_{index:02d}.jpg")
+        capture_stamp = str(item.get("capture_stamp", "") or "")
+        display_name = html.escape(queued_name)
+        stamp_text = f' <span style="color:#94A3B8;">· {html.escape(capture_stamp)}</span>' if capture_stamp else ""
+        file_rows.append(
+            f'<div style="padding:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'
+            f'<b style="display:inline-block;min-width:26px;color:#475569;">{index:02d}</b>'
+            f'<span>{display_name}</span>{stamp_text}</div>'
+        )
+
+    if file_rows:
+        st.markdown(
+            '<div style="margin:4px 0 8px;padding:7px 10px;border:1px solid #E2E8F0;'
+            'border-radius:8px;background:#F8FAFC;max-height:132px;overflow-y:auto;'
+            'font-size:.76rem;line-height:1.25;color:#334155;">'
+            '<div style="font-weight:900;margin-bottom:4px;color:#475569;">📎 첨부 대기 파일</div>'
+            + ''.join(file_rows)
+            + '</div>',
+            unsafe_allow_html=True,
+        )
+        st.caption("저장 시에는 기존 규칙대로 기록ID/점검ID가 포함된 고유 파일명으로 자동 저장됩니다.")
 
     health = st.session_state.get(health_key)
     if isinstance(health, dict):
@@ -5644,6 +5669,8 @@ def _worklog_reset_entry_widgets() -> None:
             or key_text.startswith("worklog_photo_upload_nonce_")
             or key_text.startswith("worklog_photo_queue_notice_")
             or key_text.startswith("worklog_photo_raw_receipt_")
+            or key_text.startswith("worklog_photo_album_nonce_")
+            or key_text.startswith("worklog_photo_camera_nonce_")
             or key_text.endswith("_health")
         ):
             del st.session_state[key]
@@ -5666,7 +5693,7 @@ st.markdown("""
     <span>SMART WORK <b>AI AGENT</b></span>
   </div>
   <div class="smart-work-brand-subtitle">Integrated Field &amp; Business Assistant System</div>
-  <div class="smart-work-brand-version">FINAL V26 · MOBILE PHOTO RECEIPT · 최종 업로드 2026.08.19</div>
+  <div class="smart-work-brand-version">FINAL V28 · COMPACT PHOTO LIST · 최종 업로드 2026.08.19</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -7034,33 +7061,64 @@ with tab_worklog:
                     st.caption(st.session_state["worklog_items_confirmed_notice"])
 
                 st.markdown('<div class="worklog-field-title">📷 현장사진</div>', unsafe_allow_html=True)
-                # 사진 큐도 새 기록 generation별로 분리합니다.
                 worklog_photo_queue_key = f"worklog_photo_queue_{entry_generation}"
-                worklog_photo_nonce_key = f"worklog_photo_upload_nonce_{entry_generation}"
                 worklog_photo_notice_key = f"worklog_photo_queue_notice_{entry_generation}"
-                worklog_photo_nonce = int(st.session_state.get(worklog_photo_nonce_key, 0) or 0)
                 worklog_raw_receipt_key = f"worklog_photo_raw_receipt_{entry_generation}"
                 worklog_health_key = f"{worklog_photo_queue_key}_health"
-                worklog_uploader_key = entry_key(f"uploads_{worklog_photo_nonce}")
-                st.file_uploader(
-                    "사진 1장 추가 · 카메라/앨범/파일",
-                    type=["jpg", "jpeg", "png", "webp", "heic", "heif"],
-                    accept_multiple_files=False,
-                    key=worklog_uploader_key,
-                    on_change=_worklog_capture_single_photo_callback,
-                    args=(
-                        worklog_uploader_key,
+                worklog_album_nonce_key = f"worklog_photo_album_nonce_{entry_generation}"
+                worklog_camera_nonce_key = f"worklog_photo_camera_nonce_{entry_generation}"
+                worklog_album_nonce = int(st.session_state.get(worklog_album_nonce_key, 0) or 0)
+                worklog_camera_nonce = int(st.session_state.get(worklog_camera_nonce_key, 0) or 0)
+
+                st.caption("앨범은 여러 장을 한 번에 선택할 수 있습니다. 직접 촬영은 촬영 후 아래 확인 버튼을 눌러 사진을 담습니다.")
+
+                with st.form(key=entry_key(f"photo_album_form_{worklog_album_nonce}"), clear_on_submit=False):
+                    album_files = st.file_uploader(
+                        "🖼️ 앨범에서 여러 장 선택",
+                        type=["jpg", "jpeg", "png", "webp", "heic", "heif"],
+                        accept_multiple_files=True,
+                        key=entry_key(f"album_uploads_{worklog_album_nonce}"),
+                    ) or []
+                    album_submit = st.form_submit_button(
+                        "선택한 사진 담기",
+                        use_container_width=True,
+                    )
+                if album_submit:
+                    _worklog_process_photo_submission(
+                        album_files,
                         worklog_photo_queue_key,
-                        worklog_photo_nonce_key,
                         worklog_photo_notice_key,
                         worklog_raw_receipt_key,
                         worklog_health_key,
-                    ),
-                )
+                    )
+                    st.session_state[worklog_album_nonce_key] = worklog_album_nonce + 1
+                    st.rerun()
+
+                with st.form(key=entry_key(f"photo_camera_form_{worklog_camera_nonce}"), clear_on_submit=False):
+                    camera_file = st.file_uploader(
+                        "📷 카메라 촬영 또는 사진 1장 선택",
+                        type=["jpg", "jpeg", "png", "webp", "heic", "heif"],
+                        accept_multiple_files=False,
+                        key=entry_key(f"camera_upload_{worklog_camera_nonce}"),
+                    )
+                    camera_submit = st.form_submit_button(
+                        "촬영/선택 사진 담기",
+                        use_container_width=True,
+                    )
+                if camera_submit:
+                    _worklog_process_photo_submission(
+                        [camera_file] if camera_file is not None else [],
+                        worklog_photo_queue_key,
+                        worklog_photo_notice_key,
+                        worklog_raw_receipt_key,
+                        worklog_health_key,
+                    )
+                    st.session_state[worklog_camera_nonce_key] = worklog_camera_nonce + 1
+                    st.rerun()
 
                 queue_notice = str(st.session_state.pop(worklog_photo_notice_key, "") or "").strip()
                 if queue_notice:
-                    if "실패" in queue_notice or "못했습니다" in queue_notice or "최대" in queue_notice:
+                    if "실패" in queue_notice or "못했습니다" in queue_notice or "없습니다" in queue_notice or "최대" in queue_notice:
                         st.warning(queue_notice)
                     else:
                         st.success(queue_notice)
@@ -7075,8 +7133,8 @@ with tab_worklog:
                 photo_info_col, photo_clear_col = st.columns([4.0, 1.2], gap="small", vertical_alignment="center")
                 with photo_info_col:
                     st.caption(
-                        f"선택 사진 {len(photos)}장 / 최대 {WORK_LOG_MAX_PHOTOS}장 · "
-                        "한 장씩 촬영해도 계속 추가할 수 있습니다. 저장 시 자동 압축됩니다."
+                        f"첨부 대기 {len(photos)}장 / 최대 {WORK_LOG_MAX_PHOTOS}장 · "
+                        "여러 장 선택과 1장 촬영을 섞어서 추가할 수 있습니다."
                     )
                 with photo_clear_col:
                     if photos and st.button(
@@ -7084,7 +7142,9 @@ with tab_worklog:
                         key=entry_key("photo_queue_clear"),
                         use_container_width=True,
                     ):
-                        _worklog_clear_photo_queue(worklog_photo_queue_key, worklog_photo_nonce_key)
+                        st.session_state[worklog_photo_queue_key] = []
+                        st.session_state.pop(worklog_raw_receipt_key, None)
+                        st.session_state.pop(worklog_health_key, None)
                         st.rerun()
 
                 st.markdown('<div class="worklog-field-title">📝 현상·특이사항</div>', unsafe_allow_html=True)
@@ -7259,31 +7319,55 @@ with tab_worklog:
                     "현장에서 사진 연결이 실패했더라도 기록은 유지되며, 휴대폰 앨범에서 사진만 다시 추가할 수 있습니다."
                 )
                 detail_queue_key = f"worklog_detail_photo_queue_{selected_id}"
-                detail_nonce_key = f"worklog_detail_photo_nonce_{selected_id}"
-                detail_nonce = int(st.session_state.get(detail_nonce_key, 0) or 0)
                 detail_notice_key = f"worklog_detail_photo_notice_{selected_id}"
                 detail_raw_receipt_key = f"worklog_detail_photo_raw_receipt_{selected_id}"
                 detail_health_key = f"{detail_queue_key}_health"
-                detail_uploader_key = f"worklog_detail_uploads_{selected_id}_{detail_nonce}"
-                st.file_uploader(
-                    "사진 1장 추가 · 카메라/앨범/파일",
-                    type=["jpg", "jpeg", "png", "webp", "heic", "heif"],
-                    accept_multiple_files=False,
-                    key=detail_uploader_key,
-                    on_change=_worklog_capture_single_photo_callback,
-                    args=(
-                        detail_uploader_key,
+                detail_album_nonce_key = f"worklog_detail_photo_album_nonce_{selected_id}"
+                detail_camera_nonce_key = f"worklog_detail_photo_camera_nonce_{selected_id}"
+                detail_album_nonce = int(st.session_state.get(detail_album_nonce_key, 0) or 0)
+                detail_camera_nonce = int(st.session_state.get(detail_camera_nonce_key, 0) or 0)
+
+                with st.form(key=f"worklog_detail_album_form_{selected_id}_{detail_album_nonce}", clear_on_submit=False):
+                    detail_album_files = st.file_uploader(
+                        "🖼️ 앨범에서 여러 장 선택",
+                        type=["jpg", "jpeg", "png", "webp", "heic", "heif"],
+                        accept_multiple_files=True,
+                        key=f"worklog_detail_album_{selected_id}_{detail_album_nonce}",
+                    ) or []
+                    detail_album_submit = st.form_submit_button("선택한 사진 담기", use_container_width=True)
+                if detail_album_submit:
+                    _worklog_process_photo_submission(
+                        detail_album_files,
                         detail_queue_key,
-                        detail_nonce_key,
                         detail_notice_key,
                         detail_raw_receipt_key,
                         detail_health_key,
-                    ),
-                )
+                    )
+                    st.session_state[detail_album_nonce_key] = detail_album_nonce + 1
+                    st.rerun()
+
+                with st.form(key=f"worklog_detail_camera_form_{selected_id}_{detail_camera_nonce}", clear_on_submit=False):
+                    detail_camera_file = st.file_uploader(
+                        "📷 카메라 촬영 또는 사진 1장 선택",
+                        type=["jpg", "jpeg", "png", "webp", "heic", "heif"],
+                        accept_multiple_files=False,
+                        key=f"worklog_detail_camera_{selected_id}_{detail_camera_nonce}",
+                    )
+                    detail_camera_submit = st.form_submit_button("촬영/선택 사진 담기", use_container_width=True)
+                if detail_camera_submit:
+                    _worklog_process_photo_submission(
+                        [detail_camera_file] if detail_camera_file is not None else [],
+                        detail_queue_key,
+                        detail_notice_key,
+                        detail_raw_receipt_key,
+                        detail_health_key,
+                    )
+                    st.session_state[detail_camera_nonce_key] = detail_camera_nonce + 1
+                    st.rerun()
 
                 detail_notice = str(st.session_state.pop(detail_notice_key, "") or "")
                 if detail_notice:
-                    if "실패" in detail_notice or "못했습니다" in detail_notice:
+                    if "실패" in detail_notice or "못했습니다" in detail_notice or "없습니다" in detail_notice:
                         st.warning(detail_notice)
                     else:
                         st.success(detail_notice)
@@ -7305,7 +7389,9 @@ with tab_worklog:
                             key=f"worklog_detail_photo_clear_{selected_id}",
                             use_container_width=True,
                         ):
-                            _worklog_clear_photo_queue(detail_queue_key, detail_nonce_key)
+                            st.session_state[detail_queue_key] = []
+                            st.session_state.pop(detail_raw_receipt_key, None)
+                            st.session_state.pop(detail_health_key, None)
                             st.rerun()
                     if st.button(
                         "📎 선택 사진을 이 기록에 추가 저장",
@@ -7316,7 +7402,9 @@ with tab_worklog:
                         with st.spinner("기존 기록에 현장사진을 추가하고 있습니다..."):
                             add_ok, add_message = append_work_log_photos(selected_id, auth_user, detail_photos)
                         if add_ok:
-                            _worklog_clear_photo_queue(detail_queue_key, detail_nonce_key)
+                            st.session_state[detail_queue_key] = []
+                            st.session_state.pop(detail_raw_receipt_key, None)
+                            st.session_state.pop(detail_health_key, None)
                             st.session_state["worklog_df"] = load_work_logs(auth_user)
                             st.session_state["worklog_selected_id"] = selected_id
                             st.session_state["worklog_detail_photo_saved_notice"] = add_message
@@ -8502,31 +8590,57 @@ with tab_power:
 
             st.markdown("**📷 정밀점검 현장사진 (선택)**")
             power_photo_queue_key = "power_photo_queue"
-            power_photo_nonce_key = "power_photo_upload_nonce"
-            power_photo_nonce = int(st.session_state.get(power_photo_nonce_key, 0) or 0)
             power_notice_key = "power_photo_queue_notice"
             power_raw_receipt_key = "power_photo_raw_receipt"
             power_health_key = f"{power_photo_queue_key}_health"
-            power_uploader_key = f"power_uploaded_photos_{power_photo_nonce}"
-            st.file_uploader(
-                "사진 1장 추가 · 카메라/앨범/파일",
-                type=["jpg", "jpeg", "png", "webp", "heic", "heif"],
-                accept_multiple_files=False,
-                key=power_uploader_key,
-                on_change=_worklog_capture_single_photo_callback,
-                args=(
-                    power_uploader_key,
+            power_album_nonce_key = "power_photo_album_nonce"
+            power_camera_nonce_key = "power_photo_camera_nonce"
+            power_album_nonce = int(st.session_state.get(power_album_nonce_key, 0) or 0)
+            power_camera_nonce = int(st.session_state.get(power_camera_nonce_key, 0) or 0)
+
+            st.caption("앨범은 여러 장을 한 번에 선택할 수 있고, 직접 촬영은 촬영 후 확인 버튼으로 담습니다.")
+
+            with st.form(key=f"power_photo_album_form_{power_album_nonce}", clear_on_submit=False):
+                power_album_files = st.file_uploader(
+                    "🖼️ 앨범에서 여러 장 선택",
+                    type=["jpg", "jpeg", "png", "webp", "heic", "heif"],
+                    accept_multiple_files=True,
+                    key=f"power_photo_album_{power_album_nonce}",
+                ) or []
+                power_album_submit = st.form_submit_button("선택한 사진 담기", use_container_width=True)
+            if power_album_submit:
+                _worklog_process_photo_submission(
+                    power_album_files,
                     power_photo_queue_key,
-                    power_photo_nonce_key,
                     power_notice_key,
                     power_raw_receipt_key,
                     power_health_key,
-                ),
-            )
+                )
+                st.session_state[power_album_nonce_key] = power_album_nonce + 1
+                st.rerun()
+
+            with st.form(key=f"power_photo_camera_form_{power_camera_nonce}", clear_on_submit=False):
+                power_camera_file = st.file_uploader(
+                    "📷 카메라 촬영 또는 사진 1장 선택",
+                    type=["jpg", "jpeg", "png", "webp", "heic", "heif"],
+                    accept_multiple_files=False,
+                    key=f"power_photo_camera_{power_camera_nonce}",
+                )
+                power_camera_submit = st.form_submit_button("촬영/선택 사진 담기", use_container_width=True)
+            if power_camera_submit:
+                _worklog_process_photo_submission(
+                    [power_camera_file] if power_camera_file is not None else [],
+                    power_photo_queue_key,
+                    power_notice_key,
+                    power_raw_receipt_key,
+                    power_health_key,
+                )
+                st.session_state[power_camera_nonce_key] = power_camera_nonce + 1
+                st.rerun()
 
             power_queue_notice = str(st.session_state.pop(power_notice_key, "") or "").strip()
             if power_queue_notice:
-                if "실패" in power_queue_notice or "못했습니다" in power_queue_notice or "최대" in power_queue_notice:
+                if "실패" in power_queue_notice or "못했습니다" in power_queue_notice or "없습니다" in power_queue_notice or "최대" in power_queue_notice:
                     st.warning(power_queue_notice)
                 else:
                     st.success(power_queue_notice)
@@ -8543,8 +8657,8 @@ with tab_power:
             )
             with power_photo_info_col:
                 st.caption(
-                    f"선택 사진 {len(power_photos)}장 / 최대 {WORK_LOG_MAX_PHOTOS}장 · "
-                    "한 장씩 촬영해도 계속 추가할 수 있습니다. 저장 시 자동 방향보정·압축됩니다."
+                    f"첨부 대기 {len(power_photos)}장 / 최대 {WORK_LOG_MAX_PHOTOS}장 · "
+                    "여러 장 선택과 1장 촬영을 섞어서 추가할 수 있습니다."
                 )
             with power_photo_clear_col:
                 if power_photos and st.button(
@@ -8552,7 +8666,9 @@ with tab_power:
                     key="power_photo_queue_clear",
                     use_container_width=True,
                 ):
-                    _worklog_clear_photo_queue(power_photo_queue_key, power_photo_nonce_key)
+                    st.session_state[power_photo_queue_key] = []
+                    st.session_state.pop(power_raw_receipt_key, None)
+                    st.session_state.pop(power_health_key, None)
                     st.rerun()
 
             payload_preview = _build_power_payload_from_state(final_confirmed=True)
