@@ -4165,7 +4165,7 @@ def _worklog_photo_upload_token() -> str:
     return str(_worklog_secret_value("work_log_upload_token", "") or "").strip()
 
 
-WORK_LOG_PHOTO_ENGINE_VERSION = "V6-20260819-FIELD-SAFE"
+WORK_LOG_PHOTO_ENGINE_VERSION = "V7-20260819-MOBILE-SAFE"
 
 
 def _worklog_normalize_apps_script_url() -> tuple[str, str]:
@@ -4422,6 +4422,89 @@ def _worklog_make_id(now_dt: datetime.datetime | None = None) -> str:
     return f"WL-{now_dt.strftime('%Y%m%d-%H%M%S')}-{suffix}"
 
 
+
+def _worklog_register_mobile_image_support() -> tuple[bool, str]:
+    """HEIC/HEIF를 포함한 모바일 이미지 디코더를 등록합니다."""
+    try:
+        from pillow_heif import register_heif_opener
+        register_heif_opener(thumbnails=False)
+        return True, ""
+    except ImportError:
+        return False, "HEIC/HEIF 지원을 위해 requirements.txt에 pillow-heif>=1.1.1을 추가해 주세요."
+    except Exception as error:
+        return False, f"HEIC/HEIF 디코더 초기화 실패: {error}"
+
+
+def _worklog_uploaded_file_meta(uploaded_file) -> dict:
+    name = str(getattr(uploaded_file, "name", "") or "field_photo")
+    mime = str(getattr(uploaded_file, "type", "") or "").lower()
+    ext = os.path.splitext(name)[1].lower().lstrip(".")
+    try:
+        size = len(uploaded_file.getvalue())
+    except Exception:
+        size = 0
+    return {"name": name, "mime": mime, "ext": ext, "size": size}
+
+
+def _worklog_is_heif_file(uploaded_file) -> bool:
+    meta = _worklog_uploaded_file_meta(uploaded_file)
+    return (
+        meta["ext"] in {"heic", "heif", "heics", "heifs", "hif"}
+        or meta["mime"] in {"image/heic", "image/heif", "image/heic-sequence", "image/heif-sequence"}
+    )
+
+
+def _worklog_photo_health_cached(max_age_seconds: int = 120) -> tuple[bool, str]:
+    """Apps Script/Drive 연결을 짧게 캐시해 모바일에서 반복 네트워크 점검을 줄입니다."""
+    cache = st.session_state.get("worklog_photo_health_cache")
+    now_ts = time.time()
+    if isinstance(cache, dict):
+        cached_at = float(cache.get("at", 0) or 0)
+        if now_ts - cached_at <= max_age_seconds:
+            return bool(cache.get("ok")), str(cache.get("message", "") or "")
+    ok, message = _worklog_apps_script_healthcheck()
+    st.session_state["worklog_photo_health_cache"] = {
+        "at": now_ts,
+        "ok": bool(ok),
+        "message": str(message or ""),
+    }
+    return bool(ok), str(message or "")
+
+
+def _worklog_render_photo_queue_status(photos: list, queue_key: str, health_key: str) -> None:
+    """사용자가 저장 전에 사진 수신 여부를 눈으로 확인할 수 있게 표시합니다."""
+    queue = list(st.session_state.get(queue_key, []) or [])
+    if not photos:
+        st.caption("📷 사진 서버 수신: 0장")
+        return
+
+    total_bytes = sum(int(item.get("bytes", 0) or 0) for item in queue if isinstance(item, dict))
+    st.success(
+        f"✅ 사진 서버 수신 완료 · {len(photos)}장 · "
+        f"압축 후 약 {total_bytes / 1024:.0f}KB"
+    )
+
+    # 최대 10장이므로 모바일에서도 2열 썸네일로 실제 수신 사진을 확인할 수 있습니다.
+    preview_cols = st.columns(2, gap="small")
+    for index, photo in enumerate(photos):
+        with preview_cols[index % 2]:
+            try:
+                st.image(photo.getvalue(), caption=f"{index + 1}번 사진", use_container_width=True)
+            except Exception:
+                st.caption(f"{index + 1}번 사진 · 미리보기 생성 실패")
+
+    health = st.session_state.get(health_key)
+    if isinstance(health, dict):
+        if bool(health.get("ok")):
+            st.caption("🟢 Drive 사진 저장 연결 확인 완료")
+        else:
+            st.warning(
+                "🟠 사진은 서버에 정상 수신됐지만 Drive 저장 연결 점검에 실패했습니다. "
+                "기록 본문은 저장되며 사진은 나중에 다시 추가할 수 있습니다. "
+                f"원인: {str(health.get('message', '') or '연결 확인 필요')}"
+            )
+
+
 def _photo_capture_timestamp(uploaded_file, fallback_dt: datetime.datetime | None = None) -> str:
     """사진 EXIF 촬영시각을 우선 사용하고, 없으면 현재 한국시간을 파일명용 시각으로 반환합니다."""
     fallback_dt = fallback_dt or _korea_now()
@@ -4431,6 +4514,9 @@ def _photo_capture_timestamp(uploaded_file, fallback_dt: datetime.datetime | Non
     try:
         from io import BytesIO
         from PIL import Image
+
+        if _worklog_is_heif_file(uploaded_file):
+            _worklog_register_mobile_image_support()
 
         raw = uploaded_file.getvalue() if uploaded_file is not None else b""
         if raw:
@@ -4463,6 +4549,11 @@ def _worklog_compress_image(uploaded_file) -> tuple[bytes | None, str, str, str]
     try:
         from io import BytesIO
         from PIL import Image, ImageOps
+
+        if _worklog_is_heif_file(uploaded_file):
+            heif_ok, heif_error = _worklog_register_mobile_image_support()
+            if not heif_ok:
+                return None, "", "", heif_error
 
         raw = uploaded_file.getvalue()
         image = Image.open(BytesIO(raw))
@@ -4822,7 +4913,11 @@ def _worklog_queue_selected_photos(queue_key: str, uploaded_files) -> tuple[int,
         capture_stamp = _photo_capture_timestamp(file_obj, fallback_dt=_korea_now())
         compressed, safe_name, mime_type, compress_error = _worklog_compress_image(file_obj)
         if not compressed:
-            failures.append(f"{file_index}번째 사진 처리 실패: {compress_error}")
+            meta = _worklog_uploaded_file_meta(file_obj)
+            fmt_text = meta.get("ext") or meta.get("mime") or "형식 미확인"
+            failures.append(
+                f"{file_index}번째 사진 처리 실패 · {meta.get('name')} · {fmt_text}: {compress_error}"
+            )
             continue
 
         queue.append({
@@ -5481,7 +5576,14 @@ def _worklog_reset_entry_widgets() -> None:
             del st.session_state[key]
     for key in list(st.session_state.keys()):
         key_text = str(key)
-        if key_text.startswith("worklog_uploads_"):
+        if (
+            key_text.startswith("wlentry_")
+            or key_text.startswith("worklog_uploads_")
+            or key_text.startswith("worklog_photo_queue_")
+            or key_text.startswith("worklog_photo_upload_nonce_")
+            or key_text.startswith("worklog_photo_queue_notice_")
+            or key_text.endswith("_health")
+        ):
             del st.session_state[key]
         elif key_text in {
             "worklog_photo_queue_clear",
@@ -5502,7 +5604,7 @@ st.markdown("""
     <span>SMART WORK <b>AI AGENT</b></span>
   </div>
   <div class="smart-work-brand-subtitle">Integrated Field &amp; Business Assistant System</div>
-  <div class="smart-work-brand-version">FINAL V23 · FIELD-SAFE · 최종 업로드 2026.08.19</div>
+  <div class="smart-work-brand-version">FINAL V25 · MOBILE PHOTO SAFE · 최종 업로드 2026.08.19</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -6718,6 +6820,13 @@ with tab_worklog:
                     st.warning("⚠️ " + str(post_save_result.get("warning", "") or "").strip())
             if st.session_state.pop("worklog_entry_reset_completed", False):
                 st.caption("새 기록 입력창이 초기화되었습니다. 다음 현장기록을 바로 작성할 수 있습니다.")
+
+            # V24 HARD RESET:
+            # 저장 성공마다 generation을 증가시켜 모든 새 기록 위젯 key를 새 값으로 만듭니다.
+            # 따라서 모바일 브라우저가 이전 입력 위젯을 재사용할 수 없습니다.
+            entry_generation = int(st.session_state.get("worklog_entry_generation", 0) or 0)
+            entry_key = lambda name: f"wlentry_{entry_generation}_{name}"
+
             with st.container(border=True):
                 st.markdown('<div class="worklog-field-title">✍️ 작성자</div>', unsafe_allow_html=True)
                 writer = str(auth_user.get("name", "") or "").strip()
@@ -6732,7 +6841,7 @@ with tab_worklog:
                     "공개범위",
                     ["🌐 공개 · 팀 공유", "🔒 비공개 · 나만 보기"],
                     horizontal=True,
-                    key="worklog_visibility",
+                    key=entry_key("visibility"),
                     label_visibility="collapsed",
                 )
                 visibility = "비공개" if visibility_label.startswith("🔒") else "공개"
@@ -6747,12 +6856,13 @@ with tab_worklog:
                 st.markdown('<div class="worklog-field-title">📍 국사 검색 · 자동입력</div>', unsafe_allow_html=True)
                 st.caption("정밀점검과 같은 국사 기준정보를 사용합니다. 국사명만 검색·선택하면 권역·모국·국소가 자동 반영됩니다.")
 
-                with st.form(key="worklog_station_search_form", clear_on_submit=False):
+                station_query_key = entry_key("station_search_query")
+                with st.form(key=entry_key("station_search_form"), clear_on_submit=False):
                     station_search_col, station_search_btn_col = st.columns([4.2, 1.15], gap="small")
                     with station_search_col:
                         st.text_input(
                             "국사명",
-                            key="worklog_station_search_query",
+                            key=station_query_key,
                             placeholder="예: 송포",
                             help="국사명을 입력한 뒤 확인을 누르세요. 키보드 Enter로도 검색할 수 있습니다.",
                             label_visibility="collapsed",
@@ -6761,6 +6871,11 @@ with tab_worklog:
                         worklog_station_search_submitted = st.form_submit_button("확인", use_container_width=True)
 
                 if worklog_station_search_submitted:
+                    # 기존 검색 엔진은 내부 상태명 그대로 사용하고,
+                    # 화면 widget만 generation key로 분리합니다.
+                    st.session_state["worklog_station_search_query"] = str(
+                        st.session_state.get(station_query_key, "") or ""
+                    )
                     _run_worklog_station_search()
 
                 worklog_station_search_status = str(
@@ -6779,17 +6894,21 @@ with tab_worklog:
                         f"같은 이름 또는 유사한 국사가 {len(worklog_station_candidate_ids)}곳 있습니다. "
                         "아래에서 정확한 국사를 선택해 주세요."
                     )
-                    with st.form(key="worklog_station_duplicate_form", clear_on_submit=False):
+                    station_choice_key = entry_key("station_search_choice")
+                    with st.form(key=entry_key("station_duplicate_form"), clear_on_submit=False):
                         st.radio(
                             "국사 선택",
                             worklog_station_candidate_ids,
-                            key="worklog_station_search_choice",
+                            key=station_choice_key,
                             format_func=_worklog_station_search_label,
                         )
                         worklog_station_choice_submitted = st.form_submit_button(
                             "선택 확인", use_container_width=True
                         )
                     if worklog_station_choice_submitted:
+                        st.session_state["worklog_station_search_choice"] = str(
+                            st.session_state.get(station_choice_key, "") or ""
+                        )
                         _confirm_worklog_station_search_choice()
 
                 worklog_station_notice = str(
@@ -6826,7 +6945,7 @@ with tab_worklog:
                     "상태이력",
                     WORK_LOG_STATUS_OPTIONS,
                     horizontal=True,
-                    key="worklog_status",
+                    key=entry_key("status"),
                     label_visibility="collapsed",
                 )
 
@@ -6837,13 +6956,13 @@ with tab_worklog:
                         "점검항목",
                         WORK_LOG_ITEM_OPTIONS,
                         placeholder="전원 · 축전지 · 접지 · 냉방 · 출입 · 안전 · 기타",
-                        key="worklog_items",
+                        key=entry_key("items"),
                         label_visibility="collapsed",
                     )
                 with item_ok_col:
                     worklog_items_ok = st.button(
                         "확인",
-                        key="worklog_items_ok",
+                        key=entry_key("items_ok"),
                         use_container_width=True,
                     )
                 if worklog_items_ok:
@@ -6853,29 +6972,36 @@ with tab_worklog:
                     st.caption(st.session_state["worklog_items_confirmed_notice"])
 
                 st.markdown('<div class="worklog-field-title">📷 현장사진</div>', unsafe_allow_html=True)
-                worklog_photo_queue_key = "worklog_photo_queue"
-                worklog_photo_nonce_key = "worklog_photo_upload_nonce"
+                # 사진 큐도 새 기록 generation별로 분리합니다.
+                worklog_photo_queue_key = f"worklog_photo_queue_{entry_generation}"
+                worklog_photo_nonce_key = f"worklog_photo_upload_nonce_{entry_generation}"
+                worklog_photo_notice_key = f"worklog_photo_queue_notice_{entry_generation}"
                 worklog_photo_nonce = int(st.session_state.get(worklog_photo_nonce_key, 0) or 0)
                 uploaded_photos = st.file_uploader(
                     "앨범/파일에서 선택",
-                    type=["jpg", "jpeg", "png", "webp"],
+                    type=["jpg", "jpeg", "png", "webp", "heic", "heif"],
                     accept_multiple_files=True,
-                    key=f"worklog_uploads_{worklog_photo_nonce}",
+                    key=entry_key(f"uploads_{worklog_photo_nonce}"),
                 ) or []
                 if uploaded_photos:
                     _added_count, _queued_count, _queue_errors = _worklog_queue_selected_photos(
                         worklog_photo_queue_key, uploaded_photos
                     )
                     if _queue_errors:
-                        st.session_state["worklog_photo_queue_notice"] = " / ".join(_queue_errors[:2])
+                        st.session_state[worklog_photo_notice_key] = " / ".join(_queue_errors[:2])
                     else:
-                        st.session_state["worklog_photo_queue_notice"] = (
+                        st.session_state[worklog_photo_notice_key] = (
                             f"사진 {_added_count}장 추가 · 현재 {_queued_count}장"
                         )
+                        health_ok, health_message = _worklog_photo_health_cached()
+                        st.session_state[f"{worklog_photo_queue_key}_health"] = {
+                            "ok": health_ok,
+                            "message": health_message,
+                        }
                     st.session_state[worklog_photo_nonce_key] = worklog_photo_nonce + 1
                     st.rerun()
 
-                queue_notice = str(st.session_state.pop("worklog_photo_queue_notice", "") or "").strip()
+                queue_notice = str(st.session_state.pop(worklog_photo_notice_key, "") or "").strip()
                 if queue_notice:
                     if "실패" in queue_notice or "못했습니다" in queue_notice or "최대" in queue_notice:
                         st.warning(queue_notice)
@@ -6883,6 +7009,11 @@ with tab_worklog:
                         st.success(queue_notice)
 
                 photos = _worklog_queued_photo_objects(worklog_photo_queue_key)
+                _worklog_render_photo_queue_status(
+                    photos,
+                    worklog_photo_queue_key,
+                    f"{worklog_photo_queue_key}_health",
+                )
                 photo_info_col, photo_clear_col = st.columns([4.0, 1.2], gap="small", vertical_alignment="center")
                 with photo_info_col:
                     st.caption(
@@ -6892,7 +7023,7 @@ with tab_worklog:
                 with photo_clear_col:
                     if photos and st.button(
                         "사진 지우기",
-                        key="worklog_photo_queue_clear",
+                        key=entry_key("photo_queue_clear"),
                         use_container_width=True,
                     ):
                         _worklog_clear_photo_queue(worklog_photo_queue_key, worklog_photo_nonce_key)
@@ -6903,7 +7034,7 @@ with tab_worklog:
                     "현상·특이사항",
                     placeholder="예: 축전지 1조 7번 셀 전압이 다른 셀보다 낮게 측정됨",
                     height=105,
-                    key="worklog_issue",
+                    key=entry_key("issue"),
                     label_visibility="collapsed",
                 )
                 st.markdown('<div class="worklog-field-title">🛠️ 조치내용</div>', unsafe_allow_html=True)
@@ -6911,7 +7042,7 @@ with tab_worklog:
                     "조치내용",
                     placeholder="예: 단자 상태 확인 및 재측정",
                     height=85,
-                    key="worklog_action",
+                    key=entry_key("action"),
                     label_visibility="collapsed",
                 )
                 st.markdown('<div class="worklog-field-title">🔁 후속조치</div>', unsafe_allow_html=True)
@@ -6919,14 +7050,14 @@ with tab_worklog:
                     "후속조치",
                     placeholder="예: 다음 방문 시 1조 7번 셀 재확인",
                     height=85,
-                    key="worklog_followup",
+                    key=entry_key("followup"),
                     label_visibility="collapsed",
                 )
                 st.markdown('<div class="worklog-field-title">📌 비고</div>', unsafe_allow_html=True)
                 remark = st.text_input(
                     "비고",
                     placeholder="필요한 추가 메모",
-                    key="worklog_remark",
+                    key=entry_key("remark"),
                     label_visibility="collapsed",
                 )
 
@@ -6934,7 +7065,7 @@ with tab_worklog:
                     "💾 MY WORK LOG 저장",
                     use_container_width=True,
                     type="primary",
-                    key="worklog_save",
+                    key=entry_key("save"),
                 )
                 if save_log:
                     record = {
@@ -6964,9 +7095,10 @@ with tab_worklog:
                         except Exception:
                             pass
 
-                        # 다음 실행에서 새 기록 위젯이 생성되기 전에 전체 입력상태를 초기화합니다.
+                        # HARD RESET: 다음 기록은 완전히 다른 widget key 세대를 사용합니다.
+                        st.session_state["worklog_entry_generation"] = entry_generation + 1
                         st.session_state["worklog_entry_reset_pending"] = True
-                        time.sleep(0.20)
+                        time.sleep(0.15)
                         st.rerun()
                     else:
                         st.error(f"❌ {message}")
@@ -7073,7 +7205,7 @@ with tab_worklog:
                 detail_nonce = int(st.session_state.get(detail_nonce_key, 0) or 0)
                 detail_uploads = st.file_uploader(
                     "사진 추가 · 카메라/앨범/파일",
-                    type=["jpg", "jpeg", "png", "webp"],
+                    type=["jpg", "jpeg", "png", "webp", "heic", "heif"],
                     accept_multiple_files=True,
                     key=f"worklog_detail_uploads_{selected_id}_{detail_nonce}",
                 ) or []
@@ -7084,6 +7216,11 @@ with tab_worklog:
                         st.session_state[f"worklog_detail_photo_notice_{selected_id}"] = " / ".join(d_errors[:2])
                     else:
                         st.session_state[f"worklog_detail_photo_notice_{selected_id}"] = f"추가 대기 사진 {d_total}장"
+                        health_ok, health_message = _worklog_photo_health_cached()
+                        st.session_state[f"{detail_queue_key}_health"] = {
+                            "ok": health_ok,
+                            "message": health_message,
+                        }
                     st.rerun()
 
                 detail_notice = str(st.session_state.pop(f"worklog_detail_photo_notice_{selected_id}", "") or "")
@@ -7094,6 +7231,11 @@ with tab_worklog:
                         st.success(detail_notice)
 
                 detail_photos = _worklog_queued_photo_objects(detail_queue_key)
+                _worklog_render_photo_queue_status(
+                    detail_photos,
+                    detail_queue_key,
+                    f"{detail_queue_key}_health",
+                )
                 if detail_photos:
                     add_photo_c1, add_photo_c2 = st.columns([3.8, 1.4], gap="small")
                     with add_photo_c1:
@@ -8305,7 +8447,7 @@ with tab_power:
             power_photo_nonce = int(st.session_state.get(power_photo_nonce_key, 0) or 0)
             power_uploaded_photos = st.file_uploader(
                 "앨범/파일에서 선택",
-                type=["jpg", "jpeg", "png", "webp"],
+                type=["jpg", "jpeg", "png", "webp", "heic", "heif"],
                 accept_multiple_files=True,
                 key=f"power_uploaded_photos_{power_photo_nonce}",
             ) or []
@@ -8319,6 +8461,11 @@ with tab_power:
                     st.session_state["power_photo_queue_notice"] = (
                         f"사진 {_added_count}장 추가 · 현재 {_queued_count}장"
                     )
+                    health_ok, health_message = _worklog_photo_health_cached()
+                    st.session_state[f"{power_photo_queue_key}_health"] = {
+                        "ok": health_ok,
+                        "message": health_message,
+                    }
                 st.session_state[power_photo_nonce_key] = power_photo_nonce + 1
                 st.rerun()
 
@@ -8330,6 +8477,11 @@ with tab_power:
                     st.success(power_queue_notice)
 
             power_photos = _worklog_queued_photo_objects(power_photo_queue_key)
+            _worklog_render_photo_queue_status(
+                power_photos,
+                power_photo_queue_key,
+                f"{power_photo_queue_key}_health",
+            )
             power_photo_info_col, power_photo_clear_col = st.columns(
                 [4.0, 1.2], gap="small", vertical_alignment="center"
             )
