@@ -2280,33 +2280,36 @@ def save_power_inspection_result(payload: dict, photos: list | None = None) -> t
         source_id = str(payload.get("source_inspection_id", "")).strip()
         source_saved_at = str(payload.get("source_saved_at", "")).strip()
 
-        # 정밀점검 사진은 WORK LOG와 동일한 비공개 Apps Script → Drive 경로로 저장합니다.
-        # 사진 저장이 실패하면 Google Sheets 행도 만들지 않아 기록/사진이 어긋나지 않도록 합니다.
+        # FIELD-SAFE: 사진은 선택사항입니다. 사진 장애가 측정값 전송 자체를 막지 않도록 분리합니다.
         photo_ids: list[str] = []
         photo_names: list[str] = []
-        used_power_photo_names: set[str] = set()
-        if photos:
+        power_photo_failures: list[str] = []
+        power_photo_upload_allowed = bool(photos)
+
+        if photos and not _worklog_photo_upload_ready():
+            power_photo_failures.append("사진 업로드 설정을 사용할 수 없습니다.")
+            power_photo_upload_allowed = False
+
+        if photos and power_photo_upload_allowed:
             preflight_ok, preflight_message = _worklog_apps_script_healthcheck()
             if not preflight_ok:
-                return False, f"사진 업로드 사전진단 실패: {preflight_message}", ""
+                power_photo_failures.append(f"사진 연결 사전진단 실패: {preflight_message}")
+                power_photo_upload_allowed = False
 
+        if power_photo_upload_allowed:
             for photo_index, photo in enumerate(photos, 1):
                 capture_stamp = _photo_capture_timestamp(photo, fallback_dt=now)
                 compressed, _safe_name, mime_type, photo_error = _worklog_compress_image(photo)
                 if not compressed:
-                    return False, f"{photo_index}번째 사진 처리 실패: {photo_error}", ""
-                base_drive_name = f"정밀점검_{capture_stamp}"
-                drive_name = f"{base_drive_name}.jpg"
-                duplicate_no = 2
-                while drive_name in used_power_photo_names:
-                    drive_name = f"{base_drive_name}_{duplicate_no:02d}.jpg"
-                    duplicate_no += 1
-                used_power_photo_names.add(drive_name)
+                    power_photo_failures.append(f"{photo_index}번째 사진 처리 실패: {photo_error}")
+                    continue
+                drive_name = f"정밀점검_{capture_stamp}_{inspection_id}_{photo_index:02d}.jpg"
                 photo_ok, drive_meta, upload_error = _worklog_upload_drive_image(
                     compressed, drive_name, mime_type
                 )
                 if not photo_ok:
-                    return False, f"{photo_index}번째 사진 저장 실패: {upload_error}", ""
+                    power_photo_failures.append(f"{photo_index}번째 사진 저장 실패: {upload_error}")
+                    continue
                 photo_ids.append(str(drive_meta.get("id", "") or ""))
                 photo_names.append(str(drive_meta.get("name", drive_name) or drive_name))
 
@@ -2385,6 +2388,11 @@ def save_power_inspection_result(payload: dict, photos: list | None = None) -> t
                 raise
 
         if append_response is None:
+            if photo_ids:
+                try:
+                    _worklog_trash_drive_files(photo_ids)
+                except Exception:
+                    pass
             return False, f"저장 요청이 집중되어 전송하지 못했습니다. 다시 전송해 주세요. ({last_error})", ""
 
         # 최종 표준 순서(R/S/T/N)에서도 N상 전류가 실제 저장됐는지 확인합니다.
@@ -2404,9 +2412,16 @@ def save_power_inspection_result(payload: dict, photos: list | None = None) -> t
                     f"관리자에게 확인해 주세요. ({n_phase_error})"
                 ), inspection_id
 
-        photo_message = f" · 현장사진 {len(photo_ids)}장 Drive 저장" if photo_ids else ""
+        photo_message = f" · 현장사진 {len(photo_ids)}/{len(photos)}장 Drive 저장" if photos else ""
+        if power_photo_failures:
+            photo_message += f" · ⚠️ 사진 {len(photos) - len(photo_ids)}장은 미첨부"
         return True, f"측정값과 N상 전류가 Google Sheets에 정상 저장되었습니다.{photo_message}", inspection_id
     except Exception as e:
+        try:
+            if "photo_ids" in locals() and photo_ids:
+                _worklog_trash_drive_files(photo_ids)
+        except Exception:
+            pass
         return False, str(e), ""
 
 
@@ -4150,7 +4165,7 @@ def _worklog_photo_upload_token() -> str:
     return str(_worklog_secret_value("work_log_upload_token", "") or "").strip()
 
 
-WORK_LOG_PHOTO_ENGINE_VERSION = "V5-20260812-1945"
+WORK_LOG_PHOTO_ENGINE_VERSION = "V6-20260819-FIELD-SAFE"
 
 
 def _worklog_normalize_apps_script_url() -> tuple[str, str]:
@@ -4410,6 +4425,9 @@ def _worklog_make_id(now_dt: datetime.datetime | None = None) -> str:
 def _photo_capture_timestamp(uploaded_file, fallback_dt: datetime.datetime | None = None) -> str:
     """사진 EXIF 촬영시각을 우선 사용하고, 없으면 현재 한국시간을 파일명용 시각으로 반환합니다."""
     fallback_dt = fallback_dt or _korea_now()
+    queued_stamp = str(getattr(uploaded_file, "_worklog_capture_stamp", "") or "").strip()
+    if re.fullmatch(r"\d{8}_\d{6}", queued_stamp):
+        return queued_stamp
     try:
         from io import BytesIO
         from PIL import Image
@@ -4438,6 +4456,10 @@ def _worklog_compress_image(uploaded_file) -> tuple[bytes | None, str, str, str]
     """현장 사진을 방향보정하고 1600px/약 450KB 수준 JPEG로 최적화합니다."""
     if uploaded_file is None:
         return None, "", "", "사진이 없습니다."
+    if bool(getattr(uploaded_file, "_worklog_precompressed", False)):
+        raw = uploaded_file.getvalue()
+        safe_name = str(getattr(uploaded_file, "_worklog_safe_name", "") or getattr(uploaded_file, "name", "field_photo.jpg"))
+        return raw, safe_name, "image/jpeg", ""
     try:
         from io import BytesIO
         from PIL import Image, ImageOps
@@ -4748,6 +4770,101 @@ def _render_power_photo_download(record, key_prefix: str) -> None:
         st.warning(f"첨부사진 중 {failed_count}장은 현재 읽을 수 없어 표시하지 못했습니다.")
 
 
+
+class _WorklogQueuedPhoto:
+    """압축된 사진 bytes를 기존 UploadedFile 호환 객체처럼 제공합니다."""
+    def __init__(
+        self,
+        data: bytes,
+        name: str = "field_photo.jpg",
+        mime_type: str = "image/jpeg",
+        capture_stamp: str = "",
+    ):
+        self._data = bytes(data or b"")
+        self.name = str(name or "field_photo.jpg")
+        self.type = str(mime_type or "image/jpeg")
+        self._worklog_precompressed = True
+        self._worklog_safe_name = self.name
+        self._worklog_capture_stamp = str(capture_stamp or "")
+
+    def getvalue(self) -> bytes:
+        return self._data
+
+
+def _worklog_queue_selected_photos(queue_key: str, uploaded_files) -> tuple[int, int, list[str]]:
+    """선택 즉시 압축 후 세션 큐에 누적합니다. 모바일 원본 대용량 bytes는 세션에 남기지 않습니다."""
+    queue = list(st.session_state.get(queue_key, []) or [])
+    seen = {
+        str(item.get("digest", "") or "")
+        for item in queue
+        if isinstance(item, dict) and str(item.get("digest", "") or "")
+    }
+
+    added = 0
+    failures: list[str] = []
+    for file_index, file_obj in enumerate(list(uploaded_files or []), 1):
+        if len(queue) >= WORK_LOG_MAX_PHOTOS:
+            failures.append(f"최대 {WORK_LOG_MAX_PHOTOS}장까지만 추가할 수 있습니다.")
+            break
+        try:
+            raw = file_obj.getvalue()
+        except Exception as error:
+            failures.append(f"{file_index}번째 사진을 읽지 못했습니다: {error}")
+            continue
+        if not raw:
+            failures.append(f"{file_index}번째 사진 데이터가 비어 있습니다.")
+            continue
+
+        original_digest = hashlib.sha256(raw).hexdigest()
+        if original_digest in seen:
+            continue
+
+        capture_stamp = _photo_capture_timestamp(file_obj, fallback_dt=_korea_now())
+        compressed, safe_name, mime_type, compress_error = _worklog_compress_image(file_obj)
+        if not compressed:
+            failures.append(f"{file_index}번째 사진 처리 실패: {compress_error}")
+            continue
+
+        queue.append({
+            "data": compressed,
+            "name": safe_name or "field_photo.jpg",
+            "type": mime_type or "image/jpeg",
+            "digest": original_digest,
+            "capture_stamp": capture_stamp,
+            "bytes": len(compressed),
+        })
+        seen.add(original_digest)
+        added += 1
+
+    st.session_state[queue_key] = queue[:WORK_LOG_MAX_PHOTOS]
+    return added, len(st.session_state[queue_key]), failures
+
+
+def _worklog_queued_photo_objects(queue_key: str) -> list:
+    """세션 사진 큐를 기존 저장 함수가 그대로 사용할 수 있는 객체 목록으로 변환합니다."""
+    result = []
+    for item in list(st.session_state.get(queue_key, []) or [])[:WORK_LOG_MAX_PHOTOS]:
+        if not isinstance(item, dict):
+            continue
+        raw = item.get("data", b"")
+        if not raw:
+            continue
+        result.append(
+            _WorklogQueuedPhoto(
+                raw,
+                str(item.get("name", "") or "field_photo.jpg"),
+                str(item.get("type", "") or "image/jpeg"),
+                str(item.get("capture_stamp", "") or ""),
+            )
+        )
+    return result
+
+
+def _worklog_clear_photo_queue(queue_key: str, nonce_key: str) -> None:
+    st.session_state[queue_key] = []
+    st.session_state[nonce_key] = int(st.session_state.get(nonce_key, 0) or 0) + 1
+
+
 def _worklog_collect_photos(camera_photo, uploaded_photos) -> list:
     """카메라 촬영 + 앨범 업로드를 중복 제거해 최대 10장으로 합칩니다."""
     candidates = []
@@ -4804,11 +4921,11 @@ def _worklog_can_access_record(record: dict, auth_user: dict) -> bool:
     return _worklog_record_owned_by(record, auth_user)
 
 
-def save_work_log(record: dict, photos: list) -> tuple[bool, str, str]:
-    """로그인 사용자 소유의 현장기록을 저장하고 사진은 비공개 Drive에 분리 저장합니다."""
+def save_work_log(record: dict, photos: list) -> tuple[bool, str, str, str]:
+    """FIELD-SAFE: 사진 장애가 발생해도 MY WORK LOG 본문 기록은 우선 저장합니다."""
     client = init_google_sheet_connection()
     if not client:
-        return False, "Google Sheets 연결 실패: 기존 gcp_service_account 설정을 확인하세요.", ""
+        return False, "Google Sheets 연결 실패: 기존 gcp_service_account 설정을 확인하세요.", "", ""
 
     writer = str(record.get("작성자", "")).strip()
     owner_id = str(record.get("작성자ID", "") or "").strip()
@@ -4825,59 +4942,57 @@ def save_work_log(record: dict, photos: list) -> tuple[bool, str, str]:
 
     expected_owner = _worklog_user_id_from_name(writer)
     if not writer or not owner_id:
-        return False, "MY WORK LOG 개인 인증 정보를 확인하지 못했습니다. 다시 로그인해 주세요.", ""
+        return False, "MY WORK LOG 개인 인증 정보를 확인하지 못했습니다. 다시 로그인해 주세요.", "", ""
     if expected_owner and expected_owner != owner_id:
-        return False, "로그인 사용자와 작성자 정보가 일치하지 않습니다. 다시 로그인해 주세요.", ""
+        return False, "로그인 사용자와 작성자 정보가 일치하지 않습니다. 다시 로그인해 주세요.", "", ""
     if visibility not in WORK_LOG_VISIBILITY_OPTIONS:
-        return False, "공개범위 값이 올바르지 않습니다.", ""
+        return False, "공개범위 값이 올바르지 않습니다.", "", ""
     if area not in POWER_REGION_DATA:
-        return False, "국사명을 검색하여 정확한 국사를 먼저 선택해 주세요.", ""
+        return False, "국사명을 검색하여 정확한 국사를 먼저 선택해 주세요.", "", ""
     area_map = POWER_REGION_DATA.get(area, {}).get("모국_국소", {})
     if mother not in area_map or local not in area_map.get(mother, []):
-        return False, "선택한 국사의 권역·모국·국소 정보가 올바르지 않습니다. 국사를 다시 검색해 주세요.", ""
+        return False, "선택한 국사의 권역·모국·국소 정보가 올바르지 않습니다. 국사를 다시 검색해 주세요.", "", ""
     if status not in WORK_LOG_STATUS_OPTIONS:
-        return False, "상태이력 값이 올바르지 않습니다.", ""
+        return False, "상태이력 값이 올바르지 않습니다.", "", ""
     if not items:
-        return False, "점검항목을 한 개 이상 선택해 주세요.", ""
+        return False, "점검항목을 한 개 이상 선택해 주세요.", "", ""
     if not any([issue, action, followup, remark, photos]):
-        return False, "현상·특이사항, 조치내용, 후속조치, 비고 또는 사진 중 한 가지 이상을 남겨 주세요.", ""
-    if photos and not _worklog_photo_upload_ready():
-        _, config_issues = _worklog_photo_config_status()
-        issue_text = " / ".join(config_issues) if config_issues else "사진 업로드 설정 확인 필요"
-        return False, (
-            "사진 업로드 설정 오류: " + issue_text + ". "
-            "Streamlit Secrets의 [work_log]에는 photo_upload_url과 upload_token이 필요합니다. "
-            "photo_upload_url은 Apps Script 배포용 /exec 주소, upload_token은 Apps Script의 UPLOAD_TOKEN과 동일해야 합니다."
-        ), ""
-
-    if photos:
-        preflight_ok, preflight_message = _worklog_apps_script_healthcheck()
-        if not preflight_ok:
-            return False, f"사진 업로드 사전진단 실패: {preflight_message}", ""
+        return False, "현상·특이사항, 조치내용, 후속조치, 비고 또는 사진 중 한 가지 이상을 남겨 주세요.", "", ""
 
     now = _korea_now()
     record_id = _worklog_make_id(now)
-    photo_ids = []
-    photo_names = []
-    used_worklog_photo_names: set[str] = set()
+    photo_ids: list[str] = []
+    photo_names: list[str] = []
+    photo_failures: list[str] = []
 
-    for index, photo in enumerate(photos[:WORK_LOG_MAX_PHOTOS], 1):
-        compressed, safe_name, mime_type, error = _worklog_compress_image(photo)
-        if not compressed:
-            return False, f"{index}번째 사진 처리 실패: {error}", ""
-        capture_stamp = _photo_capture_timestamp(photo, fallback_dt=now)
-        base_drive_name = f"WORK LOG_{capture_stamp}"
-        drive_name = f"{base_drive_name}.jpg"
-        duplicate_no = 2
-        while drive_name in used_worklog_photo_names:
-            drive_name = f"{base_drive_name}_{duplicate_no:02d}.jpg"
-            duplicate_no += 1
-        used_worklog_photo_names.add(drive_name)
-        ok, drive_meta, upload_error = _worklog_upload_drive_image(compressed, drive_name, mime_type)
-        if not ok:
-            return False, f"{index}번째 사진 저장 실패: {upload_error}", ""
-        photo_ids.append(str(drive_meta.get("id", "")))
-        photo_names.append(str(drive_meta.get("name", drive_name)))
+    photo_upload_allowed = bool(photos)
+    if photos and not _worklog_photo_upload_ready():
+        _, config_issues = _worklog_photo_config_status()
+        issue_text = " / ".join(config_issues) if config_issues else "사진 업로드 설정 확인 필요"
+        photo_failures.append(f"사진 업로드 설정 확인 필요: {issue_text}")
+        photo_upload_allowed = False
+
+    if photos and photo_upload_allowed:
+        preflight_ok, preflight_message = _worklog_apps_script_healthcheck()
+        if not preflight_ok:
+            photo_failures.append(f"사진 연결 사전진단 실패: {preflight_message}")
+            photo_upload_allowed = False
+
+    if photo_upload_allowed:
+        for index, photo in enumerate(photos[:WORK_LOG_MAX_PHOTOS], 1):
+            compressed, _safe_name, mime_type, error = _worklog_compress_image(photo)
+            if not compressed:
+                photo_failures.append(f"{index}번째 사진 처리 실패: {error}")
+                continue
+            capture_stamp = _photo_capture_timestamp(photo, fallback_dt=now)
+            # 기록ID + 순번을 포함하여 폴더 전체에서 파일명이 중복되지 않도록 합니다.
+            drive_name = f"WORK LOG_{capture_stamp}_{record_id}_{index:02d}.jpg"
+            ok, drive_meta, upload_error = _worklog_upload_drive_image(compressed, drive_name, mime_type)
+            if not ok:
+                photo_failures.append(f"{index}번째 사진 저장 실패: {upload_error}")
+                continue
+            photo_ids.append(str(drive_meta.get("id", "")))
+            photo_names.append(str(drive_meta.get("name", drive_name)))
 
     try:
         spreadsheet = client.open(WORK_LOG_SPREADSHEET_NAME)
@@ -4922,10 +5037,127 @@ def save_work_log(record: dict, photos: list) -> tuple[bool, str, str]:
             [history_map.get(header, "") for header in history_headers],
             value_input_option="USER_ENTERED",
         )
+
         scope_text = "팀 공유" if visibility == "공개" else "나만 보기"
-        return True, f"MY WORK LOG가 저장되었습니다. · {scope_text} · 사진 {len(photo_ids)}장", record_id
+        photo_summary = f"사진 {len(photo_ids)}/{len(photos)}장" if photos else "사진 없음"
+        warning_text = ""
+        if photo_failures:
+            first_reason = photo_failures[0]
+            warning_text = (
+                f"기록은 정상 저장됐지만 사진 {len(photos) - len(photo_ids)}장은 첨부되지 않았습니다. "
+                f"원인: {first_reason} · 휴대폰 앨범의 원본은 유지되므로 상세·조치에서 사진만 다시 추가할 수 있습니다."
+            )
+        return True, f"MY WORK LOG가 저장되었습니다. · {scope_text} · {photo_summary}", record_id, warning_text
+
     except Exception as error:
-        return False, f"WORK LOG 저장 실패: {error}", ""
+        # 사진은 올라갔는데 Sheet 본문 저장이 실패한 경우 orphan 파일을 휴지통으로 되돌립니다.
+        if photo_ids:
+            try:
+                _worklog_trash_drive_files(photo_ids)
+            except Exception:
+                pass
+        return False, f"WORK LOG 저장 실패: {error}", "", ""
+
+
+def append_work_log_photos(record_id: str, auth_user: dict, photos: list) -> tuple[bool, str]:
+    """기존 본인 WORK LOG에 사진을 나중에 추가합니다. 오늘처럼 현장 사진 업로드가 실패한 경우 복구용입니다."""
+    if not auth_user:
+        return False, "개인 인증이 필요합니다."
+    record_id = str(record_id or "").strip()
+    photos = list(photos or [])
+    if not record_id or not photos:
+        return False, "추가할 사진을 선택해 주세요."
+
+    client = init_google_sheet_connection()
+    if not client:
+        return False, "Google Sheets 연결 실패"
+    try:
+        spreadsheet = client.open(WORK_LOG_SPREADSHEET_NAME)
+        ws, history_ws = _worklog_ensure_sheets(spreadsheet)
+        record, row_no, headers = _worklog_get_record_row(ws, record_id)
+        if not record or row_no is None:
+            return False, "기록을 찾지 못했습니다."
+        if not _worklog_record_owned_by(record, auth_user):
+            return False, "사진 추가 권한은 이 기록을 작성한 본인에게만 있습니다."
+
+        existing_ids = [v.strip() for v in str(record.get("사진파일ID목록", "") or "").split("|") if v.strip()]
+        existing_names = [v.strip() for v in str(record.get("사진파일명목록", "") or "").split("|") if v.strip()]
+        available = max(0, WORK_LOG_MAX_PHOTOS - len(existing_ids))
+        if available <= 0:
+            return False, f"사진은 최대 {WORK_LOG_MAX_PHOTOS}장까지 저장할 수 있습니다."
+
+        if not _worklog_photo_upload_ready():
+            return False, "현재 사진 저장 연결을 사용할 수 없습니다. 기록 본문은 유지되어 있으므로 잠시 후 다시 시도해 주세요."
+        preflight_ok, preflight_message = _worklog_apps_script_healthcheck()
+        if not preflight_ok:
+            return False, f"사진 연결 확인 실패: {preflight_message}"
+
+        now = _korea_now()
+        new_ids: list[str] = []
+        new_names: list[str] = []
+        failures: list[str] = []
+        for offset, photo in enumerate(photos[:available], 1):
+            compressed, _safe_name, mime_type, error = _worklog_compress_image(photo)
+            if not compressed:
+                failures.append(f"{offset}번째 사진 처리 실패: {error}")
+                continue
+            capture_stamp = _photo_capture_timestamp(photo, fallback_dt=now)
+            seq = len(existing_ids) + offset
+            drive_name = f"WORK LOG_{capture_stamp}_{record_id}_{seq:02d}.jpg"
+            ok, drive_meta, upload_error = _worklog_upload_drive_image(compressed, drive_name, mime_type)
+            if not ok:
+                failures.append(f"{offset}번째 사진 저장 실패: {upload_error}")
+                continue
+            new_ids.append(str(drive_meta.get("id", "") or ""))
+            new_names.append(str(drive_meta.get("name", drive_name) or drive_name))
+
+        if not new_ids:
+            reason = failures[0] if failures else "사진 저장에 성공한 파일이 없습니다."
+            return False, reason
+
+        all_ids = existing_ids + new_ids
+        all_names = existing_names + new_names
+        now_text = now.strftime("%Y-%m-%d %H:%M:%S")
+        updates = {
+            "사진수": len(all_ids),
+            "사진파일ID목록": "|".join(all_ids),
+            "사진파일명목록": "|".join(all_names),
+            "최근수정일시": now_text,
+        }
+        try:
+            for header, value in updates.items():
+                if header in headers:
+                    ws.update_cell(row_no, headers.index(header) + 1, value)
+
+            history_headers = [str(value).strip() for value in history_ws.row_values(1)]
+            history_map = {
+                "저장일시": now_text,
+                "기록ID": record_id,
+                "작성자": str(auth_user.get("name", "") or ""),
+                "상태": str(record.get("상태", "") or ""),
+                "변경구분": f"현장사진 추가 {len(new_ids)}장",
+                "조치내용": str(record.get("조치내용", "") or ""),
+                "후속조치": str(record.get("후속조치", "") or ""),
+                "비고": str(record.get("비고", "") or ""),
+                "작업자ID": str(auth_user.get("user_id", "") or ""),
+            }
+            history_ws.append_row(
+                [history_map.get(header, "") for header in history_headers],
+                value_input_option="USER_ENTERED",
+            )
+        except Exception as sheet_error:
+            try:
+                _worklog_trash_drive_files(new_ids)
+            except Exception:
+                pass
+            return False, f"사진은 업로드되었으나 기록 연결에 실패하여 사진을 되돌렸습니다: {sheet_error}"
+
+        message = f"현장사진 {len(new_ids)}장을 기존 기록에 추가했습니다."
+        if failures:
+            message += f" · {len(failures)}장은 실패하여 제외되었습니다."
+        return True, message
+    except Exception as error:
+        return False, f"현장사진 추가 실패: {error}"
 
 
 def load_work_logs(auth_user: dict | None = None) -> pd.DataFrame:
@@ -5237,7 +5469,8 @@ def delete_work_log(record_id: str, auth_user: dict | None = None) -> tuple[bool
 def _worklog_reset_entry_widgets() -> None:
     keys = [
         "worklog_writer", "worklog_area", "worklog_area_key", "worklog_mother", "worklog_local", "worklog_status",
-        "worklog_items", "worklog_uploads", "worklog_issue", "worklog_action",
+        "worklog_items", "worklog_uploads", "worklog_photo_queue", "worklog_photo_upload_nonce", "worklog_photo_queue_notice",
+        "worklog_issue", "worklog_action",
         "worklog_followup", "worklog_remark", "worklog_station_search_query",
         "worklog_station_search_candidates", "worklog_station_search_choice", "worklog_station_search_status",
         "worklog_station_search_notice", "worklog_station_search_applied",
@@ -5245,6 +5478,16 @@ def _worklog_reset_entry_widgets() -> None:
     ]
     for key in keys:
         if key in st.session_state:
+            del st.session_state[key]
+    for key in list(st.session_state.keys()):
+        key_text = str(key)
+        if key_text.startswith("worklog_uploads_"):
+            del st.session_state[key]
+        elif key_text in {
+            "worklog_photo_queue_clear",
+            "worklog_save",
+            "worklog_items_ok",
+        }:
             del st.session_state[key]
 
 
@@ -5259,7 +5502,7 @@ st.markdown("""
     <span>SMART WORK <b>AI AGENT</b></span>
   </div>
   <div class="smart-work-brand-subtitle">Integrated Field &amp; Business Assistant System</div>
-  <div class="smart-work-brand-version">FINAL V20 · 최종 업로드 2026.08.18</div>
+  <div class="smart-work-brand-version">FINAL V23 · FIELD-SAFE · 최종 업로드 2026.08.19</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -6247,6 +6490,14 @@ with tab_worklog:
 
     else:
         auth_user = worklog_auth_user
+
+        # V23: 저장 성공 후에는 다음 rerun의 위젯 생성 전에 새 기록 입력값을 초기화합니다.
+        # 이미 생성된 widget key를 같은 run에서 삭제하면 모바일/브라우저가 이전 값을 다시 보낼 수 있으므로
+        # reset_pending 플래그를 사용해 렌더링 전에 초기화합니다.
+        if st.session_state.pop("worklog_entry_reset_pending", False):
+            _worklog_reset_entry_widgets()
+            st.session_state["worklog_entry_reset_completed"] = True
+
         user_employee = str(auth_user.get("employee_no", "") or "")
         masked_employee = ("••••" + user_employee[-4:]) if len(user_employee) >= 4 else user_employee
         userbar_col, auth_manage_col, logout_col = st.columns([5.2, 1.8, 1.25], gap="small", vertical_alignment="center")
@@ -6460,6 +6711,13 @@ with tab_worklog:
 
         with entry_col:
             st.markdown('<div class="worklog-entry-title">📝 새 현장기록</div>', unsafe_allow_html=True)
+            post_save_result = st.session_state.pop("worklog_post_save_result", None)
+            if isinstance(post_save_result, dict):
+                st.success("✅ " + str(post_save_result.get("message", "") or "MY WORK LOG가 저장되었습니다."))
+                if str(post_save_result.get("warning", "") or "").strip():
+                    st.warning("⚠️ " + str(post_save_result.get("warning", "") or "").strip())
+            if st.session_state.pop("worklog_entry_reset_completed", False):
+                st.caption("새 기록 입력창이 초기화되었습니다. 다음 현장기록을 바로 작성할 수 있습니다.")
             with st.container(border=True):
                 st.markdown('<div class="worklog-field-title">✍️ 작성자</div>', unsafe_allow_html=True)
                 writer = str(auth_user.get("name", "") or "").strip()
@@ -6595,14 +6853,50 @@ with tab_worklog:
                     st.caption(st.session_state["worklog_items_confirmed_notice"])
 
                 st.markdown('<div class="worklog-field-title">📷 현장사진</div>', unsafe_allow_html=True)
+                worklog_photo_queue_key = "worklog_photo_queue"
+                worklog_photo_nonce_key = "worklog_photo_upload_nonce"
+                worklog_photo_nonce = int(st.session_state.get(worklog_photo_nonce_key, 0) or 0)
                 uploaded_photos = st.file_uploader(
                     "앨범/파일에서 선택",
                     type=["jpg", "jpeg", "png", "webp"],
                     accept_multiple_files=True,
-                    key="worklog_uploads",
+                    key=f"worklog_uploads_{worklog_photo_nonce}",
                 ) or []
-                photos = _worklog_collect_photos(None, uploaded_photos)
-                st.caption(f"선택 사진 {len(photos)}장 / 최대 {WORK_LOG_MAX_PHOTOS}장 · 저장 시 자동 압축(최대 변 1600px, 목표 약 450KB/장)")
+                if uploaded_photos:
+                    _added_count, _queued_count, _queue_errors = _worklog_queue_selected_photos(
+                        worklog_photo_queue_key, uploaded_photos
+                    )
+                    if _queue_errors:
+                        st.session_state["worklog_photo_queue_notice"] = " / ".join(_queue_errors[:2])
+                    else:
+                        st.session_state["worklog_photo_queue_notice"] = (
+                            f"사진 {_added_count}장 추가 · 현재 {_queued_count}장"
+                        )
+                    st.session_state[worklog_photo_nonce_key] = worklog_photo_nonce + 1
+                    st.rerun()
+
+                queue_notice = str(st.session_state.pop("worklog_photo_queue_notice", "") or "").strip()
+                if queue_notice:
+                    if "실패" in queue_notice or "못했습니다" in queue_notice or "최대" in queue_notice:
+                        st.warning(queue_notice)
+                    else:
+                        st.success(queue_notice)
+
+                photos = _worklog_queued_photo_objects(worklog_photo_queue_key)
+                photo_info_col, photo_clear_col = st.columns([4.0, 1.2], gap="small", vertical_alignment="center")
+                with photo_info_col:
+                    st.caption(
+                        f"선택 사진 {len(photos)}장 / 최대 {WORK_LOG_MAX_PHOTOS}장 · "
+                        "한 장씩 촬영해도 계속 추가할 수 있습니다. 저장 시 자동 압축됩니다."
+                    )
+                with photo_clear_col:
+                    if photos and st.button(
+                        "사진 지우기",
+                        key="worklog_photo_queue_clear",
+                        use_container_width=True,
+                    ):
+                        _worklog_clear_photo_queue(worklog_photo_queue_key, worklog_photo_nonce_key)
+                        st.rerun()
 
                 st.markdown('<div class="worklog-field-title">📝 현상·특이사항</div>', unsafe_allow_html=True)
                 issue = st.text_area(
@@ -6657,17 +6951,22 @@ with tab_worklog:
                         "후속조치": followup,
                         "비고": remark,
                     }
-                    with st.spinner("현장 기록과 사진을 안전하게 저장하고 있습니다..."):
-                        ok, message, record_id = save_work_log(record, photos)
+                    with st.spinner("현장 기록을 우선 저장하고 선택 사진을 연결하고 있습니다..."):
+                        ok, message, record_id, photo_warning = save_work_log(record, photos)
                     if ok:
-                        st.success(f"✅ {message} · 기록ID: {record_id}")
+                        st.session_state["worklog_post_save_result"] = {
+                            "message": f"{message} · 기록ID: {record_id}",
+                            "warning": photo_warning,
+                        }
                         try:
                             st.session_state["worklog_df"] = load_work_logs(auth_user)
                             st.session_state["worklog_loaded_at"] = _korea_now().strftime("%Y-%m-%d %H:%M:%S")
                         except Exception:
                             pass
-                        _worklog_reset_entry_widgets()
-                        time.sleep(0.8)
+
+                        # 다음 실행에서 새 기록 위젯이 생성되기 전에 전체 입력상태를 초기화합니다.
+                        st.session_state["worklog_entry_reset_pending"] = True
+                        time.sleep(0.20)
                         st.rerun()
                     else:
                         st.error(f"❌ {message}")
@@ -6761,8 +7060,74 @@ with tab_worklog:
             else:
                 st.info("이 기록에는 첨부된 현장사진이 없습니다.")
 
-            # V13: 기록 소유자는 과거/현재 자료 모두 공개 ↔ 비공개를 언제든 변경할 수 있습니다.
+            # V22 FIELD-SAFE: 기록 소유자는 현장에서 누락된 사진을 나중에 상세·조치에서 추가할 수 있습니다.
             is_owner = _worklog_record_owned_by(selected, auth_user)
+            if is_owner and len(selected_photo_ids) < WORK_LOG_MAX_PHOTOS:
+                st.markdown("#### ➕ 현장사진 추가")
+                st.caption(
+                    f"현재 {len(selected_photo_ids)}장 · 최대 {WORK_LOG_MAX_PHOTOS}장. "
+                    "현장에서 사진 연결이 실패했더라도 기록은 유지되며, 휴대폰 앨범에서 사진만 다시 추가할 수 있습니다."
+                )
+                detail_queue_key = f"worklog_detail_photo_queue_{selected_id}"
+                detail_nonce_key = f"worklog_detail_photo_nonce_{selected_id}"
+                detail_nonce = int(st.session_state.get(detail_nonce_key, 0) or 0)
+                detail_uploads = st.file_uploader(
+                    "사진 추가 · 카메라/앨범/파일",
+                    type=["jpg", "jpeg", "png", "webp"],
+                    accept_multiple_files=True,
+                    key=f"worklog_detail_uploads_{selected_id}_{detail_nonce}",
+                ) or []
+                if detail_uploads:
+                    d_added, d_total, d_errors = _worklog_queue_selected_photos(detail_queue_key, detail_uploads)
+                    st.session_state[detail_nonce_key] = detail_nonce + 1
+                    if d_errors:
+                        st.session_state[f"worklog_detail_photo_notice_{selected_id}"] = " / ".join(d_errors[:2])
+                    else:
+                        st.session_state[f"worklog_detail_photo_notice_{selected_id}"] = f"추가 대기 사진 {d_total}장"
+                    st.rerun()
+
+                detail_notice = str(st.session_state.pop(f"worklog_detail_photo_notice_{selected_id}", "") or "")
+                if detail_notice:
+                    if "실패" in detail_notice or "못했습니다" in detail_notice:
+                        st.warning(detail_notice)
+                    else:
+                        st.success(detail_notice)
+
+                detail_photos = _worklog_queued_photo_objects(detail_queue_key)
+                if detail_photos:
+                    add_photo_c1, add_photo_c2 = st.columns([3.8, 1.4], gap="small")
+                    with add_photo_c1:
+                        st.caption(f"사진 {len(detail_photos)}장 추가 대기")
+                    with add_photo_c2:
+                        if st.button(
+                            "추가 취소",
+                            key=f"worklog_detail_photo_clear_{selected_id}",
+                            use_container_width=True,
+                        ):
+                            _worklog_clear_photo_queue(detail_queue_key, detail_nonce_key)
+                            st.rerun()
+                    if st.button(
+                        "📎 선택 사진을 이 기록에 추가 저장",
+                        key=f"worklog_detail_photo_save_{selected_id}",
+                        type="primary",
+                        use_container_width=True,
+                    ):
+                        with st.spinner("기존 기록에 현장사진을 추가하고 있습니다..."):
+                            add_ok, add_message = append_work_log_photos(selected_id, auth_user, detail_photos)
+                        if add_ok:
+                            _worklog_clear_photo_queue(detail_queue_key, detail_nonce_key)
+                            st.session_state["worklog_df"] = load_work_logs(auth_user)
+                            st.session_state["worklog_selected_id"] = selected_id
+                            st.session_state["worklog_detail_photo_saved_notice"] = add_message
+                            st.rerun()
+                        else:
+                            st.error(add_message)
+
+                detail_saved_notice = str(st.session_state.pop("worklog_detail_photo_saved_notice", "") or "")
+                if detail_saved_notice:
+                    st.success("✅ " + detail_saved_notice)
+
+            # V13: 기록 소유자는 과거/현재 자료 모두 공개 ↔ 비공개를 언제든 변경할 수 있습니다.
             current_visibility = _worklog_record_visibility(selected)
             current_visibility_label = (
                 "🌐 공개 · 팀 공유" if current_visibility == "공개" else "🔒 비공개 · 나만 보기"
@@ -7935,17 +8300,52 @@ with tab_power:
             st.caption("작성 예: 축전지 2조 미측정 사유 · 접지선 보완 필요 · 다음 점검 시 확인사항")
 
             st.markdown("**📷 정밀점검 현장사진 (선택)**")
+            power_photo_queue_key = "power_photo_queue"
+            power_photo_nonce_key = "power_photo_upload_nonce"
+            power_photo_nonce = int(st.session_state.get(power_photo_nonce_key, 0) or 0)
             power_uploaded_photos = st.file_uploader(
                 "앨범/파일에서 선택",
                 type=["jpg", "jpeg", "png", "webp"],
                 accept_multiple_files=True,
-                key="power_uploaded_photos",
+                key=f"power_uploaded_photos_{power_photo_nonce}",
             ) or []
-            power_photos = _worklog_collect_photos(None, power_uploaded_photos)
-            st.caption(
-                f"선택 사진 {len(power_photos)}장 / 최대 {WORK_LOG_MAX_PHOTOS}장 · "
-                "저장 시 자동 방향보정·압축 후 비공개 Drive에 저장됩니다."
+            if power_uploaded_photos:
+                _added_count, _queued_count, _queue_errors = _worklog_queue_selected_photos(
+                    power_photo_queue_key, power_uploaded_photos
+                )
+                if _queue_errors:
+                    st.session_state["power_photo_queue_notice"] = " / ".join(_queue_errors[:2])
+                else:
+                    st.session_state["power_photo_queue_notice"] = (
+                        f"사진 {_added_count}장 추가 · 현재 {_queued_count}장"
+                    )
+                st.session_state[power_photo_nonce_key] = power_photo_nonce + 1
+                st.rerun()
+
+            power_queue_notice = str(st.session_state.pop("power_photo_queue_notice", "") or "").strip()
+            if power_queue_notice:
+                if "실패" in power_queue_notice or "못했습니다" in power_queue_notice or "최대" in power_queue_notice:
+                    st.warning(power_queue_notice)
+                else:
+                    st.success(power_queue_notice)
+
+            power_photos = _worklog_queued_photo_objects(power_photo_queue_key)
+            power_photo_info_col, power_photo_clear_col = st.columns(
+                [4.0, 1.2], gap="small", vertical_alignment="center"
             )
+            with power_photo_info_col:
+                st.caption(
+                    f"선택 사진 {len(power_photos)}장 / 최대 {WORK_LOG_MAX_PHOTOS}장 · "
+                    "한 장씩 촬영해도 계속 추가할 수 있습니다. 저장 시 자동 방향보정·압축됩니다."
+                )
+            with power_photo_clear_col:
+                if power_photos and st.button(
+                    "사진 지우기",
+                    key="power_photo_queue_clear",
+                    use_container_width=True,
+                ):
+                    _worklog_clear_photo_queue(power_photo_queue_key, power_photo_nonce_key)
+                    st.rerun()
 
             payload_preview = _build_power_payload_from_state(final_confirmed=True)
             all_missing = _power_payload_missing_items(payload_preview)
