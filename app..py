@@ -1262,14 +1262,11 @@ POWER_STATION_SEARCH_BY_ID = {
 # 이름과 조 정보가 추가되면 이 사전만 확장하면 됩니다.
 POWER_INSPECTOR_GROUP_MAP = {
     "정청운": "덕양관리조",
-    "정철선": "덕양관리조",
-    "정철순": "덕양관리조",
     "소순고": "덕양관리조",
     "이철순": "고양관리조",
     "김수창": "고양관리조",
     # 영문 입력 보조
     "JEONGCHEONGWOON": "덕양관리조",
-    "JEONGCHEOLSUN": "덕양관리조",
     "SOSOONGO": "덕양관리조",
     "LEECHEOLSOON": "고양관리조",
     "KIMSOOCHANG": "고양관리조",
