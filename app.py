@@ -5797,6 +5797,50 @@ st.markdown("""
     transition: border-color .16s ease;
     animation: pulse-attention 2.5s infinite ease-in-out;
 }
+/* 🔥 과격하고 화려한 스마트 내비 3D 애니메이션 */
+.smart-navi-launch {
+    overflow: visible !important; /* 박스 밖으로 튀어나오도록 허용 */
+}
+.navi-sportscar {
+    position: absolute;
+    top: -35px;
+    right: -10px;
+    font-size: 38px;
+    filter: drop-shadow(0 5px 8px rgba(0,0,0,0.3));
+    animation: car-drive 2.5s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+    z-index: 10;
+    pointer-events: none;
+}
+.navi-signal {
+    position: absolute;
+    bottom: 15px;
+    left: 20px;
+    font-size: 24px;
+    color: #D71920;
+    font-weight: 900;
+    opacity: 0;
+    animation: signal-shoot 2.5s ease-out infinite;
+    z-index: 5;
+    pointer-events: none;
+}
+.signal-1 { animation-delay: 0.1s; }
+.signal-2 { animation-delay: 0.3s; }
+.signal-3 { animation-delay: 0.5s; }
+
+@keyframes car-drive {
+    0% { transform: translateX(-200px) rotate(-10deg) scale(0.8); opacity: 0; }
+    20% { opacity: 1; transform: translateX(-100px) rotate(0deg) scale(1.1); }
+    40% { transform: translateX(0px) scale(1); }
+    70% { transform: translateX(10px) scale(1); opacity: 1; }
+    100% { transform: translateX(150px) rotate(10deg) scale(0.8); opacity: 0; }
+}
+@keyframes signal-shoot {
+    0% { transform: translate(0, 0) scale(0.5) rotate(-45deg); opacity: 0; }
+    20% { opacity: 1; }
+    60% { transform: translate(140px, -70px) scale(1.5) rotate(45deg); opacity: 0.8; }
+    100% { transform: translate(200px, -90px) scale(2) rotate(90deg); opacity: 0; }
+}
+/* 기존 hover 스타일 유지 */
 .smart-navi-launch:hover {
     transform: translateY(-1px);
     box-shadow: 0 10px 23px rgba(215,25,32,.14);
@@ -5863,9 +5907,10 @@ div[data-testid="stTabs"] button[role="tab"] {
     transition: all 0.18s ease-in-out !important;
 }
 div[data-testid="stTabs"] button[role="tab"] p {
-    font-size: clamp(1.35rem, 2.6vw, 1.55rem) !important;
+    font-size: clamp(1.5rem, 3.2vw, 1.8rem) !important;
     font-weight: 900 !important;
-    letter-spacing: -0.02em !important;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.15) !important;
+    letter-spacing: -0.03em !important;
     line-height: 1.2 !important;
     margin: 0 !important;
 }
@@ -5908,7 +5953,14 @@ div[data-testid="stTabs"] div[role="tabpanel"] {
     section.main .block-container { padding-left:.65rem !important; padding-right:.65rem !important; padding-top:.75rem !important; }
     div[data-testid="stTabs"] > div[role="tablist"] { padding:7px !important; gap:7px !important; border-radius:15px !important; }
     div[data-testid="stTabs"] button[role="tab"] { flex:0 0 auto !important; min-width:154px !important; min-height:56px !important; padding:9px 13px !important; }
-    div[data-testid="stTabs"] button[role="tab"] p { font-size:1.25rem !important; font-weight:900 !important; }
+    div[data-testid="stTabs"] button[role="tab"] p {
+    font-size: clamp(1.5rem, 3.2vw, 1.8rem) !important;
+    font-weight: 900 !important;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.15) !important;
+    letter-spacing: -0.03em !important;
+    line-height: 1.2 !important;
+    margin: 0 !important;
+}
     .smart-navi-launch-wrap { justify-content: stretch; }
     .smart-navi-launch { width: 100%; box-sizing: border-box; }
     .smart-work-brand { margin-bottom: 14px; }
@@ -5920,6 +5972,10 @@ div[data-testid="stTabs"] div[role="tabpanel"] {
 st.markdown("""
 <div class="smart-navi-launch-wrap">
   <a class="smart-navi-launch" href="https://willowy-frangipane-e06d37.netlify.app/" target="_blank" rel="noopener noreferrer" aria-label="국사 스마트 내비게이션 새 창으로 열기">
+    <div class="navi-sportscar">🏎️💨</div>
+    <div class="navi-signal signal-1">⚡</div>
+    <div class="navi-signal signal-2">⚡</div>
+    <div class="navi-signal signal-3">⚡</div>
     <span class="smart-navi-launch-icon" aria-hidden="true">📡</span>
     <span class="smart-navi-launch-copy">
       <span class="smart-navi-launch-title">국사 스마트 내비</span>
