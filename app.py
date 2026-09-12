@@ -5797,50 +5797,53 @@ st.markdown("""
     transition: border-color .16s ease;
     animation: pulse-attention 2.5s infinite ease-in-out;
 }
-/* 🔥 과격하고 화려한 스마트 내비 3D 애니메이션 */
+/* 🔥 부드럽고 빠른 왼쪽->오른쪽 스포츠카 애니메이션 */
 .smart-navi-launch {
-    overflow: visible !important; /* 박스 밖으로 튀어나오도록 허용 */
+    overflow: visible !important;
 }
-.navi-sportscar {
+.navi-sportscar-wrapper {
     position: absolute;
-    top: -35px;
-    right: -10px;
-    font-size: 38px;
-    filter: drop-shadow(0 5px 8px rgba(0,0,0,0.3));
-    animation: car-drive 2.5s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+    top: -38px;
+    left: -20px;
     z-index: 10;
     pointer-events: none;
+    /* linear: 멈춤 없이 일정한 속도로 매끄럽게 이동 */
+    animation: car-drive-smooth 1.8s linear infinite;
+}
+.navi-sportscar-inner {
+    display: inline-block;
+    font-size: 38px;
+    filter: drop-shadow(0 5px 8px rgba(0,0,0,0.3));
+    /* 핵심: 윈도우 기본 이모지가 왼쪽을 보므로 좌우를 뒤집어서 오른쪽을 보게 만듦 */
+    transform: scaleX(-1);
 }
 .navi-signal {
     position: absolute;
-    bottom: 15px;
+    top: 10px;
     left: 20px;
     font-size: 24px;
     color: #D71920;
     font-weight: 900;
     opacity: 0;
-    animation: signal-shoot 2.5s ease-out infinite;
+    animation: signal-shoot 1.8s ease-out infinite;
     z-index: 5;
     pointer-events: none;
 }
-.signal-1 { animation-delay: 0.1s; }
-.signal-2 { animation-delay: 0.3s; }
-.signal-3 { animation-delay: 0.5s; }
+.signal-1 { animation-delay: 0.0s; }
+.signal-2 { animation-delay: 0.2s; }
+.signal-3 { animation-delay: 0.4s; }
 
-@keyframes car-drive {
-    0% { transform: translateX(-200px) rotate(-10deg) scale(0.8); opacity: 0; }
-    20% { opacity: 1; transform: translateX(-100px) rotate(0deg) scale(1.1); }
-    40% { transform: translateX(0px) scale(1); }
-    70% { transform: translateX(10px) scale(1); opacity: 1; }
-    100% { transform: translateX(150px) rotate(10deg) scale(0.8); opacity: 0; }
+@keyframes car-drive-smooth {
+    0% { transform: translateX(-30px); opacity: 0; }
+    15% { opacity: 1; transform: translateX(20px); }
+    85% { opacity: 1; transform: translateX(260px); }
+    100% { transform: translateX(310px); opacity: 0; }
 }
 @keyframes signal-shoot {
     0% { transform: translate(0, 0) scale(0.5) rotate(-45deg); opacity: 0; }
     20% { opacity: 1; }
-    60% { transform: translate(140px, -70px) scale(1.5) rotate(45deg); opacity: 0.8; }
-    100% { transform: translate(200px, -90px) scale(2) rotate(90deg); opacity: 0; }
+    100% { transform: translate(120px, -50px) scale(1.8) rotate(45deg); opacity: 0; }
 }
-/* 기존 hover 스타일 유지 */
 .smart-navi-launch:hover {
     transform: translateY(-1px);
     box-shadow: 0 10px 23px rgba(215,25,32,.14);
@@ -5972,7 +5975,7 @@ div[data-testid="stTabs"] div[role="tabpanel"] {
 st.markdown("""
 <div class="smart-navi-launch-wrap">
   <a class="smart-navi-launch" href="https://willowy-frangipane-e06d37.netlify.app/" target="_blank" rel="noopener noreferrer" aria-label="국사 스마트 내비게이션 새 창으로 열기">
-    <div class="navi-sportscar">🏎️💨</div>
+    <div class="navi-sportscar-wrapper"><div class="navi-sportscar-inner">🏎️💨</div></div>
     <div class="navi-signal signal-1">⚡</div>
     <div class="navi-signal signal-2">⚡</div>
     <div class="navi-signal signal-3">⚡</div>
