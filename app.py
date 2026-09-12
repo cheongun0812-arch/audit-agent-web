@@ -5775,6 +5775,12 @@ st.markdown("""
     justify-content: flex-start;
     margin: 0 0 9px 0;
 }
+@keyframes pulse-attention {
+    0% { box-shadow: 0 7px 18px rgba(215,25,32,.15); transform: translateY(0); }
+    50% { box-shadow: 0 12px 25px rgba(215,25,32,.35); transform: translateY(-2px); }
+    100% { box-shadow: 0 7px 18px rgba(215,25,32,.15); transform: translateY(0); }
+}
+
 .smart-navi-launch {
     display: inline-flex;
     align-items: center;
@@ -5788,7 +5794,8 @@ st.markdown("""
     box-shadow: 0 7px 18px rgba(15,23,42,.08);
     color: #24364B !important;
     text-decoration: none !important;
-    transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+    transition: border-color .16s ease;
+    animation: pulse-attention 2.5s infinite ease-in-out;
 }
 .smart-navi-launch:hover {
     transform: translateY(-1px);
@@ -5856,8 +5863,8 @@ div[data-testid="stTabs"] button[role="tab"] {
     transition: all 0.18s ease-in-out !important;
 }
 div[data-testid="stTabs"] button[role="tab"] p {
-    font-size: clamp(1.22rem, 2.35vw, 1.38rem) !important;
-    font-weight: 950 !important;
+    font-size: clamp(1.35rem, 2.6vw, 1.55rem) !important;
+    font-weight: 900 !important;
     letter-spacing: -0.02em !important;
     line-height: 1.2 !important;
     margin: 0 !important;
@@ -5901,7 +5908,7 @@ div[data-testid="stTabs"] div[role="tabpanel"] {
     section.main .block-container { padding-left:.65rem !important; padding-right:.65rem !important; padding-top:.75rem !important; }
     div[data-testid="stTabs"] > div[role="tablist"] { padding:7px !important; gap:7px !important; border-radius:15px !important; }
     div[data-testid="stTabs"] button[role="tab"] { flex:0 0 auto !important; min-width:154px !important; min-height:56px !important; padding:9px 13px !important; }
-    div[data-testid="stTabs"] button[role="tab"] p { font-size:1.14rem !important; font-weight:950 !important; }
+    div[data-testid="stTabs"] button[role="tab"] p { font-size:1.25rem !important; font-weight:900 !important; }
     .smart-navi-launch-wrap { justify-content: stretch; }
     .smart-navi-launch { width: 100%; box-sizing: border-box; }
     .smart-work-brand { margin-bottom: 14px; }
