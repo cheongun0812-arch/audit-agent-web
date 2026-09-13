@@ -5693,7 +5693,7 @@ st.markdown("""
     <span>SMART WORK <b>AI AGENT</b></span>
   </div>
   <div class="smart-work-brand-subtitle">Integrated Field &amp; Business Assistant System</div>
-  <div class="smart-work-brand-version">FINAL V29 · DUPLICATE KEY FIX · 최종 업로드 2026.08.20</div>
+  <div class="smart-work-brand-version">FINAL V29 · DUPLICATE KEY FIX · 최종 업로드 2026.09.14</div>
 </div>
 """, unsafe_allow_html=True)
 
