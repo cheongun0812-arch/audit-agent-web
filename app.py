@@ -5769,11 +5769,13 @@ st.markdown("""
     line-height: 1.25;
 }
 
-/* 외부 스마트 내비 메뉴 1개: 기존 Streamlit 탭은 그대로 유지 */
+/* 외부 스마트 링크 3개: 기존 Streamlit 탭은 그대로 유지 */
 .smart-navi-launch-wrap {
-    display: flex;
-    justify-content: flex-start;
-    margin: 0 0 9px 0;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 12px;
+    margin: 0 0 12px 0;
 }
 @keyframes pulse-attention {
     0% { box-shadow: 0 7px 18px rgba(215,25,32,.15); transform: translateY(0); }
@@ -5785,7 +5787,11 @@ st.markdown("""
     display: inline-flex;
     align-items: center;
     gap: 10px;
-    min-height: 52px;
+    position: relative;
+    width: 100%;
+    min-width: 0;
+    min-height: 76px;
+    box-sizing: border-box;
     padding: 8px 14px 8px 11px;
     border: 1.5px solid #D71920;
     border-left: 5px solid #D71920;
@@ -5886,6 +5892,130 @@ st.markdown("""
     margin-left: 2px;
 }
 
+/* 장애 지식검색 · 안전 핵심가이드: 정적 탭과 구분되는 외부 포털 카드 */
+.portal-launch-card {
+    isolation: isolate;
+    overflow: hidden !important;
+    animation: portal-card-breathe 3.2s ease-in-out infinite;
+}
+.portal-launch-card::before {
+    content: "";
+    position: absolute;
+    inset: -45% -25%;
+    z-index: -1;
+    background: linear-gradient(110deg, transparent 38%, rgba(255,255,255,.72) 49%, transparent 60%);
+    transform: translateX(-65%);
+    animation: portal-sheen 4.8s ease-in-out infinite;
+    pointer-events: none;
+}
+.portal-launch-card::after {
+    content: "";
+    position: absolute;
+    right: -24px;
+    bottom: -38px;
+    z-index: -1;
+    width: 92px;
+    height: 92px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: .055;
+    pointer-events: none;
+}
+.fault-search-launch {
+    border-color: #0B72D9;
+    border-left-color: #0B72D9;
+    background: linear-gradient(135deg, #FFFFFF 0%, #EFF8FF 60%, #E3F3FF 100%);
+    color: #0B72D9 !important;
+}
+.safety-guide-launch {
+    border-color: #F59E0B;
+    border-left-color: #F59E0B;
+    background: linear-gradient(135deg, #FFFFFF 0%, #FFF9EA 60%, #FFF1C7 100%);
+    color: #C87900 !important;
+    animation-delay: .45s;
+}
+.portal-launch-card:hover,
+.portal-launch-card:focus-visible {
+    transform: translateY(-3px) scale(1.01);
+    filter: saturate(1.08);
+}
+.fault-search-launch:hover,
+.fault-search-launch:focus-visible {
+    border-color: #075CAF;
+    box-shadow: 0 13px 28px rgba(11,114,217,.22);
+}
+.safety-guide-launch:hover,
+.safety-guide-launch:focus-visible {
+    border-color: #D98600;
+    box-shadow: 0 13px 28px rgba(245,158,11,.23);
+}
+.portal-card-visual {
+    position: relative;
+    flex: 0 0 44px;
+    display: inline-grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 13px;
+    color: #FFFFFF;
+    box-shadow: 0 6px 15px rgba(15,23,42,.17);
+}
+.portal-card-visual svg {
+    width: 27px;
+    height: 27px;
+    overflow: visible;
+}
+.fault-search-launch .portal-card-visual {
+    background: linear-gradient(145deg, #0B72D9, #09A6D8);
+}
+.safety-guide-launch .portal-card-visual {
+    background: linear-gradient(145deg, #F59E0B, #E26B12);
+}
+.radar-ring {
+    position: absolute;
+    inset: 5px;
+    border: 1px solid rgba(255,255,255,.72);
+    border-radius: 50%;
+    animation: radar-ring-pulse 1.9s ease-out infinite;
+}
+.radar-ring.ring-two { animation-delay: .65s; }
+.fault-search-launch .smart-navi-launch-title,
+.fault-search-launch .smart-navi-launch-sub,
+.fault-search-launch .smart-navi-launch-arrow {
+    color: #075CAF;
+}
+.safety-guide-launch .smart-navi-launch-title,
+.safety-guide-launch .smart-navi-launch-sub,
+.safety-guide-launch .smart-navi-launch-arrow {
+    color: #A95800;
+}
+.portal-launch-card .smart-navi-launch-copy { min-width: 0; }
+.portal-launch-card .smart-navi-launch-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.safety-bolt {
+    transform-origin: center;
+    animation: safety-bolt-glow 1.8s ease-in-out infinite;
+}
+@keyframes portal-card-breathe {
+    0%, 100% { box-shadow: 0 7px 18px rgba(15,23,42,.08); }
+    50% { box-shadow: 0 11px 25px rgba(14,116,190,.17); }
+}
+@keyframes portal-sheen {
+    0%, 55% { transform: translateX(-72%) rotate(0.001deg); opacity: 0; }
+    68% { opacity: .75; }
+    86%, 100% { transform: translateX(72%) rotate(0.001deg); opacity: 0; }
+}
+@keyframes radar-ring-pulse {
+    0% { transform: scale(.45); opacity: .9; }
+    85%, 100% { transform: scale(1.22); opacity: 0; }
+}
+@keyframes safety-bolt-glow {
+    0%, 100% { transform: scale(1); filter: drop-shadow(0 0 0 rgba(255,241,145,0)); }
+    50% { transform: scale(1.13); filter: drop-shadow(0 0 5px #FFF191); }
+}
+
 /* Streamlit 탭을 카드형 메뉴처럼 보이게 개선 */
 div[data-testid="stTabs"] > div[role="tablist"] {
     gap: 10px !important;
@@ -5964,9 +6094,29 @@ div[data-testid="stTabs"] div[role="tabpanel"] {
     line-height: 1.2 !important;
     margin: 0 !important;
 }
-    .smart-navi-launch-wrap { justify-content: stretch; }
-    .smart-navi-launch { width: 100%; box-sizing: border-box; }
+    .smart-navi-launch-wrap {
+        display: flex;
+        overflow-x: auto;
+        gap: 9px;
+        padding: 3px 2px 8px 2px;
+        scroll-snap-type: x mandatory;
+        scrollbar-width: thin;
+    }
+    .smart-navi-launch { flex: 0 0 min(82vw, 310px); scroll-snap-align: start; }
     .smart-work-brand { margin-bottom: 14px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .smart-navi-launch,
+    .navi-sportscar-wrapper,
+    .navi-signal,
+    .portal-launch-card,
+    .portal-launch-card::before,
+    .radar-ring,
+    .safety-bolt {
+        animation: none !important;
+        transition: none !important;
+    }
 }
 
 </style>
@@ -5983,6 +6133,34 @@ st.markdown("""
     <span class="smart-navi-launch-copy">
       <span class="smart-navi-launch-title">국사 스마트 내비</span>
       <span class="smart-navi-launch-sub">SMART NAVIGATION · 새 창</span>
+    </span>
+    <span class="smart-navi-launch-arrow" aria-hidden="true">↗</span>
+  </a>
+  <a class="smart-navi-launch portal-launch-card fault-search-launch" href="https://sparkling-buttercream-00d86c.netlify.app/" target="_blank" rel="noopener noreferrer" aria-label="전원시설 장애 지식검색 새 창으로 열기">
+    <span class="portal-card-visual" aria-hidden="true">
+      <span class="radar-ring"></span><span class="radar-ring ring-two"></span>
+      <svg viewBox="0 0 32 32" fill="none">
+        <circle cx="13.5" cy="13.5" r="7.5" stroke="currentColor" stroke-width="3"></circle>
+        <path d="M19 19L27 27" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"></path>
+        <path d="M10 14l2.3 2.3L17 11.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
+      </svg>
+    </span>
+    <span class="smart-navi-launch-copy">
+      <span class="smart-navi-launch-title">전원시설 장애 지식검색</span>
+      <span class="smart-navi-launch-sub">773건 장애·조치 검색 · 새 창</span>
+    </span>
+    <span class="smart-navi-launch-arrow" aria-hidden="true">↗</span>
+  </a>
+  <a class="smart-navi-launch portal-launch-card safety-guide-launch" href="https://smart-work-ai-agent-dev.netlify.app/" target="_blank" rel="noopener noreferrer" aria-label="현장 전기 실무 안전 핵심가이드 새 창으로 열기">
+    <span class="portal-card-visual" aria-hidden="true">
+      <svg viewBox="0 0 32 32" fill="none">
+        <path d="M16 3.5L27 8v7.2c0 6.7-4.6 11.4-11 13.3C9.6 26.6 5 21.9 5 15.2V8l11-4.5Z" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"></path>
+        <path class="safety-bolt" d="M18.2 8.5 11.5 18h4.8l-1.7 6 6.6-9.2h-4.5l1.5-6.3Z" fill="currentColor"></path>
+      </svg>
+    </span>
+    <span class="smart-navi-launch-copy">
+      <span class="smart-navi-launch-title">현장 전기 실무 안전 핵심가이드</span>
+      <span class="smart-navi-launch-sub">현장 안전·측정 가이드 · 새 창</span>
     </span>
     <span class="smart-navi-launch-arrow" aria-hidden="true">↗</span>
   </a>
