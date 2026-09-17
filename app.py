@@ -3436,6 +3436,7 @@ ASSET_MANAGEMENT_HEADERS = [
     "자산ID", "품명", "모델명", "설비번호", "제조번호", "등록사용자", "실사사용자",
     "실사일", "보관위치", "보유확인", "이상여부", "이상내용", "비고",
     "사진수", "사진파일ID목록", "사진파일명목록", "최종수정일시", "사진해시목록",
+    "자산상태", "임차일", "반납일", "임대업체", "교체전자산ID", "실사자",
 ]
 ASSET_USER_OPTIONS = ["이철순", "김수창", "소순고", "정청운", "공용/미배정"]
 ASSET_LOCATION_OPTIONS = ["차량", "사무실 캐비닛", "사무실", "현장 보관함", "대여 중", "기타"]
@@ -3457,7 +3458,8 @@ def _asset_default_records() -> list[dict]:
     return [{"자산ID": f"MEA-{i:03d}", "품명": item, "모델명": model, "설비번호": equipment_no, "제조번호": serial_no,
              "등록사용자": owner, "실사사용자": owner, "실사일": "", "보관위치": location, "보유확인": "미실사",
              "이상여부": "미확인", "이상내용": "", "비고": "원본 대장 메모 반영" if location else "", "사진수": "0",
-             "사진파일ID목록": "", "사진파일명목록": "", "최종수정일시": ""}
+             "사진파일ID목록": "", "사진파일명목록": "", "최종수정일시": "",
+             "자산상태": "보유중", "임차일": "", "반납일": "", "임대업체": "", "교체전자산ID": ""}
             for i, (item, model, equipment_no, serial_no, owner, location) in enumerate(ASSET_INITIAL_ROWS, 1)]
 
 def _asset_header_plan(values):
@@ -3514,7 +3516,10 @@ def _asset_ensure_sheet(spreadsheet):
         ws = spreadsheet.add_worksheet(title=ASSET_MANAGEMENT_SHEET_NAME, rows=300, cols=len(ASSET_MANAGEMENT_HEADERS))
     values = ws.get_all_values()
     st.session_state["asset_header_diagnostic"] = values[:5]
-    if not values:
+    # Sheets may return [[]] or [['', '']] for a visually empty sheet.
+    if not any(str(cell).strip() for row in values for cell in row):
+        if ws.col_count < len(ASSET_MANAGEMENT_HEADERS):
+            ws.resize(cols=len(ASSET_MANAGEMENT_HEADERS))
         ws.update(range_name="A1", values=[ASSET_MANAGEMENT_HEADERS] + [
             [record.get(h, "") for h in ASSET_MANAGEMENT_HEADERS] for record in _asset_default_records()
         ], value_input_option="RAW")
@@ -3557,9 +3562,70 @@ def _asset_load_records() -> tuple[object | None, list[dict], str]:
     except Exception as exc:
         return None, _asset_default_records(), f"자산대장 조회 실패: {exc}"
 
+def _asset_validate_lifecycle(record):
+    today = _korea_now().date()
+    dates = {}
+    for name in ("임차일", "반납일", "실사일"):
+        value = record.get(name, "")
+        if value:
+            try:
+                dates[name] = datetime.date.fromisoformat(str(value))
+            except ValueError:
+                return f"{name}은 YYYY-MM-DD 형식이어야 합니다."
+            if dates[name] > today:
+                return f"{name}은 오늘 이후일 수 없습니다."
+    if record.get("자산상태") == "반납완료" and "반납일" not in dates:
+        return "반납완료 등록에는 반납일이 필요합니다."
+    if record.get("자산상태") != "반납완료" and "반납일" in dates:
+        return "반납일이 있으면 자산상태를 반납완료로 선택해 주세요."
+    if "임차일" in dates and "반납일" in dates and dates["반납일"] < dates["임차일"]:
+        return "반납일은 임차일보다 빠를 수 없습니다."
+    return ""
+
+def _asset_register_rental(record):
+    """Append a separate asset; never replace the returned asset's model or photos."""
+    if not _worklog_current_user():
+        return False, "개인 인증이 필요합니다."
+    for field in ("자산ID", "품명", "모델명", "제조번호", "임차일"):
+        if not str(record.get(field, "")).strip():
+            return False, f"{field}을 입력해 주세요."
+    problem = _asset_validate_lifecycle(record)
+    if problem:
+        return False, problem
+    try:
+        client = init_google_sheet_connection()
+        if not client:
+            return False, "Google Sheets 연결을 확인해 주세요."
+        ws = _asset_ensure_sheet(client.open(WORK_LOG_SPREADSHEET_NAME))
+        values = ws.get_all_values()
+        headers = values[0]
+        rows = [dict(zip(headers, r + [""] * (len(headers) - len(r)))) for r in values[1:]]
+        existing = next((r for r in rows if r.get("자산ID") == record["자산ID"]), None)
+        if existing:
+            if all(existing.get(k, "") == record.get(k, "") for k in ("품명", "모델명", "제조번호", "임차일")):
+                return True, "이미 등록된 임차 건입니다. 중복 등록하지 않았습니다."
+            return False, "등록ID가 이미 사용됐습니다. 최신 대장을 다시 불러와 주세요."
+        if any(str(r.get("제조번호", "")).strip().casefold() == record["제조번호"].strip().casefold()
+               and r.get("자산상태") != "반납완료" for r in rows):
+            return False, "같은 제조번호의 사용 중 장비가 있습니다. 기존 장비를 확인해 주세요."
+        predecessor = record.get("교체전자산ID", "")
+        if predecessor and not any(r.get("자산ID") == predecessor and r.get("자산상태") == "반납완료" for r in rows):
+            return False, "교체 대상은 먼저 반납완료로 저장해 주세요."
+        record.update({"자산상태": "임차중", "보유확인": "미실사", "이상여부": "미확인", "사진수": "0",
+                       "실사자": str(_worklog_current_user().get("이름", "")),
+                       "최종수정일시": _korea_now().isoformat(timespec="microseconds")})
+        ws.append_row([record.get(h, "") for h in headers], value_input_option="RAW")
+        return True, "신규 임차 장비를 등록했습니다. 아래 실사 화면에서 사진을 추가할 수 있습니다."
+    except Exception as exc:
+        return False, f"등록 확인 실패: {exc} · 같은 화면에서 재시도하면 등록ID로 중복을 확인합니다."
+
 def _asset_save_record(asset_id: str, record: dict, photos: list) -> tuple[bool, str]:
     if not _worklog_current_user():
         return False, "MY WORK LOG 개인 인증 후 저장할 수 있습니다."
+    problem = _asset_validate_lifecycle(record)
+    if problem:
+        return False, problem
+    record["실사자"] = str(_worklog_current_user().get("이름", ""))
     client = init_google_sheet_connection()
     if not client:
         return False, "Google Sheets 연결 실패: gcp_service_account 설정을 확인해 주세요."
@@ -3571,6 +3637,8 @@ def _asset_save_record(asset_id: str, record: dict, photos: list) -> tuple[bool,
                    if len(r) > headers.index("자산ID") and r[headers.index("자산ID")] == asset_id]
         if len(matches) != 1:
             return False, "자산ID가 없거나 중복되어 저장을 중단했습니다."
+        if matches[0].get("자산상태") == "반납완료" and record.get("자산상태") != "반납완료":
+            return False, "반납완료 이력은 유지합니다. 재임차는 신규 임차 등록을 이용해 주세요."
         if matches[0].get("최종수정일시", "") != record.get("최종수정일시", ""):
             return False, "다른 사용자가 수정했습니다. 최신 대장을 다시 불러온 후 저장해 주세요."
         known_hashes = set(filter(None, matches[0].get("사진해시목록", "").split("|")))
@@ -6393,12 +6461,9 @@ def _render_asset_management():
     if not _worklog_current_user():
         st.info("아래 MY WORK LOG에서 개인 인증한 뒤 자산대장을 열어 주세요.")
         return
-    st.caption("자산관리 개선판 R2 · 2026-09-17 · 기존 시트 헤더 호환 보완")
+    st.caption("자산관리 R3 · 전체 자산 불러오기 / 간편 실사 / 반납·신규 임차")
     st.caption("제조번호로 실물을 대조한 뒤 보유 여부·사용자·위치·이상 여부·사진을 저장합니다. 사진은 기존 현장기록과 동일한 보안 경로로 관리됩니다.")
     if "asset_records" not in st.session_state:
-        st.info("최초 불러오기 시 Google Sheets에 22대의 원본 대장을 등록합니다. 이미 저장된 자료는 유지합니다.")
-        if not st.button("📂 자산대장 열기", key="asset_open"):
-            return
         _asset_ws, asset_records, asset_message = _asset_load_records()
         if _asset_ws is None:
             st.error(asset_message)
@@ -6426,7 +6491,7 @@ def _render_asset_management():
     with metrics_col:
         confirmed = sum(r.get("보유확인") == "보유 확인" for r in records)
         missing = sum(r.get("보유확인") == "미보유/소재 확인 필요" for r in records)
-        defective = sum(r.get("이상여부") == "이상 있음" for r in records)
+        defective = sum(r.get("이상여부") in ("이상 있음", "불량") for r in records)
         st.info(f"총 **{len(records)}대** · 보유 확인 **{confirmed}대** · 소재 확인 필요 **{missing}대** · 이상 **{defective}대**")
 
     f1, f2, f3 = st.columns(3)
@@ -6439,7 +6504,10 @@ def _render_asset_management():
     filtered = [r for r in records if (owner_filter == "전체" or r.get("등록사용자") == owner_filter)
                 and (check_filter == "전체" or r.get("보유확인") == check_filter)
                 and (location_filter == "전체" or r.get("보관위치") == location_filter)]
-    table_cols = ["자산ID", "품명", "모델명", "설비번호", "제조번호", "등록사용자", "실사사용자", "실사일", "보관위치", "보유확인", "이상여부", "사진수", "비고"]
+    lifecycle_filter = st.selectbox("자산 구분", ["전체", "현재 보유·임차", "반납완료"], key="asset_lifecycle_filter")
+    if lifecycle_filter != "전체":
+        filtered = [r for r in filtered if (r.get("자산상태") == "반납완료") == (lifecycle_filter == "반납완료")]
+    table_cols = ["자산ID", "품명", "모델명", "설비번호", "제조번호", "등록사용자", "실사사용자", "실사일", "보관위치", "보유확인", "이상여부", "사진수", "비고", "자산상태", "임차일", "반납일", "임대업체", "교체전자산ID"]
     st.dataframe(pd.DataFrame(filtered).reindex(columns=table_cols), use_container_width=True, hide_index=True, height=330)
 
     if filtered:
@@ -6460,15 +6528,24 @@ def _render_asset_management():
                 ix = ASSET_USER_OPTIONS.index(selected.get("실사사용자")) if selected.get("실사사용자") in ASSET_USER_OPTIONS else 0
                 inspector = st.selectbox("실사 사용자", ASSET_USER_OPTIONS, index=ix)
                 inspected_date = st.date_input("실사일", value=saved_date, max_value=_korea_now().date())
-                possession_options = ["미실사", "보유 확인", "미보유/소재 확인 필요"]
-                possession = st.selectbox("실물 보유 확인", possession_options, index=possession_options.index(selected.get("보유확인")) if selected.get("보유확인") in possession_options else 0)
+                st.caption("실사 저장 시 보유 확인으로 기록합니다. 소재 불명 장비는 아래 항목을 선택하세요.")
+                not_found = st.checkbox("장비를 찾지 못함", value=selected.get("보유확인") == "미보유/소재 확인 필요")
+                possession = "미보유/소재 확인 필요" if not_found else "보유 확인"
             with c2:
-                loc_options = [""] + ASSET_LOCATION_OPTIONS
+                loc_options = ["", "차량", "사무실", "사무실 캐비닛", "현장 보관함", "대여 중", "기타"]
                 location = st.selectbox("계측기 위치", loc_options, index=loc_options.index(selected.get("보관위치")) if selected.get("보관위치") in loc_options else 0, format_func=lambda v: "선택해 주세요" if not v else v)
-                defect_options = ["미확인", "정상", "이상 있음", "점검 필요"]
-                defect = st.selectbox("이상 여부", defect_options, index=defect_options.index(selected.get("이상여부")) if selected.get("이상여부") in defect_options else 0)
+                defect_options = ["미확인", "양호", "불량"]
+                default_defect = {"정상": "양호", "이상 있음": "불량", "점검 필요": "미확인"}.get(selected.get("이상여부"), selected.get("이상여부"))
+                defect = st.selectbox("장비 상태 (양호 / 불량)", defect_options, index=defect_options.index(default_defect) if default_defect in defect_options else 0)
                 defect_detail = st.text_input("이상 내용", value=selected.get("이상내용", ""), placeholder="예: 측정값 불안정, 배터리 교체 필요")
             remark = st.text_area("실사 비고", value=selected.get("비고", ""), placeholder="대여 대상, 차량 번호, 캐비닛 위치 등 추적 가능한 정보를 입력해 주세요.")
+            st.markdown("**반납 관리 (반납할 때만 변경)**")
+            states = ["보유중", "임차중", "반납완료"]
+            old_state = selected.get("자산상태") or "보유중"
+            state = st.selectbox("자산상태", states, index=states.index(old_state) if old_state in states else 0,
+                                 disabled=old_state == "반납완료")
+            return_date = st.text_input("반납일 (YYYY-MM-DD, 미반납은 공란)", value=selected.get("반납일", ""))
+            st.caption("기존 모델·제조번호·사진은 보존합니다. 다른 모델로 교체할 경우 반납 저장 후 신규 임차 등록을 이용하세요.")
             camera_photo = st.camera_input("실사 사진 촬영 (선택)", key=f"asset_camera_{selected_id}_{nonce}")
             upload_photos = st.file_uploader("실사 사진 첨부 (선택, 최대 10장)", type=["jpg", "jpeg", "png", "webp", "heic", "heif"], accept_multiple_files=True, key=f"asset_upload_{selected_id}_{nonce}")
             save_asset = st.form_submit_button("💾 실사 결과 및 사진 저장", type="primary", use_container_width=True)
@@ -6478,14 +6555,18 @@ def _render_asset_management():
                     st.error("촬영 사진을 포함해 한 번에 최대 10장까지 저장할 수 있습니다.")
                 elif possession == "미실사":
                     st.error("실물 보유 확인 결과를 선택해 주세요.")
-                elif possession == "보유 확인" and not location:
+                elif state != "반납완료" and possession == "보유 확인" and not location:
                     st.error("보유 확인한 장비는 보관 위치를 반드시 선택해 주세요.")
-                elif defect == "이상 있음" and not defect_detail.strip():
+                elif state != "반납완료" and not not_found and defect == "미확인":
+                    st.error("양호 또는 불량을 선택해 주세요.")
+                elif defect == "불량" and not defect_detail.strip():
                     st.error("이상 있음으로 등록하려면 이상 내용을 입력해 주세요.")
                 else:
                     updated = dict(selected)
                     updated.update({"실사사용자": inspector, "실사일": inspected_date.strftime("%Y-%m-%d"), "보관위치": location,
-                                    "보유확인": possession, "이상여부": defect, "이상내용": defect_detail.strip(), "비고": remark.strip()})
+                                    "보유확인": "반납완료" if state == "반납완료" else possession,
+                                    "이상여부": defect, "이상내용": defect_detail.strip(), "비고": remark.strip(),
+                                    "자산상태": state, "반납일": return_date.strip()})
                     ok, message = _asset_save_record(selected_id, updated, photos)
                     if ok:
                         st.session_state["asset_records"] = [updated if r.get("자산ID") == selected_id else r for r in records]
@@ -6499,6 +6580,38 @@ def _render_asset_management():
                 _render_power_photo_download(selected, key_prefix=f"asset_view_{selected_id}")
     else:
         st.info("선택한 조건에 맞는 계측기가 없습니다.")
+    st.markdown("#### ➕ 신규 임차 등록 / 모델 교체")
+    st.caption("새 장비는 별도 자산으로 등록됩니다. 반납한 기존 장비의 기록과 사진은 그대로 유지됩니다.")
+    if "asset_new_id" not in st.session_state:
+        st.session_state["asset_new_id"] = "RENT-" + hashlib.sha256(os.urandom(32)).hexdigest()[:20]
+    rental_id = st.session_state["asset_new_id"]
+    with st.form(f"asset_rental_{rental_id}"):
+        new_name = st.text_input("품명", key=f"rental_name_{rental_id}")
+        new_model = st.text_input("모델명", key=f"rental_model_{rental_id}")
+        new_serial = st.text_input("제조번호", key=f"rental_serial_{rental_id}")
+        new_equipment = st.text_input("설비번호 (선택)", key=f"rental_equipment_{rental_id}")
+        new_user = st.selectbox("사용자", ASSET_USER_OPTIONS, key=f"rental_user_{rental_id}")
+        new_date = st.date_input("임차일", value=_korea_now().date(), max_value=_korea_now().date(), key=f"rental_date_{rental_id}")
+        new_supplier = st.text_input("임대업체 (선택)", key=f"rental_supplier_{rental_id}")
+        new_location = st.selectbox("보관 위치", ["차량", "사무실", "기타"], key=f"rental_loc_{rental_id}")
+        returned = {r["자산ID"]: r for r in records if r.get("자산상태") == "반납완료"}
+        prior = st.selectbox("교체 전 반납 장비 (선택)", [""] + list(returned),
+                             format_func=lambda v: "해당 없음 — 추가 임차" if not v else f"{v} · {returned[v].get('품명')} / {returned[v].get('모델명')}",
+                             key=f"rental_prior_{rental_id}")
+        new_note = st.text_area("신규 임차 비고", key=f"rental_note_{rental_id}")
+        if st.form_submit_button("신규 임차 등록", type="primary", use_container_width=True):
+            new_record = {"자산ID": rental_id, "품명": new_name.strip(), "모델명": new_model.strip(),
+                          "제조번호": new_serial.strip(), "설비번호": new_equipment.strip(), "등록사용자": new_user,
+                          "실사사용자": new_user, "임차일": new_date.isoformat(), "임대업체": new_supplier.strip(),
+                          "보관위치": new_location, "교체전자산ID": prior, "비고": new_note.strip()}
+            ok, message = _asset_register_rental(new_record)
+            if ok:
+                st.session_state.pop("asset_records", None)
+                st.session_state.pop("asset_new_id", None)
+                st.session_state["asset_saved_notice"] = message
+                st.rerun()
+            else:
+                st.error(message)
     safe_rows = [{k: ("'" + str(v) if str(v).lstrip().startswith(("=", "+", "-", "@")) else v)
                   for k, v in r.items()} for r in records]
     asset_csv = pd.DataFrame(safe_rows).reindex(columns=ASSET_MANAGEMENT_HEADERS).to_csv(index=False).encode("utf-8-sig")
