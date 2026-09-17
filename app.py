@@ -6482,7 +6482,7 @@ def _render_asset_management():
     if not _worklog_current_user():
         st.info("아래 MY WORK LOG에서 개인 인증한 뒤 자산대장을 열어 주세요.")
         return
-    st.caption("자산관리 R4 · 품명 선택 → 실사 입력·사진 첨부 → 실사 완료")
+    st.caption("자산관리 R5 · 표에서 장비 선택 → 실사 입력·사진 첨부 → 첫 열 완료 표시")
     st.caption("제조번호로 실물을 대조한 뒤 보유 여부·사용자·위치·이상 여부·사진을 저장합니다. 사진은 기존 현장기록과 동일한 보안 경로로 관리됩니다.")
     if "asset_records" not in st.session_state:
         _asset_ws, asset_records, asset_message = _asset_load_records()
@@ -6529,25 +6529,41 @@ def _render_asset_management():
     if lifecycle_filter != "전체":
         filtered = [r for r in filtered if (r.get("자산상태") == "반납완료") == (lifecycle_filter == "반납완료")]
     table_cols = ["품명", "모델명", "제조번호", "등록사용자", "실사사용자", "실사일", "보관위치", "보유확인", "이상여부", "사진수", "비고", "자산상태", "반납일", "실사상태", "실사완료일시"]
-    st.markdown("**불러온 대장 — 품명을 누르면 아래 실사 화면에 해당 장비가 표시됩니다.**")
-    st.caption("입력 중 다른 품명을 선택하면 저장하지 않은 내용은 사라집니다. 먼저 입력 저장 또는 실사 완료를 눌러 주세요.")
-    for row in filtered:
-        name_col, info_col, result_col = st.columns([3, 3, 4])
-        with name_col:
-            status_icon = "✅" if row.get("실사상태") == "완료" else "⬜"
-            if st.button(f"{status_icon} {row.get('품명')}", key=f"asset_pick_{row['자산ID']}", use_container_width=True):
-                st.session_state["asset_active_id"] = row["자산ID"]
+    st.markdown("**계측기 실사대장**")
+    st.caption("표에서 장비 행을 선택하세요. 첫 열 ‘완료’는 실사 완료 저장 후 자동 체크됩니다. 다른 행으로 이동하기 전 입력 내용을 저장해 주세요.")
+    grid = pd.DataFrame(filtered).reindex(columns=table_cols).fillna("")
+    grid.insert(0, "완료", [r.get("실사상태") == "완료" for r in filtered])
+    grid["실사상태"] = grid["실사상태"].replace("", "미실사")
+    # Bind selection positions to the exact filtered ID sequence, never to the full ledger.
+    grid_scope = hashlib.sha256(json.dumps([r["자산ID"] for r in filtered]).encode()).hexdigest()[:16]
+    import inspect
+    if "on_select" in inspect.signature(st.dataframe).parameters:
+        event = st.dataframe(
+            grid, use_container_width=True, hide_index=True,
+            height=380, key=f"asset_grid_{grid_scope}",
+            on_select="rerun", selection_mode="single-row",
+            column_config={
+                "완료": st.column_config.CheckboxColumn("완료", width="small", help="실사 완료 저장에 성공한 장비만 자동 체크됩니다."),
+                "품명": st.column_config.TextColumn("품명", width="medium"),
+                "모델명": st.column_config.TextColumn("모델명", width="small"),
+                "제조번호": st.column_config.TextColumn("제조번호", width="medium"),
+            },
+        )
+        positions = event.selection.rows
+        if positions and 0 <= positions[0] < len(filtered):
+            clicked_id = filtered[positions[0]]["자산ID"]
+            if st.session_state.get("asset_active_id") != clicked_id:
+                st.session_state["asset_active_id"] = clicked_id
                 st.session_state["asset_form_nonce"] = st.session_state.get("asset_form_nonce", 0) + 1
-        with info_col:
-            st.text(f"{row.get('모델명', '')} · {row.get('제조번호', '')}")
-            st.caption(f"사용자: {row.get('실사사용자') or row.get('등록사용자', '')}")
-        with result_col:
-            st.text(f"{row.get('실사상태') or '미실사'} · {row.get('실사일') or '날짜 미등록'}")
-            st.caption(f"{row.get('보관위치') or '위치 미확인'} · {row.get('이상여부') or '미확인'} · 사진 {row.get('사진수') or '0'}장")
-            if row.get("비고"):
-                st.text(row["비고"])
-            if row.get("반납일"):
-                st.caption(f"반납일: {row['반납일']}")
+    else:
+        st.dataframe(grid, use_container_width=True, hide_index=True, height=380)
+        st.caption("현재 Streamlit 버전은 표 행 선택을 지원하지 않습니다. 아래에서 장비를 선택할 수 있습니다.")
+        fallback_ids = [None] + [r["자산ID"] for r in filtered]
+        labels = {r["자산ID"]: f"{r.get('품명')} · {r.get('모델명')} · {r.get('제조번호')}" for r in filtered}
+        clicked_id = st.selectbox("실사 대상", fallback_ids, format_func=lambda v: labels.get(v, "장비 선택"), key=f"asset_grid_fallback_{grid_scope}")
+        if clicked_id and st.session_state.get("asset_active_id") != clicked_id:
+            st.session_state["asset_active_id"] = clicked_id
+            st.session_state["asset_form_nonce"] = st.session_state.get("asset_form_nonce", 0) + 1
 
     selected_id = st.session_state.get("asset_active_id")
     selected = next((r for r in filtered if r.get("자산ID") == selected_id), None)
@@ -6622,7 +6638,7 @@ def _render_asset_management():
             if st.checkbox("📷 저장된 실사 사진 보기", key=f"asset_photos_{selected_id}"):
                 _render_power_photo_download(selected, key_prefix=f"asset_view_{selected_id}")
     else:
-        st.info("위 목록에서 실사할 장비의 품명을 눌러 주세요." if filtered else "선택한 조건에 맞는 계측기가 없습니다.")
+        st.info("위 표에서 실사할 장비 행을 선택해 주세요." if filtered else "선택한 조건에 맞는 계측기가 없습니다.")
     st.markdown("#### ➕ 신규 임차 등록 / 모델 교체")
     st.caption("새 장비는 별도 자산으로 등록됩니다. 반납한 기존 장비의 기록과 사진은 그대로 유지됩니다.")
     if "asset_new_id" not in st.session_state:
@@ -6657,7 +6673,9 @@ def _render_asset_management():
                 st.error(message)
     safe_rows = [{k: ("'" + str(v) if str(v).lstrip().startswith(("=", "+", "-", "@")) else v)
                   for k, v in r.items()} for r in records]
-    asset_csv = pd.DataFrame(safe_rows).reindex(columns=table_cols).to_csv(index=False).encode("utf-8-sig")
+    export_grid = pd.DataFrame(safe_rows).reindex(columns=table_cols)
+    export_grid.insert(0, "완료", ["✓" if r.get("실사상태") == "완료" else "" for r in records])
+    asset_csv = export_grid.to_csv(index=False).encode("utf-8-sig")
     st.download_button("⬇️ 계측기 자산대장 CSV 다운로드", asset_csv, "계측기_자산관리현황.csv", "text/csv", use_container_width=True)
 
 # LAW SEARCH는 기존 법률 검토/AI 에이전트/스마트 요약 기능을 그대로 묶은 하위 메뉴입니다.
