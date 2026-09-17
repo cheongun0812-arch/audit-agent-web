@@ -3426,6 +3426,155 @@ WORK_LOG_STATUS_OPTIONS = ["신규", "확인필요", "조치중", "재점검", "
 WORK_LOG_ITEM_OPTIONS = ["전원", "축전지", "접지", "냉방", "출입", "안전", "기타"]
 WORK_LOG_VISIBILITY_OPTIONS = ["공개", "비공개"]
 
+# ==========================================
+# 8-4. 계측기 자산 실사 · 관리대장
+#      - MY WORK LOG와 별도 시트에 저장
+#      - 현장 사진은 기존의 검증된 Drive 업로드 경로를 재사용
+# ==========================================
+ASSET_MANAGEMENT_SHEET_NAME = "계측기_자산관리"
+ASSET_MANAGEMENT_HEADERS = [
+    "자산ID", "품명", "모델명", "설비번호", "제조번호", "등록사용자", "실사사용자",
+    "실사일", "보관위치", "보유확인", "이상여부", "이상내용", "비고",
+    "사진수", "사진파일ID목록", "사진파일명목록", "최종수정일시", "사진해시목록",
+]
+ASSET_USER_OPTIONS = ["이철순", "김수창", "소순고", "정청운", "공용/미배정"]
+ASSET_LOCATION_OPTIONS = ["차량", "사무실 캐비닛", "사무실", "현장 보관함", "대여 중", "기타"]
+ASSET_INITIAL_ROWS = [
+    ("고압·특고압 검전기", "TK-1500V", "", "230100193", "소순고", ""), ("고압·특고압 검전기", "TK-1500V", "", "230100150", "이철순", ""),
+    ("검상기", "PD3129-10", "", "230217907", "이철순", ""), ("검상기", "PD3129-10", "", "230223017", "소순고", ""),
+    ("저압검전기", "TK5060", "", "230010635", "이철순", ""), ("저압검전기", "TK5060", "", "230010259", "소순고", ""),
+    ("적외선온도계", "FLUKE-561", "", "60730027WS", "이철순", ""), ("적외선온도계", "FLUKE-561", "", "60730028WS", "소순고", ""),
+    ("누설전류측정기", "ETCR-6300", "", "63100137", "이철순", ""), ("누설전류측정기", "ETCR-6300", "", "63100144", "소순고", ""),
+    ("클램프미터(AC/DC 겸용)", "CM4375", "", "230248050", "이철순", ""), ("클램프미터(AC/DC 겸용)", "CM4375", "", "230248047", "소순고", ""),
+    ("멀티테스터(회로시험기)", "FLUKE-17B", "", "60735499WS", "이철순", ""), ("멀티테스터(회로시험기)", "FLUKE-17B", "", "60735581WS", "소순고", "사무실"),
+    ("접지저항측정기", "ETCR2100", "", "22530048", "이철순", ""), ("접지저항측정기", "ETCR2100", "", "22530042", "소순고", ""),
+    ("절연저항측정기(500V/100MΩ)", "IR4013-10", "", "221156562", "이철순", "사무실"), ("절연저항측정기(500V/100MΩ)", "IR4013-10", "", "220450289", "소순고", ""),
+    ("디지털다기능계측기", "CEM-24000", "74035938", "CEM2424010941", "이철순", ""), ("축전지내부저항측정기", "IBEX-3000BT", "74025656", "7170908", "소순고", "대여 중"),
+    ("디지털다기능계측기", "CEM-24000", "74035952", "CEM2424010927", "소순고", "대여 중"), ("축전지내부저항측정기", "IBEX-3000BT", "70950822", "7170402", "이철순", "사무실"),
+]
+
+def _asset_default_records() -> list[dict]:
+    return [{"자산ID": f"MEA-{i:03d}", "품명": item, "모델명": model, "설비번호": equipment_no, "제조번호": serial_no,
+             "등록사용자": owner, "실사사용자": owner, "실사일": "", "보관위치": location, "보유확인": "미실사",
+             "이상여부": "미확인", "이상내용": "", "비고": "원본 대장 메모 반영" if location else "", "사진수": "0",
+             "사진파일ID목록": "", "사진파일명목록": "", "최종수정일시": ""}
+            for i, (item, model, equipment_no, serial_no, owner, location) in enumerate(ASSET_INITIAL_ROWS, 1)]
+
+def _asset_ensure_sheet(spreadsheet):
+    try:
+        ws = spreadsheet.worksheet(ASSET_MANAGEMENT_SHEET_NAME)
+    except gspread.WorksheetNotFound:
+        ws = spreadsheet.add_worksheet(title=ASSET_MANAGEMENT_SHEET_NAME, rows=300, cols=len(ASSET_MANAGEMENT_HEADERS))
+    values = ws.get_all_values()
+    if not values:
+        ws.update(range_name="A1", values=[ASSET_MANAGEMENT_HEADERS] + [
+            [record.get(h, "") for h in ASSET_MANAGEMENT_HEADERS] for record in _asset_default_records()
+        ], value_input_option="RAW")
+    else:
+        headers = values[0]
+        if "자산ID" not in headers or len(set(headers)) != len(headers):
+            raise ValueError("자산대장 헤더가 올바르지 않습니다. 기존 자료를 보존하고 작업을 중단합니다.")
+        missing = [h for h in ASSET_MANAGEMENT_HEADERS if h not in headers]
+        if missing:
+            headers = headers + missing
+            if ws.col_count < len(headers):
+                ws.resize(cols=len(headers))
+            ws.update(range_name="A1", values=[headers], value_input_option="RAW")
+    return ws
+
+def _asset_load_records() -> tuple[object | None, list[dict], str]:
+    client = init_google_sheet_connection()
+    if not client:
+        return None, _asset_default_records(), "Google Sheets 연결을 확인할 수 없어 원본 대장 기준으로 표시합니다."
+    try:
+        ws = _asset_ensure_sheet(client.open(WORK_LOG_SPREADSHEET_NAME))
+        values = ws.get_all_values()
+        headers = [str(v).strip() for v in values[0]]
+        rows = [{header: (row[i] if i < len(row) else "") for i, header in enumerate(headers)} for row in values[1:] if any(str(v).strip() for v in row)]
+        return ws, rows, ""
+    except Exception as exc:
+        return None, _asset_default_records(), f"자산대장 조회 실패: {exc}"
+
+def _asset_save_record(asset_id: str, record: dict, photos: list) -> tuple[bool, str]:
+    if not _worklog_current_user():
+        return False, "MY WORK LOG 개인 인증 후 저장할 수 있습니다."
+    client = init_google_sheet_connection()
+    if not client:
+        return False, "Google Sheets 연결 실패: gcp_service_account 설정을 확인해 주세요."
+    try:
+        ws = _asset_ensure_sheet(client.open(WORK_LOG_SPREADSHEET_NAME))
+        values = ws.get_all_values()
+        headers = values[0]
+        matches = [dict(zip(headers, r + [""] * (len(headers) - len(r)))) for r in values[1:]
+                   if len(r) > headers.index("자산ID") and r[headers.index("자산ID")] == asset_id]
+        if len(matches) != 1:
+            return False, "자산ID가 없거나 중복되어 저장을 중단했습니다."
+        if matches[0].get("최종수정일시", "") != record.get("최종수정일시", ""):
+            return False, "다른 사용자가 수정했습니다. 최신 대장을 다시 불러온 후 저장해 주세요."
+        known_hashes = set(filter(None, matches[0].get("사진해시목록", "").split("|")))
+    except Exception as exc:
+        return False, f"저장 사전 확인 실패: {exc}"
+    now = _korea_now()
+    photo_ids, photo_names, photo_failures = [], [], []
+    added_hashes = []
+    pending = st.session_state.setdefault("asset_pending_photos", {})
+    if photos:
+        if _worklog_photo_upload_ready():
+            for index, photo in enumerate(photos[:WORK_LOG_MAX_PHOTOS], 1):
+                digest = hashlib.sha256(photo.getvalue()).hexdigest()
+                if digest in known_hashes or digest in added_hashes:
+                    continue
+                pending_key = asset_id + ":" + digest
+                if pending_key in pending:
+                    meta = pending[pending_key]
+                    photo_ids.append(meta["id"])
+                    photo_names.append(meta["name"])
+                    added_hashes.append(digest)
+                    continue
+                compressed, _safe_name, mime_type, error = _worklog_compress_image(photo)
+                if not compressed:
+                    photo_failures.append(f"{index}번째 사진 처리 실패: {error}")
+                    continue
+                name = f"계측기실사_{now.strftime('%Y%m%d_%H%M%S')}_{asset_id}_{index:02d}.jpg"
+                ok, meta, error = _worklog_upload_drive_image(compressed, name, mime_type)
+                if ok:
+                    photo_ids.append(str(meta.get("id", "")))
+                    photo_names.append(str(meta.get("name", name)))
+                    added_hashes.append(digest)
+                    pending[pending_key] = {"id": str(meta.get("id", "")), "name": str(meta.get("name", name))}
+                else:
+                    photo_failures.append(f"{index}번째 사진 저장 실패: {error}")
+        else:
+            photo_failures.append("사진 업로드 설정을 확인해 주세요. 실사 내용은 사진 없이 저장합니다.")
+    try:
+        ws = _asset_ensure_sheet(client.open(WORK_LOG_SPREADSHEET_NAME))
+        values = ws.get_all_values()
+        headers = [str(v).strip() for v in values[0]]
+        id_index = headers.index("자산ID")
+        for row_no, row in enumerate(values[1:], start=2):
+            if id_index < len(row) and str(row[id_index]).strip() == asset_id:
+                old = {header: (row[i] if i < len(row) else "") for i, header in enumerate(headers)}
+                if old.get("최종수정일시", "") != record.get("최종수정일시", ""):
+                    return False, "저장 중 다른 수정이 발견되었습니다. 최신 대장을 다시 불러와 주세요. 사진 업로드는 세션에 보관됩니다."
+                old_ids = [v for v in str(old.get("사진파일ID목록", "")).split("|") if v]
+                old_names = [v for v in str(old.get("사진파일명목록", "")).split("|") if v]
+                changes = {"사진수": str(len(old_ids) + len(photo_ids)), "사진파일ID목록": "|".join(old_ids + photo_ids),
+                           "사진파일명목록": "|".join(old_names + photo_names), "사진해시목록": "|".join(sorted(known_hashes | set(added_hashes))),
+                           "최종수정일시": now.isoformat(timespec="microseconds")}
+                merged = dict(old)
+                merged.update(record)
+                merged.update(changes)
+                ws.update(range_name=f"A{row_no}", values=[[merged.get(header, "") for header in headers]], value_input_option="RAW")
+                record.update(changes)
+                for digest in added_hashes:
+                    pending.pop(asset_id + ":" + digest, None)
+                suffix = f" · 사진 {len(photo_ids)}장 저장" if photo_ids else ""
+                warning = f" · {' / '.join(photo_failures)}" if photo_failures else ""
+                return True, f"실사 결과가 Google Sheets에 저장되었습니다.{suffix}{warning}"
+        return False, "자산ID를 찾지 못했습니다."
+    except Exception as exc:
+        return False, f"저장 실패: {exc}"
+
 # 최초 1회 로그인 공통 임시 PIN은 000000입니다.
 # 최초 인증 후에는 "영문+숫자 혼합 4자리 간편 접속코드"를 설정하여 이후 접속에 사용합니다.
 # 6자리 개인 PIN은 간편 접속코드를 잊었을 때 사용하는 복구용 인증수단으로 유지합니다.
@@ -6098,11 +6247,14 @@ div[data-testid="stTabs"] div[role="tabpanel"] {
         display: flex;
         overflow-x: auto;
         gap: 9px;
-        padding: 3px 2px 8px 2px;
+        /* 가로 스크롤 컨테이너가 차량의 상단을 자르지 않도록 주행 공간을 확보합니다. */
+        padding: 58px 2px 8px 2px;
         scroll-snap-type: x mandatory;
         scrollbar-width: thin;
     }
     .smart-navi-launch { flex: 0 0 min(82vw, 310px); scroll-snap-align: start; }
+    .navi-sportscar-wrapper { top: -44px; }
+    .navi-sportscar-inner { line-height: 1; }
     .smart-work-brand { margin-bottom: 14px; }
 }
 
@@ -6174,7 +6326,123 @@ tab_worklog, tab_power, tab_law, tab_admin = st.tabs([
     "🔒 관리자 모드",
 ])
 
+def _render_asset_management():
+    st.markdown("### 📦 계측기 자산 실사 및 관리대장")
+    if not _worklog_current_user():
+        st.info("아래 MY WORK LOG에서 개인 인증한 뒤 자산대장을 열어 주세요.")
+        return
+    st.caption("자산관리 개선판 · 2026-09-17 · 시트 열 보완 / 사진 조회 지원")
+    st.caption("제조번호로 실물을 대조한 뒤 보유 여부·사용자·위치·이상 여부·사진을 저장합니다. 사진은 기존 현장기록과 동일한 보안 경로로 관리됩니다.")
+    if "asset_records" not in st.session_state:
+        st.info("최초 불러오기 시 Google Sheets에 22대의 원본 대장을 등록합니다. 이미 저장된 자료는 유지합니다.")
+        if not st.button("📂 자산대장 열기", key="asset_open"):
+            return
+        _asset_ws, asset_records, asset_message = _asset_load_records()
+        if _asset_ws is None:
+            st.error(asset_message)
+            return
+        st.session_state["asset_records"] = asset_records
+        st.session_state["asset_message"] = asset_message
+    if st.session_state.get("asset_saved_notice"):
+        st.info(st.session_state.pop("asset_saved_notice"))
+    records = st.session_state["asset_records"]
+    if st.session_state.get("asset_message"):
+        st.warning(st.session_state["asset_message"])
+
+    reload_col, metrics_col = st.columns([0.32, 0.68], vertical_alignment="center")
+    with reload_col:
+        if st.button("🔄 최신 대장 불러오기", type="primary", use_container_width=True, key="asset_reload"):
+            _asset_ws, asset_records, asset_message = _asset_load_records()
+            if _asset_ws is not None:
+                st.session_state["asset_records"] = asset_records
+            st.session_state["asset_message"] = asset_message
+            st.rerun()
+    with metrics_col:
+        confirmed = sum(r.get("보유확인") == "보유 확인" for r in records)
+        missing = sum(r.get("보유확인") == "미보유/소재 확인 필요" for r in records)
+        defective = sum(r.get("이상여부") == "이상 있음" for r in records)
+        st.info(f"총 **{len(records)}대** · 보유 확인 **{confirmed}대** · 소재 확인 필요 **{missing}대** · 이상 **{defective}대**")
+
+    f1, f2, f3 = st.columns(3)
+    with f1:
+        owner_filter = st.selectbox("등록 사용자", ["전체"] + ASSET_USER_OPTIONS, key="asset_owner_filter")
+    with f2:
+        check_filter = st.selectbox("실사 상태", ["전체", "미실사", "보유 확인", "미보유/소재 확인 필요"], key="asset_check_filter")
+    with f3:
+        location_filter = st.selectbox("보관 위치", ["전체"] + ASSET_LOCATION_OPTIONS, key="asset_location_filter")
+    filtered = [r for r in records if (owner_filter == "전체" or r.get("등록사용자") == owner_filter)
+                and (check_filter == "전체" or r.get("보유확인") == check_filter)
+                and (location_filter == "전체" or r.get("보관위치") == location_filter)]
+    table_cols = ["자산ID", "품명", "모델명", "설비번호", "제조번호", "등록사용자", "실사사용자", "실사일", "보관위치", "보유확인", "이상여부", "사진수", "비고"]
+    st.dataframe(pd.DataFrame(filtered).reindex(columns=table_cols), use_container_width=True, hide_index=True, height=330)
+
+    if filtered:
+        st.markdown("#### 🔎 현장 실사 등록")
+        choice_map = {f"{r.get('자산ID')} · {r.get('품명')} · 제조번호 {r.get('제조번호')}": r.get("자산ID") for r in filtered}
+        selected_label = st.selectbox("실사할 계측기", list(choice_map), key="asset_selected")
+        selected_id = choice_map[selected_label]
+        selected = next(r for r in records if r.get("자산ID") == selected_id)
+        nonce = st.session_state.get("asset_form_nonce", 0)
+        try:
+            saved_date = datetime.date.fromisoformat(selected.get("실사일", ""))
+        except (ValueError, TypeError):
+            saved_date = _korea_now().date()
+        with st.form(f"asset_inspection_{selected_id}_{nonce}"):
+            st.markdown(f"**{selected.get('품명')}** · 모델 `{selected.get('모델명')}` · 제조번호 `{selected.get('제조번호')}`")
+            c1, c2 = st.columns(2)
+            with c1:
+                ix = ASSET_USER_OPTIONS.index(selected.get("실사사용자")) if selected.get("실사사용자") in ASSET_USER_OPTIONS else 0
+                inspector = st.selectbox("실사 사용자", ASSET_USER_OPTIONS, index=ix)
+                inspected_date = st.date_input("실사일", value=saved_date, max_value=_korea_now().date())
+                possession_options = ["미실사", "보유 확인", "미보유/소재 확인 필요"]
+                possession = st.selectbox("실물 보유 확인", possession_options, index=possession_options.index(selected.get("보유확인")) if selected.get("보유확인") in possession_options else 0)
+            with c2:
+                loc_options = [""] + ASSET_LOCATION_OPTIONS
+                location = st.selectbox("계측기 위치", loc_options, index=loc_options.index(selected.get("보관위치")) if selected.get("보관위치") in loc_options else 0, format_func=lambda v: "선택해 주세요" if not v else v)
+                defect_options = ["미확인", "정상", "이상 있음", "점검 필요"]
+                defect = st.selectbox("이상 여부", defect_options, index=defect_options.index(selected.get("이상여부")) if selected.get("이상여부") in defect_options else 0)
+                defect_detail = st.text_input("이상 내용", value=selected.get("이상내용", ""), placeholder="예: 측정값 불안정, 배터리 교체 필요")
+            remark = st.text_area("실사 비고", value=selected.get("비고", ""), placeholder="대여 대상, 차량 번호, 캐비닛 위치 등 추적 가능한 정보를 입력해 주세요.")
+            camera_photo = st.camera_input("실사 사진 촬영 (선택)", key=f"asset_camera_{selected_id}_{nonce}")
+            upload_photos = st.file_uploader("실사 사진 첨부 (선택, 최대 10장)", type=["jpg", "jpeg", "png", "webp", "heic", "heif"], accept_multiple_files=True, key=f"asset_upload_{selected_id}_{nonce}")
+            save_asset = st.form_submit_button("💾 실사 결과 및 사진 저장", type="primary", use_container_width=True)
+            if save_asset:
+                photos = ([camera_photo] if camera_photo is not None else []) + list(upload_photos or [])
+                if len(photos) > WORK_LOG_MAX_PHOTOS:
+                    st.error("촬영 사진을 포함해 한 번에 최대 10장까지 저장할 수 있습니다.")
+                elif possession == "미실사":
+                    st.error("실물 보유 확인 결과를 선택해 주세요.")
+                elif possession == "보유 확인" and not location:
+                    st.error("보유 확인한 장비는 보관 위치를 반드시 선택해 주세요.")
+                elif defect == "이상 있음" and not defect_detail.strip():
+                    st.error("이상 있음으로 등록하려면 이상 내용을 입력해 주세요.")
+                else:
+                    updated = dict(selected)
+                    updated.update({"실사사용자": inspector, "실사일": inspected_date.strftime("%Y-%m-%d"), "보관위치": location,
+                                    "보유확인": possession, "이상여부": defect, "이상내용": defect_detail.strip(), "비고": remark.strip()})
+                    ok, message = _asset_save_record(selected_id, updated, photos)
+                    if ok:
+                        st.session_state["asset_records"] = [updated if r.get("자산ID") == selected_id else r for r in records]
+                        st.session_state["asset_saved_notice"] = message
+                        st.session_state["asset_form_nonce"] = nonce + 1
+                        st.rerun()
+                    else:
+                        st.error(message)
+        if selected.get("사진파일ID목록"):
+            if st.checkbox("📷 저장된 실사 사진 보기", key=f"asset_photos_{selected_id}"):
+                _render_power_photo_download(selected, key_prefix=f"asset_view_{selected_id}")
+    else:
+        st.info("선택한 조건에 맞는 계측기가 없습니다.")
+    safe_rows = [{k: ("'" + str(v) if str(v).lstrip().startswith(("=", "+", "-", "@")) else v)
+                  for k, v in r.items()} for r in records]
+    asset_csv = pd.DataFrame(safe_rows).reindex(columns=ASSET_MANAGEMENT_HEADERS).to_csv(index=False).encode("utf-8-sig")
+    st.download_button("⬇️ 계측기 자산대장 CSV 다운로드", asset_csv, "계측기_자산관리현황.csv", "text/csv", use_container_width=True)
+
 # LAW SEARCH는 기존 법률 검토/AI 에이전트/스마트 요약 기능을 그대로 묶은 하위 메뉴입니다.
+with tab_worklog:
+    with st.expander("📦 계측기 자산 실사 및 관리대장", expanded=False):
+        _render_asset_management()
+
 # 기존 기능 코드는 아래에서 각 컨테이너에 그대로 렌더링됩니다.
 with tab_law:
     st.markdown(
