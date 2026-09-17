@@ -3460,26 +3460,88 @@ def _asset_default_records() -> list[dict]:
              "사진파일ID목록": "", "사진파일명목록": "", "최종수정일시": ""}
             for i, (item, model, equipment_no, serial_no, owner, location) in enumerate(ASSET_INITIAL_ROWS, 1)]
 
+def _asset_header_plan(values):
+    """Repair only recognisable first-row headers; never infer data from column position."""
+    if not values:
+        return [], []
+    width = max(len(r) for r in values)
+    original = list(values[0]) + [""] * (width - len(values[0]))
+    canonical = {re.sub(r"\s+", "", h).casefold(): h for h in ASSET_MANAGEMENT_HEADERS}
+    canonical.update({"제품명": "품명", "모델": "모델명", "일련번호": "제조번호",
+                      "serialnumber": "제조번호", "assetid": "자산ID"})
+    headers, seen = [], set()
+    for i, value in enumerate(original):
+        clean = str(value).replace("\ufeff", "").replace("\u200b", "").strip()
+        name = canonical.get(re.sub(r"\s+", "", clean).casefold(), clean)
+        if not name:
+            name = f"원본열_{i + 1}"
+        if name in seen:
+            # A duplicated nonempty managed field is ambiguous: refuse rather than overwrite.
+            if name in ASSET_MANAGEMENT_HEADERS:
+                raise ValueError(f"'{name}' 열이 중복되어 자동 보완할 수 없습니다. 시트의 첫 행을 확인해 주세요.")
+            name = f"{name}_원본열_{i + 1}"
+        while name in seen:
+            name += "_원본"
+        headers.append(name)
+        seen.add(name)
+    if not ("품명" in headers and "제조번호" in headers):
+        raise ValueError("첫 행에서 품명·제조번호 열을 찾지 못했습니다. 아래 열 구조 진단을 확인해 주세요. 원본은 변경하지 않았습니다.")
+    headers += [h for h in ASSET_MANAGEMENT_HEADERS if h not in headers]
+    id_col = headers.index("자산ID")
+    serial_col = headers.index("제조번호")
+    result = [headers]
+    used = set()
+    for number, row in enumerate(values[1:], 2):
+        padded = list(row) + [""] * (len(headers) - len(row))
+        if any(str(v).strip() for v in row):
+            asset_id = str(padded[id_col]).strip()
+            serial = str(padded[serial_col]).strip()
+            if not asset_id:
+                if not serial:
+                    raise ValueError(f"{number}행은 자산ID와 제조번호가 모두 없습니다. 원본은 변경하지 않았습니다.")
+                asset_id = "LEG-" + hashlib.sha256(serial.encode("utf-8")).hexdigest()[:16]
+                padded[id_col] = asset_id
+            if asset_id in used:
+                raise ValueError(f"{number}행의 자산ID가 중복되었습니다. 중복 행을 확인해 주세요.")
+            used.add(asset_id)
+        result.append(padded)
+    return headers, result
+
 def _asset_ensure_sheet(spreadsheet):
     try:
         ws = spreadsheet.worksheet(ASSET_MANAGEMENT_SHEET_NAME)
     except gspread.WorksheetNotFound:
         ws = spreadsheet.add_worksheet(title=ASSET_MANAGEMENT_SHEET_NAME, rows=300, cols=len(ASSET_MANAGEMENT_HEADERS))
     values = ws.get_all_values()
+    st.session_state["asset_header_diagnostic"] = values[:5]
     if not values:
         ws.update(range_name="A1", values=[ASSET_MANAGEMENT_HEADERS] + [
             [record.get(h, "") for h in ASSET_MANAGEMENT_HEADERS] for record in _asset_default_records()
         ], value_input_option="RAW")
     else:
-        headers = values[0]
-        if "자산ID" not in headers or len(set(headers)) != len(headers):
-            raise ValueError("자산대장 헤더가 올바르지 않습니다. 기존 자료를 보존하고 작업을 중단합니다.")
-        missing = [h for h in ASSET_MANAGEMENT_HEADERS if h not in headers]
-        if missing:
-            headers = headers + missing
+        headers, repaired = _asset_header_plan(values)
+        changed_rows = [i for i, row in enumerate(repaired) if
+                        row != list(values[i]) + [""] * (len(headers) - len(values[i]))]
+        if changed_rows:
+            # Preserve a value snapshot before any repair. Failure to back up stops the repair.
+            stamp = _korea_now().strftime("%Y%m%d_%H%M%S_%f")
+            backup = spreadsheet.add_worksheet(title=f"계측기_원본백업_{stamp}",
+                                              rows=max(100, len(values)), cols=max(18, max(map(len, values))))
+            backup.update(range_name="A1", values=values, value_input_option="RAW")
             if ws.col_count < len(headers):
                 ws.resize(cols=len(headers))
-            ws.update(range_name="A1", values=[headers], value_input_option="RAW")
+            # Update only header/ID cells, preserving other cells and any formulas.
+            changes = [{"range": "A1", "values": [headers]}]
+            id_index = headers.index("자산ID")
+            column, n = "", id_index + 1
+            while n:
+                n, rem = divmod(n - 1, 26)
+                column = chr(65 + rem) + column
+            for i in changed_rows:
+                if i and repaired[i][id_index] != (values[i][id_index] if id_index < len(values[i]) else ""):
+                    changes.append({"range": f"{column}{i + 1}", "values": [[repaired[i][id_index]]]})
+            ws.batch_update(changes, value_input_option="RAW")
+            st.session_state["asset_header_notice"] = "열 구조를 보완했습니다. 변경 전 값은 '계측기_원본백업_' 시트에 보관했습니다."
     return ws
 
 def _asset_load_records() -> tuple[object | None, list[dict], str]:
@@ -6331,7 +6393,7 @@ def _render_asset_management():
     if not _worklog_current_user():
         st.info("아래 MY WORK LOG에서 개인 인증한 뒤 자산대장을 열어 주세요.")
         return
-    st.caption("자산관리 개선판 · 2026-09-17 · 시트 열 보완 / 사진 조회 지원")
+    st.caption("자산관리 개선판 R2 · 2026-09-17 · 기존 시트 헤더 호환 보완")
     st.caption("제조번호로 실물을 대조한 뒤 보유 여부·사용자·위치·이상 여부·사진을 저장합니다. 사진은 기존 현장기록과 동일한 보안 경로로 관리됩니다.")
     if "asset_records" not in st.session_state:
         st.info("최초 불러오기 시 Google Sheets에 22대의 원본 대장을 등록합니다. 이미 저장된 자료는 유지합니다.")
@@ -6340,12 +6402,16 @@ def _render_asset_management():
         _asset_ws, asset_records, asset_message = _asset_load_records()
         if _asset_ws is None:
             st.error(asset_message)
+            st.caption("열 구조 진단 — 기존 시트 첫 5행입니다. 제목 행·중복 열이 있다면 이 부분을 확인해 주세요.")
+            st.dataframe(pd.DataFrame(st.session_state.get("asset_header_diagnostic", [])), use_container_width=True)
             return
         st.session_state["asset_records"] = asset_records
         st.session_state["asset_message"] = asset_message
     if st.session_state.get("asset_saved_notice"):
         st.info(st.session_state.pop("asset_saved_notice"))
     records = st.session_state["asset_records"]
+    if st.session_state.get("asset_header_notice"):
+        st.info(st.session_state.pop("asset_header_notice"))
     if st.session_state.get("asset_message"):
         st.warning(st.session_state["asset_message"])
 
