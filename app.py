@@ -3620,7 +3620,7 @@ def _asset_register_rental(record):
     except Exception as exc:
         return False, f"등록 확인 실패: {exc} · 같은 화면에서 재시도하면 등록ID로 중복을 확인합니다."
 
-def _asset_save_record(asset_id: str, record: dict, photos: list) -> tuple[bool, str]:
+def _asset_save_record(asset_id: str, record: dict, photos: list, progress=None) -> tuple[bool, str]:
     if not _worklog_current_user():
         return False, "MY WORK LOG 개인 인증 후 저장할 수 있습니다."
     problem = _asset_validate_lifecycle(record)
@@ -3665,6 +3665,8 @@ def _asset_save_record(asset_id: str, record: dict, photos: list) -> tuple[bool,
     if photos:
         if _worklog_photo_upload_ready():
             for index, photo in enumerate(photos[:WORK_LOG_MAX_PHOTOS], 1):
+                if progress:
+                    progress(f"사진 {index}/{len(photos)} 처리 중… 완료될 때까지 화면을 유지해 주세요.")
                 digest = hashlib.sha256(photo.getvalue()).hexdigest()
                 if digest in known_hashes or digest in added_hashes:
                     continue
@@ -3680,7 +3682,9 @@ def _asset_save_record(asset_id: str, record: dict, photos: list) -> tuple[bool,
                     photo_failures.append(f"{index}번째 사진 처리 실패: {error}")
                     continue
                 name = f"계측기실사_{now.strftime('%Y%m%d_%H%M%S')}_{asset_id}_{index:02d}.jpg"
-                ok, meta, error = _worklog_upload_drive_image(compressed, name, mime_type)
+                if progress:
+                    progress(f"사진 {index}/{len(photos)} 전송 중 · 압축 후 {len(compressed) / 1024:.0f}KB")
+                ok, meta, error = _worklog_upload_drive_image(compressed, name, mime_type, response_attempts=3)
                 if ok:
                     photo_ids.append(str(meta.get("id", "")))
                     photo_names.append(str(meta.get("name", name)))
@@ -3719,7 +3723,8 @@ def _asset_save_record(asset_id: str, record: dict, photos: list) -> tuple[bool,
                 for digest in added_hashes:
                     pending.pop(asset_id + ":" + digest, None)
                 suffix = f" · 사진 {len(photo_ids)}장 저장" if photo_ids else ""
-                warning = f" · {' / '.join(photo_failures)}" if photo_failures else ""
+                warning = (f" · {' / '.join(photo_failures)} · 첨부한 사진을 다시 선택하지 말고 같은 완료 버튼을 눌러 재시도해 주세요. "
+                           "이미 저장된 사진은 건너뜁니다.") if photo_failures else ""
                 result_label = "실사 완료" if record.get("실사상태") == "완료" else "입력 저장 (실사 미완료)"
                 return True, f"{result_label}: Google Sheets에 저장되었습니다.{suffix}{warning}"
         return False, "자산ID를 찾지 못했습니다."
@@ -4532,7 +4537,7 @@ def _worklog_photo_upload_ready() -> bool:
     return ready
 
 
-def _worklog_follow_apps_script_response(first_response, timeout: int = 30):
+def _worklog_follow_apps_script_response(first_response, timeout: int = 30, attempts: int = 1):
     """Apps Script ContentService의 일회성 리디렉션을 즉시 따라가 최종 응답을 반환합니다."""
     response = first_response
     if first_response.status_code in {301, 302, 303, 307, 308}:
@@ -4540,20 +4545,23 @@ def _worklog_follow_apps_script_response(first_response, timeout: int = 30):
         if not redirect_url:
             return None, "Apps Script 리디렉션에 Location 주소가 없습니다."
         redirect_host = str(urlparse(redirect_url).netloc or "").lower()
-        if "script.googleusercontent.com" not in redirect_host:
+        if urlparse(redirect_url).scheme != "https" or redirect_host != "script.googleusercontent.com":
             return None, f"예상하지 않은 리디렉션 주소입니다: {redirect_host or '확인 불가'}"
-        try:
-            response = requests.get(
-                redirect_url,
-                timeout=timeout,
-                allow_redirects=True,
-                headers={
-                    "Accept": "application/json,text/plain,*/*",
-                    "User-Agent": "SMART-WORK-AI-AGENT/4.0",
-                },
-            )
-        except Exception as error:
-            return None, f"Apps Script 응답 리디렉션 처리 실패: {error}"
+        # Retry only receipt reads. Repeating the upload POST may create duplicate Drive files.
+        for attempt in range(max(1, min(attempts, 3))):
+            try:
+                response = requests.get(
+                    redirect_url, timeout=timeout, allow_redirects=True,
+                    headers={"Accept": "application/json,text/plain,*/*", "User-Agent": "SMART-WORK-AI-AGENT/4.0"},
+                )
+                if response.status_code not in {429, 500, 502, 503, 504} or attempt + 1 >= attempts:
+                    break
+            except (requests.Timeout, requests.ConnectionError):
+                if attempt + 1 >= attempts:
+                    return None, "사진 저장 결과 수신이 지연되었습니다. 저장 여부를 확인하지 못했습니다."
+            except Exception:
+                return None, "사진 저장 결과를 읽지 못했습니다."
+            time.sleep(min(attempt + 1, 2))
     return response, ""
 
 
@@ -4996,7 +5004,7 @@ def _worklog_compress_image(uploaded_file) -> tuple[bytes | None, str, str, str]
         return None, "", "", f"사진 처리 실패: {error}"
 
 
-def _worklog_upload_drive_image(image_bytes: bytes, file_name: str, mime_type: str) -> tuple[bool, dict, str]:
+def _worklog_upload_drive_image(image_bytes: bytes, file_name: str, mime_type: str, response_attempts: int = 1) -> tuple[bool, dict, str]:
     """압축 사진 1장을 Apps Script로 저장합니다.
 
     JSON을 application/json으로 직접 보내지 않고 text/plain JSON으로 전송해 Apps Script 웹앱의
@@ -5030,7 +5038,7 @@ def _worklog_upload_drive_image(image_bytes: bytes, file_name: str, mime_type: s
             timeout=60,
             allow_redirects=False,
         )
-        response, redirect_error = _worklog_follow_apps_script_response(first, timeout=60)
+        response, redirect_error = _worklog_follow_apps_script_response(first, timeout=60, attempts=response_attempts)
         if redirect_error:
             return False, {}, redirect_error
         if response is None:
@@ -14197,7 +14205,9 @@ def _asset_build_pdf(records, scope_label, photo_loader):
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Table, TableStyle, Spacer, PageBreak, Image
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Table, TableStyle, Spacer, PageBreak, Flowable
+    from reportlab.lib.utils import ImageReader
+    import math
     from PIL import Image as PILImage, ImageOps
 
     font = "AssetNanumGothic"
@@ -14231,14 +14241,64 @@ def _asset_build_pdf(records, scope_label, photo_loader):
                         f"{r.get('실사사용자') or r.get('등록사용자', '')}\n{r.get('보관위치', '')}",
                         f"{r.get('실사일', '')}\n{r.get('이상여부', '')}"])
     story.append(table(summary, [57, 139, 110, 112, 113]))
+    class AssetPage(Flowable):
+        """One fixed A4 content frame; the photo grid never causes pagination."""
+        def __init__(self, number, record, photos):
+            Flowable.__init__(self)
+            self.width, self.height = doc.width - 12, doc.height - 12
+            self.number, self.record, self.photos = number, record, photos
+
+        def draw(self):
+            c, w, h = self.canv, self.width, self.height
+            heading = p(f"{self.number}. {self.record.get('품명', '')}", title)
+            _, heading_h = heading.wrap(w, h)
+            fields = ["모델명", "제조번호", "등록사용자", "실사사용자", "실사자", "실사일", "보관위치",
+                      "보유확인", "이상여부", "이상내용", "비고", "자산상태", "반납일", "실사상태", "실사완료일시"]
+            specs = table([["항목", "내용"]] + [[k, self.record.get(k, "")] for k in fields], [100, w - 100])
+            _, specs_h = specs.wrap(w, h)
+            # Preserve every field; exceptionally long notes shrink within the fixed details region.
+            details_h = heading_h + 12 + specs_h
+            scale = min(1, h * .62 / details_h)
+            c.saveState()
+            c.translate(0, h)
+            c.scale(scale, scale)
+            heading.drawOn(c, 0, -heading_h)
+            specs.drawOn(c, 0, -details_h)
+            c.restoreState()
+            grid_top = h - details_h * scale - 26
+            c.setFont(font, 9)
+            c.drawString(0, grid_top + 10, f"실사 사진: {len(self.photos)}장")
+            if not self.photos:
+                c.drawString(0, grid_top - 14, "등록된 사진 없음")
+                return
+            count = len(self.photos)
+            columns = count if count <= 3 else min(3, math.ceil(math.sqrt(count)))
+            rows = math.ceil(count / columns)
+            gap = 6
+            cell_w = (w - gap * (columns - 1)) / columns
+            cell_h = (grid_top - gap * (rows - 1)) / rows
+            for pos, photo in enumerate(self.photos):
+                x = (pos % columns) * (cell_w + gap)
+                y = grid_top - (pos // columns + 1) * cell_h - (pos // columns) * gap
+                c.setStrokeColor(colors.HexColor("#b7c5d4"))
+                c.rect(x, y, cell_w, cell_h, stroke=1, fill=0)
+                c.setFont(font, 8)
+                c.drawString(x + 5, y + cell_h - 12, f"사진 {pos + 1} / {count}")
+                if photo is None:
+                    msg = p("사진 읽기 실패<br/>원본 파일·권한 확인")
+                    _, mh = msg.wrap(cell_w - 10, cell_h - 24)
+                    msg.drawOn(c, x + 5, y + max(5, (cell_h - 20 - mh) / 2))
+                    continue
+                payload, iw, ih = photo
+                ratio = min((cell_w - 10) / iw, (cell_h - 26) / ih)
+                dw, dh = iw * ratio, ih * ratio
+                c.drawImage(ImageReader(BytesIO(payload)), x + (cell_w - dw) / 2,
+                            y + 5 + (cell_h - 26 - dh) / 2, width=dw, height=dh)
+
     failures = []
     for i, r in enumerate(records, 1):
-        story.extend([PageBreak(), p(f"{i}. {r.get('품명', '')}", title)])
-        fields = ["모델명", "제조번호", "등록사용자", "실사사용자", "실사자", "실사일", "보관위치",
-                  "보유확인", "이상여부", "이상내용", "비고", "자산상태", "반납일", "실사상태", "실사완료일시"]
-        story.append(table([["항목", "내용"]] + [[k, r.get(k, "")] for k in fields], [100, 431]))
         ids = [v.strip() for v in str(r.get("사진파일ID목록") or "").split("|") if v.strip()]
-        story.extend([Spacer(1, 12), p(f"실사 사진: {len(ids)}장")])
+        photos = []
         for n, file_id in enumerate(ids, 1):
             try:
                 data = photo_loader(file_id)
@@ -14250,14 +14310,12 @@ def _asset_build_pdf(records, scope_label, photo_loader):
                     buf = BytesIO()
                     photo.save(buf, format="JPEG", quality=85)
                     width, height = photo.size
-                buf.seek(0)
-                scale = min(500 / width, 320 / height)
-                from reportlab.platypus import KeepTogether
-                story.append(KeepTogether([Spacer(1, 10), p(f"{i}. {r.get('품명', '')} · 사진 {n} / {len(ids)}"), Image(buf, width=width * scale, height=height * scale)]))
+                photos.append((buf.getvalue(), width, height))
             except Exception:
                 label = f"{i}번 {r.get('품명', '')} / 사진 {n}"
                 failures.append(label)
-                story.append(p(f"{label}: 사진을 불러오지 못했습니다. Drive 읽기 권한 또는 원본 파일을 확인하세요."))
+                photos.append(None)
+        story.extend([PageBreak(), AssetPage(i, r, photos)])
     def footer(canvas, document):
         canvas.setFont(font, 8)
         canvas.drawRightString(A4[0] - 32, 20, f"계측기 관리대장 · {document.page}")
@@ -14445,6 +14503,12 @@ def _render_asset_management():
                     camera_photo = st.camera_input("사진 촬영", **camera_options)
                 with upload_col:
                     upload_photos = st.file_uploader("사진 첨부 · 최대 10장", type=["jpg", "jpeg", "png", "webp", "heic", "heif"], accept_multiple_files=True, key=f"asset_upload_{selected_id}_{nonce}")
+                st.caption("촬영 후 사진 미리보기 또는 첨부 파일명이 나타난 것을 확인하고 아래 완료 버튼을 눌러 주세요. 전송 중에는 새로고침하지 마세요.")
+                received_photos = ([camera_photo] if camera_photo is not None else []) + list(upload_photos or [])
+                if received_photos:
+                    st.caption(f"서버 수신: {len(received_photos)}장 · 저장 시 자동 압축됩니다.")
+                if selected.get("실사상태") == "보완필요":
+                    st.warning("사진 저장이 완료되지 않았습니다. 첨부가 남아 있으면 다시 선택하지 말고 완료 버튼을 눌러 주세요.")
             finish_asset = st.form_submit_button("📷 사진 저장 · 실사 완료", type="primary", use_container_width=True)
             if finish_asset:
                 photos = ([camera_photo] if camera_photo is not None else []) + list(upload_photos or [])
@@ -14465,11 +14529,17 @@ def _render_asset_management():
                                     "이상여부": defect, "이상내용": defect_detail.strip(), "비고": remark.strip(),
                                     "자산상태": state, "반납일": return_date.strip(),
                                     "실사상태": "완료"})
-                    ok, message = _asset_save_record(selected_id, updated, photos)
+                    photo_progress = st.empty()
+                    with st.spinner("사진과 실사 내용을 저장하고 있습니다…"):
+                        ok, message = _asset_save_record(selected_id, updated, photos, progress=photo_progress.info)
+                    photo_progress.empty()
                     if ok:
                         st.session_state["asset_records"] = [updated if r.get("자산ID") == selected_id else r for r in records]
                         st.session_state["asset_saved_notice"] = message
-                        st.session_state["asset_form_nonce"] = nonce + 1
+                        # Partial upload is a saved ledger draft, not a completed photo submission.
+                        # Keep the same uploader/camera keys so failed photos can be retried.
+                        if updated.get("실사상태") == "완료":
+                            st.session_state["asset_form_nonce"] = nonce + 1
                         st.rerun()
                     else:
                         st.error(message)
