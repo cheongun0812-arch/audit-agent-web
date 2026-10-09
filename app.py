@@ -4675,7 +4675,7 @@ def _drafts_autosave(user: dict) -> None:
 AUDIT_SHEET_NAME = "MY_WORK_LOG_AUDIT"
 AUDIT_HEADERS = ["일시", "사용자ID", "이름", "이벤트", "상세", "접속IP(마스킹)", "단말"]
 APP_DISPLAY_NAME = "SMART POWER FIELD"
-APP_VERSION_TEXT = "v7.2 · 2026.10.09 · 사용자 인증 · 신뢰 단말"
+APP_VERSION_TEXT = "v7.3 · 2026.10.09 · 사용자 인증 · 신뢰 단말"
 
 
 def _mask_ip(ip: str) -> str:
@@ -6855,7 +6855,7 @@ st.markdown("""
     <span>SMART POWER <b>FIELD</b></span>
   </div>
   <div class="smart-work-brand-subtitle">ktMOS북부 · 전원시설 현장업무 플랫폼</div>
-  <div class="smart-work-brand-version">v7.2 · 2026.10.09 · 사용자 인증 · 신뢰 단말</div>
+  <div class="smart-work-brand-version">v7.3 · 2026.10.09 · 사용자 인증 · 신뢰 단말</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -7445,6 +7445,51 @@ with tab_worklog:
         border:none !important;
         border-radius:10px !important;
     }
+
+    /* 검색 패널 입력칸: 배경과 구분되는 흰 칸 + 진한 테두리 + 굵은 라벨
+       (Streamlit 버전마다 입력칸 구조가 달라 data-baseweb 방식과 'input을 직접 품은 div' 방식을 함께 지정) */
+    .st-key-worklog_public_scope [data-baseweb="select"] > div,
+    .st-key-worklog_filter [data-baseweb="select"] > div,
+    .st-key-worklog_search div[data-baseweb="input"],
+    .st-key-worklog_public_scope div:has(> input),
+    .st-key-worklog_filter div:has(> input),
+    .st-key-worklog_search div:has(> input) {
+        background:#FFFFFF !important;
+        border:1.6px solid #6F88AA !important;
+        border-radius:10px !important;
+        box-shadow:0 1px 3px rgba(15,23,42,.12) !important;
+        min-height:46px !important;
+    }
+    .st-key-worklog_search input, .st-key-worklog_filter input, .st-key-worklog_public_scope input {
+        background:transparent !important; border:none !important; box-shadow:none !important;
+    }
+    .st-key-worklog_public_scope [data-baseweb="select"] > div:hover,
+    .st-key-worklog_filter [data-baseweb="select"] > div:hover,
+    .st-key-worklog_search div[data-baseweb="input"]:hover,
+    .st-key-worklog_public_scope div:has(> input:not(:disabled)):hover,
+    .st-key-worklog_filter div:has(> input):hover,
+    .st-key-worklog_search div:has(> input):hover,
+    .st-key-worklog_search div:has(> input:focus),
+    .st-key-worklog_filter div:has(> input:focus) {
+        border-color:#0F4C81 !important; box-shadow:0 0 0 3px rgba(15,76,129,.14) !important;
+    }
+    .st-key-worklog_public_scope [data-baseweb="select"] > div[aria-disabled="true"],
+    .st-key-worklog_public_scope div:has(> input:disabled) {
+        background:#EEF2F7 !important; border-color:#B8C4D6 !important; box-shadow:none !important; opacity:.85;
+    }
+    .st-key-worklog_public_scope label p, .st-key-worklog_filter label p, .st-key-worklog_search label p {
+        font-weight:900 !important; color:#24364B !important; font-size:.9rem !important;
+    }
+    .st-key-worklog_public_scope [data-baseweb="select"] div[value], .st-key-worklog_filter [data-baseweb="select"] div[value],
+    .st-key-worklog_filter input, .st-key-worklog_public_scope input {
+        font-weight:850 !important; color:#102A43 !important;
+    }
+    /* 검색 조건 | 검색어는 모바일에서도 좌/우 한 줄 유지 */
+    div[data-testid="stHorizontalBlock"]:has(.st-key-worklog_filter) { flex-wrap:nowrap !important; gap:.5rem !important; }
+    div[data-testid="stHorizontalBlock"]:has(.st-key-worklog_filter) > div[data-testid="stColumn"],
+    div[data-testid="stHorizontalBlock"]:has(.st-key-worklog_filter) > div[data-testid="column"] {
+        min-width:0 !important; width:auto !important;
+    }
     /* 조회 결과 화면의 고정 버튼: 최근 기록 박스 오른쪽, 항상 같은 위치 */
     .st-key-worklog_float_close {
         position:fixed !important; right:14px; z-index:1000; width:132px !important; margin:0 !important; bottom:84px;
@@ -7757,32 +7802,43 @@ with tab_worklog:
         with recent_col:
             st.markdown('<div class="worklog-entry-title">🔎 검색 조건</div>', unsafe_allow_html=True)
             with st.container(border=True):
-                worklog_filter = st.selectbox(
-                    "검색 조건",
-                    ["전체", "🌐 공개", "🔒 내 비공개"] + WORK_LOG_STATUS_OPTIONS,
-                    key="worklog_filter",
-                    label_visibility="collapsed",
+                # ① 맨 위: 공개 기록 범위 (검색 조건이 '공개'일 때만 선택 가능)
+                _filter_now = str(st.session_state.get("worklog_filter", "전체") or "전체")
+                worklog_public_scope = st.selectbox(
+                    "기록 범위 (공개 조회 시)",
+                    ["👤 내 기록", "👥 전체 기록"],
+                    key="worklog_public_scope",
+                    disabled=(_filter_now != "🌐 공개"),
+                    help="아래 검색 조건에서 ‘🌐 공개’를 고르면 선택할 수 있습니다. 내 기록은 본인이 작성한 공개 기록만, 전체 기록은 모든 사용자의 공개 기록을 조회합니다.",
                 )
-                worklog_public_scope = "👤 내 기록"
-                if worklog_filter == "🌐 공개":
-                    worklog_public_scope = st.selectbox(
-                        "공개 기록 범위",
-                        ["👤 내 기록", "👥 전체 기록"],
-                        key="worklog_public_scope",
-                        help="내 기록은 로그인한 본인이 작성한 공개 기록만, 전체 기록은 모든 사용자의 공개 기록을 조회합니다.",
+                if _filter_now != "🌐 공개":
+                    worklog_public_scope = "👤 내 기록"
+                # ② 같은 블록 안 좌/우: 검색 조건(공개·비공개·상태) | 검색어(국사·작성자·점검항목)
+                cond_col, text_col = st.columns([1, 1.35], gap="small")
+                with cond_col:
+                    worklog_filter = st.selectbox(
+                        "검색 조건",
+                        ["전체", "🌐 공개", "🔒 내 비공개"] + WORK_LOG_STATUS_OPTIONS,
+                        key="worklog_filter",
                     )
-                worklog_search = st.text_input(
-                    "검색어",
-                    placeholder="국사 · 작성자 · 점검항목 등",
-                    key="worklog_search",
-                    label_visibility="collapsed",
-                ).strip()
+                with text_col:
+                    worklog_search = st.text_input(
+                        "검색어",
+                        placeholder="국사 · 작성자 · 점검항목 등",
+                        key="worklog_search",
+                    ).strip()
+                # ③ 불러오기
                 refresh_worklog = st.button(
                     "🔄 불러오기",
                     use_container_width=True,
                     type="primary",
                     key="worklog_refresh",
                 )
+
+        # 불러오기를 누른 즉시(데이터를 읽어 오기 전에) 조회창닫기 버튼부터 화면에 나타나게 합니다.
+        # Streamlit은 실행 중 만들어진 요소를 바로 화면에 내보내므로, 느린 시트 조회보다 앞에 두면 동시에 활성화됩니다.
+        if refresh_worklog or isinstance(st.session_state.get("worklog_df"), pd.DataFrame):
+            st.button("✕ 조회창닫기", key="worklog_float_close", on_click=_worklog_close_loaded_results)
 
         if refresh_worklog:
             with st.spinner("Google Sheets에서 MY WORK LOG를 불러오는 중입니다..."):
@@ -8658,9 +8714,6 @@ with tab_worklog:
                             if record_id and active_detail_id == record_id and active_ui_key == ui_record_key:
                                 _render_worklog_inline_detail(log, record_id)
 
-        if isinstance(st.session_state.get("worklog_df"), pd.DataFrame):
-            # 조회 결과가 길어져도 항상 같은 자리(화면 오른쪽 가장자리)에 떠 있는 두 버튼
-            st.button("✕ 조회닫기", key="worklog_float_close", on_click=_worklog_close_loaded_results)
 
 
 
