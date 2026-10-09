@@ -1,9 +1,9 @@
- streamlit>=1.37
-   gspread>=5.12
-   google-auth>=2.20
-   pandas
-   openpyxl
-   pytz
-   requests
-   Pillow
-   pillow-heif>=1.1.1
+streamlit>=1.37
+gspread>=5.12
+google-auth>=2.20
+pandas
+openpyxl
+pytz
+requests
+Pillow
+pillow-heif>=1.1.1
