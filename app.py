@@ -3752,20 +3752,72 @@ _DEVICES_CACHE_LOCK = _PS["devices_cache_lock"]
 _DEVICES_CACHE_TTL_SECONDS = 45
 
 
-def _device_supported() -> bool:
-    """서버가 요청 쿠키를 읽을 수 있는 Streamlit 버전인지 확인합니다. (st.context, 1.37+)"""
+_DEVICE_BRIDGE_HTML = """<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0">
+<script>
+(function () {
+  function send(type, data) { window.parent.postMessage(Object.assign({isStreamlitMessage: true, type: type}, data), "*"); }
+  function rnd() {
+    var a = new Uint8Array(32); (window.crypto || window.msCrypto).getRandomValues(a);
+    return Array.prototype.map.call(a, function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
+  }
+  var info = {token: '', model: '', platform: '', ua: (navigator.userAgent || ''), ls: true};
+  try {
+    var tok = localStorage.getItem('sw_dev') || '';
+    if (!/^[0-9a-f]{64}$/.test(tok)) { tok = rnd(); localStorage.setItem('sw_dev', tok); }
+    info.token = tok;
+  } catch (e) { info.ls = false; info.token = rnd(); }
+  function done() { send('streamlit:setComponentValue', {value: info, dataType: 'json'}); }
+  send('streamlit:componentReady', {apiVersion: 1});
+  send('streamlit:setFrameHeight', {height: 0});
+  var uad = navigator.userAgentData;
+  if (uad && uad.getHighEntropyValues) {
+    uad.getHighEntropyValues(['model', 'platform']).then(function (v) { info.model = v.model || ''; info.platform = v.platform || ''; done(); }).catch(done);
+  } else { done(); }
+})();
+</script></body></html>"""
+
+
+@st.cache_resource(show_spinner=False)
+def _device_bridge_component():
+    """브라우저(localStorage)의 단말 토큰·모델을 서버로 돌려주는 숨은 컴포넌트를 준비합니다."""
+    root = os.path.join(tempfile.gettempdir(), "smartpowerfield_bridge")
+    os.makedirs(root, exist_ok=True)
+    path = os.path.join(root, "index.html")
     try:
-        return hasattr(st, "context") and st.context.cookies is not None
-    except Exception:
-        return False
+        current = open(path, encoding="utf-8").read()
+    except OSError:
+        current = ""
+    if current != _DEVICE_BRIDGE_HTML:
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(_DEVICE_BRIDGE_HTML)
+    return components.declare_component("sw_device_bridge", path=root)
+
+
+def _device_bridge_read() -> dict | None:
+    """숨은 컴포넌트를 그리고, 브라우저가 보낸 값이 있으면 세션에 보관합니다. 아직 못 받았으면 None."""
+    try:
+        value = _device_bridge_component()(key="sw_device_bridge_v1", default=None)
+    except Exception as error:
+        logger.warning("단말 브리지 실행 실패: %s", error)
+        return None
+    if isinstance(value, dict) and re.fullmatch(r"[0-9a-f]{64}", str(value.get("token", ""))):
+        st.session_state["_dev_info"] = {
+            "token": str(value["token"]), "model": str(value.get("model", "") or "")[:60],
+            "ua": str(value.get("ua", "") or "")[:300], "ls": bool(value.get("ls", True)),
+        }
+        return st.session_state["_dev_info"]
+    return None
+
+
+def _device_supported() -> bool:
+    return True
 
 
 def _device_token_from_cookie() -> str:
-    try:
-        token = str(st.context.cookies.get(WORK_LOG_DEVICE_COOKIE, "") or "")
-    except Exception:
-        return ""
-    return token if re.fullmatch(r"[0-9a-f]{64}", token) else ""
+    """(이름은 이전 버전과의 호환용) 브라우저가 보내 준 단말 토큰. 저장소를 못 쓰는 브라우저(시크릿 모드 등)는 빈 값."""
+    info = st.session_state.get("_dev_info") or {}
+    token = str(info.get("token", "") or "")
+    return token if info.get("ls", True) and re.fullmatch(r"[0-9a-f]{64}", token) else ""
 
 
 def _device_hash(token: str) -> str:
@@ -3778,6 +3830,8 @@ def _device_ua_info() -> dict:
         ua = str(st.context.headers.get("User-Agent", "") or "")
     except Exception:
         ua = ""
+    if not ua:
+        ua = str((st.session_state.get("_dev_info") or {}).get("ua", "") or "")
     low = ua.lower()
     if "android" in low:
         kind = "android"
@@ -3820,14 +3874,9 @@ def _device_ua_info() -> dict:
         # Chrome의 축소 UA는 모델을 'K'로 감추므로 무시하고 JS 힌트를 우선 사용합니다.
         if candidate and candidate.upper() not in {"K", "MOBILE", "LINUX", "WV"} and len(candidate) >= 2:
             model = candidate
-    try:
-        hint = str(st.context.cookies.get(WORK_LOG_DEVICE_MODEL_COOKIE, "") or "")
-    except Exception:
-        hint = ""
-    if "|" in hint:
-        hint_model = hint.split("|", 1)[1].strip()
-        if hint_model and hint_model.upper() not in {"K", "NA"}:
-            model = hint_model[:60]
+    hint_model = str((st.session_state.get("_dev_info") or {}).get("model", "") or "").strip()
+    if hint_model and hint_model.upper() not in {"K", "NA"}:
+        model = hint_model[:60]
     return {
         "kind": kind,
         "browser": browser,
@@ -3846,48 +3895,6 @@ def _device_compatible(stored_kind: str, stored_model: str, info: dict) -> bool:
     if stored_model and current_model and stored_model != current_model:
         return False
     return True
-
-
-def _device_bootstrap_script() -> None:
-    """브라우저에 단말 고유 토큰(쿠키)을 만들고 모델 힌트를 기록합니다. 토큰은 서버에 해시로만 저장됩니다."""
-    script = """
-<script>
-(function () {
-  try {
-    var P = window.parent, D = P.document;
-    var TOKEN = "__TOKEN__", MODEL = "__MODEL__";
-    function getC(n) { var m = D.cookie.match(new RegExp('(?:^|; )' + n + '=([^;]*)')); return m ? decodeURIComponent(m[1]) : ''; }
-    function setC(n, v, age) {
-      D.cookie = n + '=' + encodeURIComponent(v) + '; Max-Age=' + age + '; Path=/; SameSite=Lax' + (P.location.protocol === 'https:' ? '; Secure' : '');
-    }
-    var tok = getC(TOKEN);
-    if (!/^[0-9a-f]{64}$/.test(tok)) {
-      try { tok = P.localStorage.getItem(TOKEN) || ''; } catch (e) { tok = ''; }
-      if (!/^[0-9a-f]{64}$/.test(tok)) {
-        var a = new Uint8Array(32); P.crypto.getRandomValues(a);
-        tok = Array.prototype.map.call(a, function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
-      }
-      setC(TOKEN, tok, 31536000);
-      try { P.localStorage.setItem(TOKEN, tok); } catch (e) {}
-      if (getC(TOKEN) === tok) {
-        if (!P.sessionStorage.getItem('sw_dev_reload')) { P.sessionStorage.setItem('sw_dev_reload', '1'); P.location.reload(); return; }
-      } else if (P.location.search.indexOf('nodev=1') < 0) {
-        var u = new URL(P.location.href); u.searchParams.set('nodev', '1'); P.location.replace(u.toString()); return;
-      }
-    }
-    if (!getC(MODEL)) {
-      var uad = P.navigator.userAgentData;
-      if (uad && uad.getHighEntropyValues) {
-        uad.getHighEntropyValues(['model', 'platform']).then(function (v) {
-          setC(MODEL, (v.platform || 'na') + '|' + (v.model || 'na'), 31536000);
-        }).catch(function () { setC(MODEL, 'na|na', 31536000); });
-      } else { setC(MODEL, 'na|na', 31536000); }
-    }
-  } catch (e) {}
-})();
-</script>
-""".replace("__TOKEN__", WORK_LOG_DEVICE_COOKIE).replace("__MODEL__", WORK_LOG_DEVICE_MODEL_COOKIE)
-    components.html(script, height=0)
 
 
 def _device_ensure_sheet(spreadsheet):
@@ -4282,26 +4289,35 @@ def _render_quick_upgrade_gate(user: dict) -> None:
     st.button("로그아웃", key="gate_upgrade_logout", on_click=_worklog_logout)
 
 
+if hasattr(st, "fragment"):
+    @st.fragment(run_every=2)
+    def _device_wait_tick():
+        ticks = int(st.session_state.get("_dev_wait_ticks", 0) or 0) + 1
+        st.session_state["_dev_wait_ticks"] = ticks
+        if ticks >= 4:   # 약 8초 안에 단말 정보를 못 받으면 단말 기억 없이 진행합니다.
+            st.session_state["device_skip"] = True
+            st.rerun()
+else:
+    def _device_wait_tick():
+        return None
+
+
 def _app_auth_gate() -> dict:
     """앱 전체 진입 게이트. 인증되면 사용자 dict를 반환하고, 아니면 인증 화면을 그린 뒤 실행을 멈춥니다."""
-    device_enabled = _device_supported() and "nodev" not in st.query_params and not st.session_state.get("device_skip")
-    token = _device_token_from_cookie() if device_enabled else ""
-
+    device_enabled = not st.session_state.get("device_skip")
     if device_enabled:
-        if not token:
-            _device_bootstrap_script()
+        bridge = _device_bridge_read()          # 숨은 컴포넌트: 브라우저가 단말 토큰을 서버로 돌려줍니다.
+        if bridge is None:
             st.info("🔄 이 단말을 확인하는 중입니다. 잠시만 기다려 주세요…")
-            if st.button("단말 기억 없이 계속", key="device_skip_btn"):
+            st.caption("몇 초 안에 넘어가지 않으면 자동으로 사용자 인증 화면으로 이동합니다.")
+            if st.button("지금 사용자 인증으로 이동", key="device_skip_btn"):
                 st.session_state["device_skip"] = True
                 st.rerun()
+            _device_wait_tick()
             st.stop()
-        elif not st.session_state.get("device_model_hint_ready"):
-            _device_bootstrap_script()
-            try:
-                if st.context.cookies.get(WORK_LOG_DEVICE_MODEL_COOKIE):
-                    st.session_state["device_model_hint_ready"] = True
-            except Exception:
-                pass
+        if not bridge.get("ls", True):
+            device_enabled = False               # 시크릿 모드 등 저장소를 쓸 수 없으면 단말 기억 없이 인증만 사용
+    token = _device_token_from_cookie() if device_enabled else ""
 
     user = _worklog_current_user()
 
@@ -4798,18 +4814,14 @@ def _render_status_strip(user: dict) -> None:
     method = "신뢰 단말" if st.session_state.get("auth_via_device") else "인증코드"
     saved = st.session_state.get("_draft_saved_at", "")
     saved_text = f"💾 임시저장 {saved}" if saved else "💾 입력 내용은 자동 임시저장됩니다"
-    strip_col, logout_col = st.columns([5.2, 1.2], gap="small", vertical_alignment="center")
-    with strip_col:
-        st.markdown(
-            '<div class="spf-strip">'
-            f'<span class="spf-chip user">👤 {html.escape(str(user.get("name", "")))}</span>'
-            f'<span class="spf-chip ok">🔐 {method}</span>'
-            f'<span class="spf-chip">{saved_text}</span>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-    with logout_col:
-        st.button("로그아웃", key="spf_strip_logout", use_container_width=True, on_click=_worklog_logout)
+    st.markdown(
+        '<div class="spf-strip">'
+        f'<span class="spf-chip user">👤 {html.escape(str(user.get("name", "")))}</span>'
+        f'<span class="spf-chip ok">🔐 {method}</span>'
+        f'<span class="spf-chip">{saved_text}</span>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
 
 
 def _idle_lock_minutes() -> int:
@@ -4940,7 +4952,7 @@ def _worklog_login_dialog_body() -> None:
 
 if hasattr(st, "dialog"):
     _worklog_login_dialog = st.dialog(
-        "🔐 MY WORK LOG 개인 인증",
+        "🔐 사용자 인증 · 본인 확인",
     )(_worklog_login_dialog_body)
 else:
     _worklog_login_dialog = _worklog_login_dialog_body
@@ -7300,7 +7312,28 @@ with tab_worklog:
         border:none !important;
         border-radius:10px !important;
     }
-    .worklog-close-safe-space { height:72px; }
+    /* 조회 결과 화면의 고정 버튼: 최근 기록 박스 오른쪽, 항상 같은 위치 */
+    .st-key-worklog_float_top, .st-key-worklog_float_close {
+        position:fixed !important; right:14px; z-index:1000; width:132px !important; margin:0 !important;
+    }
+    .st-key-worklog_float_close { bottom:84px; }
+    .st-key-worklog_float_top { bottom:140px; }
+    .st-key-worklog_float_top button, .st-key-worklog_float_close button {
+        min-height:46px !important; font-weight:950 !important; border:none !important; border-radius:12px !important;
+        color:#FFFFFF !important; box-shadow:0 8px 22px rgba(15,23,42,.28) !important; width:100% !important;
+        padding:0 6px !important; white-space:nowrap !important;
+    }
+    .st-key-worklog_float_top button p, .st-key-worklog_float_close button p {
+        font-size:.9rem !important; white-space:nowrap !important; margin:0 !important;
+    }
+    .st-key-worklog_float_top button { background:linear-gradient(135deg,#2980B9,#1F3A5F) !important; }
+    .st-key-worklog_float_close button { background:#D71920 !important; }
+    @media (max-width:768px) {
+        .st-key-worklog_float_top, .st-key-worklog_float_close { right:6px; width:112px !important; }
+        .st-key-worklog_float_close { bottom:72px; }
+        .st-key-worklog_float_top { bottom:126px; }
+        .st-key-worklog_float_top button p, .st-key-worklog_float_close button p { font-size:.8rem !important; }
+    }
 
     @media (max-width:768px) {
         .worklog-overview { grid-template-columns:1fr; gap:7px; margin:6px 0 10px; }
@@ -7651,6 +7684,9 @@ with tab_worklog:
         if "worklog_selected_ui_key" not in st.session_state:
             st.session_state["worklog_selected_ui_key"] = ""
 
+        def _worklog_go_top():
+            st.session_state["worklog_scroll_to_top"] = True
+
         def _worklog_close_loaded_results():
             """조회 결과만 닫고 새 현장기록 작성 중 입력값은 보존한 뒤 WORK LOG 상단으로 이동합니다."""
             st.session_state["worklog_df"] = None
@@ -7680,57 +7716,38 @@ with tab_worklog:
                 unsafe_allow_html=True,
             )
 
-        # V15: 공개 조회는 "내 기록 / 전체 기록"을 선택할 수 있게 하고 검색어 폭을 줄입니다.
-        public_filter_for_layout = str(st.session_state.get("worklog_filter", "전체") or "전체") == "🌐 공개"
-        if public_filter_for_layout:
-            search_condition_col, public_scope_col, search_text_col, search_load_col = st.columns(
-                [0.24, 0.23, 0.31, 0.22], gap="small", vertical_alignment="bottom"
-            )
-        else:
-            search_condition_col, search_text_col, search_load_col = st.columns(
-                [0.30, 0.46, 0.24], gap="small", vertical_alignment="bottom"
-            )
-            public_scope_col = None
+        entry_col, recent_col = st.columns([0.94, 1.06], gap="large")
 
-        with search_condition_col:
-            st.markdown('<div class="worklog-search-row-marker"></div>', unsafe_allow_html=True)
-            worklog_filter = st.selectbox(
-                "검색 조건",
-                ["전체", "🌐 공개", "🔒 내 비공개"] + WORK_LOG_STATUS_OPTIONS,
-                key="worklog_filter",
-            )
-
-        worklog_public_scope = str(st.session_state.get("worklog_public_scope", "👤 내 기록") or "👤 내 기록")
-        if worklog_filter == "🌐 공개":
-            # Streamlit은 위젯 변경 시 즉시 rerun되므로 공개 선택 이후에는 4열 레이아웃으로 다시 그려집니다.
-            if public_scope_col is not None:
-                with public_scope_col:
-                    st.markdown('<div class="worklog-public-scope-marker"></div>', unsafe_allow_html=True)
+        # 오른쪽 열 맨 위: 왼쪽 '📝 새 현장기록'과 같은 위치·같은 크기의 제목 + 검색 패널
+        with recent_col:
+            st.markdown('<div class="worklog-entry-title">🔎 검색 조건</div>', unsafe_allow_html=True)
+            with st.container(border=True):
+                worklog_filter = st.selectbox(
+                    "검색 조건",
+                    ["전체", "🌐 공개", "🔒 내 비공개"] + WORK_LOG_STATUS_OPTIONS,
+                    key="worklog_filter",
+                    label_visibility="collapsed",
+                )
+                worklog_public_scope = "👤 내 기록"
+                if worklog_filter == "🌐 공개":
                     worklog_public_scope = st.selectbox(
                         "공개 기록 범위",
                         ["👤 내 기록", "👥 전체 기록"],
                         key="worklog_public_scope",
                         help="내 기록은 로그인한 본인이 작성한 공개 기록만, 전체 기록은 모든 사용자의 공개 기록을 조회합니다.",
                     )
-            else:
-                st.session_state["worklog_public_scope"] = "👤 내 기록"
-                worklog_public_scope = "👤 내 기록"
-        else:
-            worklog_public_scope = "👤 내 기록"
-
-        with search_text_col:
-            worklog_search = st.text_input(
-                "검색어",
-                placeholder="국사 · 작성자 · 점검항목 등",
-                key="worklog_search",
-            ).strip()
-        with search_load_col:
-            refresh_worklog = st.button(
-                "🔄 불러오기",
-                use_container_width=True,
-                type="primary",
-                key="worklog_refresh",
-            )
+                worklog_search = st.text_input(
+                    "검색어",
+                    placeholder="국사 · 작성자 · 점검항목 등",
+                    key="worklog_search",
+                    label_visibility="collapsed",
+                ).strip()
+                refresh_worklog = st.button(
+                    "🔄 불러오기",
+                    use_container_width=True,
+                    type="primary",
+                    key="worklog_refresh",
+                )
 
         if refresh_worklog:
             with st.spinner("Google Sheets에서 MY WORK LOG를 불러오는 중입니다..."):
@@ -7789,8 +7806,6 @@ with tab_worklog:
         )
         if st.session_state.get("worklog_loaded_at"):
             st.caption(f"최근 기록 조회시각: {st.session_state['worklog_loaded_at']} · 화면 진입만으로는 Google Sheets를 자동 조회하지 않습니다.")
-
-        entry_col, recent_col = st.columns([0.94, 1.06], gap="large")
 
         with entry_col:
             st.markdown('<div class="worklog-entry-title">📝 새 현장기록</div>', unsafe_allow_html=True)
@@ -8474,7 +8489,7 @@ with tab_worklog:
         with recent_col:
             st.markdown('<div class="worklog-recent-marker"></div>', unsafe_allow_html=True)
             with st.container(border=True):
-                st.markdown('<div class="worklog-section-title">🕘 최근 기록</div>', unsafe_allow_html=True)
+                st.markdown('<div class="worklog-entry-title">🕘 최근 기록</div>', unsafe_allow_html=True)
 
                 if not isinstance(loaded_df, pd.DataFrame):
                     st.info("검색 조건과 검색어를 정한 뒤 ‘불러오기’를 누르면 최근 현장이력이 표시됩니다.")
@@ -8609,14 +8624,9 @@ with tab_worklog:
                                 _render_worklog_inline_detail(log, record_id)
 
         if isinstance(st.session_state.get("worklog_df"), pd.DataFrame):
-            st.markdown('<div class="worklog-close-safe-space"></div>', unsafe_allow_html=True)
-            st.markdown('<div class="worklog-sticky-close-marker"></div>', unsafe_allow_html=True)
-            st.button(
-                "✕ 조회 닫기",
-                key="worklog_results_close",
-                use_container_width=True,
-                on_click=_worklog_close_loaded_results,
-            )
+            # 조회 결과가 길어져도 항상 같은 자리(화면 오른쪽 가장자리)에 떠 있는 두 버튼
+            st.button("⬆ 처음으로 가기", key="worklog_float_top", on_click=_worklog_go_top)
+            st.button("✕ 조회닫기", key="worklog_float_close", on_click=_worklog_close_loaded_results)
 
 
 
