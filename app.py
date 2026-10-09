@@ -4675,7 +4675,7 @@ def _drafts_autosave(user: dict) -> None:
 AUDIT_SHEET_NAME = "MY_WORK_LOG_AUDIT"
 AUDIT_HEADERS = ["일시", "사용자ID", "이름", "이벤트", "상세", "접속IP(마스킹)", "단말"]
 APP_DISPLAY_NAME = "SMART POWER FIELD"
-APP_VERSION_TEXT = "v7.0 · 사용자 인증 · 신뢰 단말 · 자동 임시저장"
+APP_VERSION_TEXT = "v7.2 · 2026.10.09 · 사용자 인증 · 신뢰 단말"
 
 
 def _mask_ip(ip: str) -> str:
@@ -4807,20 +4807,60 @@ def _power_sanity_warnings(payload: dict) -> list[str]:
     return warnings
 
 
-def _render_status_strip(user: dict) -> None:
-    """상단 상태 표시줄: 누가 · 어떤 방식으로 인증됐고 · 임시저장이 언제 됐는지를 항상 보여 줍니다."""
-    if not user:
-        return
-    method = "신뢰 단말" if st.session_state.get("auth_via_device") else "인증코드"
-    saved = st.session_state.get("_draft_saved_at", "")
-    saved_text = f"💾 임시저장 {saved}" if saved else "💾 입력 내용은 자동 임시저장됩니다"
-    st.markdown(
-        '<div class="spf-strip">'
-        f'<span class="spf-chip user">👤 {html.escape(str(user.get("name", "")))}</span>'
-        f'<span class="spf-chip ok">🔐 {method}</span>'
-        f'<span class="spf-chip">{saved_text}</span>'
-        '</div>',
-        unsafe_allow_html=True,
+def _render_scroll_top_button() -> None:
+    """화면을 아래로 스크롤하면 나타나는 '처음으로 가기' 떠 있는 버튼. 화면 이동은 브라우저에서 즉시 처리됩니다."""
+    components.html(
+        """
+<script>
+(function () {
+  try {
+    var P = window.parent, D = P.document;
+    if (!D.getElementById('spf-top-style')) {
+      var st = D.createElement('style'); st.id = 'spf-top-style';
+      st.textContent =
+        '#spf-top-btn{position:fixed;right:14px;bottom:140px;z-index:1000;width:132px;height:46px;border:none;border-radius:12px;' +
+        'background:linear-gradient(135deg,#2E7D32,#1B5E20);color:#fff;font-weight:900;font-size:.9rem;white-space:nowrap;cursor:pointer;' +
+        'box-shadow:0 8px 22px rgba(15,23,42,.28);display:none;font-family:inherit;padding:0 6px}' +
+        '#spf-top-btn.show{display:block}#spf-top-btn:active{transform:translateY(1px)}' +
+        '@media (max-width:768px){#spf-top-btn{right:6px;width:112px;bottom:126px;font-size:.8rem}}';
+      D.head.appendChild(st);
+    }
+    var btn = D.getElementById('spf-top-btn');
+    if (!btn) {
+      btn = D.createElement('button'); btn.id = 'spf-top-btn'; btn.type = 'button';
+      btn.setAttribute('aria-label', '화면 맨 위로'); btn.textContent = '⬆ 처음으로 가기';
+      D.body.appendChild(btn);
+    }
+    function scrollers() {
+      return [D.querySelector('section.main'), D.querySelector('[data-testid="stMain"]'),
+              D.querySelector('[data-testid="stAppViewContainer"]'), D.scrollingElement, D.documentElement].filter(Boolean);
+    }
+    function pos() { var m = 0; scrollers().forEach(function (c) { m = Math.max(m, c.scrollTop || 0); }); return Math.max(m, P.scrollY || 0); }
+    function update() { var b = D.getElementById('spf-top-btn'); if (b) { b.classList.toggle('show', pos() > 240); } }
+    btn.onclick = function () {
+      scrollers().forEach(function (c) { try { c.scrollTo({top: 0, behavior: 'smooth'}); } catch (e) { c.scrollTop = 0; } });
+      try { P.scrollTo({top: 0, behavior: 'smooth'}); } catch (e) {}
+      // 부드러운 이동이 막힌 환경(절전·백그라운드 등)에서도 반드시 맨 위로 가도록 보정합니다.
+      setTimeout(function () {
+        if (pos() > 5) {
+          scrollers().forEach(function (c) { c.scrollTop = 0; });
+          try { P.scrollTo(0, 0); } catch (e) {}
+        }
+        update();
+      }, 1200);
+    };
+    if (!P.__spfTopBound) {
+      P.__spfTopBound = true;
+      D.addEventListener('scroll', update, true);
+      P.addEventListener('resize', update);
+      setInterval(update, 500);
+    }
+    update();
+  } catch (e) {}
+})();
+</script>
+""",
+        height=0,
     )
 
 
@@ -6815,7 +6855,7 @@ st.markdown("""
     <span>SMART POWER <b>FIELD</b></span>
   </div>
   <div class="smart-work-brand-subtitle">ktMOS북부 · 전원시설 현장업무 플랫폼</div>
-  <div class="smart-work-brand-version">v7.0 · 사용자 인증 · 신뢰 단말 · 자동 임시저장</div>
+  <div class="smart-work-brand-version">v7.2 · 2026.10.09 · 사용자 인증 · 신뢰 단말</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -7097,10 +7137,103 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+def _render_account_bar(auth_user: dict) -> None:
+    """맨 위 계정 줄: 로그인한 사용자 + 🔑 인증정보 + 로그아웃 (모든 탭에서 같은 자리)."""
+    user_employee = str(auth_user.get("employee_no", "") or "")
+    masked_employee = ("••••" + user_employee[-4:]) if len(user_employee) >= 4 else user_employee
+    userbar_col, auth_manage_col, logout_col = st.columns([5.2, 1.8, 1.25], gap="small", vertical_alignment="center")
+    with userbar_col:
+        st.markdown(
+            f'<div class="worklog-userbar"><div><div class="name">👤 {html.escape(str(auth_user.get("name","")))}</div>'
+            f'<div class="meta">사용자 인증 완료 · 사번 {html.escape(masked_employee)}</div></div></div>',
+            unsafe_allow_html=True,
+        )
+    with auth_manage_col:
+        if st.button("🔑 인증정보", key="worklog_auth_settings_toggle", use_container_width=True):
+            st.session_state["worklog_show_auth_settings"] = not bool(st.session_state.get("worklog_show_auth_settings", False))
+    with logout_col:
+        st.button("로그아웃", key="worklog_logout", use_container_width=True, on_click=_worklog_logout)
+
+    if st.session_state.get("worklog_show_auth_settings"):
+        with st.container(border=True):
+            st.markdown("#### 🔐 사용자 인증코드 변경")
+            st.caption(f"사용자 인증에 쓰는 영문+숫자 {WORK_LOG_QUICK_LEN}자리 코드를 변경합니다.")
+            with st.form("worklog_quick_code_change_form", clear_on_submit=True):
+                current_quick = st.text_input("현재 인증코드", type="password", max_chars=WORK_LOG_QUICK_LEN)
+                new_quick = st.text_input("새 인증코드", type="password", max_chars=WORK_LOG_QUICK_LEN)
+                new_quick_confirm = st.text_input("새 인증코드 확인", type="password", max_chars=WORK_LOG_QUICK_LEN)
+                quick_change_submit = st.form_submit_button(
+                    "인증코드 변경",
+                    type="primary",
+                    use_container_width=True,
+                )
+            if quick_change_submit:
+                verify_ok, verify_message = _worklog_verify_code_for_current_user(current_quick)
+                if not verify_ok:
+                    st.error(f"현재 인증코드를 확인하지 못했습니다. {verify_message}")
+                else:
+                    quick_ok, quick_message = _worklog_set_quick_code(
+                        user_employee,
+                        new_quick,
+                        new_quick_confirm,
+                    )
+                    if quick_ok:
+                        _audit_log("인증코드 변경", "")
+                        st.success(quick_message)
+                        time.sleep(0.35)
+                        st.rerun()
+                    else:
+                        st.error(quick_message)
+
+            st.markdown("#### 📱 신뢰 단말 관리")
+            st.caption(
+                f"신뢰 단말에서는 사용자 인증을 다시 묻지 않습니다. 최대 {WORK_LOG_DEVICE_MAX_PER_USER}대까지 등록되며, "
+                f"{WORK_LOG_DEVICE_TTL_DAYS}일 이상 사용하지 않거나 단말 모델이 바뀌면 다시 인증합니다."
+            )
+            current_device_token = _device_token_from_cookie()
+            current_device_hash = _device_hash(current_device_token) if current_device_token else ""
+            my_devices = _devices_for_user(str(auth_user.get("user_id", "") or ""))
+            if not my_devices:
+                st.info("등록된 신뢰 단말이 없습니다.")
+            for device_row_no, device_rec in my_devices:
+                is_this_device = bool(current_device_hash) and str(device_rec.get("토큰해시", "")) == current_device_hash
+                dev_c1, dev_c2 = st.columns([4.2, 1.4], gap="small", vertical_alignment="center")
+                with dev_c1:
+                    st.markdown(
+                        f"**{'📍 이 단말 · ' if is_this_device else ''}{html.escape(str(device_rec.get('단말요약', '') or '단말'))}**  \n"
+                        f"등록 {device_rec.get('등록일시', '')} · 최근 접속 {device_rec.get('최근접속', '')}"
+                    )
+                with dev_c2:
+                    if st.button("해제", key=f"worklog_device_revoke_{device_row_no}", use_container_width=True):
+                        _device_revoke_row(device_row_no)
+                        st.rerun()
+
+            st.markdown("#### 🔐 복구용 개인 PIN 변경")
+            st.caption("사용자 인증코드를 잊었을 때 사번과 함께 사용하는 숫자 6자리 PIN입니다.")
+            with st.form("worklog_regular_pin_change_form", clear_on_submit=True):
+                current_pin = st.text_input("현재 복구 PIN", type="password", max_chars=6)
+                new_pin = st.text_input("새 복구 PIN", type="password", max_chars=6)
+                new_pin_confirm = st.text_input("새 복구 PIN 확인", type="password", max_chars=6)
+                pin_change_submit = st.form_submit_button("복구 PIN 변경", use_container_width=True)
+            if pin_change_submit:
+                verify_ok, verify_message, _ = _worklog_authenticate_user(user_employee, current_pin)
+                if not verify_ok:
+                    st.error(f"현재 복구 PIN 확인 실패: {verify_message}")
+                else:
+                    pin_ok, pin_message = _worklog_change_pin(user_employee, new_pin, new_pin_confirm)
+                    if pin_ok:
+                        st.success(pin_message)
+                        time.sleep(0.35)
+                        st.rerun()
+                    else:
+                        st.error(pin_message)
+
+
 # 사용자 인증 게이트: 신뢰 단말이면 자동 통과, 아니면 사용자 인증코드를 확인한 뒤에만 아래 화면을 그립니다.
 _gate_user = _app_auth_gate()
 _drafts_restore_once(_gate_user)
-_render_status_strip(_gate_user)
+_render_account_bar(_gate_user)
+_render_scroll_top_button()
 _render_photo_jobs_panel()
 
 tab_worklog, tab_power, tab_admin = st.tabs([
@@ -7313,26 +7446,21 @@ with tab_worklog:
         border-radius:10px !important;
     }
     /* 조회 결과 화면의 고정 버튼: 최근 기록 박스 오른쪽, 항상 같은 위치 */
-    .st-key-worklog_float_top, .st-key-worklog_float_close {
-        position:fixed !important; right:14px; z-index:1000; width:132px !important; margin:0 !important;
+    .st-key-worklog_float_close {
+        position:fixed !important; right:14px; z-index:1000; width:132px !important; margin:0 !important; bottom:84px;
     }
-    .st-key-worklog_float_close { bottom:84px; }
-    .st-key-worklog_float_top { bottom:140px; }
-    .st-key-worklog_float_top button, .st-key-worklog_float_close button {
+    .st-key-worklog_float_close button {
         min-height:46px !important; font-weight:950 !important; border:none !important; border-radius:12px !important;
         color:#FFFFFF !important; box-shadow:0 8px 22px rgba(15,23,42,.28) !important; width:100% !important;
         padding:0 6px !important; white-space:nowrap !important;
     }
-    .st-key-worklog_float_top button p, .st-key-worklog_float_close button p {
+    .st-key-worklog_float_close button p {
         font-size:.9rem !important; white-space:nowrap !important; margin:0 !important;
     }
-    .st-key-worklog_float_top button { background:linear-gradient(135deg,#2980B9,#1F3A5F) !important; }
-    .st-key-worklog_float_close button { background:#D71920 !important; }
+    .st-key-worklog_float_close button { background:linear-gradient(135deg,#2E7D32,#1B5E20) !important; }
     @media (max-width:768px) {
-        .st-key-worklog_float_top, .st-key-worklog_float_close { right:6px; width:112px !important; }
-        .st-key-worklog_float_close { bottom:72px; }
-        .st-key-worklog_float_top { bottom:126px; }
-        .st-key-worklog_float_top button p, .st-key-worklog_float_close button p { font-size:.8rem !important; }
+        .st-key-worklog_float_close { right:6px; width:112px !important; bottom:72px; }
+        .st-key-worklog_float_close button p { font-size:.8rem !important; }
     }
 
     @media (max-width:768px) {
@@ -7585,96 +7713,6 @@ with tab_worklog:
             _worklog_reset_entry_widgets()
             st.session_state["worklog_entry_reset_completed"] = True
 
-        user_employee = str(auth_user.get("employee_no", "") or "")
-        masked_employee = ("••••" + user_employee[-4:]) if len(user_employee) >= 4 else user_employee
-        userbar_col, auth_manage_col, logout_col = st.columns([5.2, 1.8, 1.25], gap="small", vertical_alignment="center")
-        with userbar_col:
-            st.markdown(
-                f'<div class="worklog-userbar"><div><div class="name">👤 {html.escape(str(auth_user.get("name","")))}</div>'
-                f'<div class="meta">사용자 인증 완료 · 사번 {html.escape(masked_employee)}'
-                f'{" · 신뢰 단말" if st.session_state.get("auth_via_device") else ""}</div></div></div>',
-                unsafe_allow_html=True,
-            )
-        with auth_manage_col:
-            if st.button("🔑 인증정보", key="worklog_auth_settings_toggle", use_container_width=True):
-                st.session_state["worklog_show_auth_settings"] = not bool(st.session_state.get("worklog_show_auth_settings", False))
-        with logout_col:
-            st.button("로그아웃", key="worklog_logout", use_container_width=True, on_click=_worklog_logout)
-
-        if st.session_state.get("worklog_show_auth_settings"):
-            with st.container(border=True):
-                st.markdown("#### 🔐 사용자 인증코드 변경")
-                st.caption(f"사용자 인증에 쓰는 영문+숫자 {WORK_LOG_QUICK_LEN}자리 코드를 변경합니다.")
-                with st.form("worklog_quick_code_change_form", clear_on_submit=True):
-                    current_quick = st.text_input("현재 인증코드", type="password", max_chars=WORK_LOG_QUICK_LEN)
-                    new_quick = st.text_input("새 인증코드", type="password", max_chars=WORK_LOG_QUICK_LEN)
-                    new_quick_confirm = st.text_input("새 인증코드 확인", type="password", max_chars=WORK_LOG_QUICK_LEN)
-                    quick_change_submit = st.form_submit_button(
-                        "인증코드 변경",
-                        type="primary",
-                        use_container_width=True,
-                    )
-                if quick_change_submit:
-                    verify_ok, verify_message = _worklog_verify_code_for_current_user(current_quick)
-                    if not verify_ok:
-                        st.error(f"현재 인증코드를 확인하지 못했습니다. {verify_message}")
-                    else:
-                        quick_ok, quick_message = _worklog_set_quick_code(
-                            user_employee,
-                            new_quick,
-                            new_quick_confirm,
-                        )
-                        if quick_ok:
-                            _audit_log("인증코드 변경", "")
-                            st.success(quick_message)
-                            time.sleep(0.35)
-                            st.rerun()
-                        else:
-                            st.error(quick_message)
-
-                st.markdown("#### 📱 신뢰 단말 관리")
-                st.caption(
-                    f"신뢰 단말에서는 사용자 인증을 다시 묻지 않습니다. 최대 {WORK_LOG_DEVICE_MAX_PER_USER}대까지 등록되며, "
-                    f"{WORK_LOG_DEVICE_TTL_DAYS}일 이상 사용하지 않거나 단말 모델이 바뀌면 다시 인증합니다."
-                )
-                current_device_token = _device_token_from_cookie()
-                current_device_hash = _device_hash(current_device_token) if current_device_token else ""
-                my_devices = _devices_for_user(str(auth_user.get("user_id", "") or ""))
-                if not my_devices:
-                    st.info("등록된 신뢰 단말이 없습니다.")
-                for device_row_no, device_rec in my_devices:
-                    is_this_device = bool(current_device_hash) and str(device_rec.get("토큰해시", "")) == current_device_hash
-                    dev_c1, dev_c2 = st.columns([4.2, 1.4], gap="small", vertical_alignment="center")
-                    with dev_c1:
-                        st.markdown(
-                            f"**{'📍 이 단말 · ' if is_this_device else ''}{html.escape(str(device_rec.get('단말요약', '') or '단말'))}**  \n"
-                            f"등록 {device_rec.get('등록일시', '')} · 최근 접속 {device_rec.get('최근접속', '')}"
-                        )
-                    with dev_c2:
-                        if st.button("해제", key=f"worklog_device_revoke_{device_row_no}", use_container_width=True):
-                            _device_revoke_row(device_row_no)
-                            st.rerun()
-
-                st.markdown("#### 🔐 복구용 개인 PIN 변경")
-                st.caption("사용자 인증코드를 잊었을 때 사번과 함께 사용하는 숫자 6자리 PIN입니다.")
-                with st.form("worklog_regular_pin_change_form", clear_on_submit=True):
-                    current_pin = st.text_input("현재 복구 PIN", type="password", max_chars=6)
-                    new_pin = st.text_input("새 복구 PIN", type="password", max_chars=6)
-                    new_pin_confirm = st.text_input("새 복구 PIN 확인", type="password", max_chars=6)
-                    pin_change_submit = st.form_submit_button("복구 PIN 변경", use_container_width=True)
-                if pin_change_submit:
-                    verify_ok, verify_message, _ = _worklog_authenticate_user(user_employee, current_pin)
-                    if not verify_ok:
-                        st.error(f"현재 복구 PIN 확인 실패: {verify_message}")
-                    else:
-                        pin_ok, pin_message = _worklog_change_pin(user_employee, new_pin, new_pin_confirm)
-                        if pin_ok:
-                            st.success(pin_message)
-                            time.sleep(0.35)
-                            st.rerun()
-                        else:
-                            st.error(pin_message)
-
         if "worklog_df" not in st.session_state:
             st.session_state["worklog_df"] = None
         if "worklog_loaded_at" not in st.session_state:
@@ -7683,9 +7721,6 @@ with tab_worklog:
             st.session_state["worklog_selected_id"] = ""
         if "worklog_selected_ui_key" not in st.session_state:
             st.session_state["worklog_selected_ui_key"] = ""
-
-        def _worklog_go_top():
-            st.session_state["worklog_scroll_to_top"] = True
 
         def _worklog_close_loaded_results():
             """조회 결과만 닫고 새 현장기록 작성 중 입력값은 보존한 뒤 WORK LOG 상단으로 이동합니다."""
@@ -8625,7 +8660,6 @@ with tab_worklog:
 
         if isinstance(st.session_state.get("worklog_df"), pd.DataFrame):
             # 조회 결과가 길어져도 항상 같은 자리(화면 오른쪽 가장자리)에 떠 있는 두 버튼
-            st.button("⬆ 처음으로 가기", key="worklog_float_top", on_click=_worklog_go_top)
             st.button("✕ 조회닫기", key="worklog_float_close", on_click=_worklog_close_loaded_results)
 
 
