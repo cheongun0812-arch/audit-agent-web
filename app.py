@@ -2852,7 +2852,7 @@ WORK_LOG_HISTORY_HEADERS = [
 ]
 WORK_LOG_USER_HEADERS = [
     "사용자ID", "이름", "사번", "PIN_SALT", "PIN_HASH", "PIN변경필요", "활성", "최근로그인", "최근PIN변경일시",
-    "QUICK_SALT", "QUICK_HASH", "QUICK설정일시", "QUICK_VER",
+    "QUICK_SALT", "QUICK_HASH", "QUICK설정일시", "QUICK_VER", "RESET_TOKEN",
 ]
 # 사용자 인증코드: 영문+숫자 6자리(신규). 기존 4자리 코드는 로그인만 허용하고 즉시 6자리로 교체하게 합니다.
 WORK_LOG_QUICK_LEN = 6
@@ -3114,8 +3114,9 @@ def _worklog_ensure_headers(worksheet, desired_headers: list[str]) -> list[str]:
 
 def _worklog_ensure_user_sheet(spreadsheet):
     """사용자 시트 준비(생성·헤더 점검·최초 PIN 동기화)는 10분에 한 번만 수행합니다."""
+    # 초기화 요청(Secrets reset_users)이 바뀌면 캐시 키가 달라져 즉시 새로 처리됩니다.
     return _cached_sheet_setup(
-        "worklog_users_sheet",
+        "worklog_users_sheet|" + repr(sorted(_worklog_reset_specs().items())),
         lambda: _worklog_ensure_user_sheet_uncached(spreadsheet),
     )
 
@@ -3183,7 +3184,80 @@ def _worklog_ensure_user_sheet_uncached(spreadsheet):
     if pending_updates:
         _sheet_call(ws.batch_update, pending_updates, value_input_option="USER_ENTERED")
         _worklog_invalidate_users_cache()
+    try:
+        _worklog_apply_admin_resets(ws, headers)
+    except Exception as error:  # 초기화 실패가 로그인 전체를 막지 않도록 합니다.
+        logger.error("관리자 초기화 처리 실패: %s", error)
     return ws
+
+
+def _worklog_reset_specs() -> dict[str, str]:
+    """Secrets [work_log] reset_users = "사번:토큰, 사번:토큰" → {사번: 토큰}.
+
+    같은 토큰은 한 번만 적용됩니다. 같은 사번을 다시 초기화하려면 토큰을 바꾸세요. (예: r1 → r2)
+    """
+    raw = str(_worklog_secret_value("work_log_reset_users", "") or "")
+    specs: dict[str, str] = {}
+    for part in re.split(r"[,\s;]+", raw):
+        if ":" not in part:
+            continue
+        employee_no, token = part.split(":", 1)
+        employee_no = re.sub(r"\D", "", employee_no)
+        token = token.strip()[:40]
+        if employee_no and token:
+            specs[employee_no] = token
+    return specs
+
+
+def _worklog_initial_pin() -> str:
+    override = str(_worklog_secret_value("work_log_initial_pin", "") or "").strip()
+    return override if re.fullmatch(r"\d{6}", override) else WORK_LOG_INITIAL_PIN
+
+
+def _worklog_apply_admin_resets(ws, headers: list[str]) -> int:
+    """관리자 초기화: 지정한 사번의 인증코드·복구 PIN·신뢰 단말을 처음 상태로 되돌립니다.
+
+    초기화 후 사용자는 '사번 + 최초 임시 PIN'으로 본인 확인을 하고 새 사용자 인증코드(6자리)를 설정합니다.
+    """
+    specs = _worklog_reset_specs()
+    if not specs or "사번" not in headers:
+        return 0
+    values = _sheet_call(ws.get_all_values)
+    bootstrap = {u["사번"]: u for u in _worklog_bootstrap_users()}
+    done = 0
+    for row_no, row in enumerate(values[1:], start=2):
+        record = {h: (row[i] if i < len(row) else "") for i, h in enumerate(headers)}
+        employee_no = re.sub(r"\D", "", str(record.get("사번", "") or ""))
+        token = specs.get(employee_no)
+        if not token or str(record.get("RESET_TOKEN", "") or "").strip() == token:
+            continue
+        base = bootstrap.get(employee_no)
+        if base:
+            salt, pin_hash = base["PIN_SALT"], base["PIN_HASH"]
+        else:
+            salt = hashlib.sha256(("smartwork-bootstrap|" + employee_no).encode("utf-8")).hexdigest()[:32]
+            pin_hash = _worklog_hash_pin(_worklog_initial_pin(), salt)
+        _sheet_update_fields(ws, headers, row_no, {
+            "PIN_SALT": salt, "PIN_HASH": pin_hash, "PIN변경필요": "Y", "활성": "Y", "최근PIN변경일시": "",
+            "QUICK_SALT": "", "QUICK_HASH": "", "QUICK설정일시": "", "QUICK_VER": "", "RESET_TOKEN": token,
+        })
+        user_id = str(record.get("사용자ID", "") or "").strip()
+        try:  # 이 사용자의 신뢰 단말도 모두 해제합니다.
+            dev_ws, dev_headers, dev_rows = _devices_read(force=True)
+            if dev_ws is not None:
+                for dev_row_no, dev in dev_rows:
+                    if str(dev.get("사용자ID", "") or "").strip() == user_id and str(dev.get("활성", "")).strip().upper() == "Y":
+                        _sheet_update_fields(dev_ws, dev_headers, dev_row_no, {"활성": "N"})
+                _devices_invalidate()
+        except Exception as error:
+            logger.warning("초기화 중 단말 해제 실패: %s", error)
+        _audit_log("관리자 초기화", f"사번 끝 {employee_no[-4:]}", user={"user_id": user_id, "name": str(record.get("이름", "") or "")})
+        done += 1
+    if done:
+        _worklog_invalidate_users_cache()
+        with _AUTH_LOCK:
+            _AUTH_STATE.clear()   # 잠금 상태도 함께 풀어 줍니다.
+    return done
 
 def _worklog_read_user_by_employee(employee_no: str) -> tuple[object | None, dict, int | None]:
     """사번으로 사용자 시트의 실제 행을 읽습니다. (30초 캐시된 사용자 표 사용)"""
