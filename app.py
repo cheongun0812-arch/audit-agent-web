@@ -4125,7 +4125,7 @@ def _worklog_verify_code_for_current_user(code: str) -> tuple[bool, str]:
 
 def _render_admin_stepup_gate() -> None:
     """관리자 모드 진입 시 사용자 인증코드를 다시 확인합니다. 통과 전에는 이후 화면을 그리지 않습니다."""
-    if _admin_stepup_active():
+    if _auth_mode() == "name" or _admin_stepup_active():
         return
     st.markdown("### 🔒 관리자 모드 · 사용자 인증")
     st.caption(
@@ -4302,8 +4302,65 @@ else:
         return None
 
 
+# ---------- 인증 방식 스위치 (v7.4) ----------
+# 기본값 "name": PIN/인증코드 없이 명단에서 이름만 선택하면 바로 메뉴를 표시합니다.
+# Secrets에 work_log_auth_mode = "pin" 을 넣으면 기존 사용자 인증(인증코드·신뢰 단말)으로 즉시 돌아갑니다.
+def _auth_mode() -> str:
+    return "pin" if str(_worklog_secret_value("work_log_auth_mode", "") or "").strip().lower() == "pin" else "name"
+
+
+def _name_select_gate() -> dict:
+    """이름 선택 접속: 시트 없이 코드/Secrets 명단만 사용합니다."""
+    user = _worklog_current_user()
+    if user:
+        return user
+    roster = [u for u in _worklog_bootstrap_users() if u.get("이름") and u.get("사용자ID")]
+    st.markdown(
+        _auth_card_html("👤 사용자 선택", "본인 이름을 선택하면 바로 시작합니다. 선택한 이름이 기록 작성자로 저장됩니다."),
+        unsafe_allow_html=True,
+    )
+    if not roster:
+        st.error("사용자 명단을 불러오지 못했습니다. 관리자에게 문의해 주세요.")
+        st.stop()
+    labels = [f"{u['이름']} (사번 ••••{str(u.get('사번', ''))[-4:]})" for u in roster]
+    with st.form("name_select_form"):
+        idx = st.selectbox("이름", range(len(roster)), format_func=lambda i: labels[i], index=None, placeholder="이름을 선택하세요")
+        go = st.form_submit_button("▶ 시작하기", type="primary", use_container_width=True)
+    if go:
+        if idx is None:
+            st.warning("이름을 선택해 주세요.")
+        else:
+            u = roster[idx]
+            st.session_state["worklog_auth_user"] = {
+                "user_id": str(u["사용자ID"]).strip(),
+                "name": str(u["이름"]).strip(),
+                "employee_no": re.sub(r"\D", "", str(u.get("사번", "") or "")),
+                "must_change_pin": False,
+                "has_quick_code": True,
+            }
+            for key in ("worklog_pin_change_required", "worklog_quick_setup_required"):
+                st.session_state.pop(key, None)
+            try:
+                _audit_log("로그인(이름 선택)", "", user=st.session_state["worklog_auth_user"])
+            except Exception:
+                pass
+            st.rerun()
+    st.stop()
+
+
+def _name_mode_switch_user() -> None:
+    """이름 선택 모드의 '사용자 변경': 시트·단말 처리 없이 세션만 정리합니다."""
+    for key in (
+        "worklog_auth_user", "worklog_df", "worklog_loaded_at", "worklog_selected_id", "worklog_selected_ui_key",
+        "worklog_delete_pending_id", "worklog_search", "worklog_filter", "worklog_public_scope", "draft_restore_done",
+    ):
+        st.session_state.pop(key, None)
+
+
 def _app_auth_gate() -> dict:
     """앱 전체 진입 게이트. 인증되면 사용자 dict를 반환하고, 아니면 인증 화면을 그린 뒤 실행을 멈춥니다."""
+    if _auth_mode() == "name":
+        return _name_select_gate()
     device_enabled = not st.session_state.get("device_skip")
     if device_enabled:
         bridge = _device_bridge_read()          # 숨은 컴포넌트: 브라우저가 단말 토큰을 서버로 돌려줍니다.
@@ -7141,6 +7198,17 @@ def _render_account_bar(auth_user: dict) -> None:
     """맨 위 계정 줄: 로그인한 사용자 + 🔑 인증정보 + 로그아웃 (모든 탭에서 같은 자리)."""
     user_employee = str(auth_user.get("employee_no", "") or "")
     masked_employee = ("••••" + user_employee[-4:]) if len(user_employee) >= 4 else user_employee
+    if _auth_mode() == "name":
+        name_col, switch_col = st.columns([6.2, 1.6], gap="small", vertical_alignment="center")
+        with name_col:
+            st.markdown(
+                f'<div class="worklog-userbar"><div><div class="name">👤 {html.escape(str(auth_user.get("name","")))}</div>'
+                f'<div class="meta">이름 선택 접속 · 사번 {html.escape(masked_employee)}</div></div></div>',
+                unsafe_allow_html=True,
+            )
+        with switch_col:
+            st.button("사용자 변경", key="name_mode_switch", use_container_width=True, on_click=_name_mode_switch_user)
+        return
     userbar_col, auth_manage_col, logout_col = st.columns([5.2, 1.8, 1.25], gap="small", vertical_alignment="center")
     with userbar_col:
         st.markdown(
